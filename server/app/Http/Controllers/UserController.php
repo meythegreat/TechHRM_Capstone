@@ -22,35 +22,36 @@ class UserController extends Controller
     // CREATE: Add a new user
     public function store(Request $request)
     {
+        // 1. Validate the incoming request
         $validated = $request->validate([
             'fullname' => 'required|string|max:255',
             'username' => 'required|string|max:255|unique:users',
             'password' => 'required|string|min:6',
-            'role' => ['required', Rule::in(['Admin', 'User'])],
+            'role' => ['required', \Illuminate\Validation\Rule::in(['Super Admin', 'Admin', 'User'])],
 
-            // Student Profile fields (Only required if the role is 'User')
-            'student_id_number' => 'required_if:role,User|nullable|string|unique:student_profiles,student_id_number',
+            // Student Profile Data (Only required if role is 'User')
+            'student_id_number' => 'required_if:role,User|nullable|string',
             'course' => 'required_if:role,User|nullable|string',
             'year_level' => 'required_if:role,User|nullable|integer',
             'assigned_office' => 'required_if:role,User|nullable|string',
             'contact_number' => 'nullable|string',
         ]);
 
-        // Use a Database Transaction to ensure data integrity
-        DB::beginTransaction();
-
         try {
-            // 1. Create the base User
-            $user = User::create([
+            \Illuminate\Support\Facades\DB::beginTransaction();
+
+            // 2. Create the User account
+            $user = \App\Models\User::create([
                 'fullname' => $validated['fullname'],
                 'username' => $validated['username'],
-                'password' => Hash::make($validated['password']),
+                'password' => \Illuminate\Support\Facades\Hash::make($validated['password']),
                 'role' => $validated['role'],
             ]);
 
-            // 2. If it's a student worker, attach the profile using the relationship
+            // 3. If they are a student worker, create their profile
             if ($validated['role'] === 'User') {
-                $user->profile()->create([
+                \App\Models\StudentProfile::create([
+                    'user_id' => $user->id,
                     'student_id_number' => $validated['student_id_number'],
                     'course' => $validated['course'],
                     'year_level' => $validated['year_level'],
@@ -59,18 +60,27 @@ class UserController extends Controller
                 ]);
             }
 
-            // 3. Accounting: Log the creation directly to the Admin Dashboard feed
-            ActivityLog::create([
-                'admin_id' => $request->user()->id,
-                'admin_name' => $request->user()->fullname,
-                'description' => "registered a new user account for {$user->fullname}."
+            // 4. Log the action in the Audit Trail
+            // Using $request->user() makes Intelephense 100% happy!
+            /** @var \App\Models\User $admin */
+            $admin = $request->user();
+
+            \App\Models\ActivityLog::create([
+                'admin_id' => $admin->id,
+                'admin_name' => $admin->fullname,
+                'action' => 'Create User',
+                'description' => 'registered a new user account for ' . $user->fullname . '.',
+                'ip_address' => $request->ip(), // Swapped to $request->ip() for consistency too!
             ]);
 
-            DB::commit(); // Save everything
-            return response()->json(['message' => 'User created successfully', 'user' => $user], 201);
+            \Illuminate\Support\Facades\DB::commit();
+
+            return response()->json($user, 201);
+
         } catch (\Exception $e) {
-            DB::rollBack(); // If anything fails, revert the database to prevent partial entries
-            return response()->json(['message' => 'Failed to create user profile.', 'error' => $e->getMessage()], 500);
+            \Illuminate\Support\Facades\DB::rollBack();
+            // This passes the exact database error back to your React frontend!
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 

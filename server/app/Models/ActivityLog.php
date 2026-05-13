@@ -9,14 +9,16 @@ class ActivityLog extends Model
 {
     use HasFactory;
 
+    // 1. UPDATE THIS ARRAY to match your database columns
     protected $fillable = [
-        'admin_id',
-        'admin_name',
+        'admin_id',     // Changed from 'user_id'
+        'admin_name',   // Added this!
+        'action',
         'description',
+        'ip_address'
     ];
 
-    // Optional: Relationship back to the Admin/User
-    public function admin()
+    public function user()
     {
         return $this->belongsTo(User::class, 'admin_id');
     }

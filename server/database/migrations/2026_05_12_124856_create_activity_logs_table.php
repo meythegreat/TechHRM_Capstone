@@ -13,9 +13,14 @@ return new class extends Migration
     {
         Schema::create('activity_logs', function (Blueprint $table) {
             $table->id();
+
+            // The columns we actually need!
             $table->foreignId('admin_id')->constrained('users')->onDelete('cascade');
-            $table->string('admin_name'); // Stores the name at the time of the action
-            $table->string('description');
+            $table->string('admin_name');
+            $table->string('action'); // <-- This is the missing column!
+            $table->text('description');
+            $table->string('ip_address')->nullable();
+
             $table->timestamps();
         });
     }

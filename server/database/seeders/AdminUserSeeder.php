@@ -10,11 +10,20 @@ class AdminUserSeeder extends Seeder
 {
     public function run(): void
     {
+        // 1. Your Super Admin (You)
         User::create([
             'fullname' => 'Miguel Basinillo',
+            'username' => 'superadmin',
+            'password' => Hash::make('admin123'),
+            'role' => 'Super Admin',
+        ]);
+
+        // 2. A standard Admin (Employee)
+        User::create([
+            'fullname' => 'Staff Member',
             'username' => 'admin',
-            'password' => Hash::make('admin123'), // Hashed password for security
-            'role' => 'Admin', // Assigning the required Admin role
+            'password' => Hash::make('admin123'),
+            'role' => 'Admin',
         ]);
     }
 }

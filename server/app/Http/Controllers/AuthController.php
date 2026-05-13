@@ -4,8 +4,8 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\DB;
 use App\Models\User;
+use App\Models\ActivityLog; // Imported your new ActivityLog model!
 
 class AuthController extends Controller
 {
@@ -17,8 +17,8 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        // 2. Fetch user (Eloquent automatically uses prepared statements preventing SQL injection)
-        $user = User::where('username', $request->username)->first();
+        // 2. Fetch user WITH their student profile eager-loaded
+        $user = User::with('profile')->where('username', $request->username)->first();
 
         // 3. Verify User and Password (Invalid login handling)
         if (!$user || !Hash::check($request->password, $user->password)) {
@@ -27,36 +27,50 @@ class AuthController extends Controller
             ], 401);
         }
 
-        // 4. Create Sanctum Token for secure React API requests
+        // 4. Grab the office if they are a student worker (Admins get 'Management')
+        $office = $user->role === 'User' ? $user->profile?->assigned_office : 'Management';
+
+        // 5. Create Sanctum Token for secure React API requests
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        // 5. Accounting: Record the login activity
-        DB::table('logs')->insert([
-            'user_id' => $user->id,
-            'activity' => 'Logged in',
-            'created_at' => now(),
+        // 6. Accounting: Record the login activity in the new Audit Trail
+        ActivityLog::create([
+            'admin_id' => $user->id,
+            'admin_name' => $user->fullname,
+            'action' => 'System Login',
+            'description' => 'logged into the system.',
+            'ip_address' => $request->ip(),
         ]);
 
+        // 7. Return the exact payload React is expecting
         return response()->json([
             'message' => 'Login successful',
-            'user' => $user,
-            'token' => $token
+            'token' => $token,
+            'role' => $user->role,
+            'name' => $user->fullname,
+            'office' => $office
         ]);
     }
 
     public function logout(Request $request)
     {
+        // Tell Intelephense exactly what model we are using
+        /** @var \App\Models\User $user */
         $user = $request->user();
 
-        // Accounting: Record the logout activity
-        DB::table('logs')->insert([
-            'user_id' => $user->id,
-            'activity' => 'Logged out',
-            'created_at' => now(),
-        ]);
+        if ($user) {
+            // Accounting: Record the logout activity in the new Audit Trail
+            ActivityLog::create([
+                'admin_id' => $user->id,
+                'admin_name' => $user->fullname,
+                'action' => 'System Logout',
+                'description' => 'logged out of the system.',
+                'ip_address' => $request->ip(),
+            ]);
 
-        // Revoke the token to secure the session
-        $user->tokens()->delete();
+            // Revoke the token to secure the session
+            $user->tokens()->delete();
+        }
 
         return response()->json([
             'message' => 'Logged out successfully'

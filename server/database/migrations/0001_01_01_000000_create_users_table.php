@@ -14,7 +14,7 @@ return new class extends Migration
             $table->string('username')->unique();
             $table->string('password');
             // $table->foreignId('department_id')->constrained()->onDelete('cascade');
-            $table->enum('role', ['Admin', 'User'])->default('User');
+            $table->enum('role', ['Super Admin', 'Admin', 'User'])->default('User');
             $table->rememberToken();
             $table->timestamps();
         });

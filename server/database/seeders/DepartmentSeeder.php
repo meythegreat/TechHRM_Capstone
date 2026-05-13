@@ -52,9 +52,9 @@ class DepartmentSeeder extends Seeder
         if ($students->isEmpty()) {
             for ($i = 1; $i <= 5; $i++) {
                 $students->push(User::create([
-                    'name' => 'Working Student ' . $i,
-                    'email' => 'student' . $i . '@filamer.edu',
-                    'password' => bcrypt('password'), // default password
+                    'fullname' => 'Working Student ' . $i,   // Changed from 'name'
+                    'username' => 'student' . $i,            // Changed from 'email'
+                    'password' => bcrypt('password'),        // default password
                     'role' => $roleName,
                 ]));
             }

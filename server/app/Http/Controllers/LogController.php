@@ -2,19 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog; // Change to App\Models\Log if your model is just named "Log"
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class LogController extends Controller
 {
+    /**
+     * Display a listing of the system logs.
+     */
     public function index()
     {
-        // Join the logs table with the users table to get the user's name
-        $logs = DB::table('logs')
-            ->join('users', 'logs.user_id', '=', 'users.id')
-            ->select('logs.id', 'logs.activity', 'logs.created_at', 'users.fullname', 'users.username')
-            ->orderBy('logs.created_at', 'desc')
-            ->get();
+        // Fetch all logs, eager load the 'user' relationship, and sort by newest first
+        $logs = ActivityLog::with('user')->latest()->get();
 
         return response()->json($logs);
     }
