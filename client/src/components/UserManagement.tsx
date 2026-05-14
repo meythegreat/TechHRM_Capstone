@@ -3,7 +3,6 @@ import axios from 'axios';
 import AddUserFormModal from './AddUserFormModal';
 import EditUserModal from './EditUserModal';
 
-// 1. We added the Profile interface
 interface StudentProfile {
     student_id_number: string;
     course: string;
@@ -18,10 +17,13 @@ interface User {
     username: string;
     role: string;
     created_at: string;
-    profile: StudentProfile | null; // 2. Attach it to the User interface
+    profile: StudentProfile | null;
 }
 
 const UserManagement = () => {
+    // Grab the current logged-in user's role to determine UI permissions
+    const currentUserRole = localStorage.getItem('user_role');
+
     const [users, setUsers] = useState<User[]>([]);
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [error, setError] = useState<string>('');
@@ -88,7 +90,6 @@ const UserManagement = () => {
             {error && <div className="mb-4 p-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg">{error}</div>}
 
             <div className="overflow-hidden bg-white shadow-sm ring-1 ring-black ring-opacity-5 rounded-xl border border-gray-100">
-                {/* 3. We expanded the table width by adding overflow-x-auto */}
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
@@ -109,37 +110,32 @@ const UserManagement = () => {
                             ) : (
                                 users.map((user) => (
                                     <tr key={user.id} className="hover:bg-gray-50 transition-colors">
-                                        {/* Name and Username stacked */}
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="text-sm font-medium text-gray-900">{user.fullname}</div>
                                             <div className="text-sm text-gray-500">@{user.username}</div>
                                         </td>
                                         
-                                        {/* Student ID */}
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                             {user.profile ? <span className="font-mono">{user.profile.student_id_number}</span> : <span className="text-gray-300">-</span>}
                                         </td>
 
-                                        {/* Course and Year */}
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                             {user.profile ? `${user.profile.course} - Year ${user.profile.year_level}` : <span className="text-gray-300">-</span>}
                                         </td>
 
-                                        {/* Office Assignment */}
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
                                             {user.profile ? user.profile.assigned_office : <span className="text-gray-300">-</span>}
                                         </td>
 
-                                        {/* Role Badge */}
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                                user.role === 'Super Admin' ? 'bg-red-100 text-red-800' : 
                                                 user.role === 'Admin' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'
                                             }`}>
                                                 {user.role}
                                             </span>
                                         </td>
 
-                                        {/* Actions */}
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                             <button 
                                                 onClick={() => {
@@ -150,9 +146,13 @@ const UserManagement = () => {
                                             >
                                                 Edit
                                             </button>
-                                            <button onClick={() => handleDelete(user.id, user.username)} className="text-red-600 hover:text-red-900 font-semibold transition-colors">
-                                                Delete
-                                            </button>
+                                            
+                                            {/* ONLY Super Admins can see the Delete button */}
+                                            {currentUserRole === 'Super Admin' && (
+                                                <button onClick={() => handleDelete(user.id, user.username)} className="text-red-600 hover:text-red-900 font-semibold transition-colors">
+                                                    Delete
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))

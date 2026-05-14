@@ -51,5 +51,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // ONLY Super Admins can delete users
         Route::delete('/users/{user}', [UserController::class, 'destroy']);
+
     });
 });

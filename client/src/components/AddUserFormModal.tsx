@@ -25,6 +25,9 @@ const AddUserFormModal: FC<AddUserFormModalProps> = ({ isOpen, onClose, onSucces
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
+    // Grab the current logged-in user's role
+    const currentUserRole = String(localStorage.getItem('user_role')).replace(/['"]/g, '').trim();
+
     if (!isOpen) return null;
 
     const resetForm = () => {
@@ -55,6 +58,9 @@ const AddUserFormModal: FC<AddUserFormModalProps> = ({ isOpen, onClose, onSucces
         } catch (err: any) {
             if (err.response?.status === 422) {
                 setError(err.response.data.message || 'Please check your inputs.');
+            } else if (err.response?.data?.error) {
+                // This displays the EXACT PHP/Database error
+                setError(`Backend Error: ${err.response.data.error}`);
             } else {
                 setError('An unexpected error occurred while creating the user.');
             }
@@ -80,12 +86,16 @@ const AddUserFormModal: FC<AddUserFormModalProps> = ({ isOpen, onClose, onSucces
                 )}
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    {/* Role Selection (Placed at top so it dictates the rest of the form) */}
+                    {/* Role Selection */}
                     <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-1">System Role</label>
                         <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all">
                             <option value="User">Student Worker</option>
                             <option value="Admin">Administrator</option>
+                            {/* ONLY Super Admins can assign the Super Admin role */}
+                            {currentUserRole === 'Super Admin' && (
+                                <option value="Super Admin">Super Administrator</option>
+                            )}
                         </select>
                     </div>
 

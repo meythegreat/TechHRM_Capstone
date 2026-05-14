@@ -37,22 +37,16 @@ function App() {
             <div className="flex items-center gap-8">
                 <h1 className="text-xl font-bold text-blue-600 tracking-tight">TechHRM</h1>
                 
-                {/* Only show these tabs if the user is an Admin */}
-                {userRole === 'Admin' && (
+                {/* 1. Show management tabs for BOTH Admins and Super Admins */}
+                {(userRole === 'Admin' || userRole === 'Super Admin') && (
                     <div className="flex gap-4">
-                        {/* 2. Added the new Dashboard Tab Button */}
                         <button 
                             onClick={() => setActiveTab('dashboard')}
                             className={`text-sm font-semibold transition-colors ${activeTab === 'dashboard' ? 'text-gray-900 border-b-2 border-blue-600 pb-1' : 'text-gray-500 hover:text-gray-900 pb-1'}`}
                         >
                             Dashboard
                         </button>
-                        <button 
-                            onClick={() => setActiveTab('users')}
-                            className={`text-sm font-semibold transition-colors ${activeTab === 'users' ? 'text-gray-900 border-b-2 border-blue-600 pb-1' : 'text-gray-500 hover:text-gray-900 pb-1'}`}
-                        >
-                            User Management
-                        </button>
+                        
                         <button 
                             onClick={() => setActiveTab('attendance')}
                             className={`text-sm font-semibold transition-colors ${activeTab === 'attendance' ? 'text-gray-900 border-b-2 border-blue-600 pb-1' : 'text-gray-500 hover:text-gray-900 pb-1'}`}
@@ -65,6 +59,16 @@ function App() {
                         >
                             Audit Trail
                         </button>
+
+                        {/* 2. ONLY Super Admins get the User Management tab */}
+                        {userRole === 'Super Admin' && (
+                            <button 
+                                onClick={() => setActiveTab('users')}
+                                className={`text-sm font-semibold transition-colors ${activeTab === 'users' ? 'text-gray-900 border-b-2 border-blue-600 pb-1' : 'text-gray-500 hover:text-gray-900 pb-1'}`}
+                            >
+                                User Management
+                            </button>
+                        )}
                     </div>
                 )}
             </div>
@@ -81,8 +85,8 @@ function App() {
           </nav>
 
           <main className="max-w-7xl mx-auto py-6">
-            {/* 3. Added the condition to display the AdminDashboard */}
-            {userRole === 'Admin' ? (
+            {/* 3. Render the dashboards for BOTH Admin types */}
+            {(userRole === 'Admin' || userRole === 'Super Admin') ? (
                 <>
                     {activeTab === 'dashboard' && <AdminDashboard />}
                     {activeTab === 'users' && <UserManagement />}

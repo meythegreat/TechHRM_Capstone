@@ -97,7 +97,7 @@ class UserController extends Controller
             'fullname' => 'sometimes|required|string|max:255',
             'username' => ['sometimes', 'required', 'string', 'max:255', Rule::unique('users')->ignore($user->id)],
             'password' => 'nullable|string|min:6',
-            'role' => ['sometimes', 'required', Rule::in(['Admin', 'User'])],
+            'role' => ['sometimes', 'required', Rule::in(['Super Admin', 'Admin', 'User'])],
 
             // Profile fields (nullable because an Admin won't submit them)
             'student_id_number' => ['nullable', 'string', Rule::unique('student_profiles')->ignore($user->profile?->id)],

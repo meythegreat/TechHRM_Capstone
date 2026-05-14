@@ -14,6 +14,13 @@ const StudentDashboard = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
+    // 1. Pull the data from local storage
+    const fullName = localStorage.getItem('user_name') || 'Student';
+    const assignedOffice = localStorage.getItem('assigned_office') || 'Unassigned';
+    
+    // 2. Split the full name by spaces and grab the very first item (index 0)
+    const firstName = fullName.split(' ')[0];
+
     // Check if the most recent record has no time_out, meaning they are currently clocked in
     const isClockedIn = history.length > 0 && history[0].time_out === null;
 
@@ -56,6 +63,28 @@ const StudentDashboard = () => {
 
     return (
         <div className="p-8 font-sans max-w-4xl mx-auto">
+            
+            {/* --- NEW PERSONALIZED HEADER --- */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-8 flex items-center justify-between">
+                <div>
+                    <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+                        Hello, {firstName}! 👋
+                    </h2>
+                    <p className="mt-2 text-sm text-gray-500 font-medium flex items-center gap-2">
+                        <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                        Assigned Office: <span className="text-gray-900 font-bold">{assignedOffice}</span>
+                    </p>
+                </div>
+
+                <div className="hidden sm:block text-right">
+                    <p className="text-sm font-bold text-gray-400 uppercase tracking-wider">Today's Date</p>
+                    <p className="text-lg font-bold text-blue-600">
+                        {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                    </p>
+                </div>
+            </div>
+            {/* ------------------------------- */}
+
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center mb-8">
                 <h2 className="text-3xl font-bold text-gray-900 mb-2">Time Clock</h2>
                 <p className="text-gray-500 mb-8">Log your rendered hours for your assigned office.</p>

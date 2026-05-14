@@ -42,6 +42,9 @@ const EditUserModal: FC<EditUserModalProps> = ({ isOpen, onClose, onSuccess, use
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
+    // Grab the current logged-in user's role
+    const currentUserRole = localStorage.getItem('user_role');
+
     // Pre-fill the form whenever the selected user changes
     useEffect(() => {
         if (user) {
@@ -88,6 +91,8 @@ const EditUserModal: FC<EditUserModalProps> = ({ isOpen, onClose, onSuccess, use
         } catch (err: any) {
             if (err.response?.status === 422) {
                 setError(err.response.data.message || 'Please check your inputs.');
+            } else if (err.response?.data?.error) {
+                setError(`Backend Error: ${err.response.data.error}`);
             } else {
                 setError('An unexpected error occurred while updating the user.');
             }
@@ -114,6 +119,10 @@ const EditUserModal: FC<EditUserModalProps> = ({ isOpen, onClose, onSuccess, use
                         <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all">
                             <option value="User">Student Worker</option>
                             <option value="Admin">Administrator</option>
+                            {/* ONLY Super Admins can assign the Super Admin role */}
+                            {currentUserRole === 'Super Admin' && (
+                                <option value="Super Admin">Super Administrator</option>
+                            )}
                         </select>
                     </div>
 
