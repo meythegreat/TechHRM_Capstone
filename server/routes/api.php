@@ -7,12 +7,17 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\LogController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\AdminDashboardController;
+use App\Http\Controllers\ActivityLogController;
 
 // --- PUBLIC ROUTES ---
 Route::post('/login', [AuthController::class, 'login']);
 
 // --- PROTECTED ROUTES (Requires valid Sanctum token) ---
 Route::middleware('auth:sanctum')->group(function () {
+
+    Route::get('/users', [UserController::class, 'index']);
+    Route::get('/logs', [ActivityLogController::class, 'index']); // Fixes "failed to load"
+    Route::post('/user/avatar', [\App\Http\Controllers\UserController::class, 'uploadAvatar']);
 
     // =========================================================
     // 1. GENERAL ACCESS (Working Students, Admins, Super Admins)
@@ -38,9 +43,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/logs', [LogController::class, 'index']);
 
         // Global Attendance & Dashboards
-        Route::get('/attendance/all', [AttendanceController::class, 'index']);
+        Route::get('/attendance/all', [\App\Http\Controllers\AttendanceController::class, 'allHistory']);
         Route::get('/attendance/export', [AttendanceController::class, 'export']);
         Route::get('/admin/dashboard-metrics', [AdminDashboardController::class, 'getMetrics']);
+        Route::get('/admin/stats', [App\Http\Controllers\DashboardController::class, 'getStats']);
     });
 
     // =========================================================

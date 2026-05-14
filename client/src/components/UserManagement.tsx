@@ -1,158 +1,111 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import AddUserFormModal from './AddUserFormModal';
-import EditUserModal from './EditUserModal';
 
-interface StudentProfile {
-    student_id_number: string;
-    course: string;
-    year_level: number;
-    assigned_office: string;
-    contact_number: string | null;
-}
-
-interface User {
+interface UserRecord {
     id: number;
-    fullname: string;
+    name: string;
     username: string;
     role: string;
     created_at: string;
-    profile: StudentProfile | null;
+    profile?: {
+        student_id_number: string;
+        assigned_office: string;
+    };
 }
 
 const UserManagement = () => {
-    // Grab the current logged-in user's role to determine UI permissions
-    const currentUserRole = localStorage.getItem('user_role');
-
-    const [users, setUsers] = useState<User[]>([]);
-    const [isLoading, setIsLoading] = useState<boolean>(true);
-    const [error, setError] = useState<string>('');
-    const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
-    const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
-    const [selectedUser, setSelectedUser] = useState<User | null>(null);
-    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    const [users, setUsers] = useState<UserRecord[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
 
     useEffect(() => {
-        fetchUsers();
-    }, []);
+        fetchUsers(currentPage);
+    }, [currentPage]);
 
-    const showToast = (message: string, type: 'success' | 'error') => {
-        setToast({ message, type });
-        setTimeout(() => setToast(null), 3000);
-    };
-
-    const fetchUsers = async () => {
+    const fetchUsers = async (page: number) => {
+        setIsLoading(true);
         try {
-            const response = await axios.get('/api/users');
-            setUsers(response.data);
-        } catch (err) {
-            setError('Failed to load user data.');
-            console.error(err);
+            const response = await axios.get(`/api/users?page=${page}`);
+            setUsers(response.data.data); // .data.data because of Laravel pagination!
+            setCurrentPage(response.data.current_page);
+            setTotalPages(response.data.last_page);
+        } catch (error) {
+            console.error('Error fetching users:', error);
         } finally {
             setIsLoading(false);
         }
     };
 
-    const handleDelete = async (id: number, username: string) => {
-        if (!window.confirm(`Are you sure you want to delete the account for ${username}? This action cannot be undone.`)) {
-            return;
-        }
-
-        try {
-            await axios.delete(`/api/users/${id}`);
-            fetchUsers();
-            showToast(`User ${username} deleted successfully.`, 'success');
-        } catch (err: any) {
-            if (err.response?.status === 403) {
-                showToast(err.response.data.message || "You cannot delete your own account.", 'error');
-            } else {
-                showToast("An error occurred while trying to delete the user.", 'error');
-            }
-        }
+    const getRoleBadge = (role: string) => {
+        if (role === 'Super Admin') return "bg-purple-100 text-purple-800 border-purple-200";
+        if (role === 'Supervisor') return "bg-blue-100 text-blue-800 border-blue-200";
+        if (role === 'WSPO Staff') return "bg-orange-100 text-orange-800 border-orange-200";
+        return "bg-green-100 text-green-800 border-green-200"; // Student
     };
 
     return (
-        <div className="p-8 font-sans relative">
-            <div className="sm:flex sm:items-center sm:justify-between mb-8">
+        <div className="space-y-6 fade-in font-sans">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex justify-between items-center">
                 <div>
-                    <h2 className="text-2xl font-bold text-gray-900 tracking-tight">System Users</h2>
-                    <p className="mt-1 text-sm text-gray-500">
-                        Manage administrative access and student worker deployments.
-                    </p>
+                    <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">System Users</h2>
+                    <p className="text-sm font-medium text-gray-500 mt-1">Manage system access, roles, and student profiles.</p>
                 </div>
-                <div className="mt-4 sm:mt-0">
-                    <button onClick={() => setIsAddModalOpen(true)} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-sm hover:bg-blue-700 transition-colors">
-                        + Add New User
-                    </button>
-                </div>
+                <button className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
+                    + Add New User
+                </button>
             </div>
 
-            {error && <div className="mb-4 p-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg">{error}</div>}
-
-            <div className="overflow-hidden bg-white shadow-sm ring-1 ring-black ring-opacity-5 rounded-xl border border-gray-100">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Account Details</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Student ID</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Academic</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Assignment</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Role</th>
-                                <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Full Name</th>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">System Role</th>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Department / Details</th>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Joined Date</th>
+                                <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
+                        <tbody className="bg-white divide-y divide-gray-100">
                             {isLoading ? (
-                                <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-gray-500">Loading users...</td></tr>
-                            ) : users.length === 0 ? (
-                                <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-gray-500">No users found.</td></tr>
+                                <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-500">Loading users...</td></tr>
                             ) : (
                                 users.map((user) => (
-                                    <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                                    <tr key={user.id} className="hover:bg-gray-50">
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm font-medium text-gray-900">{user.fullname}</div>
-                                            <div className="text-sm text-gray-500">@{user.username}</div>
+                                            <div className="flex items-center">
+                                                <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-600 mr-3">
+                                                    {user.name.charAt(0)}
+                                                </div>
+                                                <div>
+                                                    <div className="text-sm font-bold text-gray-900">{user.name}</div>
+                                                    <div className="text-xs text-gray-500 font-mono">@{user.username}</div>
+                                                </div>
+                                            </div>
                                         </td>
-                                        
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            {user.profile ? <span className="font-mono">{user.profile.student_id_number}</span> : <span className="text-gray-300">-</span>}
-                                        </td>
-
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            {user.profile ? `${user.profile.course} - Year ${user.profile.year_level}` : <span className="text-gray-300">-</span>}
-                                        </td>
-
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                                            {user.profile ? user.profile.assigned_office : <span className="text-gray-300">-</span>}
-                                        </td>
-
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                                user.role === 'Super Admin' ? 'bg-red-100 text-red-800' : 
-                                                user.role === 'Admin' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'
-                                            }`}>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <span className={`px-2.5 py-1 rounded-md text-xs font-bold border ${getRoleBadge(user.role)}`}>
                                                 {user.role}
                                             </span>
                                         </td>
-
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <button 
-                                                onClick={() => {
-                                                    setSelectedUser(user);
-                                                    setIsEditModalOpen(true);
-                                                }}
-                                                className="text-blue-600 hover:text-blue-900 mr-4 font-semibold transition-colors"
-                                            >
-                                                Edit
-                                            </button>
-                                            
-                                            {/* ONLY Super Admins can see the Delete button */}
-                                            {currentUserRole === 'Super Admin' && (
-                                                <button onClick={() => handleDelete(user.id, user.username)} className="text-red-600 hover:text-red-900 font-semibold transition-colors">
-                                                    Delete
-                                                </button>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                            {user.profile ? (
+                                                <>
+                                                    <div className="font-bold text-gray-900">{user.profile.assigned_office}</div>
+                                                    <div className="text-xs text-gray-500">ID: {user.profile.student_id_number}</div>
+                                                </>
+                                            ) : (
+                                                <span className="text-gray-400 italic">System Account</span>
                                             )}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
+                                            {new Date(user.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-bold">
+                                            <button className="text-blue-600 hover:text-blue-900 mr-3">Edit</button>
+                                            <button className="text-red-600 hover:text-red-900">Revoke</button>
                                         </td>
                                     </tr>
                                 ))
@@ -160,45 +113,20 @@ const UserManagement = () => {
                         </tbody>
                     </table>
                 </div>
+
+                {/* Pagination Controls */}
+                {!isLoading && totalPages > 1 && (
+                    <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+                        <span className="text-sm text-gray-500 font-medium">
+                            Page <span className="font-bold text-gray-900">{currentPage}</span> of <span className="font-bold text-gray-900">{totalPages}</span>
+                        </span>
+                        <div className="flex gap-2">
+                            <button onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1} className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-bold text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">Prev</button>
+                            <button onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages} className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-bold text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">Next</button>
+                        </div>
+                    </div>
+                )}
             </div>
-
-            <AddUserFormModal 
-                isOpen={isAddModalOpen} 
-                onClose={() => setIsAddModalOpen(false)} 
-                onSuccess={(msg) => {
-                    setIsAddModalOpen(false);
-                    fetchUsers();
-                    showToast(msg || 'Action completed successfully.', 'success');
-                }} 
-            />
-
-            <EditUserModal
-                isOpen={isEditModalOpen}
-                user={selectedUser}
-                onClose={() => {
-                    setIsEditModalOpen(false);
-                    setSelectedUser(null);
-                }}
-                onSuccess={(msg) => {
-                    setIsEditModalOpen(false);
-                    setSelectedUser(null);
-                    fetchUsers();
-                    showToast(msg || 'User updated successfully.', 'success');
-                }}
-            />
-
-            {toast && (
-                <div className={`fixed bottom-6 right-6 px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 transition-all duration-300 transform translate-y-0 opacity-100 ${
-                    toast.type === 'success' ? 'bg-gray-900 text-white' : 'bg-red-600 text-white'
-                }`}>
-                    {toast.type === 'success' ? (
-                        <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    ) : (
-                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    )}
-                    <span className="font-semibold text-sm">{toast.message}</span>
-                </div>
-            )}
         </div>
     );
 };

@@ -151,4 +151,23 @@ class AttendanceController extends Controller
 
         return response()->stream($callback, 200, $headers);
     }
+
+    public function allHistory(Request $request)
+    {
+        $user = $request->user();
+
+        // Fetch attendances and include the user's name and profile data
+        $query = \App\Models\Attendance::with('user.profile')->orderBy('time_in', 'desc');
+
+        // If it is a Supervisor, strictly filter to show only their department's students
+        if ($user->role === 'Supervisor' && $user->department_id) {
+            $departmentId = $user->department_id;
+            $query->whereHas('user.profile', function($q) use ($departmentId) {
+                $q->where('department_id', $departmentId);
+            });
+        }
+
+        // Return the paginated data!
+        return response()->json($query->paginate(15));
+    }
 }

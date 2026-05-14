@@ -12,8 +12,8 @@ class UserController extends Controller
 {
     public function index()
     {
-        // Fetch users with their profiles, ordered by latest
-        $users = User::with('profile')->orderBy('created_at', 'desc')->get();
+        // Changed from get() to paginate(15)
+        $users = User::with('profile')->orderBy('created_at', 'desc')->paginate(15);
         return response()->json($users);
     }
 
@@ -108,5 +108,34 @@ class UserController extends Controller
         $user->delete(); // This cascades and deletes the profile too
 
         return response()->json(['message' => 'User deleted successfully']);
+    }
+
+    public function uploadAvatar(Request $request)
+    {
+        $request->validate([
+            'avatar' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048', // Max 2MB
+        ]);
+
+        $user = $request->user();
+
+        if ($request->hasFile('avatar')) {
+            // Delete the old picture if they already have one to save server space
+            if ($user->profile_picture) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($user->profile_picture);
+            }
+
+            // Save the new file in the 'avatars' folder
+            $path = $request->file('avatar')->store('avatars', 'public');
+
+            $user->profile_picture = $path;
+            $user->save();
+
+            return response()->json([
+                'message' => 'Profile picture updated successfully!',
+                'profile_picture' => asset('storage/' . $path) // Returns the full URL to React
+            ]);
+        }
+
+        return response()->json(['message' => 'No image uploaded'], 400);
     }
 }

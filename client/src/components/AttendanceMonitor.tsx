@@ -1,140 +1,111 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 
-interface User {
-    fullname: string;
-    username: string;
-}
-
 interface AttendanceRecord {
     id: number;
-    user: User;
-    date: string;
-    time_in: string | null;
+    time_in: string;
     time_out: string | null;
-    status: string;
-    total_hours: number | null;
+    work_type: string;
+    task_description: string;
+    rendered_hours: number | null;
+    user: {
+        name: string;
+        profile?: {
+            assigned_office: string;
+        }
+    };
 }
 
 const AttendanceMonitor = () => {
-    const [records, setRecords] = useState<AttendanceRecord[]>([]);
-    const [isLoading, setIsLoading] = useState<boolean>(true);
-    const [error, setError] = useState<string>('');
-
-    // Pagination State
-    const [currentPage, setCurrentPage] = useState<number>(1);
-    const recordsPerPage = 15;
+    const [attendances, setAttendances] = useState<AttendanceRecord[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
 
     useEffect(() => {
-        fetchAttendance();
-    }, []);
+        fetchAttendances(currentPage);
+    }, [currentPage]);
 
-    const fetchAttendance = async () => {
+    const fetchAttendances = async (page: number) => {
+        setIsLoading(true);
         try {
-            const response = await axios.get('/api/attendance/all');
-            setRecords(response.data);
-        } catch (err) {
-            setError('Failed to load attendance records.');
-            console.error(err);
+            const response = await axios.get(`/api/attendance/all?page=${page}`);
+            setAttendances(response.data.data);
+            setCurrentPage(response.data.current_page);
+            setTotalPages(response.data.last_page);
+        } catch (error) {
+            console.error('Error fetching attendances:', error);
         } finally {
             setIsLoading(false);
         }
     };
 
-    // --- PAGINATION LOGIC ---
-    const totalPages = Math.ceil(records.length / recordsPerPage);
-    const indexOfLastRecord = currentPage * recordsPerPage;
-    const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
-    const currentRecords = records.slice(indexOfFirstRecord, indexOfLastRecord);
-
-    const handleExport = async () => {
-        try {
-            // Adjust this endpoint if your export route is different
-            window.open('/api/attendance/export', '_blank'); 
-        } catch (err) {
-            alert('Failed to export records.');
-        }
-    };
-
-    // Add this helper function before your return statement
-    const formatTime = (timeString: string | null) => {
-        if (!timeString) return '-';
-        
-        // 1. Try parsing as a full ISO timestamp first (Laravel default)
-        const dateObj = new Date(timeString);
-        if (!isNaN(dateObj.getTime())) {
-            return dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
-        
-        // 2. Fallback: If it's strictly a "HH:MM:SS" time string
-        const fallbackDate = new Date(`2000-01-01T${timeString}`);
-        if (!isNaN(fallbackDate.getTime())) {
-            return fallbackDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
-        
-        return timeString; // Return raw string if both fail
+    const formatTime = (dateString: string | null) => {
+        if (!dateString) return '--:--';
+        return new Date(dateString).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
     };
 
     return (
-        <div className="p-8 font-sans">
-            <div className="sm:flex sm:items-center sm:justify-between mb-8">
+        <div className="space-y-6 fade-in font-sans">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex justify-between items-center">
                 <div>
-                    <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Timesheets & Attendance</h2>
-                    <p className="mt-1 text-sm text-gray-500">
-                        Monitor daily time-in and time-out records for all student workers.
-                    </p>
+                    <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">Timesheets & Attendance</h2>
+                    <p className="text-sm font-medium text-gray-500 mt-1">Review student worker hours and daily task descriptions.</p>
                 </div>
-                <div className="mt-4 sm:mt-0">
-                    <button onClick={handleExport} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-sm hover:bg-green-700 transition-colors">
-                        Export to Excel
-                    </button>
-                </div>
+                <button className="px-4 py-2 bg-green-50 text-green-700 font-bold border border-green-200 rounded-lg hover:bg-green-100 transition-colors shadow-sm flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    Export CSV
+                </button>
             </div>
 
-            {error && <div className="mb-4 p-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg">{error}</div>}
-
-            <div className="overflow-hidden bg-white shadow-sm ring-1 ring-black ring-opacity-5 rounded-xl border border-gray-100 flex flex-col">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Student Worker</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Time In</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Time Out</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Hours Logged</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date & Time</th>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Student & Dept</th>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Work Details</th>
+                                <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Rendered</th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
+                        <tbody className="bg-white divide-y divide-gray-100">
                             {isLoading ? (
-                                <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-gray-500">Loading attendance...</td></tr>
-                            ) : records.length === 0 ? (
-                                <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-gray-500">No attendance records found.</td></tr>
+                                <tr><td colSpan={4} className="px-6 py-8 text-center text-gray-500">Loading timesheets...</td></tr>
+                            ) : attendances.length === 0 ? (
+                                <tr><td colSpan={4} className="px-6 py-8 text-center text-gray-500">No timesheets recorded yet.</td></tr>
                             ) : (
-                                currentRecords.map((record) => (
-                                    <tr key={record.id} className="hover:bg-gray-50 transition-colors">
+                                attendances.map((record) => (
+                                    <tr key={record.id} className="hover:bg-gray-50">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                            <div className="font-bold text-gray-900 mb-1">
+                                                {new Date(record.time_in).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                            </div>
+                                            <div className="flex items-center gap-2 text-xs">
+                                                <span className="text-blue-600 font-bold">{formatTime(record.time_in)}</span>
+                                                <span className="text-gray-400">→</span>
+                                                <span className={record.time_out ? "text-orange-500 font-bold" : "text-gray-400 font-medium"}>
+                                                    {formatTime(record.time_out) || "Active"}
+                                                </span>
+                                            </div>
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm font-medium text-gray-900">{record.user?.fullname || 'Unknown User'}</div>
-                                            <div className="text-sm text-gray-500">@{record.user?.username || 'N/A'}</div>
+                                            <div className="text-sm font-extrabold text-gray-900">{record.user.name}</div>
+                                            <div className="text-xs font-medium text-gray-500">{record.user.profile?.assigned_office || 'Unassigned'}</div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">{record.date}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            {formatTime(record.time_in)}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            {formatTime(record.time_out)}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                                            {record.total_hours ? `${record.total_hours} hrs` : '-'}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                                record.status === 'Present' ? 'bg-green-100 text-green-800' : 
-                                                record.status === 'Late' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
-                                            }`}>
-                                                {record.status}
+                                        <td className="px-6 py-4 text-sm max-w-xs">
+                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-700 border border-blue-100 mb-1">
+                                                {record.work_type || 'Unspecified'}
                                             </span>
+                                            <p className="text-gray-500 text-xs truncate font-medium" title={record.task_description}>
+                                                {record.task_description || 'No description provided.'}
+                                            </p>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right">
+                                            <span className="text-lg font-extrabold text-gray-900">
+                                                {record.rendered_hours ? record.rendered_hours.toFixed(2) : '--'}
+                                            </span>
+                                            <span className="text-xs text-gray-500 font-medium ml-1">hrs</span>
                                         </td>
                                     </tr>
                                 ))
@@ -143,30 +114,15 @@ const AttendanceMonitor = () => {
                     </table>
                 </div>
 
-                {/* --- PAGINATION CONTROLS --- */}
-                {records.length > 0 && (
-                    <div className="flex items-center justify-between px-6 py-3 bg-gray-50 border-t border-gray-200">
-                        <div className="text-sm text-gray-500">
-                            Showing <span className="font-medium">{indexOfFirstRecord + 1}</span> to <span className="font-medium">{Math.min(indexOfLastRecord, records.length)}</span> of <span className="font-medium">{records.length}</span> records
-                        </div>
+                {/* Pagination Controls */}
+                {!isLoading && totalPages > 1 && (
+                    <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+                        <span className="text-sm text-gray-500 font-medium">
+                            Page <span className="font-bold text-gray-900">{currentPage}</span> of <span className="font-bold text-gray-900">{totalPages}</span>
+                        </span>
                         <div className="flex gap-2">
-                            <button 
-                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                disabled={currentPage === 1}
-                                className="px-3 py-1 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                                Previous
-                            </button>
-                            <span className="px-3 py-1 text-sm font-semibold text-gray-700 flex items-center">
-                                Page {currentPage} of {totalPages}
-                            </span>
-                            <button 
-                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                disabled={currentPage === totalPages}
-                                className="px-3 py-1 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                                Next
-                            </button>
+                            <button onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1} className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-bold text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">Prev</button>
+                            <button onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages} className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-bold text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">Next</button>
                         </div>
                     </div>
                 )}
