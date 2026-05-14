@@ -9,16 +9,16 @@ class ActivityLog extends Model
 {
     use HasFactory;
 
-    // 1. UPDATE THIS ARRAY to match your database columns
+    // This array tells Laravel which columns are safe to save data into
     protected $fillable = [
-        'admin_id',     // Changed from 'user_id'
-        'admin_name',   // Added this!
+        'admin_id',
+        'admin_name',    // <-- THIS IS THE MISSING PIECE!
         'action',
         'description',
-        'ip_address'
+        'ip_address',
     ];
 
-    public function user()
+    public function admin()
     {
         return $this->belongsTo(User::class, 'admin_id');
     }

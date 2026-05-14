@@ -20,7 +20,7 @@ class User extends Authenticatable
      * @var array<int, string>
      */
     protected $fillable = [
-        'fullname',
+        'name',
         'username',
         'password',
         'role',
@@ -50,7 +50,7 @@ class User extends Authenticatable
 
     public function profile()
     {
-        return $this->hasOne(StudentProfile::class);
+        return $this->hasOne(UserProfile::class);
     }
 
     public function attendances()

@@ -10,11 +10,11 @@ return new class extends Migration
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
-            $table->string('fullname');
+            $table->string('name');
             $table->string('username')->unique();
             $table->string('password');
             // $table->foreignId('department_id')->constrained()->onDelete('cascade');
-            $table->enum('role', ['Super Admin', 'Admin', 'User'])->default('User');
+            $table->string('role')->default('Student');
             $table->rememberToken();
             $table->timestamps();
         });

@@ -11,10 +11,11 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Call your custom seeders here
         $this->call([
+            // Uncomment this next line IF you have already created a 'departments' table migration
+            // DepartmentSeeder::class,
+
             AdminUserSeeder::class,
-            DepartmentSeeder::class,
         ]);
     }
 }

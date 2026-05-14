@@ -28,15 +28,15 @@ class AuthController extends Controller
         }
 
         // 4. Grab the office if they are a student worker (Admins get 'Management')
-        $office = $user->role === 'User' ? $user->profile?->assigned_office : 'Management';
+        $office = $user->role === 'Student' ? $user->profile?->assigned_office : 'Management';
 
         // 5. Create Sanctum Token for secure React API requests
         $token = $user->createToken('auth_token')->plainTextToken;
 
         // 6. Accounting: Record the login activity in the new Audit Trail
-        ActivityLog::create([
+        \App\Models\ActivityLog::create([
             'admin_id' => $user->id,
-            'admin_name' => $user->fullname,
+            'admin_name' => $user->name, // <-- Make sure this line is exactly like this!
             'action' => 'System Login',
             'description' => 'logged into the system.',
             'ip_address' => $request->ip(),
