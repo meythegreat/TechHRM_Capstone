@@ -5,20 +5,20 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Attendance extends Model
+class Schedule extends Model
 {
     use HasFactory;
 
     protected $fillable = [
         'user_id',
-        'time_in',
-        'time_out',
-        'rendered_hours',
-        'work_type',         // Add this!
-        'task_description'   // Add this!
+        'day',
+        'time',
+        'duty_type',
+        'department',
+        'supervisor'
     ];
 
-    // An attendance record belongs to one specific User
+    // A schedule belongs to a specific user
     public function user()
     {
         return $this->belongsTo(User::class);

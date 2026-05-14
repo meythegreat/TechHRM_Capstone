@@ -23,7 +23,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/attendance/clock-in', [AttendanceController::class, 'clockIn']);
     Route::post('/attendance/clock-out', [AttendanceController::class, 'clockOut']);
     Route::get('/attendance/my-history', [AttendanceController::class, 'myHistory']);
-
+    Route::get('/schedule/my-schedule', [\App\Http\Controllers\ScheduleController::class, 'mySchedule']);
 
     // =========================================================
     // 2. ADMIN & SUPER ADMIN ACCESS ONLY

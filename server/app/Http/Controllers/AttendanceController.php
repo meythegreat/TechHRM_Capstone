@@ -14,29 +14,22 @@ class AttendanceController extends Controller
     {
         $user = $request->user();
 
-        // Check if the user already has an active shift (clocked in, but hasn't clocked out)
-        $activeShift = Attendance::where('user_id', $user->id)
+        // Check if already clocked in
+        $existing = \App\Models\Attendance::where('user_id', $user->id)
             ->whereNull('time_out')
             ->first();
 
-        if ($activeShift) {
-            return response()->json(['message' => 'You are already clocked in.'], 422);
+        if ($existing) {
+            return response()->json(['message' => 'You are already clocked in.'], 400);
         }
 
-        $attendance = Attendance::create([
+        \App\Models\Attendance::create([
             'user_id' => $user->id,
             'time_in' => now(),
-            'status' => 'Present',
+            'work_type' => $request->work_type // Capture the dropdown value!
         ]);
 
-        // Accounting: Log the activity
-        DB::table('logs')->insert([
-            'user_id' => $user->id,
-            'activity' => "Clocked In",
-            'created_at' => now(),
-        ]);
-
-        return response()->json(['message' => 'Successfully clocked in!', 'attendance' => $attendance]);
+        return response()->json(['message' => 'Clocked in successfully!']);
     }
 
     // 2. Clock Out
@@ -44,8 +37,7 @@ class AttendanceController extends Controller
     {
         $user = $request->user();
 
-        // 1. Find the active attendance record (where time_out is still null)
-        $attendance = \App\Models\Attendance::where('user_id', $user->id) // Adjust model name if needed
+        $attendance = \App\Models\Attendance::where('user_id', $user->id)
             ->whereNull('time_out')
             ->first();
 
@@ -53,40 +45,41 @@ class AttendanceController extends Controller
             return response()->json(['message' => 'No active time-in record found.'], 400);
         }
 
-        // 2. Capture the exact current time using your 'Asia/Manila' timezone
         $now = now();
-
-        // 3. Parse the Time In from the database
         $timeIn = \Carbon\Carbon::parse($attendance->time_in);
 
-        // 4. THE FIX: Calculate total minutes strictly from Time In -> Time Out
-        // By doing it in minutes first and dividing by 60, we get accurate decimals
+        // Correct chronological math to prevent negative hours
         $totalMinutes = $timeIn->diffInMinutes($now);
         $renderedHours = round($totalMinutes / 60, 2);
 
-        // 5. Save the final data
         $attendance->update([
             'time_out' => $now,
             'rendered_hours' => $renderedHours,
-            // 'status' => 'Completed' // (Optional depending on your logic)
+            'task_description' => $request->task_description // Capture the text area!
         ]);
 
-        return response()->json([
-            'message' => 'Clocked out successfully!',
-            'rendered_hours' => $renderedHours
-        ]);
+        return response()->json(['message' => 'Clocked out successfully!', 'rendered_hours' => $renderedHours]);
     }
 
     // 3. Get the logged-in student's personal attendance history
     public function myHistory(Request $request)
     {
-        $history = Attendance::where('user_id', $request->user()->id)
-            ->orderBy('time_in', 'desc')
-            ->get();
+        $query = \App\Models\Attendance::where('user_id', $request->user()->id);
+
+        // If the frontend sends a start date, filter it
+        if ($request->has('start') && $request->start != '') {
+            $query->whereDate('time_in', '>=', $request->start);
+        }
+
+        // If the frontend sends an end date, filter it
+        if ($request->has('end') && $request->end != '') {
+            $query->whereDate('time_in', '<=', $request->end);
+        }
+
+        $history = $query->orderBy('time_in', 'desc')->get();
 
         return response()->json($history);
     }
-
     // 4. Admin View: Get EVERYONE'S attendance
     public function index()
     {
