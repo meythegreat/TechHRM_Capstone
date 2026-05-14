@@ -15,7 +15,10 @@ Route::post('/login', [AuthController::class, 'login']);
 // --- PROTECTED ROUTES (Requires valid Sanctum token) ---
 Route::middleware('auth:sanctum')->group(function () {
 
-    Route::get('/users', [UserController::class, 'index']);
+    Route::get('/users', [\App\Http\Controllers\UserController::class, 'index']);
+    Route::post('/users', [\App\Http\Controllers\UserController::class, 'store']);
+    Route::put('/users/{id}', [\App\Http\Controllers\UserController::class, 'update']); // For Editing
+    Route::delete('/users/{id}', [\App\Http\Controllers\UserController::class, 'destroy']); // For Deleting
     Route::get('/logs', [ActivityLogController::class, 'index']); // Fixes "failed to load"
     Route::post('/user/avatar', [\App\Http\Controllers\UserController::class, 'uploadAvatar']);
 

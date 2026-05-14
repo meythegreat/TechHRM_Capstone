@@ -83,7 +83,7 @@ const Login = ({ onLoggedIn }: LoginProps) => {
                         TechHRM
                     </h1>
                     <p className="text-lg font-medium text-blue-100 max-w-md leading-relaxed">
-                        The official Human Resource and Timesheet Management System for the Working Students Program Office.
+                        A Work-Study Program Organization Information System for Filamer Christian University, Inc.
                     </p>
                     
                     <div className="mt-12 flex items-center gap-3 bg-white/10 backdrop-blur-sm px-6 py-3 rounded-full border border-white/20">
