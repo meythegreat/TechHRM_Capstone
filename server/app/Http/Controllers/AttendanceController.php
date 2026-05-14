@@ -44,35 +44,37 @@ class AttendanceController extends Controller
     {
         $user = $request->user();
 
-        // Find the active shift
-        $activeShift = Attendance::where('user_id', $user->id)
+        // 1. Find the active attendance record (where time_out is still null)
+        $attendance = \App\Models\Attendance::where('user_id', $user->id) // Adjust model name if needed
             ->whereNull('time_out')
             ->first();
 
-        if (!$activeShift) {
-            return response()->json(['message' => 'No active shift found. Please clock in first.'], 422);
+        if (!$attendance) {
+            return response()->json(['message' => 'No active time-in record found.'], 400);
         }
 
-        $timeOut = now();
-        $timeIn = Carbon::parse($activeShift->time_in);
+        // 2. Capture the exact current time using your 'Asia/Manila' timezone
+        $now = now();
 
-        // Calculate total hours rendered (in decimal form)
-        $totalMinutes = $timeOut->diffInMinutes($timeIn);
+        // 3. Parse the Time In from the database
+        $timeIn = \Carbon\Carbon::parse($attendance->time_in);
+
+        // 4. THE FIX: Calculate total minutes strictly from Time In -> Time Out
+        // By doing it in minutes first and dividing by 60, we get accurate decimals
+        $totalMinutes = $timeIn->diffInMinutes($now);
         $renderedHours = round($totalMinutes / 60, 2);
 
-        $activeShift->update([
-            'time_out' => $timeOut,
+        // 5. Save the final data
+        $attendance->update([
+            'time_out' => $now,
             'rendered_hours' => $renderedHours,
+            // 'status' => 'Completed' // (Optional depending on your logic)
         ]);
 
-        // Accounting: Log the activity
-        DB::table('logs')->insert([
-            'user_id' => $user->id,
-            'activity' => "Clocked Out ({$renderedHours} hrs rendered)",
-            'created_at' => now(),
+        return response()->json([
+            'message' => 'Clocked out successfully!',
+            'rendered_hours' => $renderedHours
         ]);
-
-        return response()->json(['message' => 'Successfully clocked out!', 'attendance' => $activeShift]);
     }
 
     // 3. Get the logged-in student's personal attendance history
