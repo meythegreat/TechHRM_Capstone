@@ -37,6 +37,15 @@ const StudentDashboard = () => {
     const [avatarUrl, setAvatarUrl] = useState<string | null>(localStorage.getItem('profile_picture'));
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    
+    // NEW: Real-time Profile Data State
+    const [studentProfile, setStudentProfile] = useState({
+        student_id_number: 'Loading...',
+        course: 'Loading...',
+        year_level: '...',
+        phone_number: 'Loading...',
+        assigned_office: 'Loading...'
+    });
 
     // --- ATTENDANCE & SCHEDULE STATE ---
     const [history, setHistory] = useState<AttendanceRecord[]>([]);
@@ -47,10 +56,29 @@ const StudentDashboard = () => {
     const isClockedIn = history.length > 0 && history[0].time_out === null;
     const [schedule, setSchedule] = useState<ScheduleRecord[]>([]);
 
-    // Remember Active Tab
     useEffect(() => {
         localStorage.setItem('student_active_tab', activeTab);
     }, [activeTab]);
+
+    // NEW: Fetch Profile Data on initial load
+    useEffect(() => {
+        const fetchMyProfile = async () => {
+            try {
+                const response = await axios.get('/api/user');
+                const user = response.data;
+                setStudentProfile({
+                    student_id_number: user.profile?.student_id_number || 'Not Assigned',
+                    course: user.profile?.course || 'Not Assigned',
+                    year_level: user.profile?.year_level || 'N/A',
+                    phone_number: user.phone_number || 'No Contact Provided',
+                    assigned_office: user.profile?.assigned_office || 'Not Assigned' // <-- ADD THIS LINE
+                });
+            } catch (error) {
+                console.error("Failed to fetch profile", error);
+            }
+        };
+        fetchMyProfile();
+    }, []);
 
     useEffect(() => {
         fetchHistory();
@@ -167,10 +195,7 @@ const StudentDashboard = () => {
             <div className="flex-1 flex flex-col overflow-hidden">
                 <header className="h-20 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0">
                     <div className="flex items-center gap-4">
-                        <button 
-                            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                            className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
-                        >
+                        <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors">
                             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
                             </svg>
@@ -185,7 +210,6 @@ const StudentDashboard = () => {
                             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{assignedOffice}</p>
                             <p className="text-sm font-bold text-gray-900">{fullName}</p>
                         </div>
-                        {/* Header Profile Picture */}
                         <div className="w-10 h-10 bg-blue-100 border-2 border-blue-500 rounded-full flex items-center justify-center text-blue-700 font-bold shadow-sm overflow-hidden">
                             {avatarUrl ? (
                                 <img src={avatarUrl} alt="Nav Avatar" className="w-full h-full object-cover" />
@@ -405,85 +429,74 @@ const StudentDashboard = () => {
                                         </div>
                                     )}
 
-                                    <div className="flex flex-col sm:flex-row gap-8 items-start">
+                                    <div className="flex flex-col md:flex-row gap-8 items-start">
                                         
                                         {/* Profile Picture Upload Area */}
-                                        <div className="flex flex-col items-center space-y-4">
+                                        <div className="flex flex-col items-center space-y-4 md:w-1/4">
                                             <div className="w-32 h-32 bg-gray-100 rounded-full border-4 border-white shadow-lg flex items-center justify-center relative overflow-hidden group">
                                                 {avatarUrl ? (
                                                     <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
                                                 ) : (
                                                     <span className="text-gray-400 font-bold text-4xl">{firstName.charAt(0)}</span>
                                                 )}
-                                                <input 
-                                                    type="file" 
-                                                    id="avatarUpload" 
-                                                    accept="image/*" 
-                                                    onChange={handleImageUpload} 
-                                                    className="hidden" 
-                                                />
-                                                <label 
-                                                    htmlFor="avatarUpload" 
-                                                    className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                                                >
+                                                <input type="file" id="avatarUpload" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                                                <label htmlFor="avatarUpload" className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
                                                     <span className="text-white text-xs font-bold">Upload New</span>
                                                 </label>
                                             </div>
                                             <label htmlFor="avatarUpload" className="text-sm font-bold text-blue-600 hover:text-blue-700 cursor-pointer">
                                                 Change Picture
                                             </label>
-                                            <p className="text-[10px] text-gray-400 max-w-40 text-center mx-auto">Images are securely stored and encrypted upon upload.</p>
+                                            <p className="text-[10px] text-gray-400 text-center mx-auto">Images are securely stored and encrypted upon upload.</p>
                                         </div>
 
-                                        <div className="flex-1 w-full space-y-4">
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                <div>
-                                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Full Name</label>
-                                                    <input type="text" disabled value={fullName} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-500 font-medium cursor-not-allowed" />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Contact Number</label>
-                                                    <input type="text" placeholder="+63 900 000 0000" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium" />
+                                        <div className="flex-1 w-full space-y-6">
+                                            
+                                            {/* LOCKED: Official Student Profile Data */}
+                                            <div>
+                                                <h4 className="text-sm font-bold text-gray-900 mb-4 border-b border-gray-100 pb-2">University Record <span className="text-xs font-medium text-gray-400 font-normal ml-2">(Contact Admin to edit)</span></h4>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Full Name</label>
+                                                        <input type="text" disabled value={fullName} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-600 font-bold cursor-not-allowed" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Student ID Number</label>
+                                                        <input type="text" disabled value={studentProfile.student_id_number} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-600 font-bold font-mono cursor-not-allowed" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Contact Number</label>
+                                                        <input type="text" disabled value={studentProfile.phone_number} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-600 font-bold cursor-not-allowed" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Course & Year Level</label>
+                                                        <input type="text" disabled value={`${studentProfile.course} - Year ${studentProfile.year_level}`} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-600 font-bold cursor-not-allowed" />
+                                                    </div>
+                                                    <div className="sm:col-span-2">
+                                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Assigned Department / Office</label>
+                                                        <input type="text" disabled value={studentProfile.assigned_office} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-600 font-bold cursor-not-allowed" />
+                                                    </div>
                                                 </div>
                                             </div>
 
-                                            <div className="pt-4 mt-4 border-t border-gray-100">
-                                                <h4 className="text-sm font-bold text-gray-900 mb-4">Security</h4>
+                                            {/* EDITABLE: Security Details */}
+                                            <div className="pt-2 mt-4">
+                                                <h4 className="text-sm font-bold text-gray-900 mb-4 border-b border-gray-100 pb-2">Security</h4>
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                    
-                                                    {/* See/Hide New Password */}
                                                     <div>
                                                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">New Password</label>
                                                         <div className="relative">
-                                                            <input 
-                                                                type={showNewPassword ? "text" : "password"} 
-                                                                placeholder="••••••••" 
-                                                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none pr-14" 
-                                                            />
-                                                            <button 
-                                                                type="button"
-                                                                onClick={() => setShowNewPassword(!showNewPassword)}
-                                                                className="absolute inset-y-0 right-3 flex items-center text-xs font-bold text-gray-400 hover:text-gray-600"
-                                                            >
+                                                            <input type={showNewPassword ? "text" : "password"} placeholder="••••••••" className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none pr-14" />
+                                                            <button type="button" onClick={() => setShowNewPassword(!showNewPassword)} className="absolute inset-y-0 right-3 flex items-center text-xs font-bold text-gray-400 hover:text-gray-600">
                                                                 {showNewPassword ? "HIDE" : "SHOW"}
                                                             </button>
                                                         </div>
                                                     </div>
-
-                                                    {/* See/Hide Confirm Password */}
                                                     <div>
                                                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Confirm Password</label>
                                                         <div className="relative">
-                                                            <input 
-                                                                type={showConfirmPassword ? "text" : "password"} 
-                                                                placeholder="••••••••" 
-                                                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none pr-14" 
-                                                            />
-                                                            <button 
-                                                                type="button"
-                                                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                                                className="absolute inset-y-0 right-3 flex items-center text-xs font-bold text-gray-400 hover:text-gray-600"
-                                                            >
+                                                            <input type={showConfirmPassword ? "text" : "password"} placeholder="••••••••" className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none pr-14" />
+                                                            <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute inset-y-0 right-3 flex items-center text-xs font-bold text-gray-400 hover:text-gray-600">
                                                                 {showConfirmPassword ? "HIDE" : "SHOW"}
                                                             </button>
                                                         </div>
@@ -492,8 +505,8 @@ const StudentDashboard = () => {
                                             </div>
 
                                             <div className="flex justify-end pt-4">
-                                                <button className="px-6 py-3 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700 transition-colors">
-                                                    Save Changes
+                                                <button className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-lg shadow-sm hover:bg-blue-700 transition-colors">
+                                                    Update Password
                                                 </button>
                                             </div>
                                         </div>

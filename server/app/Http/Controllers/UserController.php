@@ -7,27 +7,27 @@ use App\Models\UserProfile;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Storage;
 
 class UserController extends Controller
 {
     public function index()
     {
-        // Changed from get() to paginate(15)
         $users = User::with('profile')->orderBy('created_at', 'desc')->paginate(15);
         return response()->json($users);
     }
 
     public function store(Request $request)
     {
+        // THE BOUNCER: Phone number must be explicitly allowed here!
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'username' => 'required|string|max:255|unique:users',
             'password' => 'required|string|min:8',
-
-            // Validate against the exact 4 system roles
             'role' => ['required', Rule::in(['Student', 'Supervisor', 'WSPO Staff', 'Super Admin'])],
+            'phone_number' => 'nullable|string|max:20',
 
-            // Profile fields (only required if role is 'Student')
+            // Profile fields
             'student_id_number' => 'required_if:role,Student|nullable|string',
             'course' => 'required_if:role,Student|nullable|string',
             'year_level' => 'required_if:role,Student|nullable|integer',
@@ -39,9 +39,9 @@ class UserController extends Controller
             'username' => $validated['username'],
             'password' => Hash::make($validated['password']),
             'role' => $validated['role'],
+            'phone_number' => $validated['phone_number'] ?? null,
         ]);
 
-        // Create profile only if they are a Student
         if ($validated['role'] === 'Student') {
             UserProfile::create([
                 'user_id' => $user->id,
@@ -64,24 +64,24 @@ class UserController extends Controller
             'username' => ['required', 'string', 'max:255', Rule::unique('users')->ignore($user->id)],
             'role' => ['required', Rule::in(['Student', 'Supervisor', 'WSPO Staff', 'Super Admin'])],
             'password' => 'nullable|string|min:8',
+            'phone_number' => 'nullable|string|max:20',
 
-            // Profile fields
             'student_id_number' => 'required_if:role,Student|nullable|string',
             'course' => 'required_if:role,Student|nullable|string',
             'year_level' => 'required_if:role,Student|nullable|integer',
             'assigned_office' => 'required_if:role,Student|nullable|string',
         ]);
 
-        // Update Base User
         $user->name = $validated['name'];
         $user->username = $validated['username'];
         $user->role = $validated['role'];
+        $user->phone_number = $validated['phone_number'] ?? null;
+
         if (!empty($validated['password'])) {
             $user->password = Hash::make($validated['password']);
         }
         $user->save();
 
-        // Handle Profile updates
         if ($validated['role'] === 'Student') {
             UserProfile::updateOrCreate(
                 ['user_id' => $user->id],
@@ -93,7 +93,6 @@ class UserController extends Controller
                 ]
             );
         } else {
-            // If they were changed from a Student to an Admin/Supervisor, delete their old profile
             if ($user->profile) {
                 $user->profile->delete();
             }
@@ -105,7 +104,7 @@ class UserController extends Controller
     public function destroy(string $id)
     {
         $user = User::findOrFail($id);
-        $user->delete(); // This cascades and deletes the profile too
+        $user->delete();
 
         return response()->json(['message' => 'User deleted successfully']);
     }
@@ -113,18 +112,16 @@ class UserController extends Controller
     public function uploadAvatar(Request $request)
     {
         $request->validate([
-            'avatar' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048', // Max 2MB
+            'avatar' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
         $user = $request->user();
 
         if ($request->hasFile('avatar')) {
-            // Delete the old picture if they already have one to save server space
             if ($user->profile_picture) {
-                \Illuminate\Support\Facades\Storage::disk('public')->delete($user->profile_picture);
+                Storage::disk('public')->delete($user->profile_picture);
             }
 
-            // Save the new file in the 'avatars' folder
             $path = $request->file('avatar')->store('avatars', 'public');
 
             $user->profile_picture = $path;
@@ -132,7 +129,7 @@ class UserController extends Controller
 
             return response()->json([
                 'message' => 'Profile picture updated successfully!',
-                'profile_picture' => asset('storage/' . $path) // Returns the full URL to React
+                'profile_picture' => asset('storage/' . $path)
             ]);
         }
 

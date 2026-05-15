@@ -16,6 +16,7 @@ return new class extends Migration
             // $table->foreignId('department_id')->constrained()->onDelete('cascade');
             $table->string('role')->default('Student');
             $table->string('profile_picture')->nullable();
+            $table->string('phone_number')->nullable();
             $table->rememberToken();
             $table->timestamps();
         });
