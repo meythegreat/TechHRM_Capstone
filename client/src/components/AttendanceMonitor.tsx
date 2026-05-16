@@ -7,13 +7,19 @@ interface AttendanceRecord {
     time_out: string | null;
     work_type: string;
     task_description: string;
-    rendered_hours: number | null;
+    rendered_hours: number | string | null;
     user: {
         name: string;
         profile?: {
             assigned_office: string;
         }
     };
+}
+
+function formatRenderedHoursCell(value: number | string | null | undefined): string {
+    if (value == null || value === '') return '--';
+    const n = typeof value === 'number' ? value : parseFloat(String(value));
+    return Number.isFinite(n) ? n.toFixed(2) : '--';
 }
 
 const AttendanceMonitor = () => {
@@ -103,7 +109,7 @@ const AttendanceMonitor = () => {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right">
                                             <span className="text-lg font-extrabold text-gray-900">
-                                                {record.rendered_hours ? record.rendered_hours.toFixed(2) : '--'}
+                                                {formatRenderedHoursCell(record.rendered_hours)}
                                             </span>
                                             <span className="text-xs text-gray-500 font-medium ml-1">hrs</span>
                                         </td>

@@ -7,9 +7,22 @@ interface AttendanceRecord {
     date: string;
     time_in: string;
     time_out: string | null;
-    rendered_hours: number | null;
+    /** Laravel DECIMAL often serializes as a string in JSON */
+    rendered_hours: number | string | null;
     work_type: string | null;
     task_description: string | null;
+}
+
+function parseRenderedHours(value: number | string | null | undefined): number {
+    if (value == null || value === '') return 0;
+    const n = typeof value === 'number' ? value : parseFloat(String(value));
+    return Number.isFinite(n) ? n : 0;
+}
+
+function formatRenderedHoursCell(value: number | string | null | undefined): string {
+    if (value == null || value === '') return '--';
+    const n = typeof value === 'number' ? value : parseFloat(String(value));
+    return Number.isFinite(n) ? n.toFixed(2) : '--';
 }
 
 interface ScheduleRecord {
@@ -118,7 +131,10 @@ const StudentDashboard = () => {
             const payload = action === 'in' ? { work_type: workType } : { task_description: taskDescription };
             const response = await axios.post(endpoint, payload);
             
-            setMessage({ text: response.data.message, type: 'success' });
+            // FIX: Add a fallback string if the backend doesn't send a 'message' key
+            const successMsg = response.data.message || `Successfully clocked ${action}!`;
+            setMessage({ text: successMsg, type: 'success' });
+            
             if (action === 'out') setTaskDescription(''); 
             fetchHistory(); 
         } catch (err: any) {
@@ -167,7 +183,10 @@ const StudentDashboard = () => {
         return new Date(dateString).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
     };
 
-    const totalRenderedHours = history.reduce((sum, record) => sum + (record.rendered_hours || 0), 0);
+    const totalRenderedHours = history.reduce(
+        (sum, record) => sum + parseRenderedHours(record.rendered_hours),
+        0
+    );
     const hourlyRate = 28; 
     const estimatedAmount = totalRenderedHours * hourlyRate;
     const targetHours = 60; 
@@ -248,8 +267,9 @@ const StudentDashboard = () => {
                             <div className="space-y-6">
                                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
                                     <h3 className="text-xl font-bold text-gray-900 mb-4">Action Center</h3>
-                                    {message && (
-                                        <div className={`mb-4 p-4 rounded-lg font-semibold text-sm ${message.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                                    {/* FIX: Add the question mark so it doesn't crash if text is undefined! */}
+                                    {message && message.text?.includes('Profile picture') && (
+                                        <div className={`mb-6 p-4 rounded-lg font-semibold text-sm ${message.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
                                             {message.text}
                                         </div>
                                     )}
@@ -338,7 +358,7 @@ const StudentDashboard = () => {
                                                                 <p className="text-gray-500 text-xs truncate font-medium" title={record.task_description || ''}>{record.task_description || 'No description provided.'}</p>
                                                             </td>
                                                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-extrabold text-gray-900">
-                                                                {record.rendered_hours ? `${record.rendered_hours.toFixed(2)}` : '--'}
+                                                                {formatRenderedHoursCell(record.rendered_hours)}
                                                             </td>
                                                         </tr>
                                                     ))

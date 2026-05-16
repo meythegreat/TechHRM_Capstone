@@ -8,6 +8,9 @@ import AttendanceMonitor from './components/AttendanceMonitor';
 import AdminDashboard from './pages/Admin/AdminDashboard';
 import Sidebar from './components/Sidebar';
 
+// 1. THIS IS THE NEW IMPORT WE NEEDED!
+import ScheduleManagement from './components/ScheduleManagement';
+
 function App() {
   const [hasToken, setHasToken] = useState<boolean>(() => Boolean(localStorage.getItem('auth_token')));
   const [userRole, setUserRole] = useState<string>(() => localStorage.getItem('user_role') || '');
@@ -21,7 +24,7 @@ function App() {
       localStorage.setItem('admin_active_tab', activeTab);
   }, [activeTab]);
 
-  // FULL LOGOUT FUNCTION (No placeholders!)
+  // FULL LOGOUT FUNCTION
   const handleLogout = async () => {
     try {
       await axios.post('/api/logout');
@@ -40,8 +43,6 @@ function App() {
         <div className="min-h-screen font-sans">
             <Login onLoggedIn={(role) => {
                 setUserRole(role);
-                // We set local storage here inside Login component usually, 
-                // but setting token state triggers the re-render.
                 setHasToken(true);
             }} />
         </div>
@@ -57,6 +58,9 @@ function App() {
   const adminNavItems = [
       { id: 'dashboard', label: 'Dashboard', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /> },
       { id: 'attendance', label: 'Timesheets', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /> },
+      
+      // 2. THIS ADDS THE "SCHEDULES" TAB TO THE SIDEBAR!
+      { id: 'schedules', label: 'Schedules', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /> },
   ];
 
   if (userRole === 'Super Admin' || userRole === 'WSPO Staff') {
@@ -92,6 +96,10 @@ function App() {
             <main className="flex-1 overflow-y-auto p-4 sm:p-8">
                 {activeTab === 'dashboard' && <AdminDashboard />}
                 {activeTab === 'attendance' && <AttendanceMonitor />}
+                
+                {/* 3. THIS TELLS REACT TO ACTUALLY SHOW THE PAGE! */}
+                {activeTab === 'schedules' && <ScheduleManagement />}
+                
                 {activeTab === 'logs' && <ActivityLogs />}
                 {activeTab === 'users' && <UserManagement />}
             </main>

@@ -13,14 +13,12 @@ return new class extends Migration
     {
         Schema::create('schedules', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained()->onDelete('cascade');
-
-            $table->string('day'); // Monday, Tuesday, etc.
-            $table->string('time'); // e.g., "08:00 AM - 12:00 PM"
-            $table->string('duty_type'); // Clerical, Janitorial, etc.
-            $table->string('department'); // WSPO, CCS, etc.
-            $table->string('supervisor'); // Name of the supervisor
-
+            $table->foreignId('user_id')->constrained()->onDelete('cascade'); // Links to the student
+            $table->string('day'); // e.g., 'Monday'
+            $table->string('time'); // e.g., '08:00 AM - 12:00 PM'
+            $table->string('duty_type'); // e.g., 'Library Assistant'
+            $table->string('department');
+            $table->string('supervisor');
             $table->timestamps();
         });
     }

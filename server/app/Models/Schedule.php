@@ -2,13 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Schedule extends Model
 {
-    use HasFactory;
-
     protected $fillable = [
         'user_id',
         'day',
@@ -18,7 +15,7 @@ class Schedule extends Model
         'supervisor'
     ];
 
-    // A schedule belongs to a specific user
+    // Link back to the user
     public function user()
     {
         return $this->belongsTo(User::class);

@@ -35,30 +35,38 @@ class AttendanceController extends Controller
     // 2. Clock Out
     public function clockOut(Request $request)
     {
+        $validated = $request->validate([
+            'task_description' => 'required|string'
+        ]);
+
         $user = $request->user();
 
+        // Find the active attendance record
         $attendance = \App\Models\Attendance::where('user_id', $user->id)
             ->whereNull('time_out')
+            ->latest('time_in')
             ->first();
 
         if (!$attendance) {
-            return response()->json(['message' => 'No active time-in record found.'], 400);
+            return response()->json(['message' => 'No active clock-in found.'], 400);
         }
 
-        $now = now();
+        // Calculate hours and update
+        $timeOut = \Carbon\Carbon::now();
         $timeIn = \Carbon\Carbon::parse($attendance->time_in);
-
-        // Correct chronological math to prevent negative hours
-        $totalMinutes = $timeIn->diffInMinutes($now);
-        $renderedHours = round($totalMinutes / 60, 2);
+        $hours = $timeIn->diffInMinutes($timeOut) / 60;
 
         $attendance->update([
-            'time_out' => $now,
-            'rendered_hours' => $renderedHours,
-            'task_description' => $request->task_description // Capture the text area!
+            'time_out' => $timeOut,
+            'task_description' => $validated['task_description'],
+            'rendered_hours' => round($hours, 2)
         ]);
 
-        return response()->json(['message' => 'Clocked out successfully!', 'rendered_hours' => $renderedHours]);
+        // FIX: Return a structured JSON response with a 'message' key!
+        return response()->json([
+            'message' => 'Successfully clocked out!',
+            'data' => $attendance
+        ]);
     }
 
     // 3. Get the logged-in student's personal attendance history
