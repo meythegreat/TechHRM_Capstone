@@ -11,94 +11,92 @@ use Illuminate\Support\Facades\Storage;
 
 class UserController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $users = User::with('profile')->orderBy('created_at', 'desc')->paginate(15);
+        $user = $request->user();
+        $query = \App\Models\User::with('profile');
+
+        // IF THE USER IS A SUPERVISOR: Lock them down
+        if ($user->role === 'Supervisor') {
+            // Get the supervisor's department
+            $myDepartment = $user->profile->assigned_office ?? 'Unassigned';
+
+            // Rule 1: Only show users in the same department
+            $query->whereHas('profile', function($q) use ($myDepartment) {
+                $q->where('assigned_office', $myDepartment);
+            });
+
+            // Rule 2: Strictly hide WSPO Staff and Super Admins from them
+            $query->whereNotIn('role', ['Super Admin', 'WSPO Staff']);
+        }
+
+        // Return paginated results (or get() if you aren't using pagination yet)
+        $users = $query->paginate(10);
         return response()->json($users);
     }
 
+    // --- 1. THE STORE METHOD (Creating a new user) ---
     public function store(Request $request)
     {
-        // THE BOUNCER: Phone number must be explicitly allowed here!
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'username' => 'required|string|max:255|unique:users',
+            'username' => 'required|string|unique:users',
             'password' => 'required|string|min:8',
-            'role' => ['required', Rule::in(['Student', 'Supervisor', 'WSPO Staff', 'Super Admin'])],
-            'phone_number' => 'nullable|string|max:20',
-
-            // Profile fields
-            'student_id_number' => 'required_if:role,Student|nullable|string',
-            'course' => 'required_if:role,Student|nullable|string',
-            'year_level' => 'required_if:role,Student|nullable|integer',
-            'assigned_office' => 'required_if:role,Student|nullable|string',
+            'role' => 'required|string',
+            'phone_number' => 'nullable|string'
         ]);
 
-        $user = User::create([
-            'name' => $validated['name'],
-            'username' => $validated['username'],
-            'password' => Hash::make($validated['password']),
-            'role' => $validated['role'],
-            'phone_number' => $validated['phone_number'] ?? null,
-        ]);
+        $validated['password'] = bcrypt($validated['password']);
+        $user = \App\Models\User::create($validated);
 
-        if ($validated['role'] === 'Student') {
-            UserProfile::create([
-                'user_id' => $user->id,
-                'student_id_number' => $validated['student_id_number'],
-                'course' => $validated['course'],
-                'year_level' => $validated['year_level'],
-                'assigned_office' => $validated['assigned_office'],
+        // FIX: Save profile data for Students, Supervisors, AND WSPO Staff
+        if (in_array($user->role, ['Student', 'Supervisor', 'WSPO Staff'])) {
+            $user->profile()->create([
+                'student_id_number' => $request->student_id_number ?? null,
+                'course' => $request->course ?? null, // Also holds WSPO Staff Title
+                'year_level' => $request->year_level ?? null,
+                'assigned_office' => $request->assigned_office ?? null, // Holds the Department
             ]);
         }
 
-        return response()->json(['message' => 'User created successfully', 'user' => $user->load('profile')], 201);
+        return response()->json(['message' => 'User created successfully', 'user' => $user]);
     }
 
-    public function update(Request $request, string $id)
+    // --- 2. THE UPDATE METHOD (Editing an existing user) ---
+    public function update(Request $request, $id)
     {
-        $user = User::findOrFail($id);
+        $user = \App\Models\User::findOrFail($id);
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'username' => ['required', 'string', 'max:255', Rule::unique('users')->ignore($user->id)],
-            'role' => ['required', Rule::in(['Student', 'Supervisor', 'WSPO Staff', 'Super Admin'])],
-            'password' => 'nullable|string|min:8',
-            'phone_number' => 'nullable|string|max:20',
-
-            'student_id_number' => 'required_if:role,Student|nullable|string',
-            'course' => 'required_if:role,Student|nullable|string',
-            'year_level' => 'required_if:role,Student|nullable|integer',
-            'assigned_office' => 'required_if:role,Student|nullable|string',
+            'username' => 'required|string|unique:users,username,' . $id,
+            'role' => 'required|string',
+            'phone_number' => 'nullable|string'
         ]);
 
-        $user->name = $validated['name'];
-        $user->username = $validated['username'];
-        $user->role = $validated['role'];
-        $user->phone_number = $validated['phone_number'] ?? null;
-
-        if (!empty($validated['password'])) {
-            $user->password = Hash::make($validated['password']);
+        if ($request->filled('password')) {
+            $validated['password'] = bcrypt($request->password);
         }
-        $user->save();
 
-        if ($validated['role'] === 'Student') {
-            UserProfile::updateOrCreate(
+        $user->update($validated);
+
+        // FIX: Update or Create profile data for the assigned roles
+        if (in_array($user->role, ['Student', 'Supervisor', 'WSPO Staff'])) {
+            $user->profile()->updateOrCreate(
                 ['user_id' => $user->id],
                 [
-                    'student_id_number' => $validated['student_id_number'],
-                    'course' => $validated['course'],
-                    'year_level' => $validated['year_level'],
-                    'assigned_office' => $validated['assigned_office'],
+                    'student_id_number' => $request->student_id_number ?? null,
+                    'course' => $request->course ?? null, // Also holds WSPO Staff Title
+                    'year_level' => $request->year_level ?? null,
+                    'assigned_office' => $request->assigned_office ?? null, // Holds the Department
                 ]
             );
         } else {
-            if ($user->profile) {
-                $user->profile->delete();
-            }
+            // Optional: If they are changed to a Super Admin, delete their profile data to clean up
+            $user->profile()->delete();
         }
 
-        return response()->json(['message' => 'User updated successfully', 'user' => $user->load('profile')]);
+        return response()->json(['message' => 'User updated successfully', 'user' => $user]);
     }
 
     public function destroy(string $id)

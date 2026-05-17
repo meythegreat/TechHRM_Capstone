@@ -5,22 +5,20 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Attendance extends Model
+class Profile extends Model
 {
     use HasFactory;
 
     protected $fillable = [
         'user_id',
-        'time_in',
-        'time_out',
-        'rendered_hours',
-        'work_type',
-        'task_description',
-        'date',
-        'status', // <-- ADD THIS
+        'assigned_office',
+        'course',
+        'year_level',
+        'student_id_number',
+        'phone_number'
     ];
 
-    // An attendance record belongs to one specific User
+    // Connect it back to the User
     public function user()
     {
         return $this->belongsTo(User::class);

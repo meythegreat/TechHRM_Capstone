@@ -297,7 +297,7 @@ const UserManagement = () => {
                             {user.profile.assigned_office}
                           </div>
                           <div className="text-xs text-gray-500">
-                            ID: {user.profile.student_id_number}
+                            ID: {user.profile.student_id_number || user.profile.course || 'N/A'}
                           </div>
                         </>
                       ) : (
@@ -400,7 +400,8 @@ const UserManagement = () => {
 
             <form onSubmit={handleSaveUser} className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Base Account Info */}
+                
+                {/* --- Base Account Info --- */}
                 <div className="space-y-4">
                   <h4 className="font-bold text-blue-600 uppercase text-xs tracking-wider border-b pb-2">
                     Account Details
@@ -436,7 +437,6 @@ const UserManagement = () => {
                     />
                   </div>
 
-                  {/* Phone Number Field Added Here */}
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1">
                       Contact Number
@@ -496,81 +496,135 @@ const UserManagement = () => {
                   </div>
                 </div>
 
-                {/* Conditional Profile Info */}
-                <div
-                  className={`space-y-4 transition-opacity duration-300 ${formData.role === "Student" ? "opacity-100" : "opacity-40 pointer-events-none"}`}
-                >
+                {/* --- Conditional Profile Info --- */}
+                <div className="space-y-4 bg-gray-50 p-4 rounded-xl border border-gray-100">
                   <h4 className="font-bold text-orange-500 uppercase text-xs tracking-wider border-b pb-2">
-                    Student Profile
+                    {formData.role === "Student" ? "Student Profile" : 
+                     formData.role === "Supervisor" ? "Department Info" : 
+                     formData.role === "WSPO Staff" ? "Staff Details" : 
+                     "Role Specifics"}
                   </h4>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">
-                      Student ID Number
-                    </label>
-                    <input
-                      required={formData.role === "Student"}
-                      type="text"
-                      value={formData.student_id_number}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          student_id_number: e.target.value,
-                        })
-                      }
-                      className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                      placeholder="FCU-2026-XXX"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">
-                      Course
-                    </label>
-                    <input
-                      required={formData.role === "Student"}
-                      type="text"
-                      value={formData.course}
-                      onChange={(e) =>
-                        setFormData({ ...formData, course: e.target.value })
-                      }
-                      className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                      placeholder="BS Information Technology"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">
-                      Year Level
-                    </label>
-                    <input
-                      required={formData.role === "Student"}
-                      type="number"
-                      min="1"
-                      max="5"
-                      value={formData.year_level}
-                      onChange={(e) =>
-                        setFormData({ ...formData, year_level: e.target.value })
-                      }
-                      className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                      placeholder="e.g. 3"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">
-                      Assigned Department
-                    </label>
-                    <input
-                      required={formData.role === "Student"}
-                      type="text"
-                      value={formData.assigned_office}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          assigned_office: e.target.value,
-                        })
-                      }
-                      className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                      placeholder="College of Computer Studies"
-                    />
-                  </div>
+
+                  {/* STUDENT FIELDS */}
+                  {formData.role === "Student" && (
+                    <>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">
+                          Student ID Number
+                        </label>
+                        <input
+                          required
+                          type="text"
+                          value={formData.student_id_number}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              student_id_number: e.target.value,
+                            })
+                          }
+                          className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                          placeholder="FCU-2026-XXX"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">
+                          Course
+                        </label>
+                        <input
+                          required
+                          type="text"
+                          value={formData.course}
+                          onChange={(e) =>
+                            setFormData({ ...formData, course: e.target.value })
+                          }
+                          className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                          placeholder="BS Information Technology"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">
+                          Year Level
+                        </label>
+                        <input
+                          required
+                          type="number"
+                          min="1"
+                          max="5"
+                          value={formData.year_level}
+                          onChange={(e) =>
+                            setFormData({ ...formData, year_level: e.target.value })
+                          }
+                          className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                          placeholder="e.g. 3"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* DEPARTMENT FIELD (For Students & Supervisors) */}
+                  {(formData.role === "Student" || formData.role === "Supervisor") && (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">
+                        {formData.role === "Supervisor" ? "Supervised Department" : "Assigned Department"}
+                      </label>
+                      <select
+                        required
+                        value={formData.assigned_office}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            assigned_office: e.target.value,
+                          })
+                        }
+                        className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white font-medium"
+                      >
+                        <option value="" disabled>-- Select Department --</option>
+                        <option value="Pre-School Department">Pre-School Department</option>
+                        <option value="Elementary Department">Elementary Department</option>
+                        <option value="Junior High School Department">Junior High School Department</option>
+                        <option value="Senior High School Department">Senior High School Department</option>
+                        <option value="College of Arts and Sciences">College of Arts and Sciences</option>
+                        <option value="College of Business and Accountancy">College of Business and Accountancy</option>
+                        <option value="College of Computer Studies">College of Computer Studies</option>
+                        <option value="College of Criminal Justice Education">College of Criminal Justice Education</option>
+                        <option value="College of Engineering">College of Engineering</option>
+                        <option value="College of Hotel and Tourism Management">College of Hotel and Tourism Management</option>
+                        <option value="College of Nursing">College of Nursing</option>
+                        <option value="College of Teacher Education">College of Teacher Education</option>
+                        <option value="Graduate School">Graduate School</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {/* STAFF POSITION FIELD (For WSPO Staff) */}
+                  {formData.role === "WSPO Staff" && (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">
+                        Staff Position
+                      </label>
+                      <select
+                        required
+                        value={formData.course}
+                        onChange={(e) =>
+                          setFormData({ ...formData, course: e.target.value })
+                        }
+                        className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white font-medium"
+                      >
+                        <option value="" disabled>-- Select Position --</option>
+                        <option value="WSPO Coordinator">WSPO Coordinator</option>
+                        <option value="WSPO President">WSPO President</option>
+                        <option value="WSPO Secretary">WSPO Secretary</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {/* SUPER ADMIN NOTICE */}
+                  {formData.role === "Super Admin" && (
+                    <div className="text-sm text-gray-500 italic mt-4">
+                      Super Admins have full system access. No additional profile details required.
+                    </div>
+                  )}
+
                 </div>
               </div>
 

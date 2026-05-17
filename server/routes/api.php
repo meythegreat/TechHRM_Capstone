@@ -36,17 +36,21 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/attendance/my-history', [AttendanceController::class, 'myHistory']);
     Route::get('/schedule/my-schedule', [ScheduleController::class, 'mySchedule']);
 
+    // --- STUDENT ACCESS ---
+    Route::get('/my-schedule', [\App\Http\Controllers\ScheduleController::class, 'mySchedule']);
+    Route::post('/my-schedule/{id}/request-edit', [\App\Http\Controllers\ScheduleController::class, 'requestEdit']);
 
     // --- 2. SUPERVISOR, WSPO STAFF, & SUPER ADMIN ---
     // (Filtering logic is handled securely inside the controllers)
     Route::get('/admin/stats', [DashboardController::class, 'getStats']);
+    Route::get('/attendance', [\App\Http\Controllers\AttendanceController::class, 'index']);
     Route::get('/attendance/all', [AttendanceController::class, 'allHistory']);
-
 
     // --- 3. WSPO STAFF & SUPER ADMIN ONLY ---
     // (If you have a custom role middleware, you can wrap this, otherwise the React frontend hides the button)
     Route::get('/logs', [ActivityLogController::class, 'index']);
-
+    Route::patch('/schedules/{id}/resolve-request', [\App\Http\Controllers\ScheduleController::class, 'resolveRequest']);
+    Route::patch('/attendance/{id}/approve', [\App\Http\Controllers\AttendanceController::class, 'approve']);
 
     // --- 4. SUPER ADMIN ONLY (User Management) ---
     // (We use exact HTTP verbs instead of apiResource to prevent overlap)
@@ -57,4 +61,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/schedules', [ScheduleController::class, 'index']);
     Route::post('/schedules', [ScheduleController::class, 'store']);
     Route::delete('/schedules/{id}', [ScheduleController::class, 'destroy']);
+
+    // --- SUPER ADMIN COMMAND CENTER ---
+    Route::get('/admin/dashboard-stats', [\App\Http\Controllers\AdminController::class, 'getStats']);
 });

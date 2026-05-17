@@ -7,10 +7,21 @@ interface AttendanceRecord {
     date: string;
     time_in: string;
     time_out: string | null;
-    /** Laravel DECIMAL often serializes as a string in JSON */
     rendered_hours: number | string | null;
     work_type: string | null;
     task_description: string | null;
+}
+
+// UPGRADED: Added the edit request fields to the interface
+interface ScheduleRecord {
+    id: number;
+    day: string;
+    time: string;
+    duty_type: string;
+    department: string;
+    supervisor: string;
+    edit_request_status?: 'none' | 'pending' | 'approved' | 'rejected';
+    edit_request_note?: string | null;
 }
 
 function parseRenderedHours(value: number | string | null | undefined): number {
@@ -23,15 +34,6 @@ function formatRenderedHoursCell(value: number | string | null | undefined): str
     if (value == null || value === '') return '--';
     const n = typeof value === 'number' ? value : parseFloat(String(value));
     return Number.isFinite(n) ? n.toFixed(2) : '--';
-}
-
-interface ScheduleRecord {
-    id: number;
-    day: string;
-    time: string;
-    duty_type: string;
-    department: string;
-    supervisor: string;
 }
 
 const StudentDashboard = () => {
@@ -51,7 +53,6 @@ const StudentDashboard = () => {
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     
-    // NEW: Real-time Profile Data State
     const [studentProfile, setStudentProfile] = useState({
         student_id_number: 'Loading...',
         course: 'Loading...',
@@ -69,11 +70,15 @@ const StudentDashboard = () => {
     const isClockedIn = history.length > 0 && history[0].time_out === null;
     const [schedule, setSchedule] = useState<ScheduleRecord[]>([]);
 
+    // --- REQUEST EDIT STATE ---
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [selectedShiftId, setSelectedShiftId] = useState<number | ''>('');
+    const [editNote, setEditNote] = useState('');
+
     useEffect(() => {
         localStorage.setItem('student_active_tab', activeTab);
     }, [activeTab]);
 
-    // NEW: Fetch Profile Data on initial load
     useEffect(() => {
         const fetchMyProfile = async () => {
             try {
@@ -84,7 +89,7 @@ const StudentDashboard = () => {
                     course: user.profile?.course || 'Not Assigned',
                     year_level: user.profile?.year_level || 'N/A',
                     phone_number: user.phone_number || 'No Contact Provided',
-                    assigned_office: user.profile?.assigned_office || 'Not Assigned' // <-- ADD THIS LINE
+                    assigned_office: user.profile?.assigned_office || 'Not Assigned'
                 });
             } catch (error) {
                 console.error("Failed to fetch profile", error);
@@ -111,8 +116,12 @@ const StudentDashboard = () => {
 
     const fetchSchedule = async () => {
         try {
-            const response = await axios.get('/api/schedule/my-schedule');
-            setSchedule(response.data);
+            const response = await axios.get('/api/my-schedule');
+            const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+            const sortedSchedules = response.data.sort((a: ScheduleRecord, b: ScheduleRecord) => {
+                return daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day);
+            });
+            setSchedule(sortedSchedules);
         } catch (err) {
             console.error("Failed to fetch schedule", err);
         }
@@ -131,7 +140,6 @@ const StudentDashboard = () => {
             const payload = action === 'in' ? { work_type: workType } : { task_description: taskDescription };
             const response = await axios.post(endpoint, payload);
             
-            // FIX: Add a fallback string if the backend doesn't send a 'message' key
             const successMsg = response.data.message || `Successfully clocked ${action}!`;
             setMessage({ text: successMsg, type: 'success' });
             
@@ -139,6 +147,28 @@ const StudentDashboard = () => {
             fetchHistory(); 
         } catch (err: any) {
             setMessage({ text: err.response?.data?.message || `Failed to clock ${action}.`, type: 'error' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleRequestEdit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsLoading(true);
+        try {
+            const response = await axios.post(`/api/my-schedule/${selectedShiftId}/request-edit`, { note: editNote });
+            setMessage({ text: response.data.message, type: 'success' });
+            setIsEditModalOpen(false);
+            setEditNote('');
+            setSelectedShiftId('');
+            fetchSchedule(); 
+            
+            // <-- ADD THIS LINE to clear the toast after 3 seconds
+            setTimeout(() => setMessage(null), 3000); 
+
+        } catch (error: any) {
+            setMessage({ text: error.response?.data?.message || 'Failed to send request.', type: 'error' });
+            setTimeout(() => setMessage(null), 3000); // <-- AND THIS LINE
         } finally {
             setIsLoading(false);
         }
@@ -191,7 +221,6 @@ const StudentDashboard = () => {
     const estimatedAmount = totalRenderedHours * hourlyRate;
     const targetHours = 60; 
 
-    // --- STUDENT NAVIGATION ITEMS ---
     const studentNavItems = [
         { id: 'dashboard', label: 'Dashboard', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /> },
         { id: 'attendance', label: 'Attendance Log', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /> },
@@ -241,10 +270,42 @@ const StudentDashboard = () => {
 
                 <main className="flex-1 overflow-y-auto p-4 sm:p-8">
                     <div className="max-w-6xl mx-auto space-y-6">
+
+                        {/* --- GLOBAL NOTIFICATION TOAST --- */}
+                        {message && (
+                            <div className={`p-4 rounded-xl border font-bold text-sm flex items-center gap-2 shadow-sm ${message.type === 'success' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                                {message.type === 'success' ? (
+                                    <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                ) : (
+                                    <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                )}
+                                <span>{message.text}</span>
+                            </div>
+                        )}
                         
                         {/* 1. DASHBOARD TAB */}
                         {activeTab === 'dashboard' && (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+                                    <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">My Profile</h2>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <div className="text-xs text-gray-500">Full Name</div>
+                                            <div className="font-bold text-gray-900">{fullName}</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs text-gray-500">Assigned Department</div>
+                                            <div className="font-bold text-gray-900 text-sm">{studentProfile.assigned_office}</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs text-gray-500">Course & Year</div>
+                                            <div className="font-bold text-gray-900">
+                                                {studentProfile.course} - Year {studentProfile.year_level}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                                     <h3 className="text-lg font-bold text-gray-900 mb-4">Hours Progress</h3>
                                     <div className="flex justify-between text-sm mb-2">
@@ -267,8 +328,7 @@ const StudentDashboard = () => {
                             <div className="space-y-6">
                                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
                                     <h3 className="text-xl font-bold text-gray-900 mb-4">Action Center</h3>
-                                    {/* FIX: Add the question mark so it doesn't crash if text is undefined! */}
-                                    {message && message.text?.includes('Profile picture') && (
+                                    {message && message.text?.includes('Profile picture') === false && (
                                         <div className={`mb-6 p-4 rounded-lg font-semibold text-sm ${message.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
                                             {message.text}
                                         </div>
@@ -393,47 +453,68 @@ const StudentDashboard = () => {
 
                         {/* 4. SCHEDULE TAB */}
                         {activeTab === 'schedule' && (
-                            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                                <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
-                                    <h3 className="text-xl font-bold text-gray-900">My Weekly Schedule</h3>
-                                    <button className="px-4 py-2 bg-blue-100 text-blue-700 font-bold text-sm rounded-lg hover:bg-blue-200 transition-colors">
-                                        Request Edit
-                                    </button>
+                            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 h-full">
+                              <div className="flex justify-between items-center mb-6">
+                                <div className="flex items-center gap-3">
+                                    <h2 className="text-xl font-extrabold text-gray-900">My Weekly Schedule</h2>
+                                    <span className="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded-full border border-blue-100 hidden sm:inline-block">
+                                      {schedule.length} Shifts
+                                    </span>
                                 </div>
-                                {schedule.length === 0 ? (
-                                    <div className="p-8 text-center">
-                                        <svg className="mx-auto h-12 w-12 text-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                        </svg>
-                                        <p className="text-gray-500 font-medium">Your schedule is currently empty.</p>
+                                <button 
+                                    onClick={() => setIsEditModalOpen(true)} 
+                                    disabled={schedule.length === 0}
+                                    className="px-4 py-2 bg-blue-100 text-blue-700 font-bold text-sm rounded-lg hover:bg-blue-200 transition-colors shadow-sm active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                    Request Edit
+                                </button>
+                              </div>
+
+                              {schedule.length === 0 ? (
+                                <div className="py-12 text-center bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                                  <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                  <h3 className="text-sm font-bold text-gray-900">No shifts assigned yet</h3>
+                                  <p className="text-xs text-gray-500 mt-1">Check back later or contact your supervisor.</p>
+                                </div>
+                              ) : (
+                                <div className="space-y-4">
+                                  {schedule.map((shift: ScheduleRecord) => (
+                                    <div key={shift.id} className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-xl border transition-colors group ${shift.edit_request_status === 'pending' ? 'border-orange-200 bg-orange-50/30' : 'border-gray-100 hover:border-blue-200 hover:bg-blue-50/50'}`}>
+                                      
+                                      <div className="flex items-center gap-4 mb-3 sm:mb-0">
+                                        <div className={`w-14 h-14 rounded-lg flex flex-col items-center justify-center flex-shrink-0 border shadow-sm ${shift.edit_request_status === 'pending' ? 'bg-orange-100 text-orange-700 border-orange-200' : 'bg-blue-100 text-blue-700 border-blue-200'}`}>
+                                          <span className="text-xs font-bold uppercase">{shift.day.substring(0, 3)}</span>
+                                        </div>
+                                        <div>
+                                          <div className="font-bold text-gray-900 text-lg">{shift.time}</div>
+                                          <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">{shift.duty_type}</div>
+                                        </div>
+                                      </div>
+
+                                      <div className="flex flex-col sm:items-end w-full sm:w-auto bg-gray-50 sm:bg-transparent p-3 sm:p-0 rounded-lg sm:rounded-none gap-2">
+                                        {shift.edit_request_status === 'pending' && (
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold bg-orange-100 text-orange-800 border border-orange-200 uppercase tracking-wider self-start sm:self-end">
+                                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                Pending Edit Review
+                                            </span>
+                                        )}
+                                        <div className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
+                                          <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                                          {shift.department}
+                                        </div>
+                                        <div className="text-xs text-gray-500 flex items-center gap-1.5">
+                                          <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                                          Supervisor: {shift.supervisor}
+                                        </div>
+                                      </div>
+
                                     </div>
-                                ) : (
-                                    <div className="overflow-x-auto">
-                                        <table className="min-w-full divide-y divide-gray-200">
-                                            <thead className="bg-white">
-                                                <tr>
-                                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Day</th>
-                                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Time</th>
-                                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Duty & Dept</th>
-                                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Supervisor</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="bg-white divide-y divide-gray-100">
-                                                {schedule.map((shift) => (
-                                                    <tr key={shift.id} className="hover:bg-gray-50">
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{shift.day}</td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600 font-bold">{shift.time}</td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                                            <div className="font-bold text-gray-900">{shift.duty_type}</div>
-                                                            <div className="text-gray-500 text-xs font-medium">{shift.department}</div>
-                                                        </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-700">{shift.supervisor}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
+                                  ))}
+                                </div>
+                              )}
                             </div>
                         )}
 
@@ -450,8 +531,6 @@ const StudentDashboard = () => {
                                     )}
 
                                     <div className="flex flex-col md:flex-row gap-8 items-start">
-                                        
-                                        {/* Profile Picture Upload Area */}
                                         <div className="flex flex-col items-center space-y-4 md:w-1/4">
                                             <div className="w-32 h-32 bg-gray-100 rounded-full border-4 border-white shadow-lg flex items-center justify-center relative overflow-hidden group">
                                                 {avatarUrl ? (
@@ -471,8 +550,6 @@ const StudentDashboard = () => {
                                         </div>
 
                                         <div className="flex-1 w-full space-y-6">
-                                            
-                                            {/* LOCKED: Official Student Profile Data */}
                                             <div>
                                                 <h4 className="text-sm font-bold text-gray-900 mb-4 border-b border-gray-100 pb-2">University Record <span className="text-xs font-medium text-gray-400 font-normal ml-2">(Contact Admin to edit)</span></h4>
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -499,7 +576,6 @@ const StudentDashboard = () => {
                                                 </div>
                                             </div>
 
-                                            {/* EDITABLE: Security Details */}
                                             <div className="pt-2 mt-4">
                                                 <h4 className="text-sm font-bold text-gray-900 mb-4 border-b border-gray-100 pb-2">Security</h4>
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -538,6 +614,56 @@ const StudentDashboard = () => {
                     </div>
                 </main>
             </div>
+
+            {/* REQUEST EDIT MODAL */}
+            {isEditModalOpen && (
+                <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden slide-up">
+                        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                            <h3 className="text-lg font-bold text-gray-900">Request Schedule Change</h3>
+                            <button onClick={() => setIsEditModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+                        <form onSubmit={handleRequestEdit} className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Which shift?</label>
+                                <select 
+                                    required
+                                    value={selectedShiftId}
+                                    onChange={(e) => setSelectedShiftId(Number(e.target.value))}
+                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium bg-white"
+                                >
+                                    <option value="" disabled>-- Select a scheduled shift --</option>
+                                    {schedule.map(shift => (
+                                        <option key={shift.id} value={shift.id}>
+                                            {shift.day} ({shift.time}) - {shift.duty_type}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Reason for request</label>
+                                <textarea 
+                                    required
+                                    value={editNote}
+                                    onChange={(e) => setEditNote(e.target.value)}
+                                    placeholder="e.g., I have a make-up exam during this time..."
+                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none resize-none h-28 font-medium text-sm"
+                                />
+                            </div>
+                            <div className="flex justify-end gap-3 pt-4">
+                                <button type="button" onClick={() => setIsEditModalOpen(false)} className="px-5 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                                    Cancel
+                                </button>
+                                <button type="submit" disabled={isLoading} className="px-6 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm disabled:bg-blue-400">
+                                    {isLoading ? 'Sending...' : 'Send to Supervisor'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

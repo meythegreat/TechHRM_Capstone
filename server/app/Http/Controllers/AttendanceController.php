@@ -6,6 +6,7 @@ use App\Models\Attendance;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use App\Models\Schedule;
 
 class AttendanceController extends Controller
 {
@@ -14,22 +15,68 @@ class AttendanceController extends Controller
     {
         $user = $request->user();
 
-        // Check if already clocked in
-        $existing = \App\Models\Attendance::where('user_id', $user->id)
+        // 1. PREVENT DOUBLE CLOCK-INS
+        $activeRecord = \App\Models\Attendance::where('user_id', $user->id)
             ->whereNull('time_out')
             ->first();
 
-        if ($existing) {
-            return response()->json(['message' => 'You are already clocked in.'], 400);
+        if ($activeRecord) {
+            return response()->json(['message' => 'You are already clocked in!'], 422);
         }
 
-        \App\Models\Attendance::create([
+        // --- 2. SMART SCHEDULE CHECK ---
+        $now = Carbon::now();
+        $currentDay = $now->format('l'); // Gets 'Monday', 'Tuesday', etc.
+
+        // Fetch all shifts assigned to this student for TODAY
+        $todaysShifts = Schedule::where('user_id', $user->id)
+            ->where('day', $currentDay)
+            ->get();
+
+        $hasValidShift = false;
+        $gracePeriodMinutes = 30; // Allow students to clock in 30 minutes early
+
+        foreach ($todaysShifts as $shift) {
+            $times = explode(' - ', $shift->time);
+
+            if (count($times) === 2) {
+                // Parse the shift times assuming they are for today
+                $shiftStart = Carbon::parse($times[0]);
+                $shiftEnd = Carbon::parse($times[1]);
+
+                // Handle overnight shifts (e.g., 10:00 PM to 2:00 AM)
+                if ($shiftEnd->lt($shiftStart)) {
+                    $shiftEnd->addDay();
+                }
+
+                // Check if right NOW is between (Start Time - 30 mins) and (End Time)
+                if ($now->between($shiftStart->copy()->subMinutes($gracePeriodMinutes), $shiftEnd)) {
+                    $hasValidShift = true;
+                    break;
+                }
+            }
+        }
+
+        // If the loop finishes and no valid shift was found, reject them!
+        if (!$hasValidShift) {
+            return response()->json([
+                'message' => "Access Denied: You do not have an active shift scheduled right now."
+            ], 403);
+        }
+        // --- END SMART CHECK ---
+
+        // 3. IF THEY PASS THE CHECK, SAVE THE ATTENDANCE
+        $attendance = \App\Models\Attendance::create([
             'user_id' => $user->id,
-            'time_in' => now(),
-            'work_type' => $request->work_type // Capture the dropdown value!
+            'time_in' => $now,
+            'work_type' => $request->work_type ?? 'Unspecified',
+            'date' => $now->toDateString(),
         ]);
 
-        return response()->json(['message' => 'Clocked in successfully!']);
+        return response()->json([
+            'message' => 'Successfully clocked in! Have a great shift.',
+            'record' => $attendance
+        ]);
     }
 
     // 2. Clock Out
@@ -88,12 +135,34 @@ class AttendanceController extends Controller
 
         return response()->json($history);
     }
+
     // 4. Admin View: Get EVERYONE'S attendance
-    public function index()
+    // Fetch all attendance records for the Admin/Supervisor Dashboard
+    public function index(Request $request)
     {
-        // Eager load the user data so admins can see who the record belongs to
-        $attendances = Attendance::with('user')->orderBy('time_in', 'desc')->get();
-        return response()->json($attendances);
+        $user = $request->user();
+
+        // Eager load the student's user account and their specific profile
+        $query = \App\Models\Attendance::with(['user.profile'])
+            ->orderBy('created_at', 'desc');
+
+        // MULTI-TENANT CHECK: If Supervisor, lock down to their department
+        if ($user->role === 'Supervisor') {
+            $myDepartment = $user->profile->assigned_office ?? 'Unassigned';
+
+            // Only fetch attendance where the student's assigned_office matches the supervisor's
+            $query->whereHas('user.profile', function($q) use ($myDepartment) {
+                $q->where('assigned_office', $myDepartment);
+            });
+        }
+
+        // Optional: Filter by specific date if passed from React
+        if ($request->has('date') && $request->date !== '') {
+            $query->whereDate('time_in', $request->date);
+        }
+
+        $records = $query->get();
+        return response()->json($records);
     }
 
     // 5. Admin View: Export to CSV (Excel)
@@ -177,5 +246,17 @@ class AttendanceController extends Controller
 
         // Return the paginated data!
         return response()->json($query->paginate(15));
+    }
+
+    // Approve a student's timesheet
+    public function approve($id)
+    {
+        $attendance = \App\Models\Attendance::findOrFail($id);
+
+        $attendance->update([
+            'status' => 'approved'
+        ]);
+
+        return response()->json(['message' => 'Timesheet approved successfully!']);
     }
 }

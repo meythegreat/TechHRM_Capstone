@@ -12,7 +12,9 @@ class Schedule extends Model
         'time',
         'duty_type',
         'department',
-        'supervisor'
+        'supervisor',
+        'edit_request_note',
+        'edit_request_status',  
     ];
 
     // Link back to the user
