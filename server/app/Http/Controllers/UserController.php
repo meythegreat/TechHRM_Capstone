@@ -63,7 +63,7 @@ class UserController extends Controller
     }
 
     // --- 2. THE UPDATE METHOD (Editing an existing user) ---
-    public function update(Request $request, $id)
+    public function update(Request $request, string $id)
     {
         $user = \App\Models\User::findOrFail($id);
 
@@ -117,17 +117,17 @@ class UserController extends Controller
 
         if ($request->hasFile('avatar')) {
             if ($user->profile_picture) {
-                Storage::disk('public')->delete($user->profile_picture);
+                Storage::disk('local')->delete($user->profile_picture);
             }
 
-            $path = $request->file('avatar')->store('avatars', 'public');
+            $path = $request->file('avatar')->store('avatars', 'local');
 
             $user->profile_picture = $path;
             $user->save();
 
             return response()->json([
                 'message' => 'Profile picture updated successfully!',
-                'profile_picture' => asset('storage/' . $path)
+                'profile_picture' => $path,
             ]);
         }
 

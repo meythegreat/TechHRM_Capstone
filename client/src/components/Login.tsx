@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import axios from 'axios';
+import { normalizeFilePath } from '../utils/secureFile';
 
 interface LoginProps {
     onLoggedIn: (role: string) => void;
@@ -38,7 +39,7 @@ const Login = ({ onLoggedIn }: LoginProps) => {
             // If name is null from the backend, give it a default fallback
             localStorage.setItem('user_name', name || username); 
             
-            localStorage.setItem('profile_picture', profile_picture || '');
+            localStorage.setItem('profile_picture', normalizeFilePath(profile_picture) || '');
             localStorage.setItem('assigned_office', office || 'System Administrator');
 
             // Set default headers for all future requests

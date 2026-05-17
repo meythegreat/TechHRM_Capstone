@@ -13,6 +13,7 @@ interface DashboardStats {
 const SuperAdminDashboard = () => {
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null); // <-- NEW: Error state
 
     useEffect(() => {
         fetchStats();
@@ -23,10 +24,13 @@ const SuperAdminDashboard = () => {
 
     const fetchStats = async () => {
         try {
+            setError(null);
             const response = await axios.get('/api/admin/dashboard-stats');
             setStats(response.data);
-        } catch (error) {
-            console.error("Failed to load command center stats:", error);
+        } catch (err: any) {
+            console.error("Failed to load command center stats:", err);
+            // <-- NEW: Catch the error so we can display it!
+            setError(err.response?.data?.message || "Server Error: Could not load analytics.");
         } finally {
             setIsLoading(false);
         }
@@ -35,6 +39,17 @@ const SuperAdminDashboard = () => {
     const formatTime = (dateString: string) => {
         return new Date(dateString).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
     };
+
+    // <-- NEW: If there's an error, show a red error box instead of loading forever
+    if (error) {
+        return (
+            <div className="flex flex-col justify-center items-center h-full space-y-4">
+                <svg className="w-12 h-12 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <div className="text-red-500 font-bold text-lg">{error}</div>
+                <button onClick={fetchStats} className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg font-bold">Try Again</button>
+            </div>
+        );
+    }
 
     if (isLoading || !stats) {
         return <div className="flex justify-center items-center h-full text-gray-500 font-bold">Loading Command Center...</div>;

@@ -8,6 +8,7 @@ use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\ScheduleController;
+use App\Http\Controllers\SecureFileController;
 
 // =========================================================
 // PUBLIC ROUTES
@@ -29,6 +30,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Profile Picture Upload
     Route::post('/user/avatar', [UserController::class, 'uploadAvatar']);
+
+    // Private file vault (avatars, requirement documents) — auth required
+    Route::get('/secure-file', [SecureFileController::class, 'show']);
 
     // Personal Attendance & Schedule (Student Dashboard)
     Route::post('/attendance/clock-in', [AttendanceController::class, 'clockIn']);
@@ -64,4 +68,16 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // --- SUPER ADMIN COMMAND CENTER ---
     Route::get('/admin/dashboard-stats', [\App\Http\Controllers\AdminController::class, 'getStats']);
+
+    // --- NOTIFICATIONS ---
+    Route::get('/notifications', [\App\Http\Controllers\NotificationController::class, 'index']);
+    Route::patch('/notifications/{id}/read', [\App\Http\Controllers\NotificationController::class, 'markAsRead']);
+
+    // --- REQUIREMENTS (WSPO DOCUMENTS) ---
+    Route::post('/requirements/upload', [\App\Http\Controllers\RequirementController::class, 'upload']);
+    Route::get('/my-requirements', [\App\Http\Controllers\RequirementController::class, 'myRequirements']);
+
+    // Admin review routes
+    Route::get('/requirements', [\App\Http\Controllers\RequirementController::class, 'index']);
+    Route::patch('/requirements/{id}/status', [\App\Http\Controllers\RequirementController::class, 'updateStatus']);
 });

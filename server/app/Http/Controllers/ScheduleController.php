@@ -118,6 +118,21 @@ class ScheduleController extends Controller
             'edit_request_status' => 'pending'
         ]);
 
+        $schedule->update([
+            'edit_request_note' => $validated['note'],
+            'edit_request_status' => 'pending'
+        ]);
+
+        // --- NEW: NOTIFY ALL ADMINS/SUPERVISORS ---
+        $supervisors = \App\Models\User::whereIn('role', ['Super Admin', 'Supervisor'])->get();
+        foreach($supervisors as $sup) {
+            \App\Models\Notification::create([
+                'user_id' => $sup->id,
+                'title' => 'Schedule Edit Requested',
+                'message' => $request->user()->name . ' requested an edit for their ' . $schedule->day . ' shift.'
+            ]);
+        }
+
         return response()->json(['message' => 'Edit request sent to your Supervisor!']);
     }
 

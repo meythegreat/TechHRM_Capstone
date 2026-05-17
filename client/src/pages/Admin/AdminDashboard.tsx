@@ -1,9 +1,19 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+// 1. Import the Command Center component (adjusting the path to reach the components folder)
+import SuperAdminDashboard from '../../components/SuperAdminDashboard';
 
 const AdminDashboard = () => {
     const userName = localStorage.getItem('user_name') || 'Admin';
     const userRole = localStorage.getItem('user_role') || 'Supervisor';
+    
+    // 2. THE SUPER ADMIN HIJACK
+    // If they are a Super Admin, completely swap the view to the Command Center
+    if (userRole === 'Super Admin') {
+        return <SuperAdminDashboard />;
+    }
+
+    // --- EVERYTHING BELOW THIS LINE IS FOR SUPERVISORS & WSPO STAFF ---
     
     // Default state starts at 0 until the API responds
     const [stats, setStats] = useState({

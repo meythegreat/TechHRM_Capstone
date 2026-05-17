@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\Attendance;
-use App\Models\Profile;
+use App\Models\UserProfile; // <-- FIXED: Changed from Profile to UserProfile
 
 class AdminController extends Controller
 {
@@ -20,8 +20,8 @@ class AdminController extends Controller
         $estimatedPayroll = $totalHoursRendered * $hourlyRate;
 
         // 2. Department Workforce Distribution
-        // Groups all students by their assigned office to see which department is utilizing the most labor
-        $deptStats = Profile::whereNotNull('assigned_office')
+        // <-- FIXED: Changed from Profile to UserProfile
+        $deptStats = UserProfile::whereNotNull('assigned_office')
             ->selectRaw('assigned_office as department, count(*) as student_count')
             ->groupBy('assigned_office')
             ->orderByDesc('student_count')

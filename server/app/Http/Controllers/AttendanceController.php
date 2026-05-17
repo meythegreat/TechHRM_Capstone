@@ -252,9 +252,15 @@ class AttendanceController extends Controller
     public function approve($id)
     {
         $attendance = \App\Models\Attendance::findOrFail($id);
-
         $attendance->update([
             'status' => 'approved'
+        ]);
+
+        // --- NEW: NOTIFY THE STUDENT ---
+        \App\Models\Notification::create([
+            'user_id' => $attendance->user_id,
+            'title' => 'Timesheet Approved',
+            'message' => 'Your timesheet for ' . \Carbon\Carbon::parse($attendance->time_in)->format('M d') . ' has been approved by your supervisor.'
         ]);
 
         return response()->json(['message' => 'Timesheet approved successfully!']);
