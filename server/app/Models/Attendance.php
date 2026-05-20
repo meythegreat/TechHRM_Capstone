@@ -16,8 +16,7 @@ class Attendance extends Model
         'rendered_hours',
         'work_type',
         'task_description',
-        'date',
-        'status', // <-- ADD THIS
+        'status',
     ];
 
     // An attendance record belongs to one specific User

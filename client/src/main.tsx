@@ -3,7 +3,8 @@ import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import axios from 'axios'
 
-axios.defaults.baseURL = 'http://localhost:8000'
+// In dev, Vite proxies /api to Laravel (see vite.config.ts) — avoids CORS issues.
+axios.defaults.baseURL = import.meta.env.DEV ? '' : 'http://localhost:8000'
 axios.defaults.withCredentials = true
 
 // Attach Bearer token automatically (persisted login)

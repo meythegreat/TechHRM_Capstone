@@ -70,7 +70,6 @@ class AttendanceController extends Controller
             'user_id' => $user->id,
             'time_in' => $now,
             'work_type' => $request->work_type ?? 'Unspecified',
-            'date' => $now->toDateString(),
         ]);
 
         return response()->json([

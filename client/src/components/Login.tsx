@@ -21,9 +21,6 @@ const Login = ({ onLoggedIn }: LoginProps) => {
         setError(null);
 
         try {
-            // Get CSRF cookie first
-            await axios.get('/sanctum/csrf-cookie');
-            
             const response = await axios.post('/api/login', {
                 username,
                 password,
@@ -49,7 +46,10 @@ const Login = ({ onLoggedIn }: LoginProps) => {
             onLoggedIn(role);
 
         } catch (err: any) {
-            // This will now accurately catch true 401 Unauthorized errors from Laravel
+            if (!err.response) {
+                setError('Cannot reach the server. Start Laravel with: php artisan serve (in the server folder).');
+                return;
+            }
             setError(err.response?.data?.message || 'Invalid username or password. Please try again.');
         } finally {
             setIsLoading(false);

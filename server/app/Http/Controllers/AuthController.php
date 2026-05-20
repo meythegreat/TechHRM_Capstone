@@ -33,14 +33,18 @@ class AuthController extends Controller
         // 5. Create Sanctum Token for secure React API requests
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        // 6. Accounting: Record the login activity in the new Audit Trail
-        \App\Models\ActivityLog::create([
-            'admin_id' => $user->id,
-            'admin_name' => $user->name, // <-- Make sure this line is exactly like this!
-            'action' => 'System Login',
-            'description' => 'logged into the system.',
-            'ip_address' => $request->ip(),
-        ]);
+        // 6. Audit trail (must not block login if logging fails)
+        try {
+            ActivityLog::create([
+                'admin_id' => $user->id,
+                'admin_name' => $user->name ?? $user->username,
+                'action' => 'System Login',
+                'description' => 'logged into the system.',
+                'ip_address' => $request->ip(),
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         // 7. Return the exact payload React is expecting
         return response()->json([
@@ -60,16 +64,18 @@ class AuthController extends Controller
         $user = $request->user();
 
         if ($user) {
-            // Accounting: Record the logout activity in the new Audit Trail
-            ActivityLog::create([
-                'admin_id' => $user->id,
-                'admin_name' => $user->fullname,
-                'action' => 'System Logout',
-                'description' => 'logged out of the system.',
-                'ip_address' => $request->ip(),
-            ]);
+            try {
+                ActivityLog::create([
+                    'admin_id' => $user->id,
+                    'admin_name' => $user->name ?? $user->username,
+                    'action' => 'System Logout',
+                    'description' => 'logged out of the system.',
+                    'ip_address' => $request->ip(),
+                ]);
+            } catch (\Throwable $e) {
+                report($e);
+            }
 
-            // Revoke the token to secure the session
             $user->tokens()->delete();
         }
 
