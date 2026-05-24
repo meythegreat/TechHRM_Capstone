@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Sidebar from './Sidebar'; 
 import NotificationBell from './NotificationBell';
 import TimesheetPrintView from './TimesheetPrintView';
 import SecureImage from './SecureImage.tsx';
 import { normalizeFilePath, openSecureFile } from '../utils/secureFile';
+import { firstPathSegment, resolveStudentPath } from '../config/routes';
 interface AttendanceRecord {
     id: number;
     date: string;
@@ -49,6 +51,8 @@ function formatRenderedHoursCell(value: number | string | null | undefined): str
 }
 
 const StudentDashboard = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
     // --- USER DATA ---
     const [fullName, setFullName] = useState(localStorage.getItem('user_name') || 'Student');
     const assignedOffice = localStorage.getItem('assigned_office') || 'Unassigned';
@@ -56,8 +60,10 @@ const StudentDashboard = () => {
 
     // --- UI STATE ---
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState(() => localStorage.getItem('student_active_tab') || 'dashboard');
     const [isLoading, setIsLoading] = useState(false);
+
+    const pathSegment = firstPathSegment(location.pathname);
+    const currentPath = resolveStudentPath(pathSegment);
     const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
     // --- FEATURE STATE ---
@@ -90,8 +96,16 @@ const StudentDashboard = () => {
     const [uploadFile, setUploadFile] = useState<File | null>(null);
 
     useEffect(() => {
-        localStorage.setItem('student_active_tab', activeTab);
-    }, [activeTab]);
+        const segment = firstPathSegment(location.pathname);
+        if (!segment) {
+            navigate('/dashboard', { replace: true });
+            return;
+        }
+        const resolved = resolveStudentPath(segment);
+        if (resolved !== segment) {
+            navigate(`/${resolved}`, { replace: true });
+        }
+    }, [location.pathname, navigate]);
 
     useEffect(() => {
         const fetchMyProfile = async () => {
@@ -250,8 +264,15 @@ const StudentDashboard = () => {
     };
 
     const handleLogout = async () => {
-        try { await axios.post('/api/logout'); } catch (err) { console.error(err); } 
-        finally { localStorage.clear(); window.location.reload(); }
+        try {
+            await axios.post('/api/logout');
+        } catch (err) {
+            console.error(err);
+        } finally {
+            localStorage.clear();
+            delete axios.defaults.headers.common.Authorization;
+            navigate('/');
+        }
     };
 
     const formatTime = (dateString: string | null) => {
@@ -277,7 +298,7 @@ const StudentDashboard = () => {
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
             {/* INVISIBLE PRINT LAYER: Only shows up when generating PDF */}
-            <div className="hidden print:block fixed inset-0 bg-white z-[99999] overflow-visible">
+            <div className="hidden print:block fixed inset-0 bg-white z-99999 overflow-visible">
                 <TimesheetPrintView 
                     fullName={fullName} 
                     studentProfile={studentProfile} 
@@ -291,8 +312,8 @@ const StudentDashboard = () => {
             <Sidebar 
             isSidebarOpen={isSidebarOpen} 
             setIsSidebarOpen={setIsSidebarOpen} // <-- ADD THIS LINE
-            activeTab={activeTab} 
-            setActiveTab={setActiveTab} 
+            activeTab={currentPath}
+            setActiveTab={(path) => navigate(`/${path}`)}
             handleLogout={handleLogout} 
             navItems={studentNavItems} 
             />
@@ -304,12 +325,12 @@ const StudentDashboard = () => {
                             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
                         </button>
                         <h2 className="text-xl font-bold text-gray-800 capitalize tracking-tight hidden sm:block">
-                            {activeTab.replace('-', ' ')}
+                            {currentPath.replace('-', ' ')}
                         </h2>
                     </div>
 
                     <div className="flex items-center gap-4">
-                        <NotificationBell onNavigate={setActiveTab} />
+                        <NotificationBell onNavigate={(path) => navigate(`/${path}`)} />
                         <div className="text-right hidden sm:block">
                             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{assignedOffice}</p>
                             <p className="text-sm font-bold text-gray-900">{fullName}</p>
@@ -330,7 +351,7 @@ const StudentDashboard = () => {
                         )}
 
                         {/* 1. DASHBOARD TAB */}
-                        {activeTab === 'dashboard' && (
+                        {currentPath === 'dashboard' && (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
                                     <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">My Profile</h2>
@@ -354,7 +375,7 @@ const StudentDashboard = () => {
                         )}
 
                         {/* 2. ATTENDANCE LOG TAB */}
-                        {activeTab === 'attendance' && (
+                        {currentPath === 'attendance' && (
                             <div className="space-y-6">
                                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
                                     <h3 className="text-xl font-bold text-gray-900 mb-4">Action Center</h3>
@@ -426,7 +447,7 @@ const StudentDashboard = () => {
                         )}
 
                         {/* 3. ASSESSMENT TAB */}
-                        {activeTab === 'assessment' && (
+                        {currentPath === 'assessment' && (
                             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                                 <h3 className="text-xl font-bold text-gray-900 mb-6">Financial Assessment</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -438,7 +459,7 @@ const StudentDashboard = () => {
                         )}
 
                         {/* 4. SCHEDULE TAB */}
-                        {activeTab === 'schedule' && (
+                        {currentPath === 'schedule' && (
                             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 h-full">
                               <div className="flex justify-between items-center mb-6">
                                 <h2 className="text-xl font-extrabold text-gray-900">My Weekly Schedule</h2>
@@ -465,7 +486,7 @@ const StudentDashboard = () => {
                         )}
 
                         {/* 5. NEW: REQUIREMENTS TAB */}
-                        {activeTab === 'requirements' && (
+                        {currentPath === 'requirements' && (
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                 {/* Upload Column */}
                                 <div className="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-gray-200 h-fit">
@@ -551,7 +572,7 @@ const StudentDashboard = () => {
                         )}
 
                         {/* 6. SETTINGS TAB */}
-                        {activeTab === 'settings' && (
+                        {currentPath === 'settings' && (
                             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                                 <h3 className="text-xl font-bold text-gray-900 mb-6">Profile Settings</h3>
                                 <div className="flex flex-col md:flex-row gap-8 items-start">
