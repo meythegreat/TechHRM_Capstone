@@ -8,6 +8,7 @@ interface UserRecord {
   role: string;
   phone_number?: string;
   created_at: string;
+  deleted_at?: string | null; // <-- NEW: Added for Soft Deletes
   profile?: {
     student_id_number: string;
     assigned_office: string;
@@ -197,7 +198,11 @@ const UserManagement = () => {
       {/* Notification Toast */}
       {toastMsg && (
         <div
-          className={`p-4 rounded-xl border font-bold text-sm flex items-center gap-2 ${toastMsg.type === "success" ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-700 border-red-200"}`}
+          className={`p-4 rounded-xl border font-bold text-sm flex items-center gap-2 ${
+            toastMsg.type === "success"
+              ? "bg-green-50 text-green-700 border-green-200"
+              : "bg-red-50 text-red-700 border-red-200"
+          }`}
         >
           {toastMsg.type === "success" ? (
             <svg
@@ -267,15 +272,19 @@ const UserManagement = () => {
                 </tr>
               ) : (
                 users.map((user) => (
-                  <tr key={user.id} className="hover:bg-gray-50">
+                  <tr key={user.id} className={`hover:bg-gray-50 ${user.deleted_at ? 'opacity-60' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-600 mr-3">
                           {user.name.charAt(0)}
                         </div>
                         <div>
-                          <div className="text-sm font-bold text-gray-900">
+                          {/* NEW: Badge for Super Admins to see who is deleted */}
+                          <div className="text-sm font-bold text-gray-900 flex items-center gap-2">
                             {user.name}
+                            {user.deleted_at && (
+                                <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] uppercase rounded-full tracking-wider">Revoked</span>
+                            )}
                           </div>
                           <div className="text-xs text-gray-500 font-mono">
                             @{user.username}
@@ -285,7 +294,9 @@ const UserManagement = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
-                        className={`px-2.5 py-1 rounded-md text-xs font-bold border ${getRoleBadge(user.role)}`}
+                        className={`px-2.5 py-1 rounded-md text-xs font-bold border ${getRoleBadge(
+                          user.role
+                        )}`}
                       >
                         {user.role}
                       </span>
@@ -297,7 +308,10 @@ const UserManagement = () => {
                             {user.profile.assigned_office}
                           </div>
                           <div className="text-xs text-gray-500">
-                            ID: {user.profile.student_id_number || user.profile.course || 'N/A'}
+                            ID:{" "}
+                            {user.profile.student_id_number ||
+                              user.profile.course ||
+                              "N/A"}
                           </div>
                         </>
                       ) : (
@@ -326,12 +340,16 @@ const UserManagement = () => {
                       >
                         Edit
                       </button>
-                      <button
-                        onClick={() => handleDeleteUser(user.id, user.name)}
-                        className="text-red-600 hover:text-red-900 transition-colors"
-                      >
-                        Revoke
-                      </button>
+
+                      {/* NEW: Only show if not already revoked */}
+                      {!user.deleted_at && (
+                          <button
+                            onClick={() => handleDeleteUser(user.id, user.name)}
+                            className="text-red-600 hover:text-red-900 transition-colors"
+                          >
+                            Revoke
+                          </button>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -344,9 +362,8 @@ const UserManagement = () => {
         {!isLoading && totalPages > 1 && (
           <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center">
             <span className="text-sm text-gray-500 font-medium">
-              Page{" "}
-              <span className="font-bold text-gray-900">{currentPage}</span> of{" "}
-              {totalPages}
+              Page <span className="font-bold text-gray-900">{currentPage}</span>{" "}
+              of {totalPages}
             </span>
             <div className="flex gap-2">
               <button
@@ -400,7 +417,6 @@ const UserManagement = () => {
 
             <form onSubmit={handleSaveUser} className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                
                 {/* --- Base Account Info --- */}
                 <div className="space-y-4">
                   <h4 className="font-bold text-blue-600 uppercase text-xs tracking-wider border-b pb-2">
@@ -499,10 +515,13 @@ const UserManagement = () => {
                 {/* --- Conditional Profile Info --- */}
                 <div className="space-y-4 bg-gray-50 p-4 rounded-xl border border-gray-100">
                   <h4 className="font-bold text-orange-500 uppercase text-xs tracking-wider border-b pb-2">
-                    {formData.role === "Student" ? "Student Profile" : 
-                     formData.role === "Supervisor" ? "Department Info" : 
-                     formData.role === "WSPO Staff" ? "Staff Details" : 
-                     "Role Specifics"}
+                    {formData.role === "Student"
+                      ? "Student Profile"
+                      : formData.role === "Supervisor"
+                      ? "Department Info"
+                      : formData.role === "WSPO Staff"
+                      ? "Staff Details"
+                      : "Role Specifics"}
                   </h4>
 
                   {/* STUDENT FIELDS */}

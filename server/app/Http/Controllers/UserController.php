@@ -16,21 +16,21 @@ class UserController extends Controller
         $user = $request->user();
         $query = \App\Models\User::with('profile');
 
+        // NEW: If Super Admin, show normal AND deleted users
+        if ($user->role === 'Super Admin') {
+            $query->withTrashed();
+        }
+
         // IF THE USER IS A SUPERVISOR: Lock them down
         if ($user->role === 'Supervisor') {
-            // Get the supervisor's department
             $myDepartment = $user->profile->assigned_office ?? 'Unassigned';
 
-            // Rule 1: Only show users in the same department
             $query->whereHas('profile', function($q) use ($myDepartment) {
                 $q->where('assigned_office', $myDepartment);
             });
-
-            // Rule 2: Strictly hide WSPO Staff and Super Admins from them
             $query->whereNotIn('role', ['Super Admin', 'WSPO Staff']);
         }
 
-        // Return paginated results (or get() if you aren't using pagination yet)
         $users = $query->paginate(10);
         return response()->json($users);
     }

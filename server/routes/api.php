@@ -119,17 +119,12 @@ Route::middleware('auth:sanctum')->group(function () {
     // =====================================================
     // WSPO STAFF + SUPER ADMIN
     // =====================================================
-
     Route::middleware(['role:WSPO Staff,Super Admin'])->group(function () {
-
-        // =================================================
-        // USER MANAGEMENT
-        // =================================================
-
         Route::post('/users', [UserController::class, 'store']);
-
         Route::put('/users/{id}', [UserController::class, 'update']);
 
+        // NEW: Moved here so WSPO Staff can delete
+        Route::delete('/users/{id}', [UserController::class, 'destroy']);
     });
 
     // =====================================================
@@ -137,12 +132,6 @@ Route::middleware('auth:sanctum')->group(function () {
     // =====================================================
 
     Route::middleware(['role:Super Admin'])->group(function () {
-
-        // =================================================
-        // FULL USER CONTROL
-        // =================================================
-
-        Route::delete('/users/{id}', [UserController::class, 'destroy']);
 
         // =================================================
         // ADMIN DASHBOARD
