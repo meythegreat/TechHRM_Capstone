@@ -10,22 +10,44 @@ class RequirementController extends Controller
 {
     // 1. STUDENT: Upload a document
     public function upload(Request $request)
-    {
-        $request->validate([
-            'document_type' => 'required|string',
-            'file' => 'required|file|mimes:jpg,jpeg,png,pdf|max:2048', // Max 2MB
-        ]);
+{
+    $request->validate([
+        'document_type' => 'required|string',
+        'file' => 'required|file|mimes:jpg,jpeg,png,pdf|max:2048',
+    ]);
 
-        $path = $request->file('file')->store('requirements', 'local');
+    $existing = Requirement::where(
+        'user_id',
+        $request->user()->id
+    )->where(
+        'document_type',
+        $request->document_type
+    )->first();
 
-        // Check if they already uploaded this type, if so, update it. If not, create new.
-        $requirement = Requirement::updateOrCreate(
-            ['user_id' => $request->user()->id, 'document_type' => $request->document_type],
-            ['file_path' => $path, 'status' => 'pending', 'remarks' => null]
-        );
-
-        return response()->json(['message' => 'Document uploaded successfully!', 'requirement' => $requirement]);
+    // Delete old file if exists
+    if ($existing && Storage::disk('local')->exists($existing->file_path)) {
+        Storage::disk('local')->delete($existing->file_path);
     }
+
+    $path = $request->file('file')->store('requirements', 'local');
+
+    $requirement = Requirement::updateOrCreate(
+        [
+            'user_id' => $request->user()->id,
+            'document_type' => $request->document_type
+        ],
+        [
+            'file_path' => $path,
+            'status' => 'pending',
+            'remarks' => null
+        ]
+    );
+
+    return response()->json([
+        'message' => 'Document uploaded successfully!',
+        'requirement' => $requirement
+    ]);
+}
 
     // 2. STUDENT: View their own requirements
     public function myRequirements(Request $request)

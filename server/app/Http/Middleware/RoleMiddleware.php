@@ -17,23 +17,22 @@ class RoleMiddleware
      */
     public function handle(Request $request, Closure $next, ...$roles): Response
     {
-        // 1. Check if user is authenticated
+        // Check if authenticated
         if (!Auth::check()) {
-            return response()->json(['message' => 'Unauthenticated.'], 401);
+            return response()->json([
+                'message' => 'Unauthenticated.'
+            ], 401);
         }
 
         $user = Auth::user();
 
-        // 2. Strip any accidental spaces from the route definition
+        // Clean route roles
         $cleanRoles = array_map('trim', $roles);
 
-        // 3. Check if their role is in the cleaned allowed array
+        // Check authorization
         if (!in_array($user->role, $cleanRoles)) {
-            // Optional: You can keep these debug lines here temporarily if you want to see exactly what is failing in the Network tab
             return response()->json([
-                'message' => 'Unauthorized access for your role.',
-                'debug_user_role' => $user->role,
-                'debug_required_roles' => $cleanRoles
+                'message' => 'Forbidden'
             ], 403);
         }
 
