@@ -18,8 +18,7 @@ use App\Http\Controllers\RequirementController;
 // PUBLIC ROUTES
 // =========================================================
 
-Route::post('/login', [AuthController::class, 'login'])
-    ->middleware('throttle:5,1');
+Route::post('/login', [AuthController::class, 'login']);
 
 
 // =========================================================

@@ -69,7 +69,7 @@ const Sidebar: FC<SidebarProps> = ({ isSidebarOpen, setIsSidebarOpen, activeTab,
                 </nav>
 
                 <div className="p-4 border-t border-gray-200 shrink-0">
-                    <button onClick={handleLogout} className="w-full flex items-center p-3 rounded-xl text-red-600 hover:bg-red-50 transition-all">
+                    <button type="button" onClick={() => void handleLogout()} className="w-full flex items-center p-3 rounded-xl text-red-600 hover:bg-red-50 transition-all">
                         <svg className="w-6 h-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                         </svg>

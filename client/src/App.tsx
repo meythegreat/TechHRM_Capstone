@@ -37,7 +37,7 @@ function App() {
   const canManageUsers = userRole === 'Super Admin' || userRole === 'WSPO Staff';
 
   useEffect(() => {
-    if (!isStaff) return;
+    if (!hasToken || !isStaff) return;
 
     if (!pathSegment) {
       navigate('/dashboard', { replace: true });
@@ -48,7 +48,7 @@ function App() {
     if (resolved !== pathSegment) {
       navigate(`/${resolved}`, { replace: true });
     }
-  }, [isStaff, pathSegment, userRole, navigate]);
+  }, [hasToken, isStaff, pathSegment, userRole, navigate]);
 
   useEffect(() => {
     if (hasToken && !isStudent) {
@@ -84,7 +84,7 @@ function App() {
       setHasToken(false);
       setUserRole('');
       setAdminAvatar(null);
-      navigate('/');
+      navigate('/', { replace: true });
     }
   };
 
@@ -103,7 +103,7 @@ function App() {
   }
 
   if (isStudent) {
-    return <StudentDashboard />;
+    return <StudentDashboard onLogout={handleLogout} />;
   }
 
   const staffNavItems = [

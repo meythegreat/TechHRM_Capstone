@@ -50,7 +50,11 @@ function formatRenderedHoursCell(value: number | string | null | undefined): str
     return Number.isFinite(n) ? n.toFixed(2) : '--';
 }
 
-const StudentDashboard = () => {
+interface StudentDashboardProps {
+    onLogout: () => void | Promise<void>;
+}
+
+const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
     const location = useLocation();
     const navigate = useNavigate();
     // --- USER DATA ---
@@ -96,6 +100,8 @@ const StudentDashboard = () => {
     const [uploadFile, setUploadFile] = useState<File | null>(null);
 
     useEffect(() => {
+        if (!localStorage.getItem('auth_token')) return;
+
         const segment = firstPathSegment(location.pathname);
         if (!segment) {
             navigate('/dashboard', { replace: true });
@@ -263,18 +269,6 @@ const StudentDashboard = () => {
         }
     };
 
-    const handleLogout = async () => {
-        try {
-            await axios.post('/api/logout');
-        } catch (err) {
-            console.error(err);
-        } finally {
-            localStorage.clear();
-            delete axios.defaults.headers.common.Authorization;
-            navigate('/');
-        }
-    };
-
     const formatTime = (dateString: string | null) => {
         if (!dateString) return '--:--';
         return new Date(dateString).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
@@ -314,7 +308,7 @@ const StudentDashboard = () => {
             setIsSidebarOpen={setIsSidebarOpen} // <-- ADD THIS LINE
             activeTab={currentPath}
             setActiveTab={(path) => navigate(`/${path}`)}
-            handleLogout={handleLogout} 
+            handleLogout={onLogout}
             navItems={studentNavItems} 
             />
 
