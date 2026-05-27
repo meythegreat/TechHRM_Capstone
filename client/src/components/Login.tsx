@@ -10,6 +10,7 @@ const Login = ({ onLoggedIn }: LoginProps) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
+    const [successMsg, setSuccessMsg] = useState<string | null>(null); // NEW: Success state
     const [isLoading, setIsLoading] = useState(false);
     
     // The requested See/Hide password state!
@@ -19,6 +20,7 @@ const Login = ({ onLoggedIn }: LoginProps) => {
         e.preventDefault();
         setIsLoading(true);
         setError(null);
+        setSuccessMsg(null); // Clear previous success messages
 
         try {
             const response = await axios.post('/api/login', {
@@ -28,22 +30,24 @@ const Login = ({ onLoggedIn }: LoginProps) => {
 
             // EXTRACT DIRECTLY FROM response.data based on your backend JSON!
             const { token, role, name, office, profile_picture } = response.data;
-            
+
             // Save everything to localStorage
             localStorage.setItem('auth_token', token);
             localStorage.setItem('user_role', role);
             
             // If name is null from the backend, give it a default fallback
-            localStorage.setItem('user_name', name || username); 
-            
+            localStorage.setItem('user_name', name || username);
             localStorage.setItem('profile_picture', normalizeFilePath(profile_picture) || '');
             localStorage.setItem('assigned_office', office || 'System Administrator');
 
             // Set default headers for all future requests
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
-            // Trigger the App.tsx state change
-            onLoggedIn(role);
+            // --- NEW: SHOW SUCCESS TOAST & DELAY REDIRECT ---
+            setSuccessMsg(`Welcome back, ${name || username}! Redirecting...`);
+            setTimeout(() => {
+                onLoggedIn(role);
+            }, 1500);
 
         } catch (err: any) {
             if (!err.response) {
@@ -114,12 +118,23 @@ const Login = ({ onLoggedIn }: LoginProps) => {
                         </p>
                     </div>
 
+                    {/* ERROR TOAST */}
                     {error && (
                         <div className="p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg flex items-start gap-3 animate-pulse">
                             <svg className="w-5 h-5 text-red-500 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                             </svg>
                             <span className="text-sm font-bold text-red-700">{error}</span>
+                        </div>
+                    )}
+
+                    {/* NEW SUCCESS TOAST */}
+                    {successMsg && (
+                        <div className="p-4 bg-green-50 border-l-4 border-green-500 rounded-r-lg flex items-center gap-3 slide-up">
+                            <svg className="w-5 h-5 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span className="text-sm font-bold text-green-700">{successMsg}</span>
                         </div>
                     )}
 
@@ -164,9 +179,18 @@ const Login = ({ onLoggedIn }: LoginProps) => {
                                 <button 
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute inset-y-0 right-4 flex items-center text-xs font-bold text-gray-400 hover:text-gray-600 focus:outline-none"
+                                    className="absolute inset-y-0 right-4 flex items-center text-gray-400 hover:text-blue-600 transition-colors focus:outline-none"
                                 >
-                                    {showPassword ? "HIDE" : "SHOW"}
+                                    {showPassword ? (
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                        </svg>
+                                    ) : (
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a10.05 10.05 0 011.41-2.47m2.32-2.32A10.05 10.05 0 0112 5c4.478 0 8.268 2.943 9.542 7a10.05 10.05 0 01-1.41 2.47m-2.32 2.32L3 3m18 18l-8.586-8.586" />
+                                        </svg>
+                                    )}
                                 </button>
                             </div>
                         </div>
