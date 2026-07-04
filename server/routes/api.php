@@ -28,6 +28,18 @@ Route::post('/mobile/login', [\App\Http\Controllers\AuthController::class, 'mobi
 
 Route::middleware('auth:sanctum')->group(function () {
 
+    // --- STAGE 1: WSPO APPLICATION MODULE (Student) ---
+    Route::post('/applications', [\App\Http\Controllers\ApplicationController::class, 'store']);
+    Route::get('/applications/my-status', [\App\Http\Controllers\ApplicationController::class, 'myApplication']);
+
+    // --- STAGE 2: Daily Operations (Student) ---
+    Route::get('/tasks/my-tasks', [\App\Http\Controllers\TaskController::class, 'myTasks']);
+    Route::put('/tasks/{id}/status', [\App\Http\Controllers\TaskController::class, 'updateStatus']);
+
+    // --- STAGE 5: Discipline & Compliance (Student) ---
+    Route::get('/disciplinary/my-records', [\App\Http\Controllers\DisciplinaryController::class, 'myRecords']);
+    Route::post('/disciplinary/{id}/appeal', [\App\Http\Controllers\DisciplinaryController::class, 'submitAppeal']);
+
     // =====================================================
     // GENERAL ACCESS (ALL AUTHENTICATED USERS)
     // =====================================================
@@ -74,6 +86,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/my-requirements', [RequirementController::class, 'myRequirements']);
 
+    // --- STAGE 3 & 4: Advanced Attendance ---
+    Route::post('/attendance/secure-clock-in', [\App\Http\Controllers\AdvancedAttendanceController::class, 'secureClockIn']);
+    Route::put('/attendance/secure-clock-out/{id}', [\App\Http\Controllers\AdvancedAttendanceController::class, 'secureClockOut']);
+    Route::get('/attendance/hours-summary', [\App\Http\Controllers\AdvancedAttendanceController::class, 'getWorkHourSummary']);
+
     // =====================================================
     // SUPERVISOR / WSPO STAFF / SUPER ADMIN
     // =====================================================
@@ -89,6 +106,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/attendance/all', [AttendanceController::class, 'allHistory']);
 
         Route::patch('/attendance/{id}/approve', [AttendanceController::class, 'approve']);
+
+        Route::post('/attendance/generate-token', [\App\Http\Controllers\AdvancedAttendanceController::class, 'generateToken']);
+        Route::get('/attendance/anomalies', [\App\Http\Controllers\AdvancedAttendanceController::class, 'getAnomalyLogs']);
 
         // =================================================
         // SCHEDULE MANAGEMENT
@@ -114,6 +134,32 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/logs', [ActivityLogController::class, 'index']);
 
+        // =================================================
+        // STAGE 1: Application Pipeline (Coordinator)
+        // =================================================
+
+        Route::get('/applications', [\App\Http\Controllers\ApplicationController::class, 'index']);
+        Route::put('/applications/{id}/status', [\App\Http\Controllers\ApplicationController::class, 'updateStatus']);
+        Route::put('/applications/{id}/schedule', [\App\Http\Controllers\ApplicationController::class, 'scheduleInterview']);
+        Route::put('/applications/{id}/placement', [\App\Http\Controllers\ApplicationController::class, 'assignPlacement']);
+        Route::get('/applications/{id}/match', [\App\Http\Controllers\ApplicationController::class, 'getMatchingSuggestions']);
+
+        // =================================================
+        // STAGE 2: Daily Operations (Supervisor)
+        // =================================================
+
+        Route::get('/tasks', [\App\Http\Controllers\TaskController::class, 'index']);
+        Route::post('/tasks', [\App\Http\Controllers\TaskController::class, 'store']);
+        Route::put('/tasks/{id}/notes', [\App\Http\Controllers\TaskController::class, 'addSupervisorNote']);
+
+        // =================================================
+        // STAGE 5: Discipline & Compliance (Supervisor)
+        // =================================================
+
+        Route::get('/disciplinary', [\App\Http\Controllers\DisciplinaryController::class, 'index']);
+        Route::post('/disciplinary', [\App\Http\Controllers\DisciplinaryController::class, 'store']);
+        Route::post('/disciplinary/{id}/resolve', [\App\Http\Controllers\DisciplinaryController::class, 'resolve']);
+
     });
 
     // =====================================================
@@ -123,8 +169,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/users', [UserController::class, 'store']);
         Route::put('/users/{id}', [UserController::class, 'update']);
 
-        // NEW: Moved here so WSPO Staff can delete
         Route::delete('/users/{id}', [UserController::class, 'destroy']);
+
+        // STAGE 6: Reports & Analytics
+        Route::get('/analytics/dashboard', [\App\Http\Controllers\AnalyticsController::class, 'getDashboardStats']);
+        Route::get('/analytics/export-attendance', [\App\Http\Controllers\AnalyticsController::class, 'exportAttendance']);
     });
 
     // =====================================================

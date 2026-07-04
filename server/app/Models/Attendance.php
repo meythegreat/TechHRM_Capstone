@@ -11,12 +11,24 @@ class Attendance extends Model
 
     protected $fillable = [
         'user_id',
+        'attendance_type',
+        'verification_code_used',
         'time_in',
         'time_out',
         'rendered_hours',
+        'computed_hours',
         'work_type',
         'task_description',
         'status',
+        'is_anomaly',
+        'anomaly_reason',
+    ];
+
+    protected $casts = [
+        'time_in' => 'datetime',
+        'time_out' => 'datetime',
+        'is_anomaly' => 'boolean',
+        'computed_hours' => 'decimal:2',
     ];
 
     // An attendance record belongs to one specific User

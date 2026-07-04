@@ -15,6 +15,11 @@ import SecureImage from './components/SecureImage';
 import ScheduleManagement from './components/ScheduleManagement';
 import { normalizeFilePath } from './utils/secureFile';
 import { firstPathSegment, resolveStaffPath } from './config/routes';
+import ApplicationManager from './components/ApplicationManager';
+import TaskAssignmentManager from './components/TaskAssignmentManager';
+import SupervisorAttendanceHub from './components/SupervisorAttendanceHub';
+import DisciplinaryManager from './components/DisciplinaryManager';
+import AdminAnalyticsDashboard from './components/AdminAnalyticsDashboard';
 
 function App() {
   const [hasToken, setHasToken] = useState<boolean>(() => Boolean(localStorage.getItem('auth_token')));
@@ -151,6 +156,50 @@ function App() {
         />
       ),
     },
+    {
+      id: 'pipeline',
+      label: 'Application Pipeline',
+      icon: (
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
+        />
+      ),
+    },
+    {
+      id: 'tasks',
+      label: 'Task Management',
+      icon: (
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+        />
+      ),
+    },
+    {
+      id: 'attendance-hub',
+      label: 'Attendance Hub',
+      icon: (
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+        />
+      ),
+    },
+    {
+      id: 'compliance',
+      label: 'Compliance & Discipline',
+      icon: (
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+        />
+      ),
+    },
   ];
 
   if (canManageUsers) {
@@ -173,6 +222,17 @@ function App() {
           strokeLinecap="round"
           strokeLinejoin="round"
           d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+        />
+      ),
+    });
+    staffNavItems.push({
+      id: 'analytics',
+      label: 'Reports & Analytics',
+      icon: (
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
         />
       ),
     });
@@ -230,10 +290,15 @@ function App() {
             <Route path="/attendance" element={<AttendanceMonitor />} />
             <Route path="/schedules" element={<ScheduleManagement />} />
             <Route path="/requirements" element={<RequirementManagement />} />
+            <Route path="/pipeline" element={<ApplicationManager />} />
+            <Route path="/tasks" element={<TaskAssignmentManager />} />
+            <Route path="/attendance-hub" element={<SupervisorAttendanceHub />} />
+            <Route path="/compliance" element={<DisciplinaryManager />} />
             {canManageUsers && (
               <>
                 <Route path="/logs" element={<ActivityLogs />} />
                 <Route path="/users" element={<UserManagement />} />
+                <Route path="/analytics" element={<AdminAnalyticsDashboard />} />
               </>
             )}
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

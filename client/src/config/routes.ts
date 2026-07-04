@@ -5,6 +5,9 @@ export const STUDENT_PATHS = new Set([
   'assessment',
   'schedule',
   'requirements',
+  'application',
+  'tasks',
+  'disciplinary',
   'settings',
 ]);
 
@@ -14,10 +17,14 @@ export const STAFF_BASE_PATHS = new Set([
   'attendance',
   'schedules',
   'requirements',
+  'pipeline',
+  'tasks',
+  'attendance-hub',
+  'compliance',
 ]);
 
 /** Extra paths for WSPO Staff and Super Admin only. */
-export const STAFF_ADMIN_PATHS = new Set(['logs', 'users']);
+export const STAFF_ADMIN_PATHS = new Set(['logs', 'users', 'analytics']);
 
 export function getStaffPathsForRole(role: string): Set<string> {
   const paths = new Set(STAFF_BASE_PATHS);

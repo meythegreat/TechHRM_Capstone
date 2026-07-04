@@ -7,6 +7,10 @@ import TimesheetPrintView from './TimesheetPrintView';
 import SecureImage from './SecureImage.tsx';
 import { normalizeFilePath, openSecureFile } from '../utils/secureFile';
 import { firstPathSegment, resolveStudentPath } from '../config/routes';
+import StudentApplicationHub from './StudentApplicationHub';
+import StudentTaskBoard from './StudentTaskBoard';
+import StudentDisciplinaryBoard from './StudentDisciplinaryBoard';
+import StudentAttendanceTerminal from './StudentAttendanceTerminal';
 interface AttendanceRecord {
     id: number;
     date: string;
@@ -286,6 +290,9 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
         { id: 'assessment', label: 'Assessment', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 7h6m0 10v-3m-3 3v-6m-3 6v-9m6 13H6a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2z" /> },
         { id: 'schedule', label: 'My Schedule', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /> },
         { id: 'requirements', label: 'Requirements', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /> },
+        { id: 'application', label: 'WSPO Application', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /> },
+        { id: 'tasks', label: 'My Tasks', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /> },
+        { id: 'disciplinary', label: 'Disciplinary Records', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /> },
         { id: 'settings', label: 'Settings', icon: <><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></> }
     ];
 
@@ -370,74 +377,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
 
                         {/* 2. ATTENDANCE LOG TAB */}
                         {currentPath === 'attendance' && (
-                            <div className="space-y-6">
-                                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-                                    <h3 className="text-xl font-bold text-gray-900 mb-4">Action Center</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-                                        <div className="space-y-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Duty Type</label>
-                                                <select value={workType} onChange={(e) => setWorkType(e.target.value)} disabled={isClockedIn} className="w-full p-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100 font-medium">
-                                                    <option>Clerical Work</option><option>Job Order</option><option>Janitorial</option><option>Routine Maintenance</option><option>Ad Hoc Tasks</option>
-                                                </select>
-                                            </div>
-                                            <button onClick={() => handleClockAction('in')} disabled={isClockedIn || isLoading} className="w-full py-3 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 transition-colors shadow-md">Clock In</button>
-                                        </div>
-                                        <div className="space-y-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Task Description</label>
-                                                <textarea value={taskDescription} onChange={(e) => setTaskDescription(e.target.value)} disabled={!isClockedIn} placeholder="What did you accomplish today?" className="w-full p-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-orange-500 outline-none disabled:bg-gray-100 resize-none h-12 font-medium" />
-                                            </div>
-                                            <button onClick={() => handleClockAction('out')} disabled={!isClockedIn || isLoading} className="w-full py-3 rounded-lg font-bold text-white bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 transition-colors shadow-md">Clock Out</button>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                                    <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-50">
-                                        <div className="flex items-center gap-4">
-                                            <h3 className="text-lg font-bold text-gray-900">Attendance Log</h3>
-                                            {/* NEW PDF BUTTON */}
-                                            <button onClick={() => window.print()} className="px-3 py-1.5 bg-gray-900 text-white text-xs font-bold rounded hover:bg-gray-800 transition-colors shadow-sm flex items-center gap-2">
-                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
-                                                Export PDF
-                                            </button>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="text-sm p-2 border border-gray-300 rounded-md outline-none" />
-                                            <span className="text-gray-400 self-center">to</span>
-                                            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="text-sm p-2 border border-gray-300 rounded-md outline-none" />
-                                        </div>
-                                    </div>
-                                    <div className="overflow-x-auto">
-                                        <table className="min-w-full divide-y divide-gray-200">
-                                            <thead className="bg-white">
-                                                <tr>
-                                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Date</th>
-                                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Time</th>
-                                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Work Details</th>
-                                                    <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase">Hours</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="bg-white divide-y divide-gray-100">
-                                                {history.length === 0 ? <tr><td colSpan={4} className="px-6 py-8 text-center text-sm text-gray-500">No records found.</td></tr> : history.map((record) => (
-                                                    <tr key={record.id} className="hover:bg-gray-50">
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{new Date(record.date || record.time_in).toLocaleDateString()}</td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                                            <div className="text-blue-600 font-bold">{formatTime(record.time_in)}</div>
-                                                            <div className="text-orange-500 font-bold text-xs">{formatTime(record.time_out)}</div>
-                                                        </td>
-                                                        <td className="px-6 py-4 text-sm max-w-xs">
-                                                            <span className="inline-flex px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-700 mb-1 border border-blue-100">{record.work_type || 'Unspecified'}</span>
-                                                            <p className="text-gray-500 text-xs truncate font-medium">{record.task_description || 'No description provided.'}</p>
-                                                        </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-extrabold text-gray-900">{formatRenderedHoursCell(record.rendered_hours)}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </div>
+                            <StudentAttendanceTerminal />
                         )}
 
                         {/* 3. ASSESSMENT TAB */}
@@ -563,6 +503,19 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                     </div>
                                 </div>
                             </div>
+                        )}
+
+                        {/* 7. WSPO APPLICATION TAB */}
+                        {currentPath === 'application' && (
+                            <StudentApplicationHub />
+                        )}
+
+                        {currentPath === 'tasks' && (
+                            <StudentTaskBoard />
+                        )}
+
+                        {currentPath === 'disciplinary' && (
+                            <StudentDisciplinaryBoard />
                         )}
 
                         {/* 6. SETTINGS TAB */}
