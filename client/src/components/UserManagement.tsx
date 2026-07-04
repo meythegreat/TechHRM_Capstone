@@ -156,6 +156,13 @@ const UserManagement = () => {
   };
 
   const handleDeleteUser = async (id: number, name: string) => {
+    // PREVENT SELF-DELETION
+    const currentUserName = localStorage.getItem('user_name');
+    if (name === currentUserName) {
+        alert("Safety Lock: You cannot revoke your own account!");
+        return;
+    }
+    
     if (!window.confirm(`Are you sure you want to revoke access for ${name}?`)) return;
     try {
       await axios.delete(`/api/users/${id}`);

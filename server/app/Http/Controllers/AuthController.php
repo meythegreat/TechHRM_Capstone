@@ -83,4 +83,39 @@ class AuthController extends Controller
             'message' => 'Logged out successfully'
         ]);
     }
+
+    public function mobileLogin(Request $request)
+    {
+        $request->validate([
+            'username' => 'required',
+            'password' => 'required',
+        ]);
+
+        $user = \App\Models\User::where('username', $request->username)->first();
+
+        // 1. Check if user exists and password is correct
+        if (!$user || !\Illuminate\Support\Facades\Hash::check($request->password, $user->password)) {
+            return response()->json([
+                'message' => 'Invalid username or password.'
+            ], 401);
+        }
+
+        // 2. STRICT ROLE CHECK: Only Students and Supervisors allowed on Mobile!
+        if (!in_array($user->role, ['Student', 'Supervisor'])) {
+            return response()->json([
+                'message' => 'Access Denied: Mobile app is strictly for Students and Supervisors. Admins must use the Web Portal.'
+            ], 403);
+        }
+
+        // 3. Create the Sanctum Token
+        $token = $user->createToken('mobile-auth-token')->plainTextToken;
+
+        // Load the profile so the mobile app has their department/course info
+        $user->load('profile');
+
+        return response()->json([
+            'token' => $token,
+            'user' => $user
+        ], 200);
+    }
 }
