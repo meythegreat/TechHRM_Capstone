@@ -20,6 +20,7 @@ use App\Http\Controllers\RequirementController;
 
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/mobile/login', [\App\Http\Controllers\AuthController::class, 'mobileLogin']);
+Route::post('/apply', [\App\Http\Controllers\ApplicationController::class, 'publicApply']);
 
 
 // =========================================================

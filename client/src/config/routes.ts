@@ -5,7 +5,6 @@ export const STUDENT_PATHS = new Set([
   'assessment',
   'schedule',
   'requirements',
-  'application',
   'tasks',
   'disciplinary',
   'settings',

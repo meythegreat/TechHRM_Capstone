@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
+use App\Models\Application;
 use App\Models\ActivityLog; // Imported your new ActivityLog model!
 
 class AuthController extends Controller
@@ -25,6 +26,11 @@ class AuthController extends Controller
             return response()->json([
                 'message' => 'Invalid username or password.'
             ], 401);
+        }
+
+        $pendingApplicantResponse = $this->pendingApplicantResponse($user);
+        if ($pendingApplicantResponse) {
+            return $pendingApplicantResponse;
         }
 
         // 4. Grab the office if they are a student worker (Admins get 'Management')
@@ -107,6 +113,11 @@ class AuthController extends Controller
             ], 403);
         }
 
+        $pendingApplicantResponse = $this->pendingApplicantResponse($user);
+        if ($pendingApplicantResponse) {
+            return $pendingApplicantResponse;
+        }
+
         // 3. Create the Sanctum Token
         $token = $user->createToken('mobile-auth-token')->plainTextToken;
 
@@ -117,5 +128,22 @@ class AuthController extends Controller
             'token' => $token,
             'user' => $user
         ], 200);
+    }
+
+    private function pendingApplicantResponse(User $user)
+    {
+        if ($user->role !== 'Student') {
+            return null;
+        }
+
+        $application = Application::where('user_id', $user->id)->latest()->first();
+
+        if (!$application || $application->status === 'Approved') {
+            return null;
+        }
+
+        return response()->json([
+            'message' => "Your application is currently {$application->status}. Please wait for WSPO confirmation before accessing the portal."
+        ], 403);
     }
 }

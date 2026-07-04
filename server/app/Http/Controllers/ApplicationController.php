@@ -3,10 +3,77 @@
 namespace App\Http\Controllers;
 
 use App\Models\Application;
+use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 class ApplicationController extends Controller
 {
+    // PUBLIC: Register a new applicant and submit their WSPO application.
+    public function publicApply(Request $request)
+    {
+        $validated = $request->validate([
+            'first_name' => 'required|string|max:255',
+            'middle_name' => 'nullable|string|max:255',
+            'last_name' => 'required|string|max:255',
+            'email' => 'required|string|email|max:255|unique:users,username',
+            'age' => 'required|integer|min:16',
+            'address' => 'required|string',
+            'contact_number' => 'required|string',
+            'year_level' => 'required|string',
+            'course' => 'required|string',
+            'preferred_department' => 'required|string',
+            'available_schedules' => 'required|array|min:1',
+            'reason_for_applying' => 'required|string',
+        ]);
+
+        DB::transaction(function () use ($validated) {
+            $fullName = trim(implode(' ', array_filter([
+                $validated['first_name'],
+                $validated['middle_name'] ?? null,
+                $validated['last_name'],
+            ])));
+            $tempPassword = 'FCU' . ucfirst(strtolower($validated['last_name']));
+
+            $user = User::create([
+                'name' => $fullName,
+                'username' => $validated['email'],
+                'password' => Hash::make($tempPassword),
+                'role' => 'Student',
+                'phone_number' => $validated['contact_number'],
+            ]);
+
+            $user->profile()->create([
+                'assigned_office' => null,
+                'course' => $validated['course'],
+                'year_level' => $validated['year_level'],
+                'student_id_number' => null,
+            ]);
+
+            Application::create([
+                'user_id' => $user->id,
+                'first_name' => $validated['first_name'],
+                'middle_name' => $validated['middle_name'] ?? null,
+                'last_name' => $validated['last_name'],
+                'age' => $validated['age'],
+                'address' => $validated['address'],
+                'contact_number' => $validated['contact_number'],
+                'year_level' => $validated['year_level'],
+                'course' => $validated['course'],
+                'email' => $validated['email'],
+                'preferred_department' => $validated['preferred_department'],
+                'available_schedules' => $validated['available_schedules'],
+                'reason_for_applying' => $validated['reason_for_applying'],
+                'status' => 'Pending',
+            ]);
+        });
+
+        return response()->json([
+            'message' => 'Application submitted successfully! Please wait for WSPO confirmation to receive your login details.'
+        ], 201);
+    }
+
     // 1. STUDENT: Submit Application
     public function store(Request $request)
     {
@@ -76,6 +143,11 @@ class ApplicationController extends Controller
             'assigned_position' => $validated['assigned_position'],
             'status' => 'Approved'
         ]);
+
+        $application->applicant?->profile()->updateOrCreate(
+            ['user_id' => $application->user_id],
+            ['assigned_office' => $validated['assigned_department']]
+        );
 
         return response()->json(['message' => 'Student successfully matched and placed!']);
     }

@@ -11,6 +11,15 @@ class Application extends Model
 
     protected $fillable = [
         'user_id',
+        'first_name',
+        'middle_name',
+        'last_name',
+        'age',
+        'address',
+        'contact_number',
+        'year_level',
+        'course',
+        'email',
         'preferred_department',
         'available_schedules',
         'reason_for_applying',

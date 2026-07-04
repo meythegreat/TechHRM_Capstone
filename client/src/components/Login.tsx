@@ -4,9 +4,10 @@ import { normalizeFilePath } from '../utils/secureFile';
 
 interface LoginProps {
     onLoggedIn: (role: string) => void;
+    onGoToApply?: () => void;
 }
 
-const Login = ({ onLoggedIn }: LoginProps) => {
+const Login = ({ onLoggedIn, onGoToApply }: LoginProps) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
@@ -143,7 +144,7 @@ const Login = ({ onLoggedIn }: LoginProps) => {
                         {/* Username Field */}
                         <div>
                             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2" htmlFor="username">
-                                Username
+                                Username / FCU Gmail
                             </label>
                             <input 
                                 id="username"
@@ -152,7 +153,7 @@ const Login = ({ onLoggedIn }: LoginProps) => {
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
                                 className="w-full p-4 bg-gray-50 lg:bg-white border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium text-gray-900" 
-                                placeholder="Username"
+                                placeholder="Username or FCU Gmail"
                             />
                         </div>
 
@@ -219,6 +220,19 @@ const Login = ({ onLoggedIn }: LoginProps) => {
                             )}
                         </button>
                     </form>
+
+                    {onGoToApply && (
+                        <div className="pt-6 border-t border-gray-200 text-center">
+                            <p className="text-sm text-gray-500 font-medium">Not approved yet?</p>
+                            <button
+                                type="button"
+                                onClick={onGoToApply}
+                                className="mt-2 text-sm font-extrabold text-blue-600 hover:text-blue-800 transition-colors"
+                            >
+                                Apply for WSPO
+                            </button>
+                        </div>
+                    )}
 
                     {/* Mobile-only FCU Footer */}
                     <div className="pt-8 mt-8 border-t border-gray-200 flex flex-col items-center justify-center gap-2 lg:hidden">

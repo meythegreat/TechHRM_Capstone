@@ -15,6 +15,12 @@ const getNextStage = (status) => {
     return STAGE_ORDER[index + 1];
 };
 
+const getTemporaryPassword = (lastName) => {
+    if (!lastName) return '';
+    const normalizedLastName = lastName.toLowerCase();
+    return `FCU${normalizedLastName.charAt(0).toUpperCase()}${normalizedLastName.slice(1)}`;
+};
+
 const ApplicationManager = () => {
     const [applications, setApplications] = useState([]);
     const [modalView, setModalView] = useState('');
@@ -45,7 +51,7 @@ const ApplicationManager = () => {
     };
 
     const handleReject = async (app) => {
-        if (!window.confirm(`Reject application for ${app.applicant?.name}?`)) return;
+        if (!window.confirm(`Reject application for ${app.applicant?.name || app.email}?`)) return;
         await updateApplicationStatus(app.id, 'Rejected');
         fetchApplications();
     };
@@ -80,9 +86,11 @@ const ApplicationManager = () => {
     const renderActions = (app) => {
         if (app.status === 'Approved') {
             return (
-                <span className="text-green-700 font-bold text-sm">
-                    Placed — {app.assigned_department}
-                </span>
+                <div className="text-sm">
+                    <div className="text-green-700 font-bold">Placed — {app.assigned_department}</div>
+                    <div className="text-xs text-gray-500 mt-1">Login: {app.email || app.applicant?.username}</div>
+                    {app.last_name && <div className="text-xs text-gray-500">Temp Password: {getTemporaryPassword(app.last_name)}</div>}
+                </div>
             );
         }
 
@@ -154,8 +162,15 @@ const ApplicationManager = () => {
                     ) : (
                         applications.map(app => (
                             <tr key={app.id} className="border-t">
-                                <td className="px-6 py-4">{app.applicant?.name || 'Unknown Student'}</td>
-                                <td className="px-6 py-4">{app.preferred_department}</td>
+                                <td className="px-6 py-4">
+                                    <div className="font-bold text-gray-900">{app.applicant?.name || 'Unknown Student'}</div>
+                                    <div className="text-xs text-gray-500">{app.email || app.applicant?.username}</div>
+                                    <div className="text-xs text-gray-500">{app.course} {app.year_level ? `• ${app.year_level}` : ''}</div>
+                                </td>
+                                <td className="px-6 py-4">
+                                    <div className="font-bold text-gray-900">{app.preferred_department}</div>
+                                    <div className="text-xs text-gray-500">{app.contact_number}</div>
+                                </td>
                                 <td className="px-6 py-4 font-bold text-blue-600">{app.status}</td>
                                 <td className="px-6 py-4">{renderActions(app)}</td>
                             </tr>

@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 
 import Login from './components/Login';
+import PublicApplication from './components/PublicApplication';
 import UserManagement from './components/UserManagement';
 import ActivityLogs from './components/ActivityLogs';
 import StudentDashboard from './components/StudentDashboard';
@@ -25,6 +26,7 @@ function App() {
   const [hasToken, setHasToken] = useState<boolean>(() => Boolean(localStorage.getItem('auth_token')));
   const [userRole, setUserRole] = useState<string>(() => localStorage.getItem('user_role') || '');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [showApplyForm, setShowApplyForm] = useState(false);
 
   const [adminName, setAdminName] = useState(() => localStorage.getItem('user_name') || 'Admin');
   const [adminAvatar, setAdminAvatar] = useState<string | null>(() =>
@@ -94,6 +96,10 @@ function App() {
   };
 
   if (!hasToken) {
+    if (showApplyForm) {
+      return <PublicApplication onBackToLogin={() => setShowApplyForm(false)} />;
+    }
+
     return (
       <div className="min-h-screen font-sans">
         <Login
@@ -102,6 +108,7 @@ function App() {
             setHasToken(true);
             navigate('/dashboard');
           }}
+          onGoToApply={() => setShowApplyForm(true)}
         />
       </div>
     );
