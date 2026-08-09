@@ -11,12 +11,31 @@ interface SidebarProps {
     isSidebarOpen: boolean;
     setIsSidebarOpen: (isOpen: boolean) => void;
     activeTab: string;
-    setActiveTab: (tab: any) => void;
+    setActiveTab: (path: string) => void;
     handleLogout: () => void;
-    navItems: NavItem[];
+    userRole?: string | null;
+    navItems?: NavItem[];
 }
 
-const Sidebar: FC<SidebarProps> = ({ isSidebarOpen, setIsSidebarOpen, activeTab, setActiveTab, handleLogout, navItems }) => {
+const staffNavItems: NavItem[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2 7-7 7 7M5 10v10h4v-6h6v6h4V10" /> },
+    { id: 'attendance', label: 'Timesheets', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /> },
+    { id: 'schedules', label: 'Schedules', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M8 3v4m8-4v4M5 9h14M5 5h14v16H5z" /> },
+    { id: 'requirements', label: 'Document Review', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7V3h7l5 5v11a2 2 0 01-2 2z" /> },
+    { id: 'pipeline', label: 'Application Pipeline', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M4 4h16v16H4zM8 8h8m-8 4h8m-8 4h5" /> },
+    { id: 'tasks', label: 'Task Management', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2" /> },
+    { id: 'attendance-hub', label: 'Attendance Hub', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4" /> },
+    { id: 'compliance', label: 'Compliance', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M5.1 19h13.8L12 4 5.1 19z" /> },
+    { id: 'logs', label: 'Audit Trail', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M6 3h9l3 3v15H6zM9 10h6m-6 4h6" /> },
+    { id: 'users', label: 'User Management', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2m14-10a4 4 0 100-8 4 4 0 000 8z" /> },
+    { id: 'analytics', label: 'Reports & Analytics', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M4 19V9m6 10V5m6 14v-7m4 7V3" /> },
+];
+
+const Sidebar: FC<SidebarProps> = ({ isSidebarOpen, setIsSidebarOpen, activeTab, setActiveTab, handleLogout, navItems, userRole }) => {
+    const visibleNavItems = navItems ?? staffNavItems.filter((item) =>
+        !['logs', 'users', 'analytics'].includes(item.id) || userRole === 'Super Admin' || userRole === 'WSPO Staff'
+    );
+
     return (
         <>
             {/* MOBILE OVERLAY: Darkens the background on mobile when sidebar is open */}
@@ -55,7 +74,7 @@ const Sidebar: FC<SidebarProps> = ({ isSidebarOpen, setIsSidebarOpen, activeTab,
 
                 {/* NAVIGATION LINKS */}
                 <nav className="flex-1 overflow-y-auto py-6 px-3 space-y-1.5 custom-scrollbar">
-                    {navItems.map((item) => {
+                    {visibleNavItems.map((item) => {
                         const isActive = activeTab === item.id;
 
                         return (

@@ -1,7 +1,23 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
+import { 
+    CalendarDays, 
+    Clock, 
+    Plus, 
+    User, 
+    CheckCircle2, 
+    AlertCircle, 
+    Trash2, 
+    Check, 
+    X,
+    Briefcase,
+    ChevronLeft,
+    ChevronRight,
+    MapPin
+} from 'lucide-react';
 
-interface User {
+interface UserData {
     id: number;
     name: string;
     profile?: {
@@ -25,7 +41,7 @@ interface Schedule {
 }
 
 const ScheduleManagement = () => {
-    const [students, setStudents] = useState<User[]>([]);
+    const [students, setStudents] = useState<UserData[]>([]);
     const [schedules, setSchedules] = useState<Schedule[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [currentPage, setCurrentPage] = useState(1);
@@ -56,342 +72,387 @@ const ScheduleManagement = () => {
         fetchSchedules(currentPage);
     }, [currentPage]);
 
+    const showToast = (text: string, type: 'success' | 'error') => {
+        setToastMsg({ text, type });
+        setTimeout(() => setToastMsg(null), 3000);
+    };
+
     const fetchStudents = async () => {
         try {
-            const userRes = await axios.get('/api/users?page=1'); 
-            const studentList = userRes.data.data.filter((u: any) => u.role === 'Student');
-            setStudents(studentList);
+            const response = await axios.get('/api/users/students');
+            setStudents(response.data);
         } catch (error) {
-            console.error('Error fetching students:', error);
+            console.error("Failed to fetch students", error);
         }
     };
 
-    const fetchSchedules = async (page: number = 1) => {
+    const fetchSchedules = async (page: number) => {
         setIsLoading(true);
         try {
-            const schedRes = await axios.get(`/api/schedules?page=${page}`);
-            setSchedules(schedRes.data.data);
-            setCurrentPage(schedRes.data.current_page);
-            setTotalPages(schedRes.data.last_page);
+            const response = await axios.get(`/api/schedules?page=${page}`);
+            setSchedules(response.data.data);
+            setCurrentPage(response.data.current_page);
+            setTotalPages(response.data.last_page);
         } catch (error) {
-            console.error('Error fetching schedules:', error);
+            console.error("Failed to fetch schedules", error);
+            showToast("Failed to load schedules.", "error");
         } finally {
             setIsLoading(false);
         }
     };
 
-    // --- Time Calculation Helpers ---
-    const calculateHours = (start: string, end: string) => {
-        if (!start || !end) return 0;
-        const [startHour, startMin] = start.split(':').map(Number);
-        const [endHour, endMin] = end.split(':').map(Number);
-        
-        let diff = (endHour + endMin / 60) - (startHour + startMin / 60);
-        if (diff < 0) diff += 24; 
-        
-        return diff.toFixed(1);
-    };
-
-    const format12Hour = (time24: string) => {
-        const [hourStr, min] = time24.split(':');
-        const hour = parseInt(hourStr, 10);
-        const period = hour >= 12 ? 'PM' : 'AM';
-        const hour12 = hour % 12 || 12;
-        return `${hour12}:${min} ${period}`;
-    };
-
-    // --- API Handlers ---
-    const handleAssignShift = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        
-        if (!formData.startTime || !formData.endTime) {
-            setToastMsg({ text: 'Please select both start and end times.', type: 'error' });
-            setTimeout(() => setToastMsg(null), 3000);
-            return;
-        }
-
         setIsSubmitting(true);
-        const formattedTimeString = `${format12Hour(formData.startTime)} - ${format12Hour(formData.endTime)}`;
 
         const payload = {
-            ...formData,
-            time: formattedTimeString,
+            user_id: formData.user_id,
+            day: formData.day,
+            time: `${formData.startTime} - ${formData.endTime}`,
+            duty_type: formData.duty_type,
+            department: formData.department,
+            supervisor: formData.supervisor
         };
 
         try {
             await axios.post('/api/schedules', payload);
-            setToastMsg({ text: 'Shift assigned successfully!', type: 'success' });
-            setTimeout(() => setToastMsg(null), 3000);
-            
-            setFormData({ ...formData, user_id: '', startTime: '', endTime: '' });
-            setCurrentPage(1);
-            fetchSchedules(1);
+            showToast("Shift assigned successfully!", "success");
+            setIsModalOpen(false);
+            setFormData({
+                user_id: '', day: 'Monday', startTime: '', endTime: '', duty_type: 'Clerical Work', department: '', supervisor: ''
+            });
+            fetchSchedules(currentPage);
         } catch (error: any) {
-            setToastMsg({ text: error.response?.data?.message || 'Failed to assign shift.', type: 'error' });
-            setTimeout(() => setToastMsg(null), 4000);
+            showToast(error.response?.data?.message || "Failed to assign shift.", "error");
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    const handleRemoveShift = async (id: number) => {
-        if (!window.confirm('Are you sure you want to remove this shift?')) return;
+    const handleEditAction = async (id: number, action: 'approve' | 'reject') => {
         try {
-            await axios.delete(`/api/schedules/${id}`);
-            setToastMsg({ text: 'Shift removed successfully!', type: 'success' });
+            await axios.patch(`/api/schedules/${id}/edit-request`, { action });
+            showToast(`Edit request ${action}d successfully.`, "success");
             fetchSchedules(currentPage);
-            setTimeout(() => setToastMsg(null), 3000);
         } catch (error) {
-            setToastMsg({ text: 'Failed to remove shift.', type: 'error' });
-            setTimeout(() => setToastMsg(null), 3000);
+            showToast("Failed to process request.", "error");
         }
     };
 
-    const handleResolveRequest = async (id: number) => {
+    const handleDelete = async (id: number) => {
+        if (!confirm('Are you sure you want to delete this schedule?')) return;
         try {
-            await axios.patch(`/api/schedules/${id}/resolve-request`);
-            setToastMsg({ text: 'Student request acknowledged and cleared!', type: 'success' });
+            await axios.delete(`/api/schedules/${id}`);
+            showToast("Schedule deleted successfully.", "success");
             fetchSchedules(currentPage);
-            setTimeout(() => setToastMsg(null), 3000);
-        } catch (error: any) {
-            setToastMsg({ text: error.response?.data?.message || 'Server error: Failed to clear request.', type: 'error' });
-            setTimeout(() => setToastMsg(null), 4000);
+        } catch (error) {
+            showToast("Failed to delete schedule.", "error");
         }
+    };
+
+    // STRICT TYPESCRIPT VARIANTS
+    const containerVariants: Variants = {
+        hidden: { opacity: 0 },
+        show: {
+            opacity: 1,
+            transition: { staggerChildren: 0.05 }
+        }
+    };
+
+    const rowVariants: Variants = {
+        hidden: { opacity: 0, y: 10 },
+        show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } }
     };
 
     return (
-        <div className="space-y-6 fade-in font-sans relative pb-10">
+        <div className="max-w-7xl mx-auto space-y-8 font-sans p-4 sm:p-8">
             
-            {/* GLOBAL TOAST - Now visible on the main table! */}
-            {toastMsg && (
-                <div className={`p-4 rounded-xl border font-bold text-sm flex items-center gap-2 shadow-sm ${toastMsg.type === 'success' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
-                    <span>{toastMsg.text}</span>
-                </div>
-            )}
+            {/* DARK THEME HEADER - SCHEDULE MASTER */}
+            <motion.div 
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative"
+            >
+                {/* Glowing Orbs */}
+                <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
+                <div className="absolute bottom-0 left-10 -mb-16 -ml-16 w-64 h-64 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
 
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex justify-between items-center">
-                <div>
-                    <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">Schedule Management</h2>
-                    <p className="text-sm font-medium text-gray-500 mt-1">Assign and manage weekly shifts for student workers.</p>
-                </div>
-                
-                <button onClick={() => setIsModalOpen(true)} className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-sm flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-                    Assign Shift
-                </button>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Student Name</th>
-                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Day & Time</th>
-                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Location & Duty</th>
-                                <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-100">
-                            {isLoading ? (
-                                <tr><td colSpan={4} className="px-6 py-8 text-center text-gray-500">Loading schedules...</td></tr>
-                            ) : schedules.length === 0 ? (
-                                <tr><td colSpan={4} className="px-6 py-8 text-center text-gray-500 font-medium">No shifts assigned yet.</td></tr>
-                            ) : (
-                                schedules.map((schedule) => (
-                                    <tr key={schedule.id} className={`hover:bg-gray-50 transition-colors ${schedule.edit_request_status === 'pending' ? 'bg-orange-50/60 border-l-4 border-l-orange-500' : ''}`}>
-                                        <td className="px-6 py-4">
-                                            <div className="font-bold text-gray-900">{schedule.user?.name || 'Unknown User'}</div>
-                                            
-                                            {/* STUDENT REQUEST MESSAGE */}
-                                            {schedule.edit_request_status === 'pending' && (
-                                                <div className="mt-3 p-3 bg-white rounded-lg border border-orange-200 shadow-sm">
-                                                    <span className="text-[10px] font-extrabold text-orange-800 uppercase tracking-wider block mb-1 flex items-center gap-1">
-                                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                                        Student Request
-                                                    </span>
-                                                    <p className="text-xs text-gray-700 font-medium italic border-l-2 border-orange-300 pl-2">"{schedule.edit_request_note}"</p>
-                                                    <button 
-                                                        onClick={() => handleResolveRequest(schedule.id)} 
-                                                        className="mt-3 px-3 py-1.5 bg-blue-50 text-blue-700 font-bold text-xs rounded hover:bg-blue-100 transition-colors border border-blue-100"
-                                                    >
-                                                        Acknowledge & Clear
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="font-bold text-blue-600">{schedule.day}</div>
-                                            <div className="text-sm font-medium text-gray-600">{schedule.time}</div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="font-bold text-gray-900">{schedule.department}</div>
-                                            <div className="text-xs font-medium text-gray-500 uppercase">{schedule.duty_type} • Sup: {schedule.supervisor}</div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right">
-                                            <button onClick={() => handleRemoveShift(schedule.id)} className="text-red-600 hover:text-red-900 font-bold text-sm">
-                                                Remove Shift
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
+                <div className="relative z-10">
+                    <div className="flex items-center gap-2 mb-2">
+                        <CalendarDays className="w-5 h-5 text-blue-400" />
+                        <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Timetable Management</span>
+                    </div>
+                    <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                        Schedule Master
+                    </h1>
+                    <p className="mt-2 text-slate-400 font-medium max-w-md">
+                        Assign and manage weekly shifts for student workers. Review requested schedule modifications.
+                    </p>
                 </div>
 
-                {!isLoading && (
-                    <div className="flex justify-between items-center mt-0 px-6 py-4 bg-gray-50 border-t border-gray-200">
-                        <span className="text-sm text-gray-600">
-                            Page <span className="font-bold">{currentPage}</span> of <span className="font-bold">{totalPages}</span>
+                <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-4">
+                    <div className="flex flex-col text-right">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Quick Action</span>
+                        <span className="text-sm font-medium text-slate-300">Deploy new worker</span>
+                    </div>
+                    <button 
+                        onClick={() => setIsModalOpen(true)}
+                        className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl transition-colors shadow-lg shadow-blue-900/50 flex items-center gap-2"
+                    >
+                        <Plus className="w-4 h-4" /> Assign Shift
+                    </button>
+                </div>
+            </motion.div>
+
+            {/* Animated Toasts */}
+            <AnimatePresence>
+                {toastMsg && (
+                    <motion.div 
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        className={`p-4 rounded-xl border flex items-center gap-3 shadow-sm ${
+                            toastMsg.type === 'success' ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'
+                        }`}
+                    >
+                        {toastMsg.type === 'success' 
+                            ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                            : <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+                        }
+                        <span className={`text-sm font-bold ${toastMsg.type === 'success' ? 'text-emerald-800' : 'text-red-800'}`}>
+                            {toastMsg.text}
                         </span>
-                        <div className="flex gap-2">
-                            <button 
-                                disabled={currentPage === 1}
-                                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                                className="px-4 py-2 bg-white border border-gray-300 rounded shadow-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                            >
-                                Previous
-                            </button>
-                            <button 
-                                disabled={currentPage === totalPages}
-                                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                                className="px-4 py-2 bg-white border border-gray-300 rounded shadow-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                            >
-                                Next
-                            </button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* MAIN TABLE */}
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative">
+                
+                {isLoading && (
+                    <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-10 flex items-center justify-center">
+                        <div className="flex flex-col items-center gap-3">
+                            <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
                         </div>
                     </div>
                 )}
-            </div>
 
-            {/* ASSIGN SHIFT MODAL */}
-            {isModalOpen && (
-                <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden slide-up">
-                        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                            <h3 className="text-xl font-bold text-gray-900">Assign New Shift</h3>
-                            <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
-                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                            </button>
-                        </div>
+                <div className="overflow-x-auto custom-scrollbar">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="bg-slate-50/80 border-b border-slate-200">
+                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Student Worker</th>
+                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Shift Timing</th>
+                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Duty Details</th>
+                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <motion.tbody 
+                            variants={containerVariants}
+                            initial="hidden"
+                            animate={!isLoading ? "show" : "hidden"}
+                            className="divide-y divide-slate-100"
+                        >
+                            {!isLoading && schedules.length === 0 ? (
+                                <tr>
+                                    <td colSpan={4} className="px-6 py-16 text-center text-slate-400">
+                                        <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                                        <p className="text-base font-semibold text-slate-600">No schedules found</p>
+                                        <p className="text-sm font-medium">Click "Assign Shift" to schedule a worker.</p>
+                                    </td>
+                                </tr>
+                            ) : (
+                                schedules.map((schedule) => (
+                                    <motion.tr variants={rowVariants} key={schedule.id} className="hover:bg-slate-50 transition-colors group">
+                                        <td className="px-6 py-5 align-top">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-black shrink-0 border border-blue-100 shadow-inner">
+                                                    {(schedule.user?.name || '?').charAt(0)}
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
+                                                        {schedule.user?.name || 'Unknown User'}
+                                                    </p>
+                                                    <div className="text-xs font-medium text-slate-500 flex items-center gap-1 mt-0.5">
+                                                        <MapPin className="w-3 h-3 text-slate-400" /> {schedule.department}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-5 align-top">
+                                            <div className="flex items-center gap-2 text-sm text-slate-900 font-bold mb-1.5">
+                                                <Clock className="w-4 h-4 text-blue-500" />
+                                                {schedule.time}
+                                            </div>
+                                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 uppercase tracking-widest">
+                                                {schedule.day}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-5 align-top">
+                                            <p className="text-sm font-bold text-slate-800">{schedule.duty_type}</p>
+                                            <p className="text-xs font-medium text-slate-500 mt-1 flex items-center gap-1">
+                                                <User className="w-3.5 h-3.5" /> Sup: {schedule.supervisor}
+                                            </p>
+                                        </td>
+                                        <td className="px-6 py-5 align-top text-right">
+                                            <div className="flex flex-col items-end gap-3">
+                                                {schedule.edit_request_status === 'pending' && (
+                                                    <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-left max-w-xs shadow-sm">
+                                                        <p className="text-xs font-bold text-amber-800 mb-1 flex items-center gap-1">
+                                                            <AlertCircle className="w-4 h-4" /> Edit Requested
+                                                        </p>
+                                                        <p className="text-xs text-amber-700 font-medium mb-2 italic">"{schedule.edit_request_note}"</p>
+                                                        <div className="flex gap-2">
+                                                            <button onClick={() => handleEditAction(schedule.id, 'approve')} className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold shadow-sm transition-colors flex items-center gap-1">
+                                                                <Check className="w-3.5 h-3.5" /> Approve
+                                                            </button>
+                                                            <button onClick={() => handleEditAction(schedule.id, 'reject')} className="px-3 py-1.5 bg-white border border-red-200 hover:bg-red-50 text-red-600 rounded-lg text-xs font-bold transition-colors flex items-center gap-1">
+                                                                <X className="w-3.5 h-3.5" /> Reject
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                
+                                                <button 
+                                                    onClick={() => handleDelete(schedule.id)}
+                                                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                    title="Delete Schedule"
+                                                >
+                                                    <Trash2 className="w-5 h-5" />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </motion.tr>
+                                ))
+                            )}
+                        </motion.tbody>
+                    </table>
+                </div>
 
-                        <form onSubmit={handleAssignShift} className="p-6 space-y-5">
-                            
-                            <div>
-                                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Select Student</label>
-                                <select 
-                                    required 
-                                    value={formData.user_id} 
-                                    onChange={e => setFormData({...formData, user_id: e.target.value})} 
-                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium bg-white"
-                                >
-                                    <option value="" disabled>-- Choose a student worker --</option>
-                                    {students.map(student => (
-                                        <option key={student.id} value={student.id}>
-                                            {student.name} {student.profile?.assigned_office ? `(${student.profile.assigned_office})` : ''}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="grid grid-cols-1 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100">
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Day of Week</label>
-                                    <select 
-                                        value={formData.day} 
-                                        onChange={e => setFormData({...formData, day: e.target.value})} 
-                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold bg-white"
-                                    >
-                                        <option>Monday</option><option>Tuesday</option><option>Wednesday</option>
-                                        <option>Thursday</option><option>Friday</option><option>Saturday</option><option>Sunday</option>
-                                    </select>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4 relative">
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Start Time</label>
-                                        <input required type="time" value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold bg-white"/>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-700 uppercase mb-1">End Time</label>
-                                        <input required type="time" value={formData.endTime} onChange={e => setFormData({...formData, endTime: e.target.value})} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold bg-white"/>
-                                    </div>
-                                </div>
-                                
-                                {formData.startTime && formData.endTime && (
-                                    <div className="flex justify-between items-center bg-blue-50 text-blue-700 p-3 rounded-lg border border-blue-100">
-                                        <span className="text-xs font-bold uppercase tracking-wider">Calculated Shift Duration:</span>
-                                        <span className="text-sm font-extrabold">{calculateHours(formData.startTime, formData.endTime)} Hours</span>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Duty Type</label>
-                                <select 
-                                    value={formData.duty_type} 
-                                    onChange={e => setFormData({...formData, duty_type: e.target.value})} 
-                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium bg-white"
-                                >
-                                    <option>Clerical Work</option>
-                                    <option>Job Order</option>
-                                    <option>Janitorial</option>
-                                    <option>Routine Maintenance</option>
-                                    <option>Ad Hoc Tasks</option>
-                                </select>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Department</label>
-                                    <select 
-                                        required 
-                                        value={formData.department} 
-                                        onChange={e => setFormData({...formData, department: e.target.value})} 
-                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-gray-700 bg-white"
-                                    >
-                                        <option value="" disabled>-- Select Dept --</option>
-                                        <option value="Pre-School Department">Pre-School</option>
-                                        <option value="Elementary Department">Elementary</option>
-                                        <option value="Junior High School Department">Junior High</option>
-                                        <option value="Senior High School Department">Senior High</option>
-                                        <option value="College of Arts and Sciences">Arts & Sciences</option>
-                                        <option value="College of Business and Accountancy">Business & Accountancy</option>
-                                        <option value="College of Computer Studies">Computer Studies</option>
-                                        <option value="College of Criminal Justice Education">Criminal Justice</option>
-                                        <option value="College of Engineering">Engineering</option>
-                                        <option value="College of Hotel and Tourism Management">Hotel & Tourism</option>
-                                        <option value="College of Nursing">Nursing</option>
-                                        <option value="College of Teacher Education">Teacher Ed</option>
-                                        <option value="Graduate School">Graduate School</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Supervisor Name</label>
-                                    <input 
-                                        required 
-                                        type="text" 
-                                        value={formData.supervisor} 
-                                        onChange={e => setFormData({...formData, supervisor: e.target.value})} 
-                                        placeholder="e.g. Mr. Smith" 
-                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium" 
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-                                    Cancel
-                                </button>
-                                <button type="submit" disabled={isSubmitting} className="px-6 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm disabled:bg-blue-400">
-                                    {isSubmitting ? 'Saving...' : 'Assign Shift'}
-                                </button>
-                            </div>
-                        </form>
+                {/* Pagination Footer */}
+                <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <span className="text-sm font-bold text-slate-500 uppercase tracking-wider">
+                        Page {currentPage} of {totalPages}
+                    </span>
+                    <div className="flex gap-2">
+                        <button 
+                            disabled={currentPage === 1} 
+                            onClick={() => setCurrentPage(p => p - 1)}
+                            className="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 transition-colors flex items-center gap-1 shadow-sm"
+                        >
+                            <ChevronLeft className="w-4 h-4" /> Prev
+                        </button>
+                        <button 
+                            disabled={currentPage === totalPages} 
+                            onClick={() => setCurrentPage(p => p + 1)}
+                            className="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 transition-colors flex items-center gap-1 shadow-sm"
+                        >
+                            Next <ChevronRight className="w-4 h-4" />
+                        </button>
                     </div>
                 </div>
-            )}
+            </div>
+
+            {/* MODAL: ASSIGN NEW SHIFT */}
+            <AnimatePresence>
+                {isModalOpen && (
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                    >
+                        <motion.div 
+                            initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                            className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden"
+                        >
+                            <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                                <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                                    <Plus className="w-5 h-5 text-blue-600" /> Assign New Shift
+                                </h3>
+                                <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-full transition-colors">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-6">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Select Student Worker</label>
+                                    <select 
+                                        required 
+                                        value={formData.user_id} 
+                                        onChange={e => setFormData({...formData, user_id: e.target.value})} 
+                                        className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all appearance-none cursor-pointer"
+                                    >
+                                        <option value="" disabled>-- Select a student --</option>
+                                        {students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.profile?.assigned_office || 'No Office'})</option>)}
+                                    </select>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-5">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Day of Week</label>
+                                        <select 
+                                            value={formData.day} 
+                                            onChange={e => setFormData({...formData, day: e.target.value})} 
+                                            className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all appearance-none cursor-pointer"
+                                        >
+                                            {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => <option key={d} value={d}>{d}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Duty Type</label>
+                                        <select 
+                                            value={formData.duty_type} 
+                                            onChange={e => setFormData({...formData, duty_type: e.target.value})} 
+                                            className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all appearance-none cursor-pointer"
+                                        >
+                                            <option>Clerical Work</option>
+                                            <option>Library Assistant</option>
+                                            <option>Lab Assistant</option>
+                                            <option>Cleaning</option>
+                                            <option>Event Setup</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-5">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Start Time</label>
+                                        <input required type="time" value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all cursor-pointer" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">End Time</label>
+                                        <input required type="time" value={formData.endTime} onChange={e => setFormData({...formData, endTime: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all cursor-pointer" />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Department</label>
+                                        <input required type="text" value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} placeholder="e.g. CCS Office" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all placeholder:text-slate-400 placeholder:font-medium" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Supervisor</label>
+                                        <input required type="text" value={formData.supervisor} onChange={e => setFormData({...formData, supervisor: e.target.value})} placeholder="e.g. Mr. Smith" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all placeholder:text-slate-400 placeholder:font-medium" />
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                                    <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors">
+                                        Cancel
+                                    </button>
+                                    <button type="submit" disabled={isSubmitting} className="px-6 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-lg shadow-blue-600/25 disabled:opacity-50 transition-all flex items-center gap-2">
+                                        {isSubmitting ? 'Saving...' : <><CheckCircle2 className="w-4 h-4" /> Assign Shift</>}
+                                    </button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

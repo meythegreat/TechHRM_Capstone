@@ -5,11 +5,11 @@ import { Eye, EyeOff, Loader2, CheckCircle2, AlertCircle, ArrowRight } from 'luc
 import { normalizeFilePath } from '../utils/secureFile';
 
 interface LoginProps {
-    onLoggedIn: (role: string) => void;
-    onGoToApply?: () => void;
+    onLoginSuccess: (token: string, role: string, name: string, profilePic: string | null) => void;
+    onNavigateToApply: () => void;
 }
 
-const Login = ({ onLoggedIn, onGoToApply }: LoginProps) => {
+const Login = ({ onLoginSuccess, onNavigateToApply }: LoginProps) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
@@ -37,7 +37,7 @@ const Login = ({ onLoggedIn, onGoToApply }: LoginProps) => {
 
             setSuccessMsg(`Welcome back, ${name || username}!`);
             setTimeout(() => {
-                onLoggedIn(role);
+                onLoginSuccess(token, role, name || username, profile_picture || null);
             }, 1500);
 
         } catch (err: any) {
@@ -222,12 +222,12 @@ const Login = ({ onLoggedIn, onGoToApply }: LoginProps) => {
                         </motion.button>
                     </form>
 
-                    {onGoToApply && (
+                    {onNavigateToApply && (
                         <div className="pt-8 mt-8 border-t border-slate-100 text-center">
                             <p className="text-sm text-slate-500 font-medium">Interested in the Work-Study Program?</p>
                             <button
                                 type="button"
-                                onClick={onGoToApply}
+                                onClick={onNavigateToApply}
                                 className="mt-1.5 text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors inline-flex items-center gap-1 group"
                             >
                                 Submit an Application

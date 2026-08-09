@@ -8,7 +8,8 @@ import {
     AlertCircle, 
     User,
     Check,
-    FileBox
+    FileBox,
+    ShieldCheck
 } from 'lucide-react';
 
 interface AttendanceRecord {
@@ -74,7 +75,7 @@ const AttendanceMonitor = () => {
         return Number(hours).toFixed(2);
     };
 
-    // Framer Motion Variants
+    // STRICT TYPESCRIPT VARIANTS
     const containerVariants: Variants = {
         hidden: { opacity: 0 },
         show: {
@@ -85,41 +86,53 @@ const AttendanceMonitor = () => {
 
     const rowVariants: Variants = {
         hidden: { opacity: 0, y: 10 },
-        show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+        show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } }
     };
 
     return (
-        <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-8 font-sans">
+        <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-8 font-sans">
             
-            {/* Header & Filters */}
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+            {/* DARK THEME HEADER - ATTENDANCE MONITOR */}
+            <motion.div 
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative"
+            >
+                {/* Subtle glowing background effects */}
+                <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
+                <div className="absolute bottom-0 left-10 -mb-16 -ml-16 w-64 h-64 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
+
+                <div className="relative z-10">
+                    <div className="flex items-center gap-2 mb-2">
+                        <ShieldCheck className="w-5 h-5 text-blue-400" />
+                        <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Timesheet Management</span>
+                    </div>
+                    <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
                         Attendance Monitor
                     </h1>
-                    <p className="mt-1 text-slate-500 font-medium">
-                        Review and approve daily timesheets for student workers.
+                    <p className="mt-2 text-slate-400 font-medium max-w-md">
+                        Review and approve daily timesheets for your assigned student workers to verify their actual rendered hours.
                     </p>
                 </div>
 
-                {/* Date Picker Filter */}
-                <div className="flex flex-col">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">
-                        Filter by Date
+                {/* Dark Theme Date Filter Box */}
+                <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex flex-col items-start sm:items-end w-full md:w-auto">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                        Active Date Filter
                     </label>
-                    <div className="relative group">
+                    <div className="relative group w-full">
                         <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                            <Calendar className="h-5 w-5 text-blue-600 group-hover:text-blue-700 transition-colors" />
+                            <Calendar className="h-4 w-4 text-blue-400 group-hover:text-blue-300 transition-colors" />
                         </div>
                         <input
                             type="date"
                             value={filterDate}
                             onChange={(e) => setFilterDate(e.target.value)}
-                            className="block w-full pl-11 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all shadow-sm hover:shadow-md cursor-pointer"
+                            className="block w-full sm:w-48 pl-10 pr-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm font-bold text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all cursor-pointer hover:bg-slate-800"
                         />
                     </div>
                 </div>
-            </div>
+            </motion.div>
 
             {/* Animated Toasts */}
             <AnimatePresence>
@@ -138,7 +151,7 @@ const AttendanceMonitor = () => {
                             ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
                             : <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
                         }
-                        <span className={`text-sm font-semibold ${toastMsg.type === 'success' ? 'text-emerald-800' : 'text-red-800'}`}>
+                        <span className={`text-sm font-bold ${toastMsg.type === 'success' ? 'text-emerald-800' : 'text-red-800'}`}>
                             {toastMsg.text}
                         </span>
                     </motion.div>
@@ -146,7 +159,7 @@ const AttendanceMonitor = () => {
             </AnimatePresence>
 
             {/* Table Container */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative">
                 
                 {/* Loading Overlay */}
                 {isLoading && (
@@ -181,7 +194,7 @@ const AttendanceMonitor = () => {
                                         <div className="flex flex-col items-center justify-center text-slate-400">
                                             <FileBox className="w-12 h-12 mb-3 opacity-20" />
                                             <p className="text-base font-semibold text-slate-600">No records found</p>
-                                            <p className="text-sm">There are no attendance logs for {new Date(filterDate).toLocaleDateString()}.</p>
+                                            <p className="text-sm font-medium">There are no attendance logs for {new Date(filterDate).toLocaleDateString()}.</p>
                                         </div>
                                     </td>
                                 </tr>
@@ -195,7 +208,7 @@ const AttendanceMonitor = () => {
                                         {/* Student Worker Column */}
                                         <td className="px-6 py-5 align-top">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold shrink-0">
+                                                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-black shrink-0 border border-blue-100 shadow-inner">
                                                     {record.user.name.charAt(0)}
                                                 </div>
                                                 <div>
@@ -203,7 +216,7 @@ const AttendanceMonitor = () => {
                                                         {record.user.name}
                                                     </p>
                                                     <p className="text-xs font-medium text-slate-500 flex items-center gap-1 mt-0.5">
-                                                        <User className="w-3 h-3" /> {record.user.profile.student_id_number}
+                                                        <User className="w-3 h-3 text-slate-400" /> {record.user.profile.student_id_number}
                                                     </p>
                                                 </div>
                                             </div>
@@ -215,8 +228,8 @@ const AttendanceMonitor = () => {
                                                 <Clock className="w-4 h-4 text-blue-500" />
                                                 {formatTime(record.time_in)} — {formatTime(record.time_out)}
                                             </div>
-                                            <div className="mt-1">
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 uppercase tracking-wide">
+                                            <div className="mt-1.5">
+                                                <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 uppercase tracking-widest">
                                                     {record.work_type || 'Assigned Duty'}
                                                 </span>
                                             </div>
@@ -233,13 +246,13 @@ const AttendanceMonitor = () => {
                                         <td className="px-6 py-5 align-top text-right">
                                             <div className="flex flex-col items-end gap-2">
                                                 {/* Total Hours Badge */}
-                                                <div className="text-sm font-black text-slate-900 bg-slate-100 px-3 py-1 rounded-lg">
+                                                <div className="text-sm font-black text-slate-900 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">
                                                     {formatHours(record.rendered_hours)} <span className="text-xs text-slate-500 font-bold">hrs</span>
                                                 </div>
 
                                                 {/* Action Button / Status */}
                                                 {record.status === 'approved' ? (
-                                                    <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold shadow-sm">
+                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold shadow-sm">
                                                         <CheckCircle2 className="w-4 h-4" />
                                                         APPROVED
                                                     </span>

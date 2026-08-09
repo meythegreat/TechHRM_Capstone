@@ -1,13 +1,25 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-// 1. Import the Command Center component (adjusting the path to reach the components folder)
+import { motion, type Variants } from 'framer-motion';
+import { 
+    LayoutDashboard, 
+    Users, 
+    ClipboardCheck, 
+    Clock, 
+    Activity, 
+    ShieldCheck,
+    ChevronRight
+} from 'lucide-react';
+
+// Keep your original import path for the SuperAdmin redirect
 import SuperAdminDashboard from '../../components/SuperAdminDashboard';
 
 const AdminDashboard = () => {
     const userName = localStorage.getItem('user_name') || 'Admin';
     const userRole = localStorage.getItem('user_role') || 'Supervisor';
+    const assignedOffice = localStorage.getItem('assigned_office') || 'Department Supervisor';
     
-    // 2. THE SUPER ADMIN HIJACK
+    // THE SUPER ADMIN HIJACK
     // If they are a Super Admin, completely swap the view to the Command Center
     if (userRole === 'Super Admin') {
         return <SuperAdminDashboard />;
@@ -15,12 +27,13 @@ const AdminDashboard = () => {
 
     // --- EVERYTHING BELOW THIS LINE IS FOR SUPERVISORS & WSPO STAFF ---
     
-    // Default state starts at 0 until the API responds
     const [stats, setStats] = useState({
         activeStudents: 0,
         pendingApprovals: 0,
         totalHoursThisWeek: 0
     });
+
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -29,88 +42,156 @@ const AdminDashboard = () => {
                 setStats(response.data);
             } catch (err) {
                 console.error("Failed to load dashboard stats", err);
+            } finally {
+                setIsLoading(false);
             }
         };
         fetchStats();
     }, []);
 
+    // STRICT TYPESCRIPT ANIMATION VARIANTS
+    const containerVariants: Variants = {
+        hidden: { opacity: 0 },
+        show: {
+            opacity: 1,
+            transition: { staggerChildren: 0.1 }
+        }
+    };
+
+    const itemVariants: Variants = {
+        hidden: { opacity: 0, y: 20 },
+        show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } }
+    };
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-[60vh]">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="w-12 h-12 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin"></div>
+                    <p className="text-slate-500 font-bold animate-pulse">Loading workspace data...</p>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className="space-y-6 fade-in font-sans">
+        <div className="space-y-8 font-sans max-w-7xl mx-auto p-4 sm:p-8">
             
-            {/* --- HEADER SECTION --- */}
-            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                    <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">
-                        Welcome back, {userName.split(' ')[0]}!
-                    </h2>
-                    <p className="mt-2 text-sm font-medium text-gray-500">
-                        {userRole === 'Supervisor' 
-                            ? "Here is the overview for your department's working students." 
-                            : "Here is the university-wide overview for the WSPO program."}
+            {/* DARK THEME HEADER - MANAGEMENT COMMAND CENTER */}
+            <motion.div 
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative"
+            >
+                {/* Subtle blue/purple glow for admin context */}
+                <div className="absolute top-0 left-0 -mt-16 -ml-16 w-64 h-64 bg-blue-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
+                <div className="absolute bottom-0 right-10 -mb-16 -mr-16 w-64 h-64 bg-purple-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
+
+                <div className="relative z-10">
+                    <div className="flex items-center gap-2 mb-2">
+                        <LayoutDashboard className="w-5 h-5 text-blue-400" />
+                        <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Management Hub</span>
+                    </div>
+                    <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                        Workspace Overview
+                    </h1>
+                    <p className="mt-2 text-slate-400 font-medium max-w-md">
+                        Welcome back, {userName.split(' ')[0]}. Monitor your department's student workers, review pending timesheets, and manage daily operations.
                     </p>
                 </div>
-                <div className="bg-blue-50 px-4 py-2 rounded-lg border border-blue-100">
-                    <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">Current Role: </span>
-                    <span className="text-sm font-extrabold text-blue-900">{userRole}</span>
-                </div>
-            </div>
 
-            {/* --- QUICK STATS CARDS --- */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 border-l-4 border-l-blue-500 hover:shadow-md transition-shadow">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Active Students</p>
-                            <h3 className="text-3xl font-extrabold text-gray-900">{stats.activeStudents}</h3>
-                        </div>
-                        <div className="p-3 bg-blue-50 rounded-xl text-blue-600">
-                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                            </svg>
-                        </div>
+                {/* Dynamic Status Box */}
+                <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.3)]">
+                        <ShieldCheck className="w-5 h-5" />
+                    </div>
+                    <div className="flex flex-col">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Access Level: {userRole}</span>
+                        <span className="text-sm font-extrabold text-blue-400 truncate max-w-[150px]">
+                            {assignedOffice}
+                        </span>
                     </div>
                 </div>
+            </motion.div>
 
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 border-l-4 border-l-orange-500 hover:shadow-md transition-shadow">
+            {/* --- STAT CARDS --- */}
+            <motion.div 
+                variants={containerVariants}
+                initial="hidden"
+                animate="show"
+                className="grid grid-cols-1 md:grid-cols-3 gap-6"
+            >
+                {/* Active Students Card */}
+                <motion.div variants={itemVariants} className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-blue-300 transition-colors">
                     <div className="flex justify-between items-start">
                         <div>
-                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Pending Approvals</p>
-                            <h3 className="text-3xl font-extrabold text-gray-900">{stats.pendingApprovals}</h3>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Active Personnel</p>
+                            <h3 className="text-4xl font-black text-slate-900">{stats.activeStudents}</h3>
                         </div>
-                        <div className="p-3 bg-orange-50 rounded-xl text-orange-500">
-                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
+                        <div className="p-3.5 bg-blue-50 text-blue-600 rounded-2xl group-hover:scale-110 transition-transform">
+                            <Users className="w-6 h-6" />
                         </div>
                     </div>
-                </div>
+                    <p className="text-sm text-slate-500 mt-4 font-medium">Student workers currently assigned.</p>
+                </motion.div>
 
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 border-l-4 border-l-green-500 hover:shadow-md transition-shadow">
+                {/* Pending Approvals Card */}
+                <motion.div variants={itemVariants} className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-amber-300 transition-colors">
                     <div className="flex justify-between items-start">
                         <div>
-                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Hours Logged (Week)</p>
-                            <h3 className="text-3xl font-extrabold text-gray-900">{stats.totalHoursThisWeek}</h3>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Pending Approvals</p>
+                            <h3 className="text-4xl font-black text-slate-900">{stats.pendingApprovals}</h3>
                         </div>
-                        <div className="p-3 bg-green-50 rounded-xl text-green-600">
-                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
+                        <div className="p-3.5 bg-amber-50 text-amber-600 rounded-2xl group-hover:scale-110 transition-transform">
+                            <ClipboardCheck className="w-6 h-6" />
                         </div>
                     </div>
-                </div>
-            </div>
+                    <p className="text-sm text-amber-600 mt-4 font-bold flex items-center gap-1">
+                        Requires supervisor review.
+                    </p>
+                </motion.div>
+
+                {/* Hours Logged Card */}
+                <motion.div variants={itemVariants} className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-emerald-300 transition-colors">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Hours Logged (Week)</p>
+                            <h3 className="text-4xl font-black text-slate-900">
+                                {stats.totalHoursThisWeek} <span className="text-lg font-bold text-slate-400">hrs</span>
+                            </h3>
+                        </div>
+                        <div className="p-3.5 bg-emerald-50 text-emerald-600 rounded-2xl group-hover:scale-110 transition-transform">
+                            <Clock className="w-6 h-6" />
+                        </div>
+                    </div>
+                    <p className="text-sm text-slate-500 mt-4 font-medium">Total productive hours recorded.</p>
+                </motion.div>
+            </motion.div>
 
             {/* --- RECENT ACTIVITY PREVIEW --- */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-                    <h3 className="text-lg font-bold text-gray-900">Recent Student Activity</h3>
-                    <button className="text-sm font-bold text-blue-600 hover:text-blue-700">View All</button>
+            <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+                className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden"
+            >
+                <div className="p-6 sm:p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                    <h3 className="text-xl font-black text-slate-900 flex items-center gap-2 tracking-tight">
+                        <Activity className="w-5 h-5 text-blue-600" />
+                        Recent Student Activity
+                    </h3>
+                    <button className="text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors flex items-center">
+                        View All <ChevronRight className="w-4 h-4 ml-0.5" />
+                    </button>
                 </div>
-                <div className="p-8 text-center">
-                    <p className="text-gray-500 font-medium">Activity feed will populate here once students begin logging hours.</p>
+                
+                {/* Empty state placeholder for now until you wire up the live logs */}
+                <div className="p-16 text-center flex flex-col items-center">
+                    <Activity className="w-16 h-16 text-slate-300 mb-4 opacity-50" />
+                    <p className="text-lg font-bold text-slate-600">No recent activity detected.</p>
+                    <p className="text-sm text-slate-400 font-medium mt-1">Student log-ins, completions, and schedule changes will appear here.</p>
                 </div>
-            </div>
-
+            </motion.div>
         </div>
     );
 };

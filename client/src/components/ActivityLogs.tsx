@@ -1,5 +1,17 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
+import { 
+    Activity, 
+    ShieldAlert, 
+    Terminal, 
+    Globe, 
+    Clock, 
+    User, 
+    ChevronLeft, 
+    ChevronRight,
+    Search
+} from 'lucide-react';
 
 interface LogRecord {
     id: number;
@@ -26,10 +38,7 @@ const ActivityLogs = () => {
     const fetchLogs = async (page: number) => {
         setIsLoading(true);
         try {
-            // Fetching paginated data from Laravel
             const response = await axios.get(`/api/logs?page=${page}`);
-            
-            // Laravel's paginate() wraps the array in 'data'
             setLogs(response.data.data); 
             setCurrentPage(response.data.current_page);
             setTotalPages(response.data.last_page);
@@ -40,129 +49,174 @@ const ActivityLogs = () => {
         }
     };
 
-    // Helper to color-code different actions beautifully
+    // Helper to dynamically color-code actions
     const getActionBadge = (action: string) => {
-        const baseStyle = "px-2.5 py-1 rounded-md text-xs font-bold border";
-        if (action.includes('Login') || action.includes('Logout')) {
+        const act = action.toLowerCase();
+        const baseStyle = "px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border";
+        
+        if (act.includes('login') || act.includes('logout')) 
+            return `${baseStyle} bg-purple-50 text-purple-700 border-purple-200`;
+        if (act.includes('create') || act.includes('add') || act.includes('assign') || act.includes('issue')) 
+            return `${baseStyle} bg-emerald-50 text-emerald-700 border-emerald-200`;
+        if (act.includes('update') || act.includes('edit') || act.includes('approve') || act.includes('resolve')) 
             return `${baseStyle} bg-blue-50 text-blue-700 border-blue-200`;
-        }
-        if (action.includes('Create') || action.includes('Add')) {
-            return `${baseStyle} bg-green-50 text-green-700 border-green-200`;
-        }
-        if (action.includes('Delete') || action.includes('Remove')) {
+        if (act.includes('delete') || act.includes('remove') || act.includes('reject')) 
             return `${baseStyle} bg-red-50 text-red-700 border-red-200`;
-        }
-        if (action.includes('Update') || action.includes('Edit')) {
-            return `${baseStyle} bg-orange-50 text-orange-700 border-orange-200`;
-        }
-        return `${baseStyle} bg-gray-100 text-gray-700 border-gray-200`;
+            
+        return `${baseStyle} bg-slate-50 text-slate-600 border-slate-200`;
+    };
+
+    // STRICT TYPESCRIPT VARIANTS
+    const containerVariants: Variants = {
+        hidden: { opacity: 0 },
+        show: { opacity: 1, transition: { staggerChildren: 0.05 } }
+    };
+
+    const rowVariants: Variants = {
+        hidden: { opacity: 0, x: -10 },
+        show: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } }
     };
 
     return (
-        <div className="space-y-6 fade-in font-sans">
+        <div className="max-w-7xl mx-auto space-y-8 font-sans p-4 sm:p-8">
             
-            {/* Header Section */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex justify-between items-center">
-                <div>
-                    <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">System Audit Trail</h2>
-                    <p className="text-sm font-medium text-gray-500 mt-1">Track system events, logins, and administrative actions.</p>
-                </div>
-                <button 
-                    onClick={() => fetchLogs(currentPage)}
-                    className="p-2 bg-gray-50 text-gray-500 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
-                    title="Refresh Logs"
-                >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                </button>
-            </div>
+            {/* DARK THEME HEADER - AUDIT COMMAND CENTER */}
+            <motion.div 
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative"
+            >
+                {/* Glowing Orbs */}
+                <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
+                <div className="absolute bottom-0 left-10 -mb-16 -ml-16 w-64 h-64 bg-emerald-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10"></div>
 
-            {/* Table Section */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date & Time</th>
-                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">User / Admin</th>
-                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Action</th>
-                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Description</th>
-                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">IP Address</th>
+                <div className="relative z-10">
+                    <div className="flex items-center gap-2 mb-2">
+                        <Terminal className="w-5 h-5 text-indigo-400" />
+                        <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">System Security</span>
+                    </div>
+                    <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                        System Audit Trail
+                    </h1>
+                    <p className="mt-2 text-slate-400 font-medium max-w-md">
+                        Real-time immutable monitoring of all administrative and system-level activities.
+                    </p>
+                </div>
+
+                <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.3)]">
+                        <ShieldAlert className="w-5 h-5 animate-pulse" />
+                    </div>
+                    <div className="flex flex-col text-left">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tracking Status</span>
+                        <span className="text-sm font-extrabold text-emerald-400">
+                            Active Monitoring
+                        </span>
+                    </div>
+                </div>
+            </motion.div>
+
+            {/* MAIN TABLE */}
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative">
+                
+                {/* Loading Overlay */}
+                {isLoading && (
+                    <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-10 flex items-center justify-center">
+                        <div className="flex flex-col items-center gap-3">
+                            <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                            <span className="text-sm font-bold text-indigo-700 animate-pulse">Scanning records...</span>
+                        </div>
+                    </div>
+                )}
+
+                <div className="overflow-x-auto custom-scrollbar">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="bg-slate-50/80 border-b border-slate-200">
+                                <th className="px-6 py-4 text-xs font-extrabold text-slate-400 uppercase tracking-wider w-24">Log ID</th>
+                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Administrator</th>
+                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Action</th>
+                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider w-1/3">Description</th>
+                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider text-right">Technical Details</th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-100">
-                            {isLoading ? (
+                        <motion.tbody 
+                            variants={containerVariants}
+                            initial="hidden"
+                            animate={!isLoading ? "show" : "hidden"}
+                            className="divide-y divide-slate-100"
+                        >
+                            {!isLoading && logs.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-12 text-center">
-                                        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"></div>
-                                        <p className="mt-4 text-sm font-medium text-gray-500">Loading audit trail...</p>
-                                    </td>
-                                </tr>
-                            ) : logs.length === 0 ? (
-                                <tr>
-                                    <td colSpan={5} className="px-6 py-12 text-center">
-                                        <svg className="mx-auto h-12 w-12 text-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                        </svg>
-                                        <p className="text-gray-500 font-medium">No activity logs found.</p>
+                                    <td colSpan={5} className="px-6 py-16 text-center text-slate-400">
+                                        <Search className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                                        <p className="text-base font-semibold text-slate-600">No activity logs found</p>
+                                        <p className="text-sm font-medium">System activity will appear here.</p>
                                     </td>
                                 </tr>
                             ) : (
                                 logs.map((log) => (
-                                    <tr key={log.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                            {new Date(log.created_at).toLocaleString('en-US', { 
-                                                month: 'short', day: 'numeric', year: 'numeric', 
-                                                hour: 'numeric', minute: '2-digit', hour12: true 
-                                            })}
+                                    <motion.tr variants={rowVariants} key={log.id} className="hover:bg-slate-50 transition-colors group">
+                                        <td className="px-6 py-5 align-top">
+                                            <span className="text-xs font-bold text-slate-400 font-mono">#{String(log.id).padStart(5, '0')}</span>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex items-center">
-                                                <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs mr-3">
+                                        <td className="px-6 py-5 align-top">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0 border border-indigo-100">
                                                     {log.admin_name.charAt(0)}
                                                 </div>
-                                                <span className="text-sm font-bold text-gray-900">{log.admin_name}</span>
+                                                <span className="text-sm font-bold text-slate-900 group-hover:text-indigo-700 transition-colors">
+                                                    {log.admin_name}
+                                                </span>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
+                                        <td className="px-6 py-5 align-top">
                                             <span className={getActionBadge(log.action)}>
                                                 {log.action}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-gray-500 font-medium">
-                                            {log.description}
+                                        <td className="px-6 py-5 align-top">
+                                            <p className="text-sm font-medium text-slate-600 leading-relaxed">
+                                                {log.description}
+                                            </p>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400 font-mono">
-                                            {log.ip_address}
+                                        <td className="px-6 py-5 align-top text-right">
+                                            <div className="flex flex-col items-end gap-1.5">
+                                                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 font-mono bg-slate-100 px-2 py-0.5 rounded">
+                                                    <Globe className="w-3 h-3 text-slate-400" /> {log.ip_address}
+                                                </div>
+                                                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
+                                                    <Clock className="w-3 h-3" /> {new Date(log.created_at).toLocaleString()}
+                                                </div>
+                                            </div>
                                         </td>
-                                    </tr>
+                                    </motion.tr>
                                 ))
                             )}
-                        </tbody>
+                        </motion.tbody>
                     </table>
                 </div>
 
-                {/* Pagination Controls */}
-                {!isLoading && totalPages > 1 && (
-                    <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
-                        <span className="text-sm text-gray-500 font-medium">
-                            Showing page <span className="font-bold text-gray-900">{currentPage}</span> of <span className="font-bold text-gray-900">{totalPages}</span>
+                {/* PREMIUM PAGINATION FOOTER */}
+                {!isLoading && logs.length > 0 && (
+                    <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <span className="text-sm text-slate-500 font-medium">
+                            Showing page <span className="font-bold text-slate-900">{currentPage}</span> of <span className="font-bold text-slate-900">{totalPages}</span>
                         </span>
                         <div className="flex gap-2">
                             <button 
                                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                                 disabled={currentPage === 1}
-                                className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-bold text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm flex items-center gap-1"
                             >
-                                Previous
+                                <ChevronLeft className="w-4 h-4" /> Prev
                             </button>
                             <button 
                                 onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                                 disabled={currentPage === totalPages}
-                                className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-bold text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm flex items-center gap-1"
                             >
-                                Next
+                                Next <ChevronRight className="w-4 h-4" />
                             </button>
                         </div>
                     </div>
