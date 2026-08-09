@@ -6,7 +6,7 @@ class ActivityLogController extends Controller
 {
     public function index()
     {
-        $logs = ActivityLog::orderBy('created_at', 'desc')->paginate(15);
+        $logs = ActivityLog::with('admin:id,name,role')->latest()->paginate(15);
         return response()->json($logs);
     }
 }

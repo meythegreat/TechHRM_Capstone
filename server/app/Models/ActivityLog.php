@@ -9,13 +9,21 @@ class ActivityLog extends Model
 {
     use HasFactory;
 
-    // This array tells Laravel which columns are safe to save data into
     protected $fillable = [
         'admin_id',
-        'admin_name',    // <-- THIS IS THE MISSING PIECE!
+        'admin_name',
         'action',
+        'module',
+        'record_id',
         'description',
+        'old_values',
+        'new_values',
         'ip_address',
+    ];
+
+    protected $casts = [
+        'old_values' => 'array',
+        'new_values' => 'array',
     ];
 
     public function admin()

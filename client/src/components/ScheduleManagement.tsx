@@ -28,6 +28,8 @@ const ScheduleManagement = () => {
     const [students, setStudents] = useState<User[]>([]);
     const [schedules, setSchedules] = useState<Schedule[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
     
     // Modal & Form State
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -47,11 +49,14 @@ const ScheduleManagement = () => {
     });
 
     useEffect(() => {
-        fetchData();
+        fetchStudents();
     }, []);
 
-    const fetchData = async () => {
-        setIsLoading(true);
+    useEffect(() => {
+        fetchSchedules(currentPage);
+    }, [currentPage]);
+
+    const fetchStudents = async () => {
         try {
             const userRes = await axios.get('/api/users?page=1'); 
             const studentList = userRes.data.data.filter((u: any) => u.role === 'Student');
@@ -59,10 +64,15 @@ const ScheduleManagement = () => {
         } catch (error) {
             console.error('Error fetching students:', error);
         }
+    };
 
+    const fetchSchedules = async (page: number = 1) => {
+        setIsLoading(true);
         try {
-            const schedRes = await axios.get('/api/schedules');
-            setSchedules(schedRes.data);
+            const schedRes = await axios.get(`/api/schedules?page=${page}`);
+            setSchedules(schedRes.data.data);
+            setCurrentPage(schedRes.data.current_page);
+            setTotalPages(schedRes.data.last_page);
         } catch (error) {
             console.error('Error fetching schedules:', error);
         } finally {
@@ -114,7 +124,8 @@ const ScheduleManagement = () => {
             setTimeout(() => setToastMsg(null), 3000);
             
             setFormData({ ...formData, user_id: '', startTime: '', endTime: '' });
-            fetchData();
+            setCurrentPage(1);
+            fetchSchedules(1);
         } catch (error: any) {
             setToastMsg({ text: error.response?.data?.message || 'Failed to assign shift.', type: 'error' });
             setTimeout(() => setToastMsg(null), 4000);
@@ -128,7 +139,7 @@ const ScheduleManagement = () => {
         try {
             await axios.delete(`/api/schedules/${id}`);
             setToastMsg({ text: 'Shift removed successfully!', type: 'success' });
-            fetchData();
+            fetchSchedules(currentPage);
             setTimeout(() => setToastMsg(null), 3000);
         } catch (error) {
             setToastMsg({ text: 'Failed to remove shift.', type: 'error' });
@@ -140,7 +151,7 @@ const ScheduleManagement = () => {
         try {
             await axios.patch(`/api/schedules/${id}/resolve-request`);
             setToastMsg({ text: 'Student request acknowledged and cleared!', type: 'success' });
-            fetchData(); // This will refresh the table and remove the orange box
+            fetchSchedules(currentPage);
             setTimeout(() => setToastMsg(null), 3000);
         } catch (error: any) {
             setToastMsg({ text: error.response?.data?.message || 'Server error: Failed to clear request.', type: 'error' });
@@ -228,6 +239,30 @@ const ScheduleManagement = () => {
                         </tbody>
                     </table>
                 </div>
+
+                {!isLoading && (
+                    <div className="flex justify-between items-center mt-0 px-6 py-4 bg-gray-50 border-t border-gray-200">
+                        <span className="text-sm text-gray-600">
+                            Page <span className="font-bold">{currentPage}</span> of <span className="font-bold">{totalPages}</span>
+                        </span>
+                        <div className="flex gap-2">
+                            <button 
+                                disabled={currentPage === 1}
+                                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                                className="px-4 py-2 bg-white border border-gray-300 rounded shadow-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                            >
+                                Previous
+                            </button>
+                            <button 
+                                disabled={currentPage === totalPages}
+                                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                                className="px-4 py-2 bg-white border border-gray-300 rounded shadow-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* ASSIGN SHIFT MODAL */}

@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Models\UserProfile;
-use App\Models\ActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -60,15 +59,6 @@ class UserController extends Controller
             ]);
         }
 
-        // LOG THE CREATION
-        ActivityLog::create([
-            'admin_id' => $request->user()->id,
-            'admin_name' => $request->user()->name,
-            'action' => 'Create User',
-            'description' => "Created a new {$user->role} account for {$user->username}.",
-            'ip_address' => $request->ip(),
-        ]);
-
         return response()->json(['message' => 'User created successfully', 'user' => $user]);
     }
 
@@ -106,15 +96,6 @@ class UserController extends Controller
             $user->profile()->delete();
         }
 
-        // LOG THE UPDATE
-        ActivityLog::create([
-            'admin_id' => $request->user()->id,
-            'admin_name' => $request->user()->name,
-            'action' => 'Update User',
-            'description' => "Updated the profile/role for {$user->username}.",
-            'ip_address' => $request->ip(),
-        ]);
-
         return response()->json(['message' => 'User updated successfully', 'user' => $user]);
     }
 
@@ -122,15 +103,6 @@ class UserController extends Controller
     {
         $user = User::findOrFail($id);
         $user->delete();
-
-        // LOG THE DELETION
-        ActivityLog::create([
-            'admin_id' => request()->user()->id,
-            'admin_name' => request()->user()->name,
-            'action' => 'Revoke User',
-            'description' => "Revoked system access for {$user->username}.",
-            'ip_address' => request()->ip(),
-        ]);
 
         return response()->json(['message' => 'User deleted successfully']);
     }

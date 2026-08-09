@@ -130,12 +130,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/users', [UserController::class, 'index']);
 
         // =================================================
-        // LOGS
-        // =================================================
-
-        Route::get('/logs', [ActivityLogController::class, 'index']);
-
-        // =================================================
         // STAGE 1: Application Pipeline (Coordinator)
         // =================================================
 
@@ -169,8 +163,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware(['role:WSPO Staff,Super Admin'])->group(function () {
         Route::post('/users', [UserController::class, 'store']);
         Route::put('/users/{id}', [UserController::class, 'update']);
-
         Route::delete('/users/{id}', [UserController::class, 'destroy']);
+        Route::get('/logs', [ActivityLogController::class, 'index']);
 
         // STAGE 6: Reports & Analytics
         Route::get('/analytics/dashboard', [\App\Http\Controllers\AnalyticsController::class, 'getDashboardStats']);

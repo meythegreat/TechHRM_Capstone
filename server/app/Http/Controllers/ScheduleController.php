@@ -27,7 +27,7 @@ class ScheduleController extends Controller
             $query->where('department', $myDepartment);
         }
 
-        $schedules = $query->orderBy('day')->get();
+        $schedules = $query->latest()->paginate(10);
         return response()->json($schedules);
     }
 
