@@ -34,6 +34,8 @@ const StudentAttendanceTerminal = () => {
     const [successMsg, setSuccessMsg] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     
+    const assignedDepartment = localStorage.getItem('assigned_office') || 'Unassigned';
+    
     // Real-time clock state
     const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -84,7 +86,7 @@ const StudentAttendanceTerminal = () => {
         setIsLoading(true);
         
         try {
-            await submitSecureClockIn(tokenInput, dutyType);
+            await submitSecureClockIn(tokenInput.trim().toUpperCase(), dutyType);
             setSuccessMsg('Shift started successfully! Work hard and stay safe.');
             setTokenInput('');
             await loadSummary();
@@ -148,6 +150,9 @@ const StudentAttendanceTerminal = () => {
                     </h1>
                     <p className="mt-2 text-slate-400 font-medium max-w-md">
                         Please secure a verification token from your department supervisor to start your shift.
+                    </p>
+                    <p className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 bg-white/10 border border-white/10 rounded-lg text-sm font-bold text-blue-200">
+                        Your department: <span className="text-white">{assignedDepartment}</span>
                     </p>
                 </div>
 
@@ -237,9 +242,9 @@ const StudentAttendanceTerminal = () => {
                                                 type="text"
                                                 required
                                                 value={tokenInput}
-                                                onChange={(e) => setTokenInput(e.target.value)}
+                                                onChange={(e) => setTokenInput(e.target.value.toUpperCase())}
                                                 placeholder="Enter supervisor token..."
-                                                className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all placeholder:text-slate-400 placeholder:font-medium"
+                                                className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all placeholder:text-slate-400 placeholder:font-medium uppercase tracking-widest"
                                             />
                                         </div>
                                     </div>

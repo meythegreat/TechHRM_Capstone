@@ -51,6 +51,7 @@ Route::middleware('auth:sanctum')->group(function () {
         return $request->user()->load('profile');
     });
 
+    Route::put('/user', [UserController::class, 'updateSelf']);
     Route::post('/user/avatar', [UserController::class, 'uploadAvatar']);
 
     Route::get('/secure-file', [SecureFileController::class, 'show']);

@@ -16,7 +16,18 @@ class AdvancedAttendanceController extends Controller
             'description' => 'nullable|string|max:255',
         ]);
 
-        DailyToken::where('type', $validated['type'])->delete();
+        $supervisor = $request->user()->load('profile');
+        $department = trim((string) ($supervisor->profile?->assigned_office ?? ''));
+
+        if ($department === '') {
+            return response()->json([
+                'message' => 'Your account has no assigned department. Contact an administrator before generating tokens.',
+            ], 422);
+        }
+
+        DailyToken::where('type', $validated['type'])
+            ->whereHas('creator.profile', fn ($query) => $query->where('assigned_office', $department))
+            ->delete();
 
         $code = strtoupper(substr(md5(uniqid((string) mt_rand(), true)), 0, 6));
 
@@ -24,11 +35,15 @@ class AdvancedAttendanceController extends Controller
             'token_code' => $code,
             'type' => $validated['type'],
             'description' => $validated['description'] ?? null,
-            'generated_by' => $request->user()->id,
+            'generated_by' => $supervisor->id,
             'expires_at' => Carbon::now()->addHours(12),
         ]);
 
-        return response()->json(['message' => 'Secure authentication token generated!', 'token' => $token]);
+        return response()->json([
+            'message' => 'Secure authentication token generated!',
+            'token' => $token,
+            'department' => $department,
+        ]);
     }
 
     public function getAnomalyLogs()
@@ -46,7 +61,7 @@ class AdvancedAttendanceController extends Controller
             'attendance_type' => 'required|in:Regular,Cleaning,Meeting',
         ]);
 
-        $user = $request->user();
+        $user = $request->user()->load('profile');
 
         $activeRecord = Attendance::where('user_id', $user->id)
             ->whereNull('time_out')
@@ -56,15 +71,34 @@ class AdvancedAttendanceController extends Controller
             return response()->json(['message' => 'You already have an active session. Clock out first.'], 422);
         }
 
+        $studentDepartment = trim((string) ($user->profile?->assigned_office ?? ''));
+        if ($studentDepartment === '') {
+            return response()->json([
+                'message' => 'Your account has no assigned department. Contact your supervisor.',
+            ], 422);
+        }
+
         $tokenType = $request->attendance_type === 'Regular' ? 'Daily Clock' : $request->attendance_type;
 
-        $validToken = DailyToken::where('token_code', strtoupper($request->token_code))
+        $validToken = DailyToken::with('creator.profile')
+            ->where('token_code', strtoupper(trim($request->token_code)))
             ->where('type', $tokenType)
             ->where('expires_at', '>', Carbon::now())
             ->first();
 
         if (!$validToken) {
             return response()->json(['message' => 'Authentication failed. Invalid or expired token.'], 422);
+        }
+
+        $supervisorDepartment = trim((string) ($validToken->creator?->profile?->assigned_office ?? ''));
+        if ($supervisorDepartment === '') {
+            return response()->json(['message' => 'This token is not linked to a valid department.'], 422);
+        }
+
+        if (strcasecmp($studentDepartment, $supervisorDepartment) !== 0) {
+            return response()->json([
+                'message' => "This code is only valid for {$supervisorDepartment} students. You are assigned to {$studentDepartment}.",
+            ], 403);
         }
 
         $isAnomaly = false;

@@ -23,6 +23,7 @@ import TaskAssignmentManager from './components/TaskAssignmentManager';
 import SupervisorAttendanceHub from './components/SupervisorAttendanceHub';
 import DisciplinaryManager from './components/DisciplinaryManager';
 import AdminAnalyticsDashboard from './components/AdminAnalyticsDashboard';
+import StaffProfileSettings from './components/StaffProfileSettings';
 
 function App() {
   const [hasToken, setHasToken] = useState<boolean>(() => Boolean(localStorage.getItem('auth_token')));
@@ -188,13 +189,18 @@ function App() {
               <p className="text-sm font-extrabold text-slate-900">{adminName}</p>
             </div>
 
-            <div className="w-10 h-10 bg-slate-100 border-2 border-slate-200 rounded-full flex items-center justify-center text-slate-600 font-bold shadow-sm overflow-hidden group cursor-pointer hover:border-blue-400 transition-colors">
+            <button
+              type="button"
+              onClick={() => navigate('/settings')}
+              className="w-10 h-10 bg-slate-100 border-2 border-slate-200 rounded-full flex items-center justify-center text-slate-600 font-bold shadow-sm overflow-hidden group cursor-pointer hover:border-blue-400 transition-colors"
+              title="Profile settings"
+            >
               {adminAvatar ? (
                 <SecureImage filePath={adminAvatar} altText="Admin Avatar" className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
               ) : (
                 adminFirstName.charAt(0).toUpperCase()
               )}
-            </div>
+            </button>
           </div>
         </header>
 
@@ -223,6 +229,17 @@ function App() {
                     <Route path="/analytics" element={<AdminAnalyticsDashboard />} />
                   </>
                 )}
+                <Route
+                  path="/settings"
+                  element={
+                    <StaffProfileSettings
+                      onProfileUpdated={(name, avatarPath) => {
+                        setAdminName(name);
+                        setAdminAvatar(avatarPath);
+                      }}
+                    />
+                  }
+                />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Routes>
             </AnimatePresence>

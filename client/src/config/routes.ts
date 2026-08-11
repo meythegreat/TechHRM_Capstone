@@ -20,6 +20,7 @@ export const STAFF_BASE_PATHS = new Set([
   'tasks',
   'attendance-hub',
   'compliance',
+  'settings',
 ]);
 
 /** Extra paths for WSPO Staff and Super Admin only. */

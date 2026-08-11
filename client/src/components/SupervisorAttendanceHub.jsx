@@ -22,6 +22,7 @@ const SupervisorAttendanceHub = () => {
     const [isGenerating, setIsGenerating] = useState(false);
     const [copied, setCopied] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
+    const supervisorDepartment = localStorage.getItem('assigned_office') || 'Unassigned';
 
     const formatHours = (value) => Number(value || 0).toFixed(2);
 
@@ -119,6 +120,9 @@ const SupervisorAttendanceHub = () => {
                     </h1>
                     <p className="mt-2 text-slate-400 font-medium max-w-md">
                         Generate secure verification tokens for student shifts and monitor the system for attendance anomalies.
+                    </p>
+                    <p className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 bg-white/10 border border-white/10 rounded-lg text-sm font-bold text-blue-200">
+                        Token scope: <span className="text-white">{supervisorDepartment}</span> students only
                     </p>
                 </div>
 

@@ -33,8 +33,11 @@ class AuthController extends Controller
             return $pendingApplicantResponse;
         }
 
-        // 4. Grab the office if they are a student worker (Admins get 'Management')
-        $office = $user->role === 'Student' ? $user->profile?->assigned_office : 'Management';
+        // 4. Return assigned department for students/supervisors; admins get 'Management'
+        $office = match ($user->role) {
+            'Student', 'Supervisor', 'WSPO Staff' => $user->profile?->assigned_office ?? 'Unassigned',
+            default => 'Management',
+        };
 
         // 5. Create Sanctum Token for secure React API requests
         $token = $user->createToken('auth_token')->plainTextToken;

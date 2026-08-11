@@ -18,6 +18,23 @@ import {
     ShieldAlert
 } from "lucide-react";
 
+// Official FCU Departments & Colleges
+const FCU_DEPARTMENTS = [
+    "Pre-School Department",
+    "Elementary Department",
+    "Junior High School Department",
+    "Senior High School Department",
+    "College of Arts and Sciences",
+    "College of Business and Accountancy",
+    "College of Computer Studies",
+    "College of Criminal Justice Education",
+    "College of Engineering",
+    "College of Hotel and Tourism Management",
+    "College of Nursing",
+    "College of Teacher Education",
+    "Graduate School"
+];
+
 interface UserRecord {
   id: number;
   name: string;
@@ -39,6 +56,7 @@ const UserManagement = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [searchQuery, setSearchQuery] = useState("");
   const [toastMsg, setToastMsg] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -59,19 +77,27 @@ const UserManagement = () => {
     assigned_office: "",
   });
 
+  // Debounced Search & Initial Load
   useEffect(() => {
-    fetchUsers(currentPage);
-  }, [currentPage]);
+    const handler = setTimeout(() => {
+      setCurrentPage(1); // Reset to page 1 when searching
+      fetchUsers(1, searchQuery);
+    }, 500); // 500ms delay to avoid spamming the backend while typing
+    
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
 
   const showToast = (text: string, type: "success" | "error") => {
     setToastMsg({ text, type });
     setTimeout(() => setToastMsg(null), 3000);
   };
 
-  const fetchUsers = async (page: number) => {
+  const fetchUsers = async (page: number, search: string = searchQuery) => {
     setIsLoading(true);
     try {
-      const response = await axios.get(`/api/users?page=${page}`);
+      const response = await axios.get('/api/users', {
+          params: { page, search }
+      });
       // Handle both paginated and flat array responses gracefully
       const data = response.data.data || response.data;
       setUsers(Array.isArray(data) ? data : []);
@@ -86,6 +112,11 @@ const UserManagement = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handlePageChange = (newPage: number) => {
+      setCurrentPage(newPage);
+      fetchUsers(newPage);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -201,7 +232,7 @@ const UserManagement = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 font-sans p-4 sm:p-8">
+    <div className="max-w-7xl mx-auto space-y-6 font-sans p-4 sm:p-8">
       
       {/* DARK THEME HEADER - IDENTITY COMMAND CENTER */}
       <motion.div 
@@ -240,6 +271,33 @@ const UserManagement = () => {
           </div>
       </motion.div>
 
+      {/* SEARCH BAR */}
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+        className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 flex items-center relative z-20"
+      >
+        <div className="flex-1 relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            <input 
+                type="text" 
+                placeholder="Search users by name, ID, department, or role across all pages..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 bg-transparent font-medium text-slate-900 outline-none placeholder:text-slate-400"
+            />
+        </div>
+        {searchQuery && (
+            <button 
+                onClick={() => setSearchQuery("")}
+                className="p-2 mr-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+                <X className="w-4 h-4" />
+            </button>
+        )}
+      </motion.div>
+
       {/* Animated Toasts */}
       <AnimatePresence>
           {toastMsg && (
@@ -263,7 +321,7 @@ const UserManagement = () => {
       </AnimatePresence>
 
       {/* MAIN TABLE */}
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative">
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative min-h-[400px]">
           
           {isLoading && (
               <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-10 flex items-center justify-center">
@@ -293,9 +351,9 @@ const UserManagement = () => {
                       {!isLoading && users.length === 0 ? (
                           <tr>
                               <td colSpan={4} className="px-6 py-16 text-center text-slate-400">
-                                  <Search className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                                  <Users className="w-12 h-12 mx-auto mb-3 opacity-20" />
                                   <p className="text-base font-semibold text-slate-600">No users found</p>
-                                  <p className="text-sm font-medium">Click "Add User" to provision a new account.</p>
+                                  <p className="text-sm font-medium">{searchQuery ? 'Try a different search term.' : 'Click "Add User" to provision a new account.'}</p>
                               </td>
                           </tr>
                       ) : (
@@ -372,14 +430,14 @@ const UserManagement = () => {
                   </span>
                   <div className="flex gap-2">
                       <button 
-                          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                          onClick={() => handlePageChange(Math.max(currentPage - 1, 1))}
                           disabled={currentPage === 1}
                           className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm flex items-center gap-1"
                       >
                           <ChevronLeft className="w-4 h-4" /> Prev
                       </button>
                       <button 
-                          onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                          onClick={() => handlePageChange(Math.min(currentPage + 1, totalPages))}
                           disabled={currentPage === totalPages}
                           className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm flex items-center gap-1"
                       >
@@ -520,11 +578,27 @@ const UserManagement = () => {
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Assigned Office / Dept</label>
-                          <input name="assigned_office" value={formData.assigned_office} onChange={handleInputChange} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all" />
+                          <select 
+                            name="assigned_office" 
+                            value={formData.assigned_office} 
+                            onChange={handleInputChange} 
+                            className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all appearance-none cursor-pointer"
+                          >
+                            <option value="">-- Select Department --</option>
+                            {FCU_DEPARTMENTS.map(dept => <option key={dept} value={dept}>{dept}</option>)}
+                          </select>
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Course / Degree</label>
-                          <input name="course" value={formData.course} onChange={handleInputChange} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all" />
+                          <select 
+                            name="course" 
+                            value={formData.course} 
+                            onChange={handleInputChange} 
+                            className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all appearance-none cursor-pointer"
+                          >
+                            <option value="">-- Select College/Department --</option>
+                            {FCU_DEPARTMENTS.map(dept => <option key={`course-${dept}`} value={dept}>{dept}</option>)}
+                          </select>
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Year Level</label>
@@ -542,7 +616,15 @@ const UserManagement = () => {
                     {formData.role === "Supervisor" && (
                       <div>
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Supervised Department</label>
-                        <input name="assigned_office" value={formData.assigned_office} onChange={handleInputChange} placeholder="e.g. CCS Office" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all" />
+                        <select 
+                            name="assigned_office" 
+                            value={formData.assigned_office} 
+                            onChange={handleInputChange} 
+                            className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all appearance-none cursor-pointer"
+                        >
+                            <option value="">-- Select Supervised Department --</option>
+                            {FCU_DEPARTMENTS.map(dept => <option key={`sup-${dept}`} value={dept}>{dept}</option>)}
+                        </select>
                       </div>
                     )}
 

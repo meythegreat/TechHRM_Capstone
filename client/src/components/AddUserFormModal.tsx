@@ -13,7 +13,7 @@ const AddUserFormModal: FC<AddUserFormModalProps> = ({ isOpen, onClose, onSucces
     const [fullname, setFullname] = useState('');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
-    const [role, setRole] = useState('User');
+    const [role, setRole] = useState('Student');
     
     // Student Profile State
     const [studentId, setStudentId] = useState('');
@@ -31,7 +31,7 @@ const AddUserFormModal: FC<AddUserFormModalProps> = ({ isOpen, onClose, onSucces
     if (!isOpen) return null;
 
     const resetForm = () => {
-        setFullname(''); setUsername(''); setPassword(''); setRole('User');
+        setFullname(''); setUsername(''); setPassword(''); setRole('Student');
         setStudentId(''); setCourse(''); setYearLevel('1'); setAssignedOffice(''); setContactNumber('');
     };
 
@@ -41,10 +41,10 @@ const AddUserFormModal: FC<AddUserFormModalProps> = ({ isOpen, onClose, onSucces
         setIsLoading(true);
 
         try {
-            const payload: any = { fullname, username, password, role };
+            const payload: any = { name: fullname, username, password, role };
             
-            // Only attach profile data if the role is 'User'
-            if (role === 'User') {
+            // Only attach profile data if the role is 'Student'
+            if (role === 'Student') {
                 payload.student_id_number = studentId;
                 payload.course = course;
                 payload.year_level = parseInt(yearLevel);
@@ -90,8 +90,9 @@ const AddUserFormModal: FC<AddUserFormModalProps> = ({ isOpen, onClose, onSucces
                     <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-1">System Role</label>
                         <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all">
-                            <option value="User">Student Worker</option>
-                            <option value="Admin">Administrator</option>
+                            <option value="Student">Student Worker</option>
+                            <option value="Supervisor">Department Supervisor</option>
+                            <option value="WSPO Staff">WSPO Staff Member</option>
                             {/* ONLY Super Admins can assign the Super Admin role */}
                             {currentUserRole === 'Super Admin' && (
                                 <option value="Super Admin">Super Administrator</option>
@@ -119,7 +120,7 @@ const AddUserFormModal: FC<AddUserFormModalProps> = ({ isOpen, onClose, onSucces
                     </div>
 
                     {/* Conditional Student Fields */}
-                    {role === 'User' && (
+                    {role === 'Student' && (
                         <div className="space-y-4 pt-2 border-t border-gray-100">
                             <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider">Student Profile Data</h4>
                             

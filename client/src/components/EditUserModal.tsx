@@ -12,7 +12,8 @@ interface StudentProfile {
 
 interface User {
     id: number;
-    fullname: string;
+    name?: string;
+    fullname?: string;
     username: string;
     role: string;
     profile: StudentProfile | null;
@@ -30,7 +31,7 @@ const EditUserModal: FC<EditUserModalProps> = ({ isOpen, onClose, onSuccess, use
     const [fullname, setFullname] = useState('');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
-    const [role, setRole] = useState('User');
+    const [role, setRole] = useState('Student');
     
     // Profile State
     const [studentId, setStudentId] = useState('');
@@ -48,7 +49,7 @@ const EditUserModal: FC<EditUserModalProps> = ({ isOpen, onClose, onSuccess, use
     // Pre-fill the form whenever the selected user changes
     useEffect(() => {
         if (user) {
-            setFullname(user.fullname);
+            setFullname(user.name || user.fullname || '');
             setUsername(user.username);
             setRole(user.role);
             setPassword(''); 
@@ -75,10 +76,10 @@ const EditUserModal: FC<EditUserModalProps> = ({ isOpen, onClose, onSuccess, use
         setIsLoading(true);
 
         try {
-            const payload: any = { fullname, username, role };
+            const payload: any = { name: fullname, username, role };
             if (password) payload.password = password;
 
-            if (role === 'User') {
+            if (role === 'Student') {
                 payload.student_id_number = studentId;
                 payload.course = course;
                 payload.year_level = parseInt(yearLevel);
@@ -117,8 +118,9 @@ const EditUserModal: FC<EditUserModalProps> = ({ isOpen, onClose, onSuccess, use
                     <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-1">System Role</label>
                         <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all">
-                            <option value="User">Student Worker</option>
-                            <option value="Admin">Administrator</option>
+                            <option value="Student">Student Worker</option>
+                            <option value="Supervisor">Department Supervisor</option>
+                            <option value="WSPO Staff">WSPO Staff Member</option>
                             {/* ONLY Super Admins can assign the Super Admin role */}
                             {currentUserRole === 'Super Admin' && (
                                 <option value="Super Admin">Super Administrator</option>
@@ -146,7 +148,7 @@ const EditUserModal: FC<EditUserModalProps> = ({ isOpen, onClose, onSuccess, use
                         </div>
                     </div>
 
-                    {role === 'User' && (
+                    {role === 'Student' && (
                         <div className="space-y-4 pt-2 border-t border-gray-100">
                             <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider">Student Profile Data</h4>
                             

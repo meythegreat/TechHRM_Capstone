@@ -4,6 +4,7 @@ namespace App\Traits;
 
 use App\Models\ActivityLog;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 
 trait RecordsActivity
 {
@@ -49,17 +50,31 @@ trait RecordsActivity
         $recordId = $model->getKey();
 
         try {
-            ActivityLog::create([
+            $payload = [
                 'admin_id' => $user->id,
                 'admin_name' => $actorName,
                 'action' => "{$action} {$moduleName}",
-                'module' => $moduleName,
-                'record_id' => $recordId,
                 'description' => "{$actorName} {$action}d {$moduleName} record #{$recordId}.",
-                'old_values' => $oldValues,
-                'new_values' => $newValues,
                 'ip_address' => request()?->ip(),
-            ]);
+            ];
+
+            if (Schema::hasColumn('activity_logs', 'module')) {
+                $payload['module'] = $moduleName;
+            }
+
+            if (Schema::hasColumn('activity_logs', 'record_id')) {
+                $payload['record_id'] = $recordId;
+            }
+
+            if (Schema::hasColumn('activity_logs', 'old_values')) {
+                $payload['old_values'] = $oldValues;
+            }
+
+            if (Schema::hasColumn('activity_logs', 'new_values')) {
+                $payload['new_values'] = $newValues;
+            }
+
+            ActivityLog::create($payload);
         } catch (\Throwable $exception) {
             report($exception);
         }
