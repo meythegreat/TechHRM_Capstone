@@ -18,7 +18,7 @@ import {
     ShieldAlert
 } from "lucide-react";
 
-// Official FCU Departments & Colleges
+// Official FCU Departments & Colleges (Kept for the Course Dropdown)
 const FCU_DEPARTMENTS = [
     "Pre-School Department",
     "Elementary Department",
@@ -82,7 +82,7 @@ const UserManagement = () => {
     const handler = setTimeout(() => {
       setCurrentPage(1); // Reset to page 1 when searching
       fetchUsers(1, searchQuery);
-    }, 500); // 500ms delay to avoid spamming the backend while typing
+    }, 500);
     
     return () => clearTimeout(handler);
   }, [searchQuery]);
@@ -98,7 +98,6 @@ const UserManagement = () => {
       const response = await axios.get('/api/users', {
           params: { page, search }
       });
-      // Handle both paginated and flat array responses gracefully
       const data = response.data.data || response.data;
       setUsers(Array.isArray(data) ? data : []);
       
@@ -133,6 +132,21 @@ const UserManagement = () => {
     return true;
   };
 
+  // --- PASSWORD STRENGTH CALCULATOR ---
+  const getPasswordStrength = (pass: string) => {
+    if (!pass) return 0;
+    let score = 0;
+    if (pass.length >= 8) score += 1;
+    if (/[A-Z]/.test(pass)) score += 1;
+    if (/[0-9]/.test(pass)) score += 1;
+    if (/[^A-Za-z0-9]/.test(pass)) score += 1;
+    return score;
+  };
+
+  const passwordScore = getPasswordStrength(formData.password);
+  const strengthColors = ['bg-slate-200', 'bg-red-500', 'bg-amber-500', 'bg-blue-500', 'bg-emerald-500'];
+  const strengthLabels = ['', 'Weak', 'Fair', 'Good', 'Strong'];
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateName(formData.name)) return;
@@ -140,7 +154,6 @@ const UserManagement = () => {
     setIsSubmitting(true);
     try {
       if (editingUserId) {
-        // Exclude password from payload if it's empty during edit
         const payload = { ...formData };
         if (!payload.password) delete (payload as any).password;
         await axios.put(`/api/users/${editingUserId}`, payload);
@@ -209,7 +222,6 @@ const UserManagement = () => {
     setShowPassword(false);
   };
 
-  // Helper to color-code roles beautifully
   const getRoleBadge = (role: string) => {
     const base = "px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border";
     switch(role) {
@@ -220,7 +232,6 @@ const UserManagement = () => {
     }
   };
 
-  // STRICT TYPESCRIPT VARIANTS
   const containerVariants: Variants = {
     hidden: { opacity: 0 },
     show: { opacity: 1, transition: { staggerChildren: 0.05 } }
@@ -234,13 +245,12 @@ const UserManagement = () => {
   return (
     <div className="max-w-7xl mx-auto space-y-6 font-sans p-4 sm:p-8">
       
-      {/* DARK THEME HEADER - IDENTITY COMMAND CENTER */}
+      {/* HEADER */}
       <motion.div 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative"
       >
-          {/* Glowing Orbs */}
           <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
           <div className="absolute bottom-0 left-10 -mb-16 -ml-16 w-64 h-64 bg-emerald-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10"></div>
 
@@ -422,7 +432,7 @@ const UserManagement = () => {
               </table>
           </div>
 
-          {/* PREMIUM PAGINATION FOOTER */}
+          {/* PAGINATION */}
           {!isLoading && users.length > 0 && (
               <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
                   <span className="text-sm text-slate-500 font-medium">
@@ -505,27 +515,62 @@ const UserManagement = () => {
                         className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all" 
                       />
                     </div>
+                    
+                    {/* ENHANCED PASSWORD SECTION */}
                     <div className="sm:col-span-2 relative">
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex justify-between">
                         <span>Account Password</span>
                         {editingUserId && <span className="text-amber-500 text-[10px]">Leave blank to keep current</span>}
                       </label>
-                      <input 
-                        type={showPassword ? "text" : "password"} 
-                        name="password" 
-                        value={formData.password} 
-                        onChange={handleInputChange} 
-                        required={!editingUserId} 
-                        placeholder={editingUserId ? "••••••••" : "Create a secure password"}
-                        className="w-full p-3.5 pr-12 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all placeholder:text-slate-400" 
-                      />
-                      <button 
-                        type="button" 
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-4 top-[38px] text-slate-400 hover:text-indigo-600 transition-colors"
-                      >
-                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                      </button>
+                      <div className="relative">
+                          <input 
+                            type={showPassword ? "text" : "password"} 
+                            name="password" 
+                            value={formData.password} 
+                            onChange={handleInputChange} 
+                            required={!editingUserId} 
+                            placeholder={editingUserId ? "••••••••" : "Create a secure password"}
+                            className="w-full p-3.5 pr-12 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all placeholder:text-slate-400" 
+                          />
+                          <button 
+                            type="button" 
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-4 top-[14px] text-slate-400 hover:text-indigo-600 transition-colors"
+                          >
+                            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                          </button>
+                      </div>
+
+                      {/* PASSWORD STRENGTH CRITERIA METER */}
+                      {formData.password.length > 0 && (
+                          <div className="mt-3 bg-slate-50 border border-slate-100 p-4 rounded-xl">
+                              <div className="flex justify-between items-center mb-2">
+                                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Password Strength</span>
+                                  <span className={`text-[10px] font-black uppercase tracking-wider ${strengthColors[passwordScore].replace('bg-', 'text-')}`}>
+                                      {strengthLabels[passwordScore]}
+                                  </span>
+                              </div>
+                              <div className="flex gap-1.5 mb-3">
+                                  {[1, 2, 3, 4].map((level) => (
+                                      <div key={level} className={`h-1.5 w-1/4 rounded-full transition-colors duration-300 ${passwordScore >= level ? strengthColors[passwordScore] : 'bg-slate-200'}`} />
+                                  ))}
+                              </div>
+                              <ul className="text-xs font-medium text-slate-500 space-y-1.5">
+                                  <li className={`flex items-center gap-1.5 transition-colors ${formData.password.length >= 8 ? "text-emerald-600 font-bold" : ""}`}>
+                                      <CheckCircle2 className="w-3.5 h-3.5" /> Minimum 8 characters
+                                  </li>
+                                  <li className={`flex items-center gap-1.5 transition-colors ${/[A-Z]/.test(formData.password) ? "text-emerald-600 font-bold" : ""}`}>
+                                      <CheckCircle2 className="w-3.5 h-3.5" /> Contains uppercase letter
+                                  </li>
+                                  <li className={`flex items-center gap-1.5 transition-colors ${/[0-9]/.test(formData.password) ? "text-emerald-600 font-bold" : ""}`}>
+                                      <CheckCircle2 className="w-3.5 h-3.5" /> Contains a number
+                                  </li>
+                                  <li className={`flex items-center gap-1.5 transition-colors ${/[^A-Za-z0-9]/.test(formData.password) ? "text-emerald-600 font-bold" : ""}`}>
+                                      <CheckCircle2 className="w-3.5 h-3.5" /> Contains a symbol (!@#$%)
+                                  </li>
+                              </ul>
+                          </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -576,17 +621,16 @@ const UserManagement = () => {
                           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Student ID Number</label>
                           <input name="student_id_number" value={formData.student_id_number} onChange={handleInputChange} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all" />
                         </div>
+                        {/* TEXTBOX UPGRADE */}
                         <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Assigned Office / Dept</label>
-                          <select 
+                          <input 
                             name="assigned_office" 
                             value={formData.assigned_office} 
                             onChange={handleInputChange} 
-                            className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all appearance-none cursor-pointer"
-                          >
-                            <option value="">-- Select Department --</option>
-                            {FCU_DEPARTMENTS.map(dept => <option key={dept} value={dept}>{dept}</option>)}
-                          </select>
+                            placeholder="e.g. Main Library, Clinic, etc."
+                            className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all placeholder:text-slate-400" 
+                          />
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Course / Degree</label>
@@ -615,16 +659,15 @@ const UserManagement = () => {
 
                     {formData.role === "Supervisor" && (
                       <div>
+                        {/* TEXTBOX UPGRADE */}
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Supervised Department</label>
-                        <select 
+                        <input 
                             name="assigned_office" 
                             value={formData.assigned_office} 
                             onChange={handleInputChange} 
-                            className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all appearance-none cursor-pointer"
-                        >
-                            <option value="">-- Select Supervised Department --</option>
-                            {FCU_DEPARTMENTS.map(dept => <option key={`sup-${dept}`} value={dept}>{dept}</option>)}
-                        </select>
+                            placeholder="e.g. Guidance Office, Finance, etc."
+                            className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all placeholder:text-slate-400" 
+                        />
                       </div>
                     )}
 
