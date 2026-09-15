@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getSupervisorTasks, assignTask, addSupervisorNote } from '../services/taskService';
+import { getSupervisorTasks, assignTask, addSupervisorNote, verifyTask } from '../services/taskService';
 import { 
     ClipboardCheck, 
     Send, 
@@ -19,7 +19,14 @@ import {
 const TaskAssignmentManager = () => {
     const [tasks, setTasks] = useState([]);
     const [students, setStudents] = useState([]);
-    const [formData, setFormData] = useState({ student_id: '', title: '', description: '', due_date: '' });
+    const [formData, setFormData] = useState({
+        student_id: '',
+        title: '',
+        description: '',
+        task_type: 'Routine',
+        priority: 'Medium',
+        due_date: '',
+    });
     const [noteModal, setNoteModal] = useState(null);
     const [feedbackNote, setFeedbackNote] = useState('');
     const [isLoading, setIsLoading] = useState(true);
@@ -58,7 +65,14 @@ const TaskAssignmentManager = () => {
         setIsSubmitting(true);
         try {
             await assignTask(formData);
-            setFormData({ student_id: '', title: '', description: '', due_date: '' });
+            setFormData({
+                student_id: '',
+                title: '',
+                description: '',
+                task_type: 'Routine',
+                priority: 'Medium',
+                due_date: '',
+            });
             fetchTasks();
         } catch (err) {
             console.error('Failed to assign task', err);
@@ -70,7 +84,7 @@ const TaskAssignmentManager = () => {
     const submitFeedback = async () => {
         if (!feedbackNote.trim()) return;
         try {
-            await addSupervisorNote(noteModal, { supervisor_note: feedbackNote });
+            await verifyTask(noteModal, feedbackNote);
             setNoteModal(null);
             setFeedbackNote('');
             fetchTasks();
@@ -79,7 +93,8 @@ const TaskAssignmentManager = () => {
         }
     };
 
-    const activeTasksCount = tasks.filter(t => t.status === 'Pending' || t.status === 'In Progress').length;
+    const normalizeStatus = (status) => status === 'Assigned' ? 'Pending' : status;
+    const activeTasksCount = tasks.filter(t => ['Pending', 'Assigned', 'In Progress'].includes(t.status)).length;
 
     // ANIMATION VARIANTS
     const containerVariants = {
@@ -182,6 +197,32 @@ const TaskAssignmentManager = () => {
                             />
                         </div>
 
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Task Type</label>
+                                <select
+                                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all appearance-none cursor-pointer"
+                                    value={formData.task_type}
+                                    onChange={(e) => setFormData({ ...formData, task_type: e.target.value })}
+                                >
+                                    <option value="Routine">Routine</option>
+                                    <option value="Special Project">Special Project</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Priority</label>
+                                <select
+                                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all appearance-none cursor-pointer"
+                                    value={formData.priority}
+                                    onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                                >
+                                    <option value="Low">Low</option>
+                                    <option value="Medium">Medium</option>
+                                    <option value="High">High</option>
+                                </select>
+                            </div>
+                        </div>
+
                         <div>
                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Detailed Instructions</label>
                             <textarea
@@ -231,18 +272,28 @@ const TaskAssignmentManager = () => {
                                     >
                                         <div className="flex justify-between items-start mb-4">
                                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border ${
-                                                task.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                                task.status === 'In Progress' ? 'bg-blue-50 text-blue-700 border-blue-200 animate-pulse' :
+                                                task.status === 'Verified' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                                task.status === 'Completed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                                task.status === 'In Progress' ? 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse' :
                                                 'bg-slate-50 text-slate-600 border-slate-200'
                                             }`}>
-                                                {task.status === 'Completed' && <CheckCircle2 className="w-3 h-3" />}
+                                                {task.status === 'Verified' && <CheckCircle2 className="w-3 h-3" />}
+                                                {task.status === 'Completed' && <MessageSquare className="w-3 h-3" />}
                                                 {task.status === 'In Progress' && <PlayCircle className="w-3 h-3" />}
-                                                {task.status === 'Pending' && <Clock className="w-3 h-3" />}
-                                                {task.status}
+                                                {['Pending', 'Assigned'].includes(task.status) && <Clock className="w-3 h-3" />}
+                                                {normalizeStatus(task.status)}
                                             </span>
-                                            <div className="flex items-center gap-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                                                <Calendar className="w-3.5 h-3.5" />
-                                                {task.due_date || 'No Date'}
+                                            <div className="flex flex-col items-end gap-1">
+                                                <span className={`text-[11px] font-black px-2.5 py-1 rounded-md ${
+                                                    task.priority === 'High' ? 'bg-red-100 text-red-700' :
+                                                    task.priority === 'Low' ? 'bg-slate-100 text-slate-600' :
+                                                    'bg-amber-100 text-amber-700'
+                                                }`}>
+                                                    {task.priority || 'Medium'}
+                                                </span>
+                                                <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-md">
+                                                    {task.task_type || 'Routine'}
+                                                </span>
                                             </div>
                                         </div>
 
@@ -261,7 +312,7 @@ const TaskAssignmentManager = () => {
                                                 <span className="truncate max-w-[100px]">{task.student?.name || 'Unknown'}</span>
                                             </div>
                                             
-                                            {task.status === 'Completed' && !task.supervisor_note && (
+                                            {task.status === 'Completed' && !task.evaluation_notes && !task.supervisor_notes && (
                                                 <button 
                                                     onClick={() => setNoteModal(task.id)}
                                                     className="px-3 py-1.5 bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5"
@@ -271,12 +322,12 @@ const TaskAssignmentManager = () => {
                                             )}
                                         </div>
 
-                                        {task.supervisor_note && (
+                                        {(task.evaluation_notes || task.supervisor_notes) && (
                                             <div className="mt-4 p-3 bg-emerald-50 rounded-xl border border-emerald-100">
                                                 <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-widest mb-1 flex items-center gap-1">
-                                                    <CheckCircle2 className="w-3 h-3" /> Supervisor Feedback
+                                                    <CheckCircle2 className="w-3 h-3" /> Evaluation Notes
                                                 </p>
-                                                <p className="text-xs text-emerald-700 font-medium italic">"{task.supervisor_note}"</p>
+                                                <p className="text-xs text-emerald-700 font-medium italic">"{task.evaluation_notes || task.supervisor_notes}"</p>
                                             </div>
                                         )}
                                     </motion.div>

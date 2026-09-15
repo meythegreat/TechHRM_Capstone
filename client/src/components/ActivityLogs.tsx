@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { motion, AnimatePresence, type Variants } from 'framer-motion';
+import { motion, type Variants } from 'framer-motion';
 import { 
-    Activity, 
     ShieldAlert, 
     Terminal, 
     Globe, 
     Clock, 
-    User, 
     ChevronLeft, 
     ChevronRight,
     Search

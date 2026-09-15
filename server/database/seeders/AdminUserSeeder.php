@@ -40,7 +40,7 @@ class AdminUserSeeder extends Seeder
 
         // 4. Student Worker Account
         $student = User::create([
-            'name' => 'Miguel Angelo Basinillo',
+            'name' => 'Student Worker',
             'username' => 'student',
             'password' => Hash::make('password123'),
             'role' => 'Student',

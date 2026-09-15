@@ -76,7 +76,7 @@ const StudentTaskBoard = () => {
         );
     }
 
-    const activeTasksCount = tasks.filter(t => t.status === 'Pending' || t.status === 'In Progress').length;
+    const activeTasksCount = tasks.filter(t => ['Pending', 'Assigned', 'In Progress'].includes(t.status)).length;
 
     return (
         <div className="max-w-7xl mx-auto font-sans space-y-6">
@@ -121,7 +121,11 @@ const StudentTaskBoard = () => {
             {/* KANBAN BOARD */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
                 {COLUMNS.map((columnName) => {
-                    const columnTasks = tasks.filter(t => t.status === columnName);
+                    const columnTasks = tasks.filter(t => {
+                        if (columnName === 'Pending') return t.status === 'Pending' || t.status === 'Assigned';
+                        if (columnName === 'Completed') return t.status === 'Completed' || t.status === 'Verified';
+                        return t.status === columnName;
+                    });
                     const config = COLUMN_CONFIG[columnName];
                     const Icon = config.icon;
 
@@ -174,7 +178,20 @@ const StudentTaskBoard = () => {
 
                                                 <div className="flex items-center gap-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">
                                                     <Calendar className="w-3.5 h-3.5" />
-                                                    {task.date || new Date().toLocaleDateString()}
+                                                    {task.due_date ? new Date(task.due_date).toLocaleDateString() : 'No due date'}
+                                                </div>
+
+                                                <div className="flex flex-wrap gap-2 mb-4">
+                                                    <span className={`text-[10px] font-black px-2 py-1 rounded-md uppercase ${
+                                                        task.priority === 'High' ? 'bg-red-100 text-red-700' :
+                                                        task.priority === 'Low' ? 'bg-slate-100 text-slate-600' :
+                                                        'bg-amber-100 text-amber-700'
+                                                    }`}>
+                                                        {task.priority || 'Medium'}
+                                                    </span>
+                                                    <span className="text-[10px] font-black px-2 py-1 rounded-md uppercase bg-blue-50 text-blue-700">
+                                                        {task.task_type || 'Routine'}
+                                                    </span>
                                                 </div>
 
                                                 {/* Action Buttons based on status */}
@@ -196,11 +213,20 @@ const StudentTaskBoard = () => {
                                                         </button>
                                                     )}
                                                     {columnName === 'Completed' && (
-                                                        <span className="w-full flex items-center justify-center gap-1.5 py-2 bg-emerald-50 text-emerald-600 text-xs font-bold rounded-lg cursor-default">
-                                                            <Check className="w-4 h-4" /> Completed
+                                                        <span className={`w-full flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg cursor-default ${
+                                                            task.status === 'Verified' ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-50 text-emerald-600'
+                                                        }`}>
+                                                            <Check className="w-4 h-4" /> {task.status === 'Verified' ? 'Verified by Supervisor' : 'Awaiting Verification'}
                                                         </span>
                                                     )}
                                                 </div>
+
+                                                {(task.evaluation_notes || task.supervisor_notes) && (
+                                                    <div className="mt-3 p-3 bg-emerald-50 rounded-xl border border-emerald-100">
+                                                        <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest mb-1">Evaluation Notes</p>
+                                                        <p className="text-xs text-emerald-800 italic">"{task.evaluation_notes || task.supervisor_notes}"</p>
+                                                    </div>
+                                                )}
                                             </motion.div>
                                         ))
                                     )}

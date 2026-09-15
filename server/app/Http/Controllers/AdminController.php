@@ -16,8 +16,8 @@ class AdminController extends Controller
         $activeNow = Attendance::whereNull('time_out')->count();
         $totalHoursRendered = Attendance::whereNotNull('time_out')->sum('rendered_hours');
 
-        $hourlyRate = 28; // Standard rate
-        $estimatedPayroll = $totalHoursRendered * $hourlyRate;
+        $hourlyRate = 28; // Standard hourly rate equivalent
+        $estimatedEquivalentValue = $totalHoursRendered * $hourlyRate;
 
         // 2. Department Workforce Distribution
         // <-- FIXED: Changed from Profile to UserProfile
@@ -38,7 +38,7 @@ class AdminController extends Controller
             'total_students' => $totalStudents,
             'active_now' => $activeNow,
             'total_hours' => round($totalHoursRendered, 2),
-            'estimated_payroll' => round($estimatedPayroll, 2),
+            'estimated_equivalent_value' => round($estimatedEquivalentValue, 2),
             'department_stats' => $deptStats,
             'recent_activity' => $recentActivity
         ]);

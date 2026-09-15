@@ -11,8 +11,11 @@ class DisciplinaryRecord extends Model
         'student_id',
         'issued_by',
         'violation_type',
+        'incident_date',
         'description',
         'penalty_hours',
+        'penalty',
+        'deduction_amount',
         'status',
         'appeal_notes',
         'resolved_at',
@@ -20,8 +23,10 @@ class DisciplinaryRecord extends Model
     ];
 
     protected $casts = [
+        'incident_date' => 'date',
         'resolved_at' => 'datetime',
         'penalty_hours' => 'decimal:2',
+        'deduction_amount' => 'decimal:2',
     ];
 
     public function student(): BelongsTo
@@ -32,5 +37,10 @@ class DisciplinaryRecord extends Model
     public function issuer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'issued_by');
+    }
+
+    public function reporter(): BelongsTo
+    {
+        return $this->issuer();
     }
 }

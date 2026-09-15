@@ -29,6 +29,7 @@ import { firstPathSegment, resolveStudentPath } from '../config/routes';
 import StudentTaskBoard from './StudentTaskBoard';
 import StudentDisciplinaryBoard from './StudentDisciplinaryBoard';
 import StudentAttendanceTerminal from './StudentAttendanceTerminal';
+import { StudentCompensationView } from './StudentCompensationView';
 
 interface AttendanceRecord {
     id: number;
@@ -95,8 +96,8 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
     });
 
     const [history, setHistory] = useState<AttendanceRecord[]>([]);
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
+    const [startDate] = useState('');
+    const [endDate] = useState('');
     const [schedule, setSchedule] = useState<ScheduleRecord[]>([]);
 
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -350,7 +351,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                     <div className="relative z-10">
                                         <div className="flex items-center gap-2 mb-2">
                                             <Wallet className="w-5 h-5 text-blue-400" />
-                                            <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Financial Overview</span>
+                                            <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Work-Hour Assessment</span>
                                         </div>
                                         <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
                                             Assessment
@@ -391,6 +392,8 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                         <p className="text-4xl font-black">₱{estimatedAmount.toFixed(2)}</p>
                                     </motion.div>
                                 </div>
+
+                                <StudentCompensationView />
                             </motion.div>
                         )}
 

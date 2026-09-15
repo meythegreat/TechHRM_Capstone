@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { Menu, ShieldCheck } from 'lucide-react';
+import { FinancialManagement } from './components/FinancialManagement';
 
 import Login from './components/Login';
 import PublicApplication from './components/PublicApplication';
@@ -227,6 +228,7 @@ function App() {
                     <Route path="/logs" element={<ActivityLogs />} />
                     <Route path="/users" element={<UserManagement />} />
                     <Route path="/analytics" element={<AdminAnalyticsDashboard />} />
+                    <Route path="/financial" element={<FinancialManagement />} />
                   </>
                 )}
                 <Route
@@ -248,6 +250,7 @@ function App() {
       </div>
     </div>
   );
+
 }
 
 export default App;

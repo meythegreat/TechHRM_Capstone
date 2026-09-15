@@ -18,7 +18,7 @@ interface DashboardStats {
     total_students: number;
     active_now: number;
     total_hours: number;
-    estimated_payroll: number;
+    estimated_equivalent_value: number;
     department_stats: { department: string; student_count: number }[];
     recent_activity: any[];
 }
@@ -190,9 +190,9 @@ const SuperAdminDashboard = () => {
                 <motion.div variants={itemVariants} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-amber-300 transition-colors">
                     <div className="flex justify-between items-start">
                         <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Projected Payroll</p>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Projected Equivalent Value</p>
                             <h3 className="text-3xl font-black text-slate-900 truncate max-w-[150px]">
-                                ₱{stats?.estimated_payroll?.toLocaleString() || 0}
+                                ₱{stats?.estimated_equivalent_value?.toLocaleString() || 0}
                             </h3>
                         </div>
                         <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl group-hover:scale-110 transition-transform">

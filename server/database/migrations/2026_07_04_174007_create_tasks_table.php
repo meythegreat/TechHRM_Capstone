@@ -15,11 +15,14 @@ return new class extends Migration
 
             $table->string('title');
             $table->text('description')->nullable();
-            $table->enum('status', ['Pending', 'In Progress', 'Completed'])->default('Pending');
+            $table->enum('task_type', ['Routine', 'Special Project'])->default('Routine');
+            $table->enum('priority', ['Low', 'Medium', 'High'])->default('Medium');
+            $table->enum('status', ['Pending', 'Assigned', 'In Progress', 'Completed', 'Verified'])->default('Pending');
             $table->dateTime('due_date')->nullable();
 
             $table->text('completion_log')->nullable();
             $table->text('supervisor_notes')->nullable();
+            $table->text('evaluation_notes')->nullable();
 
             $table->timestamps();
         });

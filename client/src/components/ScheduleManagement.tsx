@@ -11,7 +11,6 @@ import {
     Trash2, 
     Check, 
     X,
-    Briefcase,
     ChevronLeft,
     ChevronRight,
     MapPin

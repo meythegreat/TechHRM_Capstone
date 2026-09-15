@@ -22,8 +22,11 @@ const DisciplinaryManager = () => {
     const [formData, setFormData] = useState({
         student_id: '',
         violation_type: 'Tardiness',
+        incident_date: new Date().toISOString().split('T')[0],
         description: '',
+        penalty: 'Warning',
         penalty_hours: 0,
+        deduction_amount: 0,
     });
     const [resolveModal, setResolveModal] = useState(null); // Stores the record to resolve
     const [resolveData, setResolveData] = useState({ status: 'Resolved', resolution_remarks: '' });
@@ -67,7 +70,15 @@ const DisciplinaryManager = () => {
         setIsSubmitting(true);
         try {
             await issueViolation(formData);
-            setFormData({ student_id: '', violation_type: 'Tardiness', description: '', penalty_hours: 0 });
+            setFormData({
+                student_id: '',
+                violation_type: 'Tardiness',
+                incident_date: new Date().toISOString().split('T')[0],
+                description: '',
+                penalty: 'Warning',
+                penalty_hours: 0,
+                deduction_amount: 0,
+            });
             fetchRecords();
         } catch (err) {
             console.error('Failed to issue violation', err);
@@ -202,6 +213,32 @@ const DisciplinaryManager = () => {
                         </div>
 
                         <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Incident Date</label>
+                            <input
+                                required
+                                type="date"
+                                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-red-500 focus:bg-white outline-none transition-all"
+                                value={formData.incident_date}
+                                onChange={(e) => setFormData({ ...formData, incident_date: e.target.value })}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Penalty Type</label>
+                            <select
+                                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-red-500 focus:bg-white outline-none transition-all appearance-none cursor-pointer"
+                                value={formData.penalty}
+                                onChange={(e) => setFormData({ ...formData, penalty: e.target.value })}
+                            >
+                                <option value="Warning">Warning</option>
+                                <option value="Verbal Warning">Verbal Warning</option>
+                                <option value="Written Reprimand">Written Reprimand</option>
+                                <option value="Temporary Suspension">Temporary Suspension</option>
+                                <option value="Deduction">Equivalent Value Deduction</option>
+                            </select>
+                        </div>
+
+                        <div>
                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Penalty Hours</label>
                             <div className="relative">
                                 <input
@@ -216,6 +253,22 @@ const DisciplinaryManager = () => {
                                 <span className="absolute inset-y-0 right-4 flex items-center text-xs font-bold text-slate-400 pointer-events-none">hrs</span>
                             </div>
                             <p className="text-[10px] text-slate-400 mt-1.5 font-medium">Hours to be deducted from final rendered time.</p>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Deduction Amount</label>
+                            <div className="relative">
+                                <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    className="w-full p-3.5 pl-9 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-red-500 focus:bg-white outline-none transition-all"
+                                    value={formData.deduction_amount}
+                                    onChange={(e) => setFormData({ ...formData, deduction_amount: Number(e.target.value) })}
+                                />
+                                <span className="absolute inset-y-0 left-4 flex items-center text-xs font-bold text-slate-400 pointer-events-none">₱</span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-1.5 font-medium">Optional fixed equivalent-value deduction applied during work-hour assessment.</p>
                         </div>
 
                         <div>
@@ -272,11 +325,23 @@ const DisciplinaryManager = () => {
                                                 {record.status || 'Pending'}
                                             </span>
                                             
-                                            {record.penalty_hours > 0 && (
-                                                <span className="text-[11px] font-black text-red-700 bg-red-100 px-2.5 py-1 rounded-md">
-                                                    -{record.penalty_hours} hrs
-                                                </span>
-                                            )}
+                                            <div className="flex flex-col items-end gap-1">
+                                                {record.penalty && (
+                                                    <span className="text-[11px] font-black text-slate-700 bg-slate-100 px-2.5 py-1 rounded-md">
+                                                        {record.penalty}
+                                                    </span>
+                                                )}
+                                                {record.penalty_hours > 0 && (
+                                                    <span className="text-[11px] font-black text-red-700 bg-red-100 px-2.5 py-1 rounded-md">
+                                                        -{record.penalty_hours} hrs
+                                                    </span>
+                                                )}
+                                                {Number(record.deduction_amount || 0) > 0 && (
+                                                    <span className="text-[11px] font-black text-red-700 bg-red-100 px-2.5 py-1 rounded-md">
+                                                        -₱{Number(record.deduction_amount).toFixed(2)}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
 
                                         <h4 className="font-black text-slate-900 text-lg leading-tight mb-2 group-hover:text-red-700 transition-colors">
@@ -284,6 +349,9 @@ const DisciplinaryManager = () => {
                                         </h4>
                                         <p className="text-sm text-slate-500 font-medium mb-4 line-clamp-3 flex-1">
                                             {record.description || <span className="italic opacity-50">No description provided.</span>}
+                                        </p>
+                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
+                                            Incident: {record.incident_date ? new Date(record.incident_date).toLocaleDateString() : new Date(record.created_at).toLocaleDateString()}
                                         </p>
 
                                         <div className="pt-4 border-t border-slate-100 flex items-center justify-between mt-auto">
@@ -304,7 +372,16 @@ const DisciplinaryManager = () => {
                                             )}
                                         </div>
 
-                                        {record.status === 'Resolved' && record.resolution_remarks && (
+                                        {record.appeal_notes && (
+                                            <div className="mt-4 p-3 bg-blue-50 rounded-xl border border-blue-100">
+                                                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-1 flex items-center gap-1">
+                                                    <FileWarning className="w-3 h-3" /> Student Appeal
+                                                </p>
+                                                <p className="text-xs text-blue-800 font-medium italic">"{record.appeal_notes}"</p>
+                                            </div>
+                                        )}
+
+                                        {['Resolved', 'Dismissed'].includes(record.status) && record.resolution_remarks && (
                                             <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
                                                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 flex items-center gap-1">
                                                     <CheckCircle2 className="w-3 h-3" /> Resolution Note

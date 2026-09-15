@@ -14,8 +14,11 @@ return new class extends Migration
             $table->foreignId('issued_by')->constrained('users');
 
             $table->string('violation_type');
+            $table->date('incident_date')->nullable();
             $table->text('description');
             $table->decimal('penalty_hours', 5, 2)->default(0.00);
+            $table->string('penalty')->default('Warning');
+            $table->decimal('deduction_amount', 8, 2)->default(0.00);
 
             $table->enum('status', ['Active', 'Pending Appeal', 'Resolved', 'Dismissed'])->default('Active');
 

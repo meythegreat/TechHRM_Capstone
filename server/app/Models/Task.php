@@ -14,10 +14,13 @@ class Task extends Model
         'supervisor_id',
         'title',
         'description',
+        'task_type',
+        'priority',
         'status',
         'due_date',
         'completion_log',
         'supervisor_notes',
+        'evaluation_notes',
     ];
 
     protected $casts = [

@@ -81,7 +81,7 @@ const TimesheetPrintView: React.FC<TimesheetPrintViewProps> = ({ fullName, stude
                         <p className="font-bold text-sm text-slate-900">{studentProfile.assigned_office || 'Unassigned'}</p>
                     </div>
                     <div>
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Payroll Period</p>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Assessment Period</p>
                         <p className="font-bold text-sm text-blue-800">
                             {startDate ? formatDate(startDate) : 'Start'} — {endDate ? formatDate(endDate) : 'End'}
                         </p>

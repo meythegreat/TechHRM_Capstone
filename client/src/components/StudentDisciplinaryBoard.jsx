@@ -39,7 +39,7 @@ const StudentDisciplinaryBoard = () => {
         
         // Optimistic UI update
         const recordId = appealModal.id || appealModal;
-        setRecords(prev => prev.map(r => r.id === recordId ? { ...r, status: 'Appealed' } : r));
+        setRecords(prev => prev.map(r => r.id === recordId ? { ...r, status: 'Pending Appeal' } : r));
         
         setAppealModal(null);
         setAppealNotes('');
@@ -69,6 +69,8 @@ const StudentDisciplinaryBoard = () => {
     }
 
     const hasCleanRecord = records.length === 0;
+    const isAppealable = (record) => ['Active', 'Resolved'].includes(record.status) && !record.appeal_notes;
+    const formatMoney = (value) => Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     return (
         <div className="max-w-6xl mx-auto space-y-6 font-sans">
@@ -150,17 +152,30 @@ const StudentDisciplinaryBoard = () => {
                                 </div>
                                 <div className="flex-1">
                                     <div className="flex flex-wrap items-center gap-2 mb-1">
-                                        <h4 className="text-lg font-black text-slate-900">{record.violation || 'Standard Policy Violation'}</h4>
+                                        <h4 className="text-lg font-black text-slate-900">{record.violation_type || 'Standard Policy Violation'}</h4>
                                         <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-red-50 text-red-700 border border-red-100 uppercase tracking-wider flex items-center gap-1">
-                                            <AlertTriangle className="w-3 h-3" /> Penalty: {record.penalty || 'Warning'}
+                                            <AlertTriangle className="w-3 h-3" /> Penalty: {record.penalty || (Number(record.penalty_hours || 0) > 0 ? `${record.penalty_hours} hrs` : 'Warning')}
                                         </span>
                                     </div>
                                     <p className="text-sm text-slate-500 font-medium mb-3">
-                                        {record.details || 'No additional details provided by the supervisor.'}
+                                        {record.description || 'No additional details provided by the supervisor.'}
                                     </p>
-                                    <div className="flex items-center gap-4 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                                        <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Date Issued: {record.date || new Date().toLocaleDateString()}</span>
+                                    <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                                        <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Incident: {record.incident_date ? new Date(record.incident_date).toLocaleDateString() : new Date(record.created_at).toLocaleDateString()}</span>
+                                        {Number(record.penalty_hours || 0) > 0 && <span>-{record.penalty_hours} penalty hrs</span>}
+                                        {Number(record.deduction_amount || 0) > 0 && <span className="text-rose-600">-₱{formatMoney(record.deduction_amount)} deduction</span>}
+                                        <span>Reported by: {record.reporter?.name || record.issuer?.name || 'Supervisor'}</span>
                                     </div>
+                                    {record.resolution_remarks && (
+                                        <div className="mt-3 text-xs bg-blue-50 border border-blue-100 p-2.5 rounded-xl text-blue-800">
+                                            <strong>Admin Note:</strong> {record.resolution_remarks}
+                                        </div>
+                                    )}
+                                    {record.appeal_notes && (
+                                        <div className="mt-3 text-xs text-slate-500 italic">
+                                            Appeal submitted. Awaiting WSPO review.
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -173,19 +188,24 @@ const StudentDisciplinaryBoard = () => {
                                             <CheckCircle2 className="w-4 h-4" /> Resolved
                                         </span>
                                     )}
-                                    {record.status === 'Appealed' && (
+                                    {record.status === 'Dismissed' && (
+                                        <span className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-sm font-bold shadow-sm">
+                                            <CheckCircle2 className="w-4 h-4" /> Dismissed
+                                        </span>
+                                    )}
+                                    {record.status === 'Pending Appeal' && (
                                         <span className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm font-bold shadow-sm">
                                             <MessageSquare className="w-4 h-4" /> Appeal Under Review
                                         </span>
                                     )}
-                                    {(!record.status || record.status === 'Pending Appeal' || record.status === 'Pending') && (
+                                    {record.status === 'Active' && (
                                         <span className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-sm font-bold shadow-sm">
                                             <FileWarning className="w-4 h-4" /> Action Required
                                         </span>
                                     )}
                                 </div>
 
-                                {(!record.status || record.status === 'Pending Appeal' || record.status === 'Pending') && (
+                                {isAppealable(record) && (
                                     <button
                                         onClick={() => setAppealModal(record)}
                                         className="w-full sm:w-auto px-5 py-2.5 bg-slate-900 hover:bg-blue-600 text-white text-sm font-bold rounded-xl transition-colors shadow-md flex items-center justify-center gap-2"
@@ -233,7 +253,7 @@ const StudentDisciplinaryBoard = () => {
                                 <div>
                                     <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-2">Incident Reference</p>
                                     <p className="font-bold text-slate-900 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                        {appealModal.violation || 'Standard Policy Violation'}
+                                        {appealModal.violation_type || 'Standard Policy Violation'}
                                     </p>
                                 </div>
 

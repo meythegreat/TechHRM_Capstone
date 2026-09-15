@@ -13,6 +13,7 @@ use App\Http\Controllers\SecureFileController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\RequirementController;
+use App\Http\Controllers\FinancialController;
 
 // =========================================================
 // PUBLIC ROUTES
@@ -29,6 +30,10 @@ Route::post('/apply', [\App\Http\Controllers\ApplicationController::class, 'publ
 
 Route::middleware('auth:sanctum')->group(function () {
 
+    // Student work-hour assessment route
+    Route::get('/financial/records', [FinancialController::class, 'index']);
+    Route::post('/financial/compute-period', [FinancialController::class, 'computePeriod']);
+
     // --- STAGE 1: WSPO APPLICATION MODULE (Student) ---
     Route::post('/applications', [\App\Http\Controllers\ApplicationController::class, 'store']);
     Route::get('/applications/my-status', [\App\Http\Controllers\ApplicationController::class, 'myApplication']);
@@ -39,7 +44,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // --- STAGE 5: Discipline & Compliance (Student) ---
     Route::get('/disciplinary/my-records', [\App\Http\Controllers\DisciplinaryController::class, 'myRecords']);
+    Route::get('/my-disciplinary-records', [\App\Http\Controllers\DisciplinaryController::class, 'myRecords']);
     Route::post('/disciplinary/{id}/appeal', [\App\Http\Controllers\DisciplinaryController::class, 'submitAppeal']);
+    Route::put('/disciplinary/{id}/appeal', [\App\Http\Controllers\DisciplinaryController::class, 'submitAppeal']);
 
     // =====================================================
     // GENERAL ACCESS (ALL AUTHENTICATED USERS)
@@ -147,6 +154,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/tasks', [\App\Http\Controllers\TaskController::class, 'index']);
         Route::post('/tasks', [\App\Http\Controllers\TaskController::class, 'store']);
         Route::put('/tasks/{id}/notes', [\App\Http\Controllers\TaskController::class, 'addSupervisorNote']);
+        Route::put('/tasks/{id}/verify', [\App\Http\Controllers\TaskController::class, 'verifyTask']);
 
         // =================================================
         // STAGE 5: Discipline & Compliance (Supervisor)
@@ -155,6 +163,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/disciplinary', [\App\Http\Controllers\DisciplinaryController::class, 'index']);
         Route::post('/disciplinary', [\App\Http\Controllers\DisciplinaryController::class, 'store']);
         Route::post('/disciplinary/{id}/resolve', [\App\Http\Controllers\DisciplinaryController::class, 'resolve']);
+        Route::put('/disciplinary/{id}/resolve', [\App\Http\Controllers\DisciplinaryController::class, 'resolve']);
 
     });
 
@@ -166,6 +175,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/users/{id}', [UserController::class, 'update']);
         Route::delete('/users/{id}', [UserController::class, 'destroy']);
         Route::get('/logs', [ActivityLogController::class, 'index']);
+
+        // Stage 1: work-hour assessment records with disciplinary penalty deductions
+        Route::get('/financial/records', [FinancialController::class, 'index']);
+        Route::post('/financial/compute-period', [FinancialController::class, 'computePeriod']);
+        Route::put('/financial/records/{id}/adjustments', [FinancialController::class, 'updateAdjustments']);
+        Route::get('/financial/export-csv', [FinancialController::class, 'exportCsv']);
 
         // STAGE 6: Reports & Analytics
         Route::get('/analytics/dashboard', [\App\Http\Controllers\AnalyticsController::class, 'getDashboardStats']);
