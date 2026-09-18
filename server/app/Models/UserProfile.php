@@ -15,7 +15,9 @@ class UserProfile extends Model
         'student_id_number',
         'course',
         'year_level',
-        'assigned_office'
+        'assigned_office',
+        'duty_type',
+        'duty_request',
     ];
 
     public function user()

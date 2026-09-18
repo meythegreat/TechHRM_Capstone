@@ -49,12 +49,19 @@ const ApplicationManager = () => {
     const [modalView, setModalView] = useState('');
     const [selectedApp, setSelectedApp] = useState(null);
     const [suggestions, setSuggestions] = useState([]);
+    const [departments, setDepartments] = useState([]);
     const [placementData, setPlacementData] = useState({ assigned_department: '', assigned_position: '' });
     const [interviewData, setInterviewData] = useState({ interview_date: '', interview_remarks: '' });
     const [error, setError] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    useEffect(() => { fetchApplications(); }, []);
+    useEffect(() => {
+        fetchApplications();
+        fetch('/api/departments', { headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` } })
+            .then(res => res.ok ? res.json() : [])
+            .then(setDepartments)
+            .catch(() => setDepartments([]));
+    }, []);
 
     const fetchApplications = async () => {
         setIsLoading(true);
@@ -178,10 +185,10 @@ const ApplicationManager = () => {
                         <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Recruitment & Placement</span>
                     </div>
                     <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-                        Applicant Pipeline
+                        Assignment Manager
                     </h1>
                     <p className="mt-2 text-slate-400 font-medium max-w-md">
-                        Manage prospective student workers from initial application to final department deployment.
+                        Coordinate student placement and select the department that will take responsibility for each working student.
                     </p>
                 </div>
 
@@ -412,13 +419,15 @@ const ApplicationManager = () => {
                                 <div className="space-y-4">
                                     <div>
                                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Final Department</label>
-                                        <input
-                                            type="text"
-                                            placeholder="e.g. CCS Office"
+                                        <select
                                             value={placementData.assigned_department}
                                             onChange={(e) => setPlacementData({ ...placementData, assigned_department: e.target.value })}
                                             className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all placeholder:text-slate-400"
-                                        />
+                                        >
+                                            <option value="">-- Select the assigned department --</option>
+                                            {departments.map(department => <option key={department.id} value={department.name}>{department.name}</option>)}
+                                            {suggestions.filter(s => !departments.some(d => d.name === s.department)).map(s => <option key={s.department} value={s.department}>{s.department}</option>)}
+                                        </select>
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Position Assignment</label>

@@ -31,11 +31,17 @@ class AdminUserSeeder extends Seeder
         ]);
 
         // 3. Supervisor Account (e.g., Dean of CCS)
-        User::create([
+        $supervisor = User::create([
             'name' => 'CCS Supervisor',
             'username' => 'supervisor',
             'password' => Hash::make('password123'),
             'role' => 'Supervisor',
+        ]);
+
+        // The supervisor and the working students must share the exact area name.
+        UserProfile::create([
+            'user_id' => $supervisor->id,
+            'assigned_office' => 'College of Computer Studies (CCS)',
         ]);
 
         // 4. Student Worker Account

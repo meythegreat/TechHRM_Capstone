@@ -19,16 +19,10 @@ class DashboardController extends Controller
 
         // If it's a Supervisor, strictly filter by their department!
         // (Assuming you linked Supervisors to departments in their profile or column)
-        if ($user->role === 'Supervisor' && $user->department_id) {
-            $departmentId = $user->department_id;
-
-            $studentsQuery->whereHas('profile', function($q) use ($departmentId) {
-                 $q->where('department_id', $departmentId); // Or assigned_office
-            });
-
-            $attendanceQuery->whereHas('user.profile', function($q) use ($departmentId) {
-                 $q->where('department_id', $departmentId);
-            });
+        if ($user->role === 'Supervisor') {
+            $department = $user->profile?->assigned_office;
+            $studentsQuery->whereHas('profile', fn ($q) => $q->where('assigned_office', $department));
+            $attendanceQuery->whereHas('user.profile', fn ($q) => $q->where('assigned_office', $department));
         }
 
         $activeStudents = $studentsQuery->count();

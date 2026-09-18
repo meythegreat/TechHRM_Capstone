@@ -32,6 +32,14 @@ class TaskController extends Controller
             'due_date' => 'nullable|date',
         ]);
 
+        $student = \App\Models\User::with('profile')->where('role', 'Student')->findOrFail($validated['student_id']);
+        $department = $request->user()->profile?->assigned_office;
+        abort_unless(
+            $department && $this->departmentsMatch($student->profile?->assigned_office, $student->profile?->course, $department),
+            403,
+            'You can only assign tasks to students enrolled in your department.'
+        );
+
         $task = Task::create([
             'student_id' => $validated['student_id'],
             'supervisor_id' => $request->user()->id,
@@ -60,9 +68,10 @@ class TaskController extends Controller
         $task->update([
             'supervisor_notes' => $note,
             'evaluation_notes' => $note,
+            'status' => 'For Verification',
         ]);
 
-        return response()->json(['message' => 'Feedback saved.']);
+        return response()->json(['message' => 'Evaluation sent to WSPO for verification.']);
     }
 
     public function myTasks(Request $request)
@@ -92,7 +101,8 @@ class TaskController extends Controller
 
     public function verifyTask(Request $request, $id)
     {
-        $task = Task::where('supervisor_id', $request->user()->id)->findOrFail($id);
+        abort_unless(in_array($request->user()->role, ['WSPO Staff', 'Super Admin'], true), 403);
+        $task = Task::where('status', 'For Verification')->findOrFail($id);
 
         $request->validate([
             'evaluation_notes' => 'nullable|string',
@@ -101,9 +111,46 @@ class TaskController extends Controller
         $task->update([
             'status' => 'Verified',
             'evaluation_notes' => $request->evaluation_notes,
-            'supervisor_notes' => $request->evaluation_notes,
+            'supervisor_notes' => $task->supervisor_notes,
         ]);
 
         return response()->json(['message' => 'Task verified and evaluated successfully.']);
+    }
+
+    /** Keep deployment authorization aligned with the supervisor personnel list. */
+    private function departmentsMatch(?string $assignedOffice, ?string $course, string $supervisorDepartment): bool
+    {
+        $groups = [
+            ['CCS', 'College of Computer Studies', 'College of Computer Studies (CCS)', 'CCS Office'],
+            ['CBA', 'College of Business and Accountancy', 'College of Business Administration', 'Business Office'],
+            ['CHTM', 'College of Hotel and Tourism Management', 'College of Hospitality and Tourism Management'],
+            ['CCJE', 'College of Criminal Justice Education'],
+            ['COE', 'College of Engineering'],
+            ['CON', 'College of Nursing'],
+            ['CTE', 'College of Teacher Education'],
+            ['CAS', 'College of Arts and Sciences'],
+            ['GS', 'Graduate School'],
+            ['SHS', 'Senior High School Department'],
+            ['JHS', 'Junior High School Department'],
+            ['ES', 'Elementary Department'],
+            ['PS', 'Pre-School Department'],
+        ];
+
+        $normalize = fn (?string $value) => strtolower((string) preg_replace('/[^a-z0-9]/i', '', $value ?? ''));
+        $supervisor = $normalize($supervisorDepartment);
+        $studentValues = array_filter([$normalize($assignedOffice), $normalize($course)]);
+
+        if (in_array($supervisor, $studentValues, true)) {
+            return true;
+        }
+
+        foreach ($groups as $group) {
+            $aliases = array_map($normalize, $group);
+            if (in_array($supervisor, $aliases, true) && array_intersect($studentValues, $aliases) !== []) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

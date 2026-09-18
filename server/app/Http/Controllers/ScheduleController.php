@@ -43,6 +43,14 @@ class ScheduleController extends Controller
             'supervisor' => 'required|string',
         ]);
 
+        $student = \App\Models\User::with('profile')->where('role', 'Student')->findOrFail($validated['user_id']);
+        if ($request->user()->role === 'Supervisor') {
+            $department = $request->user()->profile?->assigned_office;
+            abort_unless($department && $student->profile?->assigned_office === $department, 403, 'You can only schedule students enrolled in your department.');
+            $validated['department'] = $department;
+            $validated['supervisor'] = $request->user()->name;
+        }
+
         // --- SMART OVERLAP CHECK ---
         // 1. Get the Start and End time of the NEW shift
         $newTimes = explode(' - ', $validated['time']);

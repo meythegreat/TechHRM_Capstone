@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 
 const TaskAssignmentManager = () => {
+    const userRole = localStorage.getItem('user_role');
+    const isSupervisor = userRole === 'Supervisor';
     const [tasks, setTasks] = useState([]);
     const [students, setStudents] = useState([]);
     const [formData, setFormData] = useState({
@@ -35,17 +37,16 @@ const TaskAssignmentManager = () => {
     useEffect(() => { 
         fetchTasks(); 
         
-        // Fetching Students
-        axios.get('/api/users').then(res => {
-            console.log("RAW API RESPONSE:", res.data);
-            const usersArray = Array.isArray(res.data) ? res.data : res.data.data;
-            if (!usersArray) {
-                console.error("Could not find an array of users in the response!");
-                return;
-            }
-            const studentUsers = usersArray.filter(u => u.role && u.role.toLowerCase() === 'student');
-            setStudents(studentUsers);
-        }).catch(err => console.error("Error fetching students:", err));
+        if (isSupervisor) {
+            axios.get('/api/personnel')
+                .then(res => setStudents(res.data))
+                .catch(err => console.error('Error fetching department personnel:', err));
+        } else {
+            // Coordinators can review all currently deployed working students.
+            axios.get('/api/personnel')
+                .then(res => setStudents(res.data))
+                .catch(err => console.error('Error fetching working students:', err));
+        }
     }, []);
 
     const fetchTasks = async () => {
@@ -84,7 +85,11 @@ const TaskAssignmentManager = () => {
     const submitFeedback = async () => {
         if (!feedbackNote.trim()) return;
         try {
-            await verifyTask(noteModal, feedbackNote);
+            if (isSupervisor) {
+                await addSupervisorNote(noteModal, feedbackNote);
+            } else {
+                await verifyTask(noteModal, feedbackNote);
+            }
             setNoteModal(null);
             setFeedbackNote('');
             fetchTasks();
@@ -125,10 +130,12 @@ const TaskAssignmentManager = () => {
                         <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Task Delegation</span>
                     </div>
                     <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-                        Assignment Manager
+                        Task Management
                     </h1>
                     <p className="mt-2 text-slate-400 font-medium max-w-md">
-                        Deploy duties to your assigned student workers, monitor their progress, and provide official feedback upon completion.
+                        {isSupervisor
+                            ? 'Give tasks to student workers enrolled in your department, then submit evaluations to WSPO.'
+                            : 'Verify department supervisor evaluations after student work is completed.'}
                     </p>
                 </div>
 
@@ -148,7 +155,7 @@ const TaskAssignmentManager = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
                 
                 {/* LEFT COLUMN: DEPLOYMENT FORM */}
-                <motion.div 
+                {isSupervisor && <motion.div
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.1 }}
@@ -241,10 +248,41 @@ const TaskAssignmentManager = () => {
                             {isSubmitting ? 'Deploying...' : <><ClipboardCheck className="w-5 h-5" /> Issue Task</>}
                         </button>
                     </form>
-                </motion.div>
+                </motion.div>}
 
                 {/* RIGHT COLUMN: TASK GRID */}
                 <div className="lg:col-span-2">
+                    {!isSupervisor && (
+                        <div className="bg-white rounded-3xl p-6 mb-6 border border-slate-200 shadow-sm">
+                            <div className="flex items-center justify-between gap-4 mb-4">
+                                <div>
+                                    <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                                        <User className="w-5 h-5 text-blue-600" /> Assigned Working Students
+                                    </h3>
+                                    <p className="text-sm text-slate-500 font-medium mt-1">Students currently assigned to each department.</p>
+                                </div>
+                                <span className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-xs font-black">{students.length} student(s)</span>
+                            </div>
+                            {students.length === 0 ? (
+                                <p className="text-sm text-slate-500 py-3">No working students have been assigned to a department yet.</p>
+                            ) : (
+                                <div className="space-y-3 max-h-64 overflow-y-auto custom-scrollbar pr-1">
+                                    {Object.entries(students.reduce((groups, student) => {
+                                        const department = student.profile?.assigned_office || 'Unassigned';
+                                        (groups[department] ||= []).push(student);
+                                        return groups;
+                                    }, {})).map(([department, members]) => (
+                                        <div key={department} className="p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-2">{department}</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {members.map(student => <span key={student.id} className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700">{student.name}</span>)}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
                     {isLoading ? (
                         <div className="flex justify-center p-12">
                             <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
@@ -273,12 +311,12 @@ const TaskAssignmentManager = () => {
                                         <div className="flex justify-between items-start mb-4">
                                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border ${
                                                 task.status === 'Verified' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                                task.status === 'Completed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                                ['Completed', 'For Verification'].includes(task.status) ? 'bg-blue-50 text-blue-700 border-blue-200' :
                                                 task.status === 'In Progress' ? 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse' :
                                                 'bg-slate-50 text-slate-600 border-slate-200'
                                             }`}>
                                                 {task.status === 'Verified' && <CheckCircle2 className="w-3 h-3" />}
-                                                {task.status === 'Completed' && <MessageSquare className="w-3 h-3" />}
+                                                {['Completed', 'For Verification'].includes(task.status) && <MessageSquare className="w-3 h-3" />}
                                                 {task.status === 'In Progress' && <PlayCircle className="w-3 h-3" />}
                                                 {['Pending', 'Assigned'].includes(task.status) && <Clock className="w-3 h-3" />}
                                                 {normalizeStatus(task.status)}
@@ -312,12 +350,17 @@ const TaskAssignmentManager = () => {
                                                 <span className="truncate max-w-[100px]">{task.student?.name || 'Unknown'}</span>
                                             </div>
                                             
-                                            {task.status === 'Completed' && !task.evaluation_notes && !task.supervisor_notes && (
+                                            {isSupervisor && task.status === 'Completed' && !task.evaluation_notes && !task.supervisor_notes && (
                                                 <button 
                                                     onClick={() => setNoteModal(task.id)}
                                                     className="px-3 py-1.5 bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5"
                                                 >
-                                                    <MessageSquare className="w-3.5 h-3.5" /> Add Note
+                                                    <MessageSquare className="w-3.5 h-3.5" /> Evaluate
+                                                </button>
+                                            )}
+                                            {!isSupervisor && task.status === 'For Verification' && (
+                                                <button onClick={() => setNoteModal(task.id)} className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5">
+                                                    <CheckCircle2 className="w-3.5 h-3.5" /> Verify
                                                 </button>
                                             )}
                                         </div>
@@ -355,7 +398,7 @@ const TaskAssignmentManager = () => {
                         >
                             <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
                                 <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
-                                    <MessageSquare className="w-5 h-5 text-blue-600" /> Provide Feedback
+                                    <MessageSquare className="w-5 h-5 text-blue-600" /> {isSupervisor ? 'Evaluate Task' : 'WSPO Verification'}
                                 </h3>
                                 <button onClick={() => setNoteModal(null)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-full transition-colors">
                                     <X className="w-5 h-5" />
@@ -365,7 +408,7 @@ const TaskAssignmentManager = () => {
                             <div className="p-6 sm:p-8 space-y-4">
                                 <div>
                                     <p className="text-xs text-slate-500 font-medium mb-3">
-                                        Acknowledge the completion of this task or provide constructive correction for the student worker.
+                                        {isSupervisor ? 'Record the department evaluation before sending this task to WSPO.' : 'Add an optional WSPO verification note and confirm this evaluation.'}
                                     </p>
                                     <textarea
                                         autoFocus

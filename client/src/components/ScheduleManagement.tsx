@@ -52,6 +52,9 @@ const ScheduleManagement = () => {
     
     // Global Toast State
     const [toastMsg, setToastMsg] = useState<{text: string, type: 'success' | 'error'} | null>(null);
+    const currentUserRole = localStorage.getItem('user_role') || '';
+    const [staffingRequests, setStaffingRequests] = useState<any[]>([]);
+    const [staffingForm, setStaffingForm] = useState({ duty_type: 'Clerical', duty_request: '', quantity: 1 });
 
     const [formData, setFormData] = useState({
         user_id: '',
@@ -65,6 +68,7 @@ const ScheduleManagement = () => {
 
     useEffect(() => {
         fetchStudents();
+        fetchStaffingRequests();
     }, []);
 
     useEffect(() => {
@@ -76,9 +80,41 @@ const ScheduleManagement = () => {
         setTimeout(() => setToastMsg(null), 3000);
     };
 
+    const fetchStaffingRequests = async () => {
+        try {
+            const response = await axios.get('/api/staffing-requests');
+            setStaffingRequests(response.data);
+        } catch (error) {
+            console.error('Failed to fetch staffing requests', error);
+        }
+    };
+
+    const submitStaffingRequest = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await axios.post('/api/staffing-requests', staffingForm);
+            setStaffingForm({ duty_type: 'Clerical', duty_request: '', quantity: 1 });
+            showToast('Staffing request sent to WSPO.', 'success');
+            fetchStaffingRequests();
+        } catch (error: any) {
+            showToast(error.response?.data?.message || 'Could not send staffing request.', 'error');
+        }
+    };
+
+    const updateStaffingRequest = async (id: number, status: string) => {
+        try {
+            await axios.patch(`/api/staffing-requests/${id}`, { status });
+            showToast('Staffing request updated.', 'success');
+            fetchStaffingRequests();
+        } catch (error: any) {
+            showToast(error.response?.data?.message || 'Could not update staffing request.', 'error');
+        }
+    };
+
     const fetchStudents = async () => {
         try {
-            const response = await axios.get('/api/users/students');
+            // The API scopes supervisors to their own department.
+            const response = await axios.get('/api/personnel');
             setStudents(response.data);
         } catch (error) {
             console.error("Failed to fetch students", error);
@@ -224,6 +260,20 @@ const ScheduleManagement = () => {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {currentUserRole === 'Supervisor' && (
+                <form onSubmit={submitStaffingRequest} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+                    <div className="sm:col-span-4"><h2 className="font-black text-slate-900">Request a Working Student</h2><p className="text-sm text-slate-500">This request is sent to WSPO for your assigned office.</p></div>
+                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Duty</label><select value={staffingForm.duty_type} onChange={e => setStaffingForm({...staffingForm, duty_type: e.target.value})} className="w-full p-3 bg-slate-50 border rounded-xl"><option>Clerical</option><option>Janitorial</option><option>Request</option></select></div>
+                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Workers Needed</label><input required min="1" type="number" value={staffingForm.quantity} onChange={e => setStaffingForm({...staffingForm, quantity: Number(e.target.value)})} className="w-full p-3 bg-slate-50 border rounded-xl" /></div>
+                    {staffingForm.duty_type === 'Request' && <div className="sm:col-span-2"><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Specific Request</label><input required value={staffingForm.duty_request} onChange={e => setStaffingForm({...staffingForm, duty_request: e.target.value})} placeholder="Describe the required assignment" className="w-full p-3 bg-slate-50 border rounded-xl" /></div>}
+                    <button className="px-4 py-3 bg-blue-600 text-white font-bold rounded-xl">Send Request</button>
+                </form>
+            )}
+
+            {currentUserRole !== 'Supervisor' && staffingRequests.length > 0 && (
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"><h2 className="font-black text-slate-900 mb-3">Supervisor Staffing Requests</h2><div className="space-y-3">{staffingRequests.map(request => <div key={request.id} className="flex flex-wrap items-center justify-between gap-3 border rounded-xl p-3"><div><p className="font-bold text-slate-800">{request.department} — {request.quantity} {request.duty_type}</p><p className="text-sm text-slate-500">Requested by {request.requester?.name}{request.duty_request ? `: ${request.duty_request}` : ''}</p></div><div className="flex items-center gap-2"><span className="text-xs font-bold text-slate-500">{request.status}</span>{request.status === 'Pending' && <><button type="button" onClick={() => updateStaffingRequest(request.id, 'Approved')} className="px-3 py-2 text-sm bg-emerald-600 text-white rounded-lg">Approve</button><button type="button" onClick={() => updateStaffingRequest(request.id, 'Declined')} className="px-3 py-2 text-sm bg-slate-200 rounded-lg">Decline</button></>}</div></div>)}</div></div>
+            )}
 
             {/* MAIN TABLE */}
             <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative">
@@ -386,7 +436,7 @@ const ScheduleManagement = () => {
                                         className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all appearance-none cursor-pointer"
                                     >
                                         <option value="" disabled>-- Select a student --</option>
-                                        {students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.profile?.assigned_office || 'No Office'})</option>)}
+                                        {students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.profile?.assigned_office || 'Unassigned'})</option>)}
                                     </select>
                                 </div>
 

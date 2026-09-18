@@ -23,19 +23,11 @@ import {
 } from "lucide-react";
 
 const FCU_DEPARTMENTS = [
-    "Pre-School Department",
-    "Elementary Department",
-    "Junior High School Department",
-    "Senior High School Department",
-    "College of Arts and Sciences",
-    "College of Business and Accountancy",
-    "College of Computer Studies",
-    "College of Criminal Justice Education",
-    "College of Engineering",
-    "College of Hotel and Tourism Management",
-    "College of Nursing",
-    "College of Teacher Education",
-    "Graduate School"
+    "Pre-School Department", "Elementary Department", "Junior High School Department", "Senior High School Department", "College of Arts and Sciences", "College of Business and Accountancy", "College of Computer Studies", "College of Criminal Justice Education", "College of Engineering", "College of Hotel and Tourism Management", "College of Nursing", "College of Teacher Education", "Graduate School"
+];
+
+const UNIVERSITY_OFFICES = [
+    "University President", "Quality Assurance", "Human Resource Development Center", "Office of the Student Affairs", "University Chaplain", "Alumni Affairs", "Administration", "Buildings & Grounds", "Pollution Control", "Security Office", "Safety and Disaster Management", "Sports", "Socio-Cultural", "WSPO", "Health Services", "General Services", "Mass Media", "ICT Services Office", "Higher Education Laboratory", "Academic Affairs", "Graduate School", "College of Arts and Sciences", "College of Business and Accountancy", "College of Computer Studies", "College of Criminal Justice Education", "College of Electronic Engineering", "College of Hospitality and Tourism Management", "College of Nursing", "College of Teacher Education", "Kindergarten/Elementary", "High School", "University Registrar", "Libraries", "Guidance & Counselling Center", "NSTP", "REIID", "International Program Office", "Community Extension", "Research", "Finance", "Accounting/Budget", "Business Management", "Property Custodian", "University Enterprise"
 ];
 
 interface UserRecord {
@@ -51,6 +43,8 @@ interface UserRecord {
     assigned_office?: string;
     course?: string;
     year_level?: number;
+    duty_type?: 'Clerical' | 'Janitorial' | 'Request';
+    duty_request?: string | null;
   };
 }
 
@@ -88,6 +82,8 @@ const UserManagement = () => {
     course: "",
     year_level: "",
     assigned_office: "",
+    duty_type: "Clerical",
+    duty_request: "",
   });
 
   useEffect(() => {
@@ -183,6 +179,8 @@ const UserManagement = () => {
             phone_number: formData.phone_number ? `+63${formData.phone_number}` : '',
             role: formData.role,
             assigned_office: formData.assigned_office
+            , duty_type: formData.duty_type
+            , duty_request: formData.duty_request
         };
         // Add password payload ONLY if admin typed a new one to reset it
         if (formData.password) {
@@ -209,6 +207,8 @@ const UserManagement = () => {
             phone_number: formData.phone_number ? `+63${formData.phone_number}` : '',
             role: formData.role,
             assigned_office: formData.assigned_office
+            , duty_type: formData.duty_type
+            , duty_request: formData.duty_request
         };
         if (formData.role === 'Student') {
             payload.student_id_number = formData.student_id_number;
@@ -254,6 +254,8 @@ const UserManagement = () => {
       course: user.profile?.course || "",
       year_level: user.profile?.year_level?.toString() || "",
       assigned_office: user.profile?.assigned_office || "",
+      duty_type: user.profile?.duty_type || "Clerical",
+      duty_request: user.profile?.duty_request || "",
     });
     setIsModalOpen(true);
   };
@@ -263,7 +265,7 @@ const UserManagement = () => {
     setFormData({
       prefix: "", first_name: "", middle_initial: "", last_name: "",
       username: "", password: "", phone_number: "", role: "Student",
-      student_id_number: "", course: "", year_level: "", assigned_office: "",
+      student_id_number: "", course: "", year_level: "", assigned_office: "", duty_type: "Clerical", duty_request: "",
     });
     setIsModalOpen(true);
   };
@@ -559,13 +561,16 @@ const UserManagement = () => {
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Assigned Office / Dept</label>
-                          <input
+                          <select
                             name="assigned_office"
                             value={formData.assigned_office}
                             onChange={handleInputChange}
-                            placeholder="e.g. Main Library, Clinic, etc."
-                            className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all placeholder:text-slate-400"
-                          />
+                            required
+                            className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all appearance-none cursor-pointer"
+                          >
+                            <option value="">-- Select Assigned Office / Dept --</option>
+                            {UNIVERSITY_OFFICES.map(dept => <option key={`office-${dept}`} value={dept}>{dept}</option>)}
+                          </select>
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Course / Degree</label>
@@ -579,6 +584,20 @@ const UserManagement = () => {
                             {FCU_DEPARTMENTS.map(dept => <option key={`course-${dept}`} value={dept}>{dept}</option>)}
                           </select>
                         </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Type of Duty</label>
+                          <select name="duty_type" value={formData.duty_type} onChange={handleInputChange} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all appearance-none cursor-pointer">
+                            <option value="Clerical">Clerical</option>
+                            <option value="Janitorial">Janitorial</option>
+                            <option value="Request">Request</option>
+                          </select>
+                        </div>
+                        {formData.duty_type === 'Request' && (
+                          <div className="sm:col-span-2">
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Requested Duty Details</label>
+                            <input required name="duty_request" value={formData.duty_request} onChange={handleInputChange} placeholder="Specify the requested duty for this student" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all" />
+                          </div>
+                        )}
                         <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Year Level</label>
                           <select name="year_level" value={formData.year_level} onChange={handleInputChange} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all appearance-none cursor-pointer">
@@ -602,7 +621,7 @@ const UserManagement = () => {
                             className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all appearance-none cursor-pointer"
                         >
                             <option value="">-- Select Supervised Department --</option>
-                            {FCU_DEPARTMENTS.map(dept => <option key={`sup-${dept}`} value={dept}>{dept}</option>)}
+                            {UNIVERSITY_OFFICES.map(dept => <option key={`sup-${dept}`} value={dept}>{dept}</option>)}
                         </select>
                       </div>
                     )}

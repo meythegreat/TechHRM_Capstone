@@ -10,13 +10,11 @@ export const STUDENT_PATHS = new Set([
   'settings',
 ]);
 
-/** Shared staff paths (Supervisor, WSPO Staff, Super Admin). */
+/** Shared operational paths. */
 export const STAFF_BASE_PATHS = new Set([
   'dashboard',
   'attendance',
   'schedules',
-  'requirements',
-  'pipeline',
   'tasks',
   'attendance-hub',
   'compliance',
@@ -30,7 +28,9 @@ export function getStaffPathsForRole(role: string): Set<string> {
   const paths = new Set(STAFF_BASE_PATHS);
   if (role === 'Super Admin' || role === 'WSPO Staff') {
     STAFF_ADMIN_PATHS.forEach((p) => paths.add(p));
+    paths.add('pipeline');
   }
+  if (role === 'Super Admin') paths.add('requirements');
   return paths;
 }
 
