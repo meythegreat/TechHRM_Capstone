@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\DisciplinaryRecord;
+use App\Models\Notification;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -10,11 +12,13 @@ class DisciplinaryController extends Controller
 {
     public function index(Request $request)
     {
-        $query = DisciplinaryRecord::with(['student:id,name,assigned_office', 'issuer:id,name', 'reporter:id,name']);
+        $query = DisciplinaryRecord::with(['student:id,name', 'issuer:id,name', 'reporter:id,name']);
 
-        if ($request->user()->role === 'Supervisor' && $request->user()->assigned_office) {
-            $query->whereHas('student', function ($q) use ($request) {
-                $q->where('assigned_office', $request->user()->assigned_office);
+        if ($request->user()->role === 'Supervisor') {
+            $request->user()->loadMissing('profile');
+            $departments = $this->supervisedDepartments($request->user());
+            $query->whereHas('student.profile', function ($q) use ($departments) {
+                $q->whereIn('assigned_office', $departments);
             });
         }
 
@@ -25,6 +29,8 @@ class DisciplinaryController extends Controller
 
     public function store(Request $request)
     {
+        $canSetPenalties = $this->isCoordinator($request->user());
+
         $validated = $request->validate([
             'student_id' => 'required_without:user_id|exists:users,id',
             'user_id' => 'required_without:student_id|exists:users,id',
@@ -37,8 +43,8 @@ class DisciplinaryController extends Controller
         ]);
 
         $studentId = $validated['student_id'] ?? $validated['user_id'];
-        $penaltyHours = (float) ($validated['penalty_hours'] ?? 0.00);
-        $deductionAmount = (float) ($validated['deduction_amount'] ?? 0.00);
+        $penaltyHours = $canSetPenalties ? (float) ($validated['penalty_hours'] ?? 0.00) : 0.00;
+        $deductionAmount = $canSetPenalties ? (float) ($validated['deduction_amount'] ?? 0.00) : 0.00;
 
         $record = DisciplinaryRecord::create([
             'student_id' => $studentId,
@@ -57,18 +63,45 @@ class DisciplinaryController extends Controller
     public function resolve(Request $request, $id)
     {
         $record = DisciplinaryRecord::findOrFail($id);
+        $user = $request->user();
 
-        $validated = $request->validate([
+        if ($record->status === 'Pending Appeal' && !$this->isCoordinator($user)) {
+            return response()->json(['message' => 'Only the WSPO coordinator can decide an appeal.'], 403);
+        }
+
+        $rules = [
             'status' => 'required|in:Resolved,Dismissed',
             'resolution_remarks' => 'required_without:resolution_notes|string',
             'resolution_notes' => 'required_without:resolution_remarks|string',
-        ]);
+        ];
 
-        $record->update([
+        if ($this->isCoordinator($user)) {
+            $rules['penalty_hours'] = 'nullable|numeric|min:0';
+            $rules['deduction_amount'] = 'nullable|numeric|min:0';
+            $rules['penalty'] = 'nullable|string|max:255';
+        }
+
+        $validated = $request->validate($rules);
+
+        $updates = [
             'status' => $validated['status'],
             'resolution_remarks' => $validated['resolution_remarks'] ?? $validated['resolution_notes'],
             'resolved_at' => Carbon::now(),
-        ]);
+        ];
+
+        if ($this->isCoordinator($user)) {
+            if (array_key_exists('penalty_hours', $validated)) {
+                $updates['penalty_hours'] = (float) ($validated['penalty_hours'] ?? 0);
+            }
+            if (array_key_exists('deduction_amount', $validated)) {
+                $updates['deduction_amount'] = (float) ($validated['deduction_amount'] ?? 0);
+            }
+            if (!empty($validated['penalty'])) {
+                $updates['penalty'] = $validated['penalty'];
+            }
+        }
+
+        $record->update($updates);
 
         return response()->json(['message' => 'Case officially closed.']);
     }
@@ -101,6 +134,41 @@ class DisciplinaryController extends Controller
             'status' => 'Pending Appeal',
         ]);
 
-        return response()->json(['message' => 'Appeal submitted for administrative review.']);
+        $studentName = $request->user()->name;
+        $this->notifyCoordinators(
+            'Disciplinary Appeal Submitted',
+            "{$studentName} appealed a {$record->violation_type} record. Please review and decide the case in Compliance."
+        );
+
+        return response()->json(['message' => 'Appeal submitted to the WSPO coordinator.']);
+    }
+
+    private function isCoordinator(?User $user): bool
+    {
+        return $user && in_array($user->role, ['WSPO Staff', 'Super Admin'], true);
+    }
+
+    private function supervisedDepartments(User $user): array
+    {
+        $configured = $user->profile?->supervised_departments;
+        $departments = is_array($configured) ? $configured : [];
+
+        if ($departments === [] && $user->profile?->assigned_office) {
+            $departments[] = $user->profile->assigned_office;
+        }
+
+        return array_values(array_unique(array_filter(array_map('trim', $departments))));
+    }
+
+    private function notifyCoordinators(string $title, string $message): void
+    {
+        $coordinators = User::whereIn('role', ['WSPO Staff', 'Super Admin'])->get(['id']);
+        foreach ($coordinators as $coordinator) {
+            Notification::create([
+                'user_id' => $coordinator->id,
+                'title' => $title,
+                'message' => $message,
+            ]);
+        }
     }
 }

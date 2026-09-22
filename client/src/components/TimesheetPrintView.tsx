@@ -2,12 +2,14 @@ import React from 'react';
 
 interface AttendanceRecord {
     id: number;
-    date: string;
+    date?: string | null;
     time_in: string;
     time_out: string | null;
-    rendered_hours: number | string | null;
+    rendered_hours?: number | string | null;
+    computed_hours?: number | string | null;
     work_type: string | null;
     task_description: string | null;
+    status?: string | null;
 }
 
 interface TimesheetPrintViewProps {
@@ -17,6 +19,8 @@ interface TimesheetPrintViewProps {
         course: string;
         year_level: string;
         assigned_office: string;
+        duty_type?: string | null;
+        supervisors?: string[];
     };
     history: AttendanceRecord[];
     totalHours: number;
@@ -24,144 +28,330 @@ interface TimesheetPrintViewProps {
     endDate: string;
 }
 
-const TimesheetPrintView: React.FC<TimesheetPrintViewProps> = ({ fullName, studentProfile, history, totalHours, startDate, endDate }) => {
-    
-    // Format time helper (12-hour format)
-    const formatTime = (dateString: string | null) => {
-        if (!dateString) return '--:--';
-        return new Date(dateString).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-    };
+interface DaySlots {
+    amIn?: Date;
+    amOut?: Date;
+    pmIn?: Date;
+    pmOut?: Date;
+    remarks: string[];
+}
 
-    // Format date helper
-    const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    };
+const border = '1px solid #000';
+const cell: React.CSSProperties = {
+    border,
+    padding: '1px 3px',
+    fontSize: '9px',
+    fontFamily: 'Arial, Helvetica, sans-serif',
+    verticalAlign: 'middle',
+};
+const th: React.CSSProperties = {
+    ...cell,
+    textAlign: 'center',
+    fontWeight: 700,
+    background: '#fff',
+};
 
-    // Generate a pseudo-random document ID for official appearance
-    const documentId = `TS-${new Date().getTime().toString().slice(-6)}-${studentProfile.student_id_number.slice(-4) || 'XXXX'}`;
+const formatClock = (date?: Date) => {
+    if (!date) return '';
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+};
+
+const hoursFor = (record: AttendanceRecord) => Number(record.computed_hours || record.rendered_hours || 0);
+
+const supervisorRemark = (record: AttendanceRecord) => {
+    if (!record.time_out) return '';
+    const status = String(record.status || '').toLowerCase();
+    if (status === 'accepted' || status === 'approved') return 'Approved by supervisor';
+    if (status === 'rejected') return 'Rejected by supervisor';
+    return '';
+};
+
+const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+const mondayOf = (date: Date) => {
+    const day = startOfDay(date);
+    const weekday = day.getDay();
+    const offset = weekday === 0 ? -6 : 1 - weekday;
+    day.setDate(day.getDate() + offset);
+    return day;
+};
+
+const weekdayShort = (date: Date) => date.toLocaleDateString('en-US', { weekday: 'short' });
+
+const monthDay = (date: Date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+interface WorkWeek {
+    key: string;
+    index: number;
+    start: Date;
+    end: Date;
+    hours: number;
+}
+
+const isMorning = (date: Date) => date.getHours() < 12 || (date.getHours() === 12 && date.getMinutes() === 0);
+
+const applyTime = (slots: DaySlots, date: Date, kind: 'in' | 'out') => {
+    const isAm = isMorning(date);
+    if (kind === 'in') {
+        if (isAm) {
+            if (!slots.amIn || date < slots.amIn) slots.amIn = date;
+        } else if (!slots.pmIn || date < slots.pmIn) {
+            slots.pmIn = date;
+        }
+        return;
+    }
+    if (isAm) {
+        if (!slots.amOut || date > slots.amOut) slots.amOut = date;
+    } else if (!slots.pmOut || date > slots.pmOut) {
+        slots.pmOut = date;
+    }
+};
+
+const TimesheetPrintView: React.FC<TimesheetPrintViewProps> = ({
+    fullName,
+    studentProfile,
+    history,
+    totalHours,
+    startDate,
+}) => {
+    const monthBase = startDate ? new Date(`${startDate}T00:00:00`) : new Date();
+    const year = monthBase.getFullYear();
+    const month = monthBase.getMonth();
+    const monthLabel = monthBase.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+    const byDay: Record<number, DaySlots> = {};
+    history.forEach((record) => {
+        if (!record.time_in) return;
+        const timeIn = new Date(record.time_in);
+        if (timeIn.getFullYear() !== year || timeIn.getMonth() !== month) return;
+        const day = timeIn.getDate();
+        if (!byDay[day]) byDay[day] = { remarks: [] };
+        applyTime(byDay[day], timeIn, 'in');
+        if (record.time_out) applyTime(byDay[day], new Date(record.time_out), 'out');
+        const remark = supervisorRemark(record);
+        if (remark && !byDay[day].remarks.includes(remark)) byDay[day].remarks.push(remark);
+    });
+
+    const supervisor = studentProfile.supervisors?.filter(Boolean).join(', ') || '';
+    const dutyRaw = (studentProfile.duty_type || '').trim().toLowerCase();
+    const dutyCode = dutyRaw.startsWith('clerical')
+        ? 'C'
+        : dutyRaw.startsWith('janitorial')
+            ? 'J'
+            : dutyRaw.startsWith('request')
+                ? 'R'
+                : '';
+    const dutyMarks = [
+        { code: 'C', label: 'Clerical (C)' },
+        { code: 'J', label: 'Janitorial (J)' },
+        { code: 'R', label: 'Request (R)' },
+    ];
+
+    const weekHours = new Map<string, number>();
+    history.forEach((record) => {
+        if (!record.time_in && !record.date) return;
+        const when = record.time_in ? new Date(record.time_in) : new Date(`${record.date}T00:00:00`);
+        if (Number.isNaN(when.getTime())) return;
+        if (when.getFullYear() !== year || when.getMonth() !== month) return;
+        const key = mondayOf(when).toDateString();
+        weekHours.set(key, (weekHours.get(key) || 0) + hoursFor(record));
+    });
+
+    const monthStart = new Date(year, month, 1);
+    const monthEnd = new Date(year, month + 1, 0);
+    const workWeeks: WorkWeek[] = [];
+    for (let monday = mondayOf(monthStart); monday <= monthEnd; monday.setDate(monday.getDate() + 7)) {
+        const friday = new Date(monday);
+        friday.setDate(monday.getDate() + 4);
+        const start = monday < monthStart ? new Date(monthStart) : new Date(monday);
+        const end = friday > monthEnd ? new Date(monthEnd) : new Date(friday);
+        if (start > end) continue;
+        workWeeks.push({
+            key: monday.toDateString(),
+            index: workWeeks.length + 1,
+            start,
+            end,
+            hours: weekHours.get(monday.toDateString()) || 0,
+        });
+    }
+
+    const weekHoursTotal = workWeeks.reduce((sum, week) => sum + week.hours, 0);
+    const monthHours = weekHoursTotal > 0 ? weekHoursTotal : totalHours;
 
     return (
-        <div className="bg-white text-slate-900 p-10 max-w-[850px] mx-auto font-sans" style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}>
-            
-            {/* OFFICIAL LETTERHEAD */}
-            <div className="flex items-center justify-between border-b-4 border-slate-900 pb-6 mb-6">
-                <div className="flex items-center gap-5">
-                    {/* Placeholder for University Logo */}
-                    <div className="w-16 h-16 bg-slate-100 border-2 border-slate-900 rounded-full flex items-center justify-center font-black text-xs text-center leading-tight">
-                        FCU<br/>LOGO
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-black uppercase tracking-widest text-slate-900 leading-none">Filamer Christian Univ.</h1>
-                        <h2 className="text-sm font-bold uppercase tracking-widest text-slate-600 mt-1.5">Work-Study Program Organization</h2>
-                    </div>
+        <div
+            className="dtr-sheet bg-white text-black mx-auto"
+            style={{
+                width: '190mm',
+                maxWidth: '100%',
+                padding: '6mm 8mm',
+                fontFamily: 'Arial, Helvetica, sans-serif',
+                color: '#000',
+                printColorAdjust: 'exact',
+                WebkitPrintColorAdjust: 'exact',
+            }}
+        >
+            <div className="flex items-center justify-between gap-3 mb-1">
+                <img src="/fcu.jpg" alt="Filamer Christian University" className="dtr-logo w-[56px] h-[56px] object-contain shrink-0" />
+                <div className="text-center flex-1">
+                    <p className="font-bold text-[11px] leading-tight tracking-wide">FILAMER CHRISTIAN UNIVERSITY, INC.</p>
+                    <p className="font-bold text-[11px] leading-tight">Work Study Program Organization</p>
+                    <p className="font-bold text-[11px] leading-tight">Roxas City</p>
                 </div>
-                <div className="text-right">
-                    <h3 className="text-xl font-black uppercase tracking-widest text-blue-800">Timesheet Report</h3>
-                    <p className="text-xs font-bold text-slate-500 font-mono mt-1">REF: {documentId}</p>
-                </div>
+                <img src="/logo.jpg" alt="Work Study Program Organization" className="dtr-logo w-[56px] h-[56px] object-contain shrink-0" />
             </div>
 
-            {/* STUDENT INFORMATION GRID */}
-            <div className="grid grid-cols-2 gap-4 mb-8">
-                <div className="border border-slate-300 rounded-lg p-4 bg-slate-50">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Student Worker Name</p>
-                    <p className="font-black text-lg text-slate-900 uppercase">{fullName}</p>
-                    <div className="flex items-center gap-3 mt-2">
-                        <span className="px-2 py-0.5 bg-white border border-slate-200 rounded text-xs font-bold font-mono text-slate-600">
-                            {studentProfile.student_id_number || 'No ID Provided'}
-                        </span>
-                        <span className="px-2 py-0.5 bg-white border border-slate-200 rounded text-xs font-bold text-slate-600">
-                            {studentProfile.course} - Yr {studentProfile.year_level}
-                        </span>
-                    </div>
-                </div>
-                <div className="border border-slate-300 rounded-lg p-4 bg-slate-50">
-                    <div className="mb-3">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Assigned Department / Office</p>
-                        <p className="font-bold text-sm text-slate-900">{studentProfile.assigned_office || 'Unassigned'}</p>
-                    </div>
-                    <div>
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Assessment Period</p>
-                        <p className="font-bold text-sm text-blue-800">
-                            {startDate ? formatDate(startDate) : 'Start'} — {endDate ? formatDate(endDate) : 'End'}
-                        </p>
-                    </div>
-                </div>
-            </div>
+            <table className="w-full border-collapse mb-1.5" style={{ borderCollapse: 'collapse' }}>
+                <tbody>
+                    <tr>
+                        <td style={{ ...cell, width: '22%' }}>Document Name:</td>
+                        <td style={{ ...cell, width: '28%' }}>WSPO Daily Time Record</td>
+                        <td style={{ ...cell, width: '22%' }}>Effectivity:</td>
+                        <td style={{ ...cell, width: '28%' }}>September 8, 2022</td>
+                    </tr>
+                    <tr>
+                        <td style={cell}>Document No:</td>
+                        <td style={cell}>WSPO – 2022 – 03</td>
+                        <td style={cell}>Issuing Office:</td>
+                        <td style={cell}>WSPO</td>
+                    </tr>
+                    <tr>
+                        <td style={cell}>Revision No:</td>
+                        <td style={cell}>1</td>
+                        <td style={cell}>Page No:</td>
+                        <td style={cell}>1</td>
+                    </tr>
+                </tbody>
+            </table>
 
-            {/* ATTENDANCE TABLE */}
-            <div className="mb-8">
-                <table className="w-full text-sm border-collapse border border-slate-400">
-                    <thead>
-                        <tr className="bg-slate-800 text-white">
-                            <th className="border border-slate-700 p-2.5 text-left font-bold uppercase tracking-wider text-xs">Date</th>
-                            <th className="border border-slate-700 p-2.5 text-center font-bold uppercase tracking-wider text-xs">Time In</th>
-                            <th className="border border-slate-700 p-2.5 text-center font-bold uppercase tracking-wider text-xs">Time Out</th>
-                            <th className="border border-slate-700 p-2.5 text-left font-bold uppercase tracking-wider text-xs">Activity / Task Description</th>
-                            <th className="border border-slate-700 p-2.5 text-right font-bold uppercase tracking-wider text-xs w-20">Hours</th>
-                        </tr>
-                    </thead>
+            <p className="text-center font-bold text-[12px] mb-1.5">WSPO Daily Time Record</p>
+
+            <div className="flex gap-2 mb-1.5 items-start">
+                <table className="flex-1 border-collapse" style={{ borderCollapse: 'collapse' }}>
                     <tbody>
-                        {history.length === 0 ? (
-                            <tr>
-                                <td colSpan={5} className="border border-slate-300 p-6 text-center text-slate-500 font-bold italic">
-                                    No attendance records found for this selected period.
+                        <tr>
+                            <td style={{ ...cell, width: '34%' }}>Name:</td>
+                            <td style={{ ...cell, fontWeight: 700 }}>{fullName}</td>
+                        </tr>
+                        <tr>
+                            <td style={cell}>For the month of:</td>
+                            <td style={{ ...cell, fontWeight: 700 }}>{monthLabel}</td>
+                        </tr>
+                        <tr>
+                            <td style={cell}>Area of Assignment:</td>
+                            <td style={{ ...cell, fontWeight: 700 }}>{studentProfile.assigned_office || ''}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <table className="border-collapse shrink-0" style={{ borderCollapse: 'collapse', width: '132px' }}>
+                    <tbody>
+                        {dutyMarks.map((duty) => (
+                            <tr key={duty.code}>
+                                <td style={{ ...cell, fontWeight: 700, whiteSpace: 'nowrap', fontSize: '8px' }}>{duty.label}</td>
+                                <td style={{ ...cell, width: '22px', textAlign: 'center', fontWeight: 700, fontSize: '11px' }}>
+                                    {dutyCode === duty.code ? '✓' : ''}
                                 </td>
                             </tr>
-                        ) : (
-                            history.map((record) => (
-                                <tr key={record.id} className="even:bg-slate-50">
-                                    <td className="border border-slate-300 p-2.5 font-medium whitespace-nowrap">{formatDate(record.date)}</td>
-                                    <td className="border border-slate-300 p-2.5 text-center font-mono text-xs">{formatTime(record.time_in)}</td>
-                                    <td className="border border-slate-300 p-2.5 text-center font-mono text-xs">{formatTime(record.time_out)}</td>
-                                    <td className="border border-slate-300 p-2.5">
-                                        <span className="text-[10px] font-bold uppercase text-slate-500 block mb-0.5">{record.work_type || 'Assigned Duty'}</span>
-                                        <span className="text-slate-800 text-xs font-medium">{record.task_description || '—'}</span>
-                                    </td>
-                                    <td className="border border-slate-300 p-2.5 text-right font-bold font-mono">
-                                        {record.rendered_hours ? Number(record.rendered_hours).toFixed(2) : '0.00'}
-                                    </td>
-                                </tr>
-                            ))
-                        )}
+                        ))}
                     </tbody>
-                    <tfoot>
-                        <tr className="bg-slate-100">
-                            <td colSpan={4} className="border border-slate-400 p-3 text-right font-black uppercase tracking-wider text-slate-900">Total Validated Hours:</td>
-                            <td className="border border-slate-400 p-3 text-right font-black text-lg text-slate-900 font-mono bg-blue-50">
-                                {totalHours.toFixed(2)}
-                            </td>
-                        </tr>
-                    </tfoot>
                 </table>
             </div>
 
-            {/* CERTIFICATION & SIGNATURE BLOCK */}
-            <div className="mt-16 pt-6">
-                <p className="text-xs font-medium text-slate-500 italic mb-12">
-                    I hereby certify that the above records are true and correct, representing the actual and verified hours rendered for the FCU Work-Study Program.
-                </p>
-                <div className="grid grid-cols-2 gap-16">
-                    <div className="text-center">
-                        <div className="border-b-2 border-slate-900 w-full h-8 mb-2"></div>
-                        <p className="font-black text-sm uppercase text-slate-900">{fullName}</p>
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Student Worker Signature</p>
-                    </div>
-                    <div className="text-center">
-                        <div className="border-b-2 border-slate-900 w-full h-8 mb-2"></div>
-                        <p className="font-black text-sm uppercase text-slate-900">Supervisor / Office Head</p>
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Signature Over Printed Name</p>
-                    </div>
-                </div>
-            </div>
+            <table className="w-full border-collapse" style={{ borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                <thead>
+                    <tr>
+                        <th rowSpan={2} style={{ ...th, width: '8%' }}>Day</th>
+                        <th colSpan={2} style={th}>AM</th>
+                        <th colSpan={2} style={th}>PM</th>
+                        <th rowSpan={2} style={{ ...th, width: '28%' }}>Remarks</th>
+                    </tr>
+                    <tr>
+                        <th style={th}>Arrival</th>
+                        <th style={th}>Departure</th>
+                        <th style={th}>Arrival</th>
+                        <th style={th}>Departure</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {Array.from({ length: 31 }, (_, index) => {
+                        const day = index + 1;
+                        const slots = byDay[day];
+                        const dayExists = new Date(year, month, day).getMonth() === month;
+                        const td: React.CSSProperties = {
+                            ...cell,
+                            textAlign: 'center',
+                            height: '13px',
+                            lineHeight: 1.1,
+                            padding: '0 3px',
+                            fontSize: '9px',
+                            color: dayExists ? '#000' : '#999',
+                        };
+                        return (
+                            <tr key={day}>
+                                <td style={{ ...td, fontWeight: 700 }}>{day}</td>
+                                <td style={td}>{dayExists ? formatClock(slots?.amIn) : ''}</td>
+                                <td style={td}>{dayExists ? formatClock(slots?.amOut) : ''}</td>
+                                <td style={td}>{dayExists ? formatClock(slots?.pmIn) : ''}</td>
+                                <td style={td}>{dayExists ? formatClock(slots?.pmOut) : ''}</td>
+                                <td style={{ ...td, textAlign: 'left', fontSize: '8px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{dayExists ? (slots?.remarks.join(', ') || '') : ''}</td>
+                            </tr>
+                        );
+                    })}
+                </tbody>
+            </table>
 
-            {/* OFFICIAL FOOTER / WATERMARK */}
-            <div className="mt-16 pt-4 border-t border-slate-200 flex justify-between items-center">
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    Generated by TechHRM Core System
+            <table className="w-full border-collapse mt-1.5" style={{ borderCollapse: 'collapse' }}>
+                <thead>
+                    <tr>
+                        <th style={{ ...th, width: '18%', fontSize: '9px' }}>Week</th>
+                        <th style={{ ...th, fontSize: '9px' }}>Dates (Monday – Friday)</th>
+                        <th style={{ ...th, width: '18%', fontSize: '9px' }}>Hours</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {workWeeks.map((week) => {
+                        const sameDay = week.start.toDateString() === week.end.toDateString();
+                        const range = sameDay
+                            ? `${monthDay(week.start)} (${weekdayShort(week.start)})`
+                            : `${monthDay(week.start)} – ${monthDay(week.end)} (${weekdayShort(week.start)}–${weekdayShort(week.end)})`;
+                        return (
+                            <tr key={week.key}>
+                                <td style={{ ...cell, textAlign: 'center', fontWeight: 700, fontSize: '9px', padding: '1px 3px' }}>
+                                    Week {week.index}
+                                </td>
+                                <td style={{ ...cell, textAlign: 'center', fontSize: '9px', padding: '1px 3px' }}>{range}</td>
+                                <td style={{ ...cell, textAlign: 'center', fontWeight: 700, fontSize: '9px', padding: '1px 3px' }}>
+                                    {week.hours.toFixed(2)}
+                                </td>
+                            </tr>
+                        );
+                    })}
+                    <tr>
+                        <td colSpan={2} style={{ ...cell, textAlign: 'right', fontWeight: 700, fontSize: '10px', padding: '2px 6px' }}>
+                            Total hours for {monthLabel}
+                        </td>
+                        <td style={{ ...cell, textAlign: 'center', fontWeight: 700, fontSize: '10px', padding: '2px 3px' }}>
+                            {monthHours.toFixed(2)}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <p className="text-center text-[9px] leading-snug my-1.5 px-4">
+                I CERTIFY on my honor that above is true and correct report of hours of work performed, record which was daily time arrival and at departure from the office.
+            </p>
+
+            <div className="flex gap-10 mt-2">
+                <div className="flex-1 text-center">
+                    <div style={{ height: '28px', borderBottom: '1px solid #000' }} />
+                    <div style={{ fontSize: '9px', fontWeight: 700, paddingTop: '3px' }}>
+                        {supervisor || 'Immediate Supervisor'}
+                    </div>
+                    {supervisor ? <div style={{ fontSize: '8px' }}>Immediate Supervisor</div> : null}
                 </div>
-                <div className="text-[10px] font-bold text-slate-400 font-mono">
-                    Printed: {new Date().toLocaleString()}
+                <div className="flex-1 text-center">
+                    <div style={{ height: '28px', borderBottom: '1px solid #000' }} />
+                    <div style={{ fontSize: '9px', fontWeight: 700, paddingTop: '3px' }}>{fullName}</div>
+                    <div style={{ fontSize: '8px' }}>Working Student</div>
                 </div>
             </div>
         </div>

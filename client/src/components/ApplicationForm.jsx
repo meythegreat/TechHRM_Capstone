@@ -3,12 +3,17 @@ import { submitApplication } from '../services/applicationService';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
+const DEPARTMENTS = [
+    "University President", "Quality Assurance", "Human Resource Development Center", "Office of the Student Affairs", "University Chaplain", "Alumni Affairs", "VP-Administration", "Superintendent Buildings & Grounds / Officer Pollution Control", "Security Office", "Safety and Disaster Management", "Sports", "Socio-Cultural", "WSPO", "Health Services", "General Services", "Mass Media", "ICT Services Office", "Higher Education Laboratory", "VP-Academic Affairs", "Graduate School", "College of Arts and Sciences", "College of Business and Accountancy", "College of Computer Studies", "College of Criminal Justice Education", "College of Electronic Engineering", "College of Hospitality and Tourism Management", "College of Nursing", "College of Teacher Education", "Kindergarten/Elementary", "High School", "University Registrar", "Director of Libraries", "Guidance & Counselling Center", "NSTP", "VP-REIID", "International Program Office", "Community Extension", "Research", "VP-Finance", "Accountant/Budget Officer", "Business Manager", "Property Custodian", "University Enterprise"
+];
+
 const ApplicationForm = ({ onApplicationSubmitted }) => {
     const [formData, setFormData] = useState({
         preferred_department: '',
         available_schedules: [],
         reason_for_applying: ''
     });
+    const [documents, setDocuments] = useState([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const toggleDay = (day) => {
@@ -20,11 +25,32 @@ const ApplicationForm = ({ onApplicationSubmitted }) => {
         }));
     };
 
+    const addDocuments = (incoming) => {
+        if (!incoming) return;
+        const next = [...documents];
+        Array.from(incoming).forEach((file) => {
+            if (next.length >= 5) return;
+            const duplicate = next.some((existing) => existing.name === file.name && existing.size === file.size);
+            if (!duplicate) next.push(file);
+        });
+        setDocuments(next.slice(0, 5));
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (documents.length < 3 || documents.length > 5) {
+            alert('Please attach 3 to 5 supporting documents.');
+            return;
+        }
+
         setIsSubmitting(true);
         try {
-            await submitApplication(formData);
+            const payload = new FormData();
+            payload.append('preferred_department', formData.preferred_department);
+            payload.append('reason_for_applying', formData.reason_for_applying);
+            formData.available_schedules.forEach((day) => payload.append('available_schedules[]', day));
+            documents.forEach((file) => payload.append('documents[]', file));
+            await submitApplication(payload);
             onApplicationSubmitted?.();
         } catch (error) {
             console.error('Error submitting application', error);
@@ -47,10 +73,7 @@ const ApplicationForm = ({ onApplicationSubmitted }) => {
                     onChange={(e) => setFormData({ ...formData, preferred_department: e.target.value })}
                 >
                     <option value="">Select Department</option>
-                    <option value="College of Computer Studies">College of Computer Studies</option>
-                    <option value="College of Business and Accountancy">College of Business and Accountancy</option>
-                    <option value="Library">Library</option>
-                    <option value="Registrar">Registrar</option>
+                    {DEPARTMENTS.map((dept) => <option key={dept} value={dept}>{dept}</option>)}
                 </select>
             </div>
 
@@ -85,9 +108,34 @@ const ApplicationForm = ({ onApplicationSubmitted }) => {
                 />
             </div>
 
+            <div className="mb-4">
+                <label className="block text-sm font-bold mb-1">Supporting Documents (3–5)</label>
+                <input
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    multiple
+                    className="w-full p-2 border rounded"
+                    onChange={(e) => {
+                        addDocuments(e.target.files);
+                        e.target.value = '';
+                    }}
+                />
+                <p className="text-xs text-gray-500 mt-1">{documents.length} of 5 selected. PDF, JPG, or PNG only.</p>
+                {documents.length > 0 && (
+                    <ul className="mt-2 space-y-1">
+                        {documents.map((file, index) => (
+                            <li key={`${file.name}-${index}`} className="flex items-center justify-between text-sm">
+                                <span className="truncate">{file.name}</span>
+                                <button type="button" className="text-red-600 font-bold" onClick={() => setDocuments(documents.filter((_, i) => i !== index))}>Remove</button>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
+
             <button
                 type="submit"
-                disabled={isSubmitting || formData.available_schedules.length === 0}
+                disabled={isSubmitting || formData.available_schedules.length === 0 || documents.length < 3}
                 className="bg-blue-600 text-white px-4 py-2 rounded font-bold disabled:opacity-50"
             >
                 {isSubmitting ? 'Submitting...' : 'Submit Application'}

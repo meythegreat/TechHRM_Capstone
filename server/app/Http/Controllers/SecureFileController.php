@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ApplicationDocument;
 use App\Models\Requirement;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -9,7 +10,7 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class SecureFileController extends Controller
 {
-    private const ALLOWED_PREFIXES = ['avatars/', 'requirements/'];
+    private const ALLOWED_PREFIXES = ['avatars/', 'requirements/', 'application-documents/'];
 
     public function show(Request $request): BinaryFileResponse
     {
@@ -82,6 +83,20 @@ class SecureFileController extends Controller
             }
 
             return in_array($user->role, ['Super Admin', 'WSPO Staff', 'Supervisor'], true);
+        }
+
+        if (str_starts_with($path, 'application-documents/')) {
+            $document = ApplicationDocument::with('application')->where('file_path', $path)->first();
+
+            if (!$document?->application) {
+                return false;
+            }
+
+            if ($document->application->user_id === $user->id) {
+                return true;
+            }
+
+            return in_array($user->role, ['Super Admin', 'WSPO Staff'], true);
         }
 
         return false;

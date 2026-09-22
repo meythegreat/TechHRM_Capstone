@@ -15,6 +15,7 @@ class Application extends Model
         'middle_name',
         'last_name',
         'age',
+        'gender',
         'address',
         'contact_number',
         'year_level',
@@ -40,5 +41,10 @@ class Application extends Model
     public function applicant()
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function documents()
+    {
+        return $this->hasMany(ApplicationDocument::class);
     }
 }

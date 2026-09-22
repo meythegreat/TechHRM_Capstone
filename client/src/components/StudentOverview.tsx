@@ -19,36 +19,46 @@ import { getMyTasks } from '../services/taskService';
 
 interface DashboardData {
     total_hours_rendered: number;
+    logged_hours: number;
+    penalty_hours: number;
     required_hours: number;
     upcoming_schedules: any[];
     recent_tasks: any[];
     pending_tasks_count: number;
     performance_score: number;
+    has_activity: boolean;
     violations: number;
 }
+
+const emptyDashboard = (): DashboardData => ({
+    total_hours_rendered: 0,
+    logged_hours: 0,
+    penalty_hours: 0,
+    required_hours: 100,
+    upcoming_schedules: [],
+    recent_tasks: [],
+    pending_tasks_count: 0,
+    performance_score: 0,
+    has_activity: false,
+    violations: 0,
+});
 
 const StudentOverview = () => {
     const [data, setData] = useState<DashboardData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const userName = localStorage.getItem('user_name') || 'Student Worker';
+    const [supervisorNames, setSupervisorNames] = useState<string[]>([]);
+    const [assignedOffice, setAssignedOffice] = useState(localStorage.getItem('assigned_office') || '');
 
     useEffect(() => {
         const fetchDashboardData = async () => {
             try {
-                // 1. Fetch general stats (Hours, Performance, etc.)
-                // Fallback used gracefully if endpoint isn't fully ready yet
-                const dashboardRes = await axios.get('/api/student/dashboard').catch(() => ({
-                    data: {
-                        total_hours_rendered: 42.5,
-                        required_hours: 100,
-                        upcoming_schedules: [
-                            { id: 1, day: 'Monday', time_start: '08:00 AM', time_end: '12:00 PM', location: 'Library' },
-                            { id: 2, day: 'Wednesday', time_start: '01:00 PM', time_end: '05:00 PM', location: 'Library' }
-                        ],
-                        performance_score: 92,
-                        violations: 0
-                    }
-                }));
+                const profileRes = await axios.get('/api/user').catch(() => ({ data: {} as any }));
+                const profile = profileRes.data || {};
+                setAssignedOffice(profile.profile?.assigned_office || localStorage.getItem('assigned_office') || '');
+                setSupervisorNames(Array.isArray(profile.department_supervisors) ? profile.department_supervisors : []);
+
+                const dashboardRes = await axios.get('/api/student/dashboard');
 
                 // 2. Fetch REAL Dynamic Tasks
                 const tasksRes = await getMyTasks().catch(() => ({ data: [] }));
@@ -67,6 +77,7 @@ const StudentOverview = () => {
 
             } catch (error) {
                 console.error("Error fetching dashboard data", error);
+                setData(emptyDashboard());
             } finally {
                 setIsLoading(false);
             }
@@ -100,7 +111,27 @@ const StudentOverview = () => {
         );
     }
 
-    const progressPercentage = data ? Math.min((data.total_hours_rendered / data.required_hours) * 100, 100) : 0;
+    const progressPercentage = data && data.required_hours > 0
+        ? Math.min((data.total_hours_rendered / data.required_hours) * 100, 100)
+        : 0;
+
+    const performanceScore = data?.performance_score ?? 0;
+    const performanceTone = performanceScore >= 90
+        ? 'text-emerald-600'
+        : performanceScore >= 75
+            ? 'text-blue-600'
+            : performanceScore >= 50
+                ? 'text-amber-600'
+                : 'text-rose-600';
+    const performanceNote = !data?.has_activity
+        ? 'Complete a shift or task to start your score.'
+        : performanceScore >= 90
+            ? 'Keep up the great work!'
+            : performanceScore >= 75
+                ? 'Solid standing. Stay consistent with your shifts.'
+                : performanceScore >= 50
+                    ? 'Room to improve on attendance and tasks.'
+                    : 'Needs attention. Review tasks and disciplinary records.';
 
     return (
         <div className="space-y-8 font-sans">
@@ -131,8 +162,13 @@ const StudentOverview = () => {
                         <CheckCircle className="w-5 h-5" />
                     </div>
                     <div className="flex flex-col">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Semester</span>
-                        <span className="text-sm font-extrabold text-emerald-400">1st Semester, 2026</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Department Supervisor</span>
+                        <span className="text-sm font-extrabold text-emerald-400">
+                            {supervisorNames.length > 0 ? supervisorNames.join(', ') : 'Not assigned'}
+                        </span>
+                        {assignedOffice && (
+                            <span className="text-[10px] font-medium text-slate-400 mt-0.5">{assignedOffice}</span>
+                        )}
                     </div>
                 </div>
             </motion.div>
@@ -148,12 +184,17 @@ const StudentOverview = () => {
                     <div className="flex justify-between items-start mb-4">
                         <div>
                             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Hours Rendered</p>
-                            <h3 className="text-3xl font-black text-slate-900">{data?.total_hours_rendered} <span className="text-sm font-bold text-slate-400">/ {data?.required_hours}</span></h3>
+                            <h3 className="text-3xl font-black text-slate-900">{Number(data?.total_hours_rendered ?? 0).toFixed(2)} <span className="text-sm font-bold text-slate-400">/ {data?.required_hours ?? 100}</span></h3>
                         </div>
                         <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl group-hover:scale-110 transition-transform">
                             <Clock className="w-6 h-6" />
                         </div>
                     </div>
+                    <p className="text-sm text-slate-500 mt-4 font-medium">
+                        {(data?.penalty_hours ?? 0) > 0
+                            ? `${Number(data?.logged_hours ?? 0).toFixed(1)} logged, ${Number(data?.penalty_hours).toFixed(1)} penalty hrs deducted.`
+                            : 'Credited from your completed attendance logs.'}
+                    </p>
                     <div className="w-full bg-slate-100 rounded-full h-2 mt-4 overflow-hidden">
                         <motion.div 
                             initial={{ width: 0 }}
@@ -169,14 +210,14 @@ const StudentOverview = () => {
                     <div className="flex justify-between items-start">
                         <div>
                             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Performance</p>
-                            <h3 className="text-3xl font-black text-emerald-600">{data?.performance_score}%</h3>
+                            <h3 className={`text-3xl font-black ${performanceTone}`}>{performanceScore}%</h3>
                         </div>
                         <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl group-hover:scale-110 transition-transform">
                             <TrendingUp className="w-6 h-6" />
                         </div>
                     </div>
                     <p className="text-sm text-slate-500 mt-4 font-medium flex items-center gap-1.5">
-                        <Award className="w-4 h-4 text-emerald-500" /> Keep up the great work!
+                        <Award className="w-4 h-4 text-emerald-500" /> {performanceNote}
                     </p>
                 </motion.div>
 
@@ -207,8 +248,12 @@ const StudentOverview = () => {
                             <AlertCircle className="w-6 h-6" />
                         </div>
                     </div>
-                    <p className="text-sm mt-4 font-medium flex items-center gap-1.5 text-emerald-600">
-                        <CheckCircle className="w-4 h-4" /> Clean record so far.
+                    <p className={`text-sm mt-4 font-medium flex items-center gap-1.5 ${(data?.violations ?? 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        {(data?.violations ?? 0) > 0 ? (
+                            <><AlertCircle className="w-4 h-4" /> Open records on file.</>
+                        ) : (
+                            <><CheckCircle className="w-4 h-4" /> Clean record so far.</>
+                        )}
                     </p>
                 </motion.div>
             </motion.div>

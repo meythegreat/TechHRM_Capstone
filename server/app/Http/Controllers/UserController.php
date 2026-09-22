@@ -11,25 +11,19 @@ use Illuminate\Support\Facades\Storage;
 class UserController extends Controller
 {
     private const UNIVERSITY_OFFICES = [
-        'University President', 'Quality Assurance', 'Human Resource Development Center', 'Office of the Student Affairs', 'University Chaplain', 'Alumni Affairs', 'Administration', 'Buildings & Grounds', 'Pollution Control', 'Security Office', 'Safety and Disaster Management', 'Sports', 'Socio-Cultural', 'WSPO', 'Health Services', 'General Services', 'Mass Media', 'ICT Services Office', 'Higher Education Laboratory', 'Academic Affairs', 'Graduate School', 'College of Arts and Sciences', 'College of Business and Accountancy', 'College of Computer Studies', 'College of Criminal Justice Education', 'College of Electronic Engineering', 'College of Hospitality and Tourism Management', 'College of Nursing', 'College of Teacher Education', 'Kindergarten/Elementary', 'High School', 'University Registrar', 'Libraries', 'Guidance & Counselling Center', 'NSTP', 'REIID', 'International Program Office', 'Community Extension', 'Research', 'Finance', 'Accounting/Budget', 'Business Management', 'Property Custodian', 'University Enterprise',
+        'University President', 'Quality Assurance', 'Human Resource Development Center', 'Office of the Student Affairs', 'University Chaplain', 'Alumni Affairs', 'VP-Administration', 'Superintendent Buildings & Grounds / Officer Pollution Control', 'Security Office', 'Safety and Disaster Management', 'Sports', 'Socio-Cultural', 'WSPO', 'Health Services', 'General Services', 'Mass Media', 'ICT Services Office', 'Higher Education Laboratory', 'VP-Academic Affairs', 'Graduate School', 'College of Arts and Sciences', 'College of Business and Accountancy', 'College of Computer Studies', 'College of Criminal Justice Education', 'College of Electronic Engineering', 'College of Hospitality and Tourism Management', 'College of Nursing', 'College of Teacher Education', 'Kindergarten/Elementary', 'High School', 'University Registrar', 'Director of Libraries', 'Guidance & Counselling Center', 'NSTP', 'VP-REIID', 'International Program Office', 'Community Extension', 'Research', 'VP-Finance', 'Accountant/Budget Officer', 'Business Manager', 'Property Custodian', 'University Enterprise',
     ];
     public function index(Request $request)
     {
         $user = $request->user();
         $query = \App\Models\User::with('profile');
 
-        // 1. ROLE-BASED VISIBILITY
-        // If Super Admin, show normal AND deleted users
-        if ($user->role === 'Super Admin') {
-            $query->withTrashed();
-        }
-
-        // If Supervisor, lock them down to ONLY their department
+        // Supervisors can oversee one or more departments.
         if ($user->role === 'Supervisor') {
-            $myDepartment = $user->profile->assigned_office ?? 'Unassigned';
+            $departments = $this->supervisedDepartments($user);
 
-            $query->whereHas('profile', function($q) use ($myDepartment) {
-                $q->where('assigned_office', $myDepartment);
+            $query->whereHas('profile', function($q) use ($departments) {
+                $q->whereIn('assigned_office', $departments);
             });
             $query->whereNotIn('role', ['Super Admin', 'WSPO Staff']);
         }
@@ -55,24 +49,61 @@ class UserController extends Controller
         // 3. RETURN PAGINATED RESULTS
         // Change from 10 to 15 or 20 if you want more users per page!
         $users = $query->paginate(10);
+        $supervisorMap = $this->departmentSupervisorMap();
+        $users->getCollection()->transform(function ($listedUser) use ($supervisorMap) {
+            if ($listedUser->role === 'Student') {
+                $listedUser->setAttribute(
+                    'department_supervisors',
+                    $supervisorMap[$listedUser->profile?->assigned_office] ?? []
+                );
+            }
+            return $listedUser;
+        });
+
         return response()->json($users);
+    }
+
+    public function me(Request $request)
+    {
+        $user = $request->user()->load('profile');
+        $data = $user->toArray();
+
+        if ($user->role === 'Student') {
+            $data['department_supervisors'] = $this->supervisorNamesForDepartment($user->profile?->assigned_office);
+        }
+
+        if ($user->role === 'Supervisor') {
+            $departments = $this->supervisedDepartments($user);
+            $data['supervised_departments'] = $departments;
+            if (isset($data['profile']) && is_array($data['profile'])) {
+                $data['profile']['supervised_departments'] = $departments;
+            }
+        }
+
+        return response()->json($data);
+    }
+
+    public function departmentSupervisors()
+    {
+        return response()->json($this->departmentSupervisorMap());
     }
 
     /** Students available to the current department. */
     public function personnel(Request $request)
     {
         $query = User::with('profile')->where('role', 'Student');
-        $department = trim((string) ($request->user()->profile?->assigned_office ?? ''));
-
         if ($request->user()->role === 'Supervisor') {
-            if ($department === '') {
+            $departments = $this->supervisedDepartments($request->user());
+            if ($departments === []) {
                 return response()->json([
-                    'message' => 'Your supervisor account has no assigned department. Ask WSPO to set your department first.',
+                    'message' => 'Your supervisor account has no assigned departments. Ask WSPO to set your departments first.',
                 ], 422);
             }
-            // A supervisor may be configured with "CCS" while older student
-            // records use "College of Computer Studies" (and vice versa).
-            $areas = $this->departmentAliases($department);
+            // Include aliases so older placement records remain visible.
+            $areas = array_values(array_unique(array_merge(...array_map(
+                fn (string $department) => $this->departmentAliases($department),
+                $departments
+            ))));
 
             $query->whereHas('profile', function ($q) use ($areas) {
                 $q->where(function ($areaQuery) use ($areas) {
@@ -128,6 +159,61 @@ class UserController extends Controller
         return strtolower((string) preg_replace('/[^a-z0-9]/i', '', $department));
     }
 
+    private function departmentSupervisorMap(): array
+    {
+        $map = [];
+        $supervisors = User::with('profile')->where('role', 'Supervisor')->orderBy('name')->get();
+
+        foreach ($supervisors as $supervisor) {
+            foreach ($this->supervisedDepartments($supervisor) as $department) {
+                $map[$department][] = $supervisor->name;
+            }
+        }
+
+        return $map;
+    }
+
+    private function supervisorNamesForDepartment(?string $department): array
+    {
+        if (!$department) {
+            return [];
+        }
+
+        return $this->departmentSupervisorMap()[$department] ?? [];
+    }
+
+    private function supervisedDepartments(User $user): array
+    {
+        $configured = $user->profile?->supervised_departments;
+        $departments = is_array($configured) ? $configured : [];
+
+        // Existing supervisor accounts continue to work after the migration.
+        if ($departments === [] && $user->profile?->assigned_office) {
+            $departments[] = $user->profile->assigned_office;
+        }
+
+        return array_values(array_unique(array_filter(array_map('trim', $departments))));
+    }
+
+    public function supervisorCanAccessStudent(User $supervisor, User $student): bool
+    {
+        $departments = $this->supervisedDepartments($supervisor);
+        if ($departments === []) {
+            return false;
+        }
+
+        $areas = array_values(array_unique(array_merge(...array_map(
+            fn (string $department) => $this->departmentAliases($department),
+            $departments
+        ))));
+
+        $office = trim((string) $student->profile?->assigned_office);
+        $course = trim((string) $student->profile?->course);
+
+        return ($office !== '' && in_array($office, $areas, true))
+            || ($course !== '' && in_array($course, $areas, true));
+    }
+
     /** WSPO coordinator links an existing working student to a department. */
     public function assignDepartment(Request $request, string $id)
     {
@@ -142,6 +228,28 @@ class UserController extends Controller
             'duty_type' => $validated['duty_type'],
             'duty_request' => $validated['duty_type'] === 'Request' ? trim($validated['duty_request']) : null,
         ]);
+
+        $dutyLabel = $validated['duty_type'] === 'Request'
+            ? trim((string) $validated['duty_request'])
+            : $validated['duty_type'];
+        $office = trim($validated['department']);
+
+        \App\Models\Notification::create([
+            'user_id' => $student->id,
+            'title' => 'Office Assignment Confirmed',
+            'message' => "You have been assigned to {$office} as a working student for {$dutyLabel}.",
+        ]);
+
+        $coordinators = User::whereIn('role', ['WSPO Staff', 'Super Admin'])
+            ->where('id', '!=', $request->user()->id)
+            ->get(['id']);
+        foreach ($coordinators as $coordinator) {
+            \App\Models\Notification::create([
+                'user_id' => $coordinator->id,
+                'title' => 'Working Student Assigned',
+                'message' => "{$student->name} will be sent to {$office} for {$dutyLabel}.",
+            ]);
+        }
 
         return response()->json(['message' => 'Student assigned to department successfully.']);
     }
@@ -161,6 +269,8 @@ class UserController extends Controller
             'duty_request' => 'required_if:duty_type,Request|nullable|string|max:1000',
         ]);
 
+        $this->abortIfUserAlreadyExists($request);
+        $request->validate(['gender' => 'nullable|in:Male,Female']);
         $validated['password'] = bcrypt($validated['password']);
         $this->ensureOfficeIsAllowed($request);
         $user = \App\Models\User::create($validated);
@@ -194,6 +304,8 @@ class UserController extends Controller
             $validated['password'] = bcrypt($request->password);
         }
 
+        $request->validate(['gender' => 'nullable|in:Male,Female']);
+        $this->abortIfUserAlreadyExists($request, $user->id);
         $this->ensureOfficeIsAllowed($request);
         $user->update($validated);
 
@@ -238,6 +350,42 @@ class UserController extends Controller
         ]);
     }
 
+    private function abortIfUserAlreadyExists(Request $request, ?int $ignoreUserId = null): void
+    {
+        $name = trim((string) $request->input('name'));
+        $nameQuery = User::query()->whereRaw('LOWER(TRIM(name)) = ?', [mb_strtolower($name)]);
+        if ($ignoreUserId !== null) {
+            $nameQuery->where('id', '!=', $ignoreUserId);
+        }
+        if ($nameQuery->exists()) {
+            abort(422, 'A user with this name already exists.');
+        }
+
+        $phone = trim((string) $request->input('phone_number', ''));
+        if ($phone !== '') {
+            $phoneQuery = User::query()->where('phone_number', $phone);
+            if ($ignoreUserId !== null) {
+                $phoneQuery->where('id', '!=', $ignoreUserId);
+            }
+            if ($phoneQuery->exists()) {
+                abort(422, 'A user with this contact number already exists.');
+            }
+        }
+
+        $studentId = trim((string) $request->input('student_id_number', ''));
+        if ($request->input('role') === 'Student' && $studentId !== '') {
+            $idQuery = User::query()->whereHas('profile', function ($query) use ($studentId) {
+                $query->where('student_id_number', $studentId);
+            });
+            if ($ignoreUserId !== null) {
+                $idQuery->where('id', '!=', $ignoreUserId);
+            }
+            if ($idQuery->exists()) {
+                abort(422, 'A user with this student ID already exists.');
+            }
+        }
+    }
+
     private function normalizeUserPayload(Request $request): void
     {
         $normalized = [];
@@ -262,7 +410,14 @@ class UserController extends Controller
 
     private function ensureOfficeIsAllowed(Request $request): void
     {
-        if (in_array($request->input('role'), ['Student', 'Supervisor'], true)
+        if ($request->input('role') === 'Supervisor') {
+            $request->validate([
+                'supervised_departments' => ['nullable', 'array'],
+                'supervised_departments.*' => ['string', 'in:' . implode(',', self::UNIVERSITY_OFFICES)],
+            ]);
+        }
+
+        if ($request->input('role') === 'Student'
             && $request->filled('assigned_office')
             && !in_array($request->input('assigned_office'), self::UNIVERSITY_OFFICES, true)) {
             abort(422, 'Assigned Office / Dept must be selected from the university office list.');
@@ -282,17 +437,42 @@ class UserController extends Controller
                 'assigned_office' => $nullableString($request->input('assigned_office')),
                 'duty_type' => $nullableString($request->input('duty_type')),
                 'duty_request' => $request->input('duty_type') === 'Request' ? $nullableString($request->input('duty_request')) : null,
+                'gender' => in_array($request->input('gender'), ['Male', 'Female'], true) ? $request->input('gender') : null,
             ],
             'Supervisor', 'WSPO Staff' => [
                 'student_id_number' => null,
                 'course' => null,
                 'year_level' => null,
-                'assigned_office' => $nullableString($request->input('assigned_office')),
+                // Keep the first selected department in the legacy field for
+                // compatibility with integrations that expect one office.
+                'assigned_office' => $role === 'Supervisor'
+                    ? $nullableString(($this->supervisedDepartmentsFromRequest($request)[0] ?? null))
+                    : $nullableString($request->input('assigned_office')),
+                'supervised_departments' => $role === 'Supervisor'
+                    ? $this->supervisedDepartmentsFromRequest($request)
+                    : null,
                 'duty_type' => null,
                 'duty_request' => null,
+                'gender' => in_array($request->input('gender'), ['Male', 'Female'], true) ? $request->input('gender') : null,
             ],
             default => [],
         };
+    }
+
+    private function supervisedDepartmentsFromRequest(Request $request): array
+    {
+        $departments = $request->input('supervised_departments', []);
+        $departments = is_array($departments) ? $departments : [];
+
+        // Accept the former single-select payload from older clients.
+        if ($departments === [] && $request->filled('assigned_office')) {
+            $departments[] = $request->input('assigned_office');
+        }
+
+        return array_values(array_unique(array_filter(array_map(
+            fn ($department) => is_string($department) ? trim($department) : '',
+            $departments
+        ))));
     }
 
     public function destroy(string $id)

@@ -19,8 +19,10 @@ import {
 interface UserData {
     id: number;
     name: string;
+    gender?: string | null;
     profile?: {
         assigned_office?: string;
+        gender?: string | null;
     }
 }
 
@@ -54,7 +56,9 @@ const ScheduleManagement = () => {
     const [toastMsg, setToastMsg] = useState<{text: string, type: 'success' | 'error'} | null>(null);
     const currentUserRole = localStorage.getItem('user_role') || '';
     const [staffingRequests, setStaffingRequests] = useState<any[]>([]);
-    const [staffingForm, setStaffingForm] = useState({ duty_type: 'Clerical', duty_request: '', quantity: 1 });
+    const [staffingCandidates, setStaffingCandidates] = useState<UserData[]>([]);
+    const [assignmentSelections, setAssignmentSelections] = useState<Record<number, number[]>>({});
+    const [staffingForm, setStaffingForm] = useState({ duty_type: 'Clerical', duty_request: '', quantity: 1, requested_genders: ['Male'] });
 
     const [formData, setFormData] = useState({
         user_id: '',
@@ -69,6 +73,9 @@ const ScheduleManagement = () => {
     useEffect(() => {
         fetchStudents();
         fetchStaffingRequests();
+        if (currentUserRole !== 'Supervisor') {
+            fetchStaffingCandidates();
+        }
     }, []);
 
     useEffect(() => {
@@ -89,11 +96,92 @@ const ScheduleManagement = () => {
         }
     };
 
+    const fetchStaffingCandidates = async () => {
+        try {
+            const response = await axios.get('/api/staffing-candidates');
+            setStaffingCandidates(response.data);
+        } catch (error) {
+            console.error('Failed to fetch working students', error);
+        }
+    };
+
+    const setRequestedQuantity = (quantity: number) => {
+        const nextQuantity = Math.max(1, Math.min(50, Number(quantity) || 1));
+        setStaffingForm((current) => {
+            const requested_genders = [...current.requested_genders];
+            while (requested_genders.length < nextQuantity) {
+                requested_genders.push('Male');
+            }
+            return {
+                ...current,
+                quantity: nextQuantity,
+                requested_genders: requested_genders.slice(0, nextQuantity),
+            };
+        });
+    };
+
+    const setSlotGender = (index: number, gender: string) => {
+        setStaffingForm((current) => {
+            const requested_genders = [...current.requested_genders];
+            requested_genders[index] = gender;
+            return { ...current, requested_genders };
+        });
+    };
+
+    const genderSummary = (genders: string[] = []) => {
+        const male = genders.filter((gender) => gender === 'Male').length;
+        const female = genders.filter((gender) => gender === 'Female').length;
+        const parts = [];
+        if (male > 0) parts.push(male === 1 ? '1 Male' : `${male} Male`);
+        if (female > 0) parts.push(female === 1 ? '1 Female' : `${female} Female`);
+        return parts.join(' and ');
+    };
+
+    const remainingGenders = (request: any, selectedIds: number[]) => {
+        const needed = { Male: 0, Female: 0 };
+        (request.requested_genders || []).forEach((gender: string) => {
+            if (gender === 'Male' || gender === 'Female') needed[gender] += 1;
+        });
+        selectedIds.forEach((id) => {
+            const student = staffingCandidates.find((candidate) => candidate.id === id);
+            const gender = student?.gender || student?.profile?.gender;
+            if (gender === 'Male' || gender === 'Female') needed[gender] = Math.max(0, needed[gender] - 1);
+        });
+        return needed;
+    };
+
+    const studentGender = (student: UserData) => student.gender || student.profile?.gender || '';
+
+    const toggleAssignedStudent = (requestId: number, studentId: number, request: any) => {
+        const limit = request.quantity;
+        setAssignmentSelections((current) => {
+            const selected = current[requestId] || [];
+            if (selected.includes(studentId)) {
+                return { ...current, [requestId]: selected.filter((id) => id !== studentId) };
+            }
+            if (selected.length >= limit) {
+                return current;
+            }
+            const student = staffingCandidates.find((candidate) => candidate.id === studentId);
+            const gender = studentGender(student || { id: studentId, name: '' });
+            const remaining = remainingGenders(request, selected);
+            if ((request.requested_genders || []).length > 0 && (gender === 'Male' || gender === 'Female') && remaining[gender] <= 0) {
+                return current;
+            }
+            return { ...current, [requestId]: [...selected, studentId] };
+        });
+    };
+
+    const assignedStudentNames = (request: any) => {
+        const names = (request.assigned_students || []).map((student: UserData) => student.name).filter(Boolean);
+        return names.length > 0 ? names.join(', ') : '';
+    };
+
     const submitStaffingRequest = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
             await axios.post('/api/staffing-requests', staffingForm);
-            setStaffingForm({ duty_type: 'Clerical', duty_request: '', quantity: 1 });
+            setStaffingForm({ duty_type: 'Clerical', duty_request: '', quantity: 1, requested_genders: ['Male'] });
             showToast('Staffing request sent to WSPO.', 'success');
             fetchStaffingRequests();
         } catch (error: any) {
@@ -103,8 +191,17 @@ const ScheduleManagement = () => {
 
     const updateStaffingRequest = async (id: number, status: string) => {
         try {
-            await axios.patch(`/api/staffing-requests/${id}`, { status });
+            const payload: { status: string; student_ids?: number[] } = { status };
+            if (status === 'Approved' || status === 'Fulfilled') {
+                payload.student_ids = assignmentSelections[id] || [];
+            }
+            await axios.patch(`/api/staffing-requests/${id}`, payload);
             showToast('Staffing request updated.', 'success');
+            setAssignmentSelections((current) => {
+                const next = { ...current };
+                delete next[id];
+                return next;
+            });
             fetchStaffingRequests();
         } catch (error: any) {
             showToast(error.response?.data?.message || 'Could not update staffing request.', 'error');
@@ -263,16 +360,85 @@ const ScheduleManagement = () => {
 
             {currentUserRole === 'Supervisor' && (
                 <form onSubmit={submitStaffingRequest} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
-                    <div className="sm:col-span-4"><h2 className="font-black text-slate-900">Request a Working Student</h2><p className="text-sm text-slate-500">This request is sent to WSPO for your assigned office.</p></div>
+                    <div className="sm:col-span-4"><h2 className="font-black text-slate-900">Request a Working Student</h2><p className="text-sm text-slate-500">Tell WSPO how many workers you need, the duty type, and the gender for each slot. The coordinator will assign who is sent to your office.</p></div>
                     <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Duty</label><select value={staffingForm.duty_type} onChange={e => setStaffingForm({...staffingForm, duty_type: e.target.value})} className="w-full p-3 bg-slate-50 border rounded-xl"><option>Clerical</option><option>Janitorial</option><option>Request</option></select></div>
-                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Workers Needed</label><input required min="1" type="number" value={staffingForm.quantity} onChange={e => setStaffingForm({...staffingForm, quantity: Number(e.target.value)})} className="w-full p-3 bg-slate-50 border rounded-xl" /></div>
+                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Workers Needed</label><input required min="1" max="50" type="number" value={staffingForm.quantity} onChange={e => setRequestedQuantity(Number(e.target.value))} className="w-full p-3 bg-slate-50 border rounded-xl" /></div>
                     {staffingForm.duty_type === 'Request' && <div className="sm:col-span-2"><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Specific Request</label><input required value={staffingForm.duty_request} onChange={e => setStaffingForm({...staffingForm, duty_request: e.target.value})} placeholder="Describe the required assignment" className="w-full p-3 bg-slate-50 border rounded-xl" /></div>}
+                    <div className="sm:col-span-4">
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Gender for each working student</label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                            {staffingForm.requested_genders.map((gender, index) => (
+                                <div key={`gender-slot-${index}`}>
+                                    <p className="text-[11px] font-semibold text-slate-500 mb-1">Student {index + 1}</p>
+                                    <select value={gender} onChange={(e) => setSlotGender(index, e.target.value)} className="w-full p-3 bg-slate-50 border rounded-xl">
+                                        <option value="Male">Male</option>
+                                        <option value="Female">Female</option>
+                                    </select>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                     <button className="px-4 py-3 bg-blue-600 text-white font-bold rounded-xl">Send Request</button>
                 </form>
             )}
 
-            {currentUserRole !== 'Supervisor' && staffingRequests.length > 0 && (
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"><h2 className="font-black text-slate-900 mb-3">Supervisor Staffing Requests</h2><div className="space-y-3">{staffingRequests.map(request => <div key={request.id} className="flex flex-wrap items-center justify-between gap-3 border rounded-xl p-3"><div><p className="font-bold text-slate-800">{request.department} — {request.quantity} {request.duty_type}</p><p className="text-sm text-slate-500">Requested by {request.requester?.name}{request.duty_request ? `: ${request.duty_request}` : ''}</p></div><div className="flex items-center gap-2"><span className="text-xs font-bold text-slate-500">{request.status}</span>{request.status === 'Pending' && <><button type="button" onClick={() => updateStaffingRequest(request.id, 'Approved')} className="px-3 py-2 text-sm bg-emerald-600 text-white rounded-lg">Approve</button><button type="button" onClick={() => updateStaffingRequest(request.id, 'Declined')} className="px-3 py-2 text-sm bg-slate-200 rounded-lg">Decline</button></>}</div></div>)}</div></div>
+            {staffingRequests.length > 0 && (
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                    <h2 className="font-black text-slate-900 mb-3">{currentUserRole === 'Supervisor' ? 'Your Staffing Requests' : 'Supervisor Staffing Requests'}</h2>
+                    <div className="space-y-3">
+                        {staffingRequests.map(request => {
+                            const selectedIds = assignmentSelections[request.id] || [];
+                            const assignedNames = assignedStudentNames(request);
+                            return (
+                                <div key={request.id} className="border rounded-xl p-3 space-y-3">
+                                    <div className="flex flex-wrap items-start justify-between gap-3">
+                                        <div>
+                                            <p className="font-bold text-slate-800">{request.department} — {request.quantity} {request.duty_type}</p>
+                                            <p className="text-sm text-slate-500">Requested by {request.requester?.name}{request.duty_request ? `: ${request.duty_request}` : ''}</p>
+                                            {(request.gender_summary || genderSummary(request.requested_genders || [])) && (
+                                                <p className="text-sm font-semibold text-slate-700 mt-1">Gender needed: {request.gender_summary || genderSummary(request.requested_genders || [])}</p>
+                                            )}
+                                            {assignedNames && <p className="text-sm font-semibold text-indigo-700 mt-1">Assigned: {assignedNames}</p>}
+                                        </div>
+                                        <span className="text-xs font-bold text-slate-500">{request.status}</span>
+                                    </div>
+                                    {currentUserRole !== 'Supervisor' && request.status === 'Pending' && (
+                                        <>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Select working student{request.quantity > 1 ? 's' : ''} to send ({selectedIds.length}/{request.quantity})</label>
+                                                <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
+                                                    {staffingCandidates.map((student) => {
+                                                        const gender = studentGender(student);
+                                                        const remaining = remainingGenders(request, selectedIds);
+                                                        const genderLocked = (request.requested_genders || []).length > 0;
+                                                        const genderFull = genderLocked && (gender === 'Male' || gender === 'Female') && remaining[gender] <= 0 && !selectedIds.includes(student.id);
+                                                        const missingGender = genderLocked && gender !== 'Male' && gender !== 'Female';
+                                                        return (
+                                                        <label key={student.id} className={`flex items-center gap-3 px-3 py-2 ${genderFull || missingGender ? 'opacity-50' : 'cursor-pointer hover:bg-slate-50'}`}>
+                                                            <input
+                                                                type="checkbox"
+                                                                disabled={genderFull || missingGender}
+                                                                checked={selectedIds.includes(student.id)}
+                                                                onChange={() => toggleAssignedStudent(request.id, student.id, request)}
+                                                            />
+                                                            <span className="text-sm font-bold text-slate-800">{student.name}</span>
+                                                            <span className="text-xs text-slate-500">{gender || 'No gender'} · {student.profile?.assigned_office || 'Unassigned'}</span>
+                                                        </label>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <button type="button" onClick={() => updateStaffingRequest(request.id, 'Approved')} className="px-3 py-2 text-sm bg-emerald-600 text-white rounded-lg">Approve & Assign</button>
+                                                <button type="button" onClick={() => updateStaffingRequest(request.id, 'Declined')} className="px-3 py-2 text-sm bg-slate-200 rounded-lg">Decline</button>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
             )}
 
             {/* MAIN TABLE */}

@@ -135,6 +135,59 @@ class AttendanceController extends Controller
         return response()->json($history);
     }
 
+    /** Official monthly DTR for one working student. Supervisors only see students in their departments. */
+    public function studentHistory(Request $request, $id)
+    {
+        $actor = $request->user()->loadMissing('profile');
+        if (!in_array($actor->role, ['Supervisor', 'WSPO Staff', 'Super Admin'], true)) {
+            return response()->json(['message' => 'You cannot view a student DTR.'], 403);
+        }
+
+        $student = \App\Models\User::with('profile')->where('role', 'Student')->findOrFail($id);
+
+        if ($actor->role === 'Supervisor' && !app(\App\Http\Controllers\UserController::class)->supervisorCanAccessStudent($actor, $student)) {
+            return response()->json(['message' => 'You can only view DTRs for working students in your department.'], 403);
+        }
+
+        $query = \App\Models\Attendance::where('user_id', $student->id);
+
+        if ($request->filled('start')) {
+            $query->whereDate('time_in', '>=', $request->start);
+        }
+        if ($request->filled('end')) {
+            $query->whereDate('time_in', '<=', $request->end);
+        }
+
+        $office = $student->profile?->assigned_office;
+        $supervisors = [];
+        if ($office) {
+            $supervisors = \App\Models\User::with('profile')
+                ->where('role', 'Supervisor')
+                ->get()
+                ->filter(function ($supervisor) use ($office) {
+                    $configured = $supervisor->profile?->supervised_departments;
+                    $departments = is_array($configured) ? $configured : [];
+                    if ($departments === [] && $supervisor->profile?->assigned_office) {
+                        $departments[] = $supervisor->profile->assigned_office;
+                    }
+                    return in_array($office, array_values(array_unique(array_filter(array_map('trim', $departments)))), true);
+                })
+                ->pluck('name')
+                ->values()
+                ->all();
+        }
+
+        return response()->json([
+            'student' => [
+                'id' => $student->id,
+                'name' => $student->name,
+                'profile' => $student->profile,
+                'department_supervisors' => $supervisors,
+            ],
+            'history' => $query->orderBy('time_in', 'desc')->get(),
+        ]);
+    }
+
     // 4. Admin View: Get EVERYONE'S attendance
     // Fetch all attendance records for the Admin/Supervisor Dashboard
     public function index(Request $request)
@@ -247,21 +300,46 @@ class AttendanceController extends Controller
         return response()->json($query->paginate(15));
     }
 
-    // Approve a student's timesheet
-    public function approve($id)
+    // Accept or reject a student's timesheet after they have timed out (department supervisor only)
+    public function approve(Request $request, $id)
     {
-        $attendance = \App\Models\Attendance::findOrFail($id);
+        $user = $request->user()->loadMissing('profile');
+
+        if ($user->role !== 'Supervisor') {
+            return response()->json(['message' => 'Only department supervisors can accept or reject attendance.'], 403);
+        }
+
+        $decision = $request->input('status', 'accepted');
+        if (!in_array($decision, ['accepted', 'rejected'], true)) {
+            return response()->json(['message' => 'Choose accepted or rejected.'], 422);
+        }
+
+        $attendance = \App\Models\Attendance::with('user.profile')->findOrFail($id);
+        if (!$attendance->time_out) {
+            return response()->json(['message' => 'The student must time out for the day before this record can be accepted or rejected.'], 422);
+        }
+
+        $studentOffice = $attendance->user?->profile?->assigned_office;
+        $supervisedOffices = array_values(array_filter(array_unique(array_merge(
+            is_array($user->profile?->supervised_departments) ? $user->profile->supervised_departments : [],
+            [$user->profile?->assigned_office]
+        ))));
+
+        if ($studentOffice === null || $studentOffice === '' || !in_array($studentOffice, $supervisedOffices, true)) {
+            return response()->json(['message' => 'You can only review attendance for students in your department.'], 403);
+        }
+
         $attendance->update([
-            'status' => 'approved'
+            'status' => $decision
         ]);
 
-        // --- NEW: NOTIFY THE STUDENT ---
+        $verb = $decision === 'accepted' ? 'accepted' : 'rejected';
         \App\Models\Notification::create([
             'user_id' => $attendance->user_id,
-            'title' => 'Timesheet Approved',
-            'message' => 'Your timesheet for ' . \Carbon\Carbon::parse($attendance->time_in)->format('M d') . ' has been approved by your supervisor.'
+            'title' => 'Timesheet ' . ucfirst($verb),
+            'message' => 'Your timesheet for ' . \Carbon\Carbon::parse($attendance->time_in)->format('M d') . ' has been ' . $verb . ' by your supervisor.'
         ]);
 
-        return response()->json(['message' => 'Timesheet approved successfully!']);
+        return response()->json(['message' => 'Timesheet ' . $verb . ' successfully!']);
     }
 }

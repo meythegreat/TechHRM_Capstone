@@ -11,7 +11,8 @@ export const getAllApplications = async () => {
 };
 
 export const updateApplicationStatus = async (id, status) => {
-    return await axios.put(`${API_URL}/${id}/status`, { status });
+    const value = typeof status === 'string' ? status : status?.status;
+    return await axios.put(`${API_URL}/${id}/status`, { status: value });
 };
 
 export const assignPlacement = async (id, placementData) => {
@@ -24,4 +25,8 @@ export const updateApplicationSchedule = async (id, data) => {
 
 export const getMatchingSuggestions = async (id) => {
     return await axios.get(`${API_URL}/${id}/match`);
+};
+
+export const deleteApplication = async (id) => {
+    return await axios.delete(`${API_URL}/${id}`);
 };

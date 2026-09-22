@@ -56,12 +56,14 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
             }
         }
 
-        if (notif.title.includes('Schedule')) {
+        if (notif.title.includes('Schedule') || notif.title.includes('Working Student') || notif.title.includes('Office Assignment')) {
             onNavigate(userRole === 'Student' ? 'schedule' : 'schedules');
         } else if (notif.title.includes('Timesheet')) {
             onNavigate('attendance');
         } else if (notif.title.includes('Requirement')) {
             onNavigate('requirements');
+        } else if (notif.title.includes('Appeal') || notif.title.includes('Disciplinary')) {
+            onNavigate(userRole === 'Student' ? 'disciplinary' : 'compliance');
         }
 
         setIsOpen(false);

@@ -7,6 +7,8 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class ApplicationController extends Controller
 {
@@ -19,6 +21,7 @@ class ApplicationController extends Controller
             'last_name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,username',
             'age' => 'required|integer|min:16',
+            'gender' => 'required|string|in:Male,Female,Prefer not to say',
             'address' => 'required|string',
             'contact_number' => 'required|string',
             'year_level' => 'required|string',
@@ -26,9 +29,11 @@ class ApplicationController extends Controller
             'preferred_department' => 'required|string',
             'available_schedules' => 'required|array|min:1',
             'reason_for_applying' => 'required|string',
+            'documents' => 'required|array|min:3|max:5',
+            'documents.*' => 'file|mimes:pdf,jpg,jpeg,png|max:4096',
         ]);
 
-        DB::transaction(function () use ($validated) {
+        DB::transaction(function () use ($request, $validated) {
             $fullName = trim(implode(' ', array_filter([
                 $validated['first_name'],
                 $validated['middle_name'] ?? null,
@@ -47,16 +52,18 @@ class ApplicationController extends Controller
             $user->profile()->create([
                 'assigned_office' => null,
                 'course' => $validated['course'],
-                'year_level' => $validated['year_level'],
+                'year_level' => $this->numericYearLevel($validated['year_level']),
                 'student_id_number' => null,
+                'gender' => in_array($validated['gender'], ['Male', 'Female'], true) ? $validated['gender'] : null,
             ]);
 
-            Application::create([
+            $application = Application::create([
                 'user_id' => $user->id,
                 'first_name' => $validated['first_name'],
                 'middle_name' => $validated['middle_name'] ?? null,
                 'last_name' => $validated['last_name'],
                 'age' => $validated['age'],
+                'gender' => $validated['gender'],
                 'address' => $validated['address'],
                 'contact_number' => $validated['contact_number'],
                 'year_level' => $validated['year_level'],
@@ -67,6 +74,8 @@ class ApplicationController extends Controller
                 'reason_for_applying' => $validated['reason_for_applying'],
                 'status' => 'Pending',
             ]);
+
+            $this->storeApplicationDocuments($request, $application);
         });
 
         return response()->json([
@@ -85,6 +94,8 @@ class ApplicationController extends Controller
             'preferred_department' => 'required|string',
             'available_schedules' => 'required|array',
             'reason_for_applying' => 'required|string',
+            'documents' => 'required|array|min:3|max:5',
+            'documents.*' => 'file|mimes:pdf,jpg,jpeg,png|max:4096',
         ]);
 
         $application = Application::create([
@@ -95,13 +106,15 @@ class ApplicationController extends Controller
             'status' => 'Pending',
         ]);
 
-        return response()->json(['message' => 'Application submitted successfully!', 'data' => $application], 201);
+        $this->storeApplicationDocuments($request, $application);
+
+        return response()->json(['message' => 'Application submitted successfully!', 'data' => $application->load('documents')], 201);
     }
 
     // 2. STUDENT: Check own application status
     public function myApplication(Request $request)
     {
-        $application = Application::where('user_id', $request->user()->id)->first();
+        $application = Application::with('documents')->where('user_id', $request->user()->id)->first();
 
         if (!$application) {
             return response()->json(null, 404);
@@ -113,7 +126,12 @@ class ApplicationController extends Controller
     // 3. COORDINATOR: View all applications
     public function index()
     {
-        return Application::with('applicant')->orderBy('created_at', 'desc')->get();
+        $this->purgeDeclinedApplications();
+
+        return Application::with(['applicant', 'documents'])
+            ->where('status', '!=', 'Rejected')
+            ->orderBy('created_at', 'desc')
+            ->get();
     }
 
     // 3. COORDINATOR: Update Workflow (Pending -> Interview -> Training -> Approved)
@@ -123,9 +141,30 @@ class ApplicationController extends Controller
 
         $request->validate(['status' => 'required|in:Pending,Interview,Training,For Result,Approved,Rejected']);
 
+        if ($request->status === 'Rejected') {
+            $this->purgeApplication($application);
+
+            return response()->json(['message' => 'Applicant declined and removed.']);
+        }
+
         $application->update(['status' => $request->status]);
 
         return response()->json(['message' => 'Workflow status updated to ' . $request->status]);
+    }
+
+    public function destroy($id)
+    {
+        $application = Application::findOrFail($id);
+
+        if ($application->status === 'Approved') {
+            return response()->json([
+                'message' => 'Approved students cannot be deleted from Applications. Use User Management if you need to remove their account.',
+            ], 422);
+        }
+
+        $this->purgeApplication($application);
+
+        return response()->json(['message' => 'Applicant removed.']);
     }
 
     // 4. COORDINATOR: Final Placement/Matching
@@ -135,21 +174,38 @@ class ApplicationController extends Controller
 
         $validated = $request->validate([
             'assigned_department' => 'required|string',
-            'assigned_position' => 'required|string',
         ]);
 
         $application->update([
             'assigned_department' => $validated['assigned_department'],
-            'assigned_position' => $validated['assigned_position'],
+            'assigned_position' => null,
             'status' => 'Approved'
         ]);
 
-        $application->applicant?->profile()->updateOrCreate(
-            ['user_id' => $application->user_id],
-            ['assigned_office' => $validated['assigned_department']]
-        );
+        $applicant = $application->applicant;
+        $tempPassword = 'FCU-' . strtoupper(Str::random(5)) . '!' . random_int(0, 9);
 
-        return response()->json(['message' => 'Student successfully matched and placed!']);
+        if ($applicant) {
+            $applicant->load('profile');
+            $applicant->profile()->updateOrCreate(
+                ['user_id' => $applicant->id],
+                [
+                    'assigned_office' => $validated['assigned_department'],
+                    'gender' => in_array($application->gender, ['Male', 'Female'], true) ? $application->gender : $applicant->profile?->gender,
+                ]
+            );
+            $applicant->password = $tempPassword;
+            $applicant->save();
+        }
+
+        return response()->json([
+            'message' => 'Student successfully matched and placed!',
+            'credentials' => [
+                'name' => $applicant?->name ?? trim($application->first_name . ' ' . $application->last_name),
+                'username' => $applicant?->username ?? $application->email,
+                'password' => $tempPassword,
+            ],
+        ]);
     }
 
         // COORDINATOR: Schedule Interview
@@ -217,5 +273,71 @@ class ApplicationController extends Controller
         usort($suggestions, fn($a, $b) => (int)$b['match_score'] <=> (int)$a['match_score']);
 
         return response()->json(['suggestions' => $suggestions]);
+    }
+
+    private function purgeDeclinedApplications(): void
+    {
+        Application::with(['documents', 'applicant'])
+            ->where('status', 'Rejected')
+            ->get()
+            ->each(fn (Application $application) => $this->purgeApplication($application));
+    }
+
+    private function purgeApplication(Application $application): void
+    {
+        DB::transaction(function () use ($application) {
+            $application->loadMissing(['documents', 'applicant']);
+
+            foreach ($application->documents as $document) {
+                if ($document->file_path) {
+                    Storage::disk('local')->delete($document->file_path);
+                }
+            }
+
+            $applicant = $application->applicant;
+            $removeAccount = $application->status !== 'Approved'
+                && $applicant
+                && $applicant->role === 'Student';
+
+            if ($removeAccount) {
+                $applicant->tokens()->delete();
+                $applicant->forceDelete();
+                return;
+            }
+
+            $application->documents()->delete();
+            $application->delete();
+        });
+    }
+
+    private function storeApplicationDocuments(Request $request, Application $application): void
+    {
+        foreach ($request->file('documents', []) as $file) {
+            $path = $file->store('application-documents', 'local');
+
+            $application->documents()->create([
+                'original_name' => $file->getClientOriginalName(),
+                'file_path' => $path,
+                'mime_type' => $file->getClientMimeType(),
+                'file_size' => $file->getSize(),
+            ]);
+        }
+    }
+
+    private function numericYearLevel(mixed $yearLevel): ?int
+    {
+        if ($yearLevel === null || $yearLevel === '') {
+            return null;
+        }
+
+        if (is_numeric($yearLevel)) {
+            return (int) $yearLevel;
+        }
+
+        if (is_string($yearLevel) && preg_match('/(\d+)/', $yearLevel, $matches)) {
+            return (int) $matches[1];
+        }
+
+        return null;
     }
 }

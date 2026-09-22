@@ -93,6 +93,17 @@ const ApplicationStatusTracker = () => {
                     </div>
                 )}
             </div>
+
+            {(application.documents || []).length > 0 && (
+                <div className="pt-4 border-t border-gray-100">
+                    <p className="text-xs font-bold text-gray-400 uppercase mb-2">Submitted Documents</p>
+                    <ul className="space-y-1">
+                        {application.documents.map((doc) => (
+                            <li key={doc.id} className="text-sm font-medium text-gray-800">{doc.original_name}</li>
+                        ))}
+                    </ul>
+                </div>
+            )}
         </div>
     );
 };

@@ -13,6 +13,9 @@ import {
     Phone,
     MapPin,
     MessageSquare,
+    FileText,
+    Upload,
+    Trash2,
     Loader2
 } from 'lucide-react';
 
@@ -29,14 +32,41 @@ type ApplicationStatus = {
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
 const DEPARTMENTS = [
-    'College of Computer Studies',
-    'College of Business and Accountancy',
-    'University Library',
-    "Registrar's Office",
-    'Guidance Office',
+    "University President", "Quality Assurance", "Human Resource Development Center", "Office of the Student Affairs", "University Chaplain", "Alumni Affairs", "VP-Administration", "Superintendent Buildings & Grounds / Officer Pollution Control", "Security Office", "Safety and Disaster Management", "Sports", "Socio-Cultural", "WSPO", "Health Services", "General Services", "Mass Media", "ICT Services Office", "Higher Education Laboratory", "VP-Academic Affairs", "Graduate School", "College of Arts and Sciences", "College of Business and Accountancy", "College of Computer Studies", "College of Criminal Justice Education", "College of Electronic Engineering", "College of Hospitality and Tourism Management", "College of Nursing", "College of Teacher Education", "Kindergarten/Elementary", "High School", "University Registrar", "Director of Libraries", "Guidance & Counselling Center", "NSTP", "VP-REIID", "International Program Office", "Community Extension", "Research", "VP-Finance", "Accountant/Budget Officer", "Business Manager", "Property Custodian", "University Enterprise"
 ];
 
 const YEAR_LEVELS = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
+const GENDERS = ['Male', 'Female', 'Prefer not to say'];
+
+const containerVariants: Variants = {
+    hidden: { opacity: 0 },
+    show: { opacity: 1, transition: { staggerChildren: 0.1 } }
+};
+
+const sectionVariants: Variants = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } }
+};
+
+const FloatingInput = ({ id, type = 'text', label, icon: Icon, required = true, ...props }: any) => (
+    <div className="relative group">
+        <input
+            id={id}
+            type={type}
+            required={required}
+            className="block px-4 pb-3 pt-6 w-full text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded-xl appearance-none focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent focus:bg-white peer transition-all shadow-sm"
+            placeholder=" "
+            {...props}
+        />
+        <label
+            htmlFor={id}
+            className="absolute text-sm text-slate-500 duration-300 transform -translate-y-3 scale-75 top-4 z-10 origin-[0] left-4 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-3 peer-focus:text-blue-600 font-medium flex items-center gap-1.5 cursor-text"
+        >
+            {Icon && <Icon className="w-4 h-4" />}
+            {label}
+        </label>
+    </div>
+);
 
 const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
     const [formData, setFormData] = useState({
@@ -45,6 +75,7 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
         last_name: '',
         email: '',
         age: '',
+        gender: '',
         address: '',
         contact_number: '',
         year_level: '',
@@ -53,6 +84,7 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
         available_schedules: [] as string[],
         reason_for_applying: '',
     });
+    const [documents, setDocuments] = useState<File[]>([]);
     
     const [status, setStatus] = useState<ApplicationStatus>({
         loading: false,
@@ -69,55 +101,64 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
         }));
     };
 
+    const addDocuments = (incoming: FileList | null) => {
+        if (!incoming) return;
+        const next = [...documents];
+        Array.from(incoming).forEach((file) => {
+            if (next.length >= 5) return;
+            const duplicate = next.some((existing) => existing.name === file.name && existing.size === file.size);
+            if (!duplicate) next.push(file);
+        });
+        setDocuments(next.slice(0, 5));
+    };
+
+    const removeDocument = (index: number) => {
+        setDocuments((current) => current.filter((_, fileIndex) => fileIndex !== index));
+    };
+
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
+        if (documents.length < 3 || documents.length > 5) {
+            setStatus({ loading: false, success: false, error: 'Please attach 3 to 5 supporting documents.' });
+            return;
+        }
+
         setStatus({ loading: true, success: false, error: '' });
 
         try {
-            await axios.post('/api/apply', formData);
+            const payload = new FormData();
+            payload.append('first_name', formData.first_name);
+            payload.append('middle_name', formData.middle_name);
+            payload.append('last_name', formData.last_name);
+            payload.append('email', formData.email);
+            payload.append('age', formData.age);
+            payload.append('gender', formData.gender);
+            payload.append('address', formData.address);
+            payload.append('contact_number', formData.contact_number);
+            payload.append('year_level', formData.year_level);
+            payload.append('course', formData.course);
+            payload.append('preferred_department', formData.preferred_department);
+            payload.append('reason_for_applying', formData.reason_for_applying);
+            formData.available_schedules.forEach((day) => payload.append('available_schedules[]', day));
+            documents.forEach((file) => payload.append('documents[]', file));
+
+            await axios.post('/api/apply', payload);
             setStatus({ loading: false, success: true, error: '' });
         } catch (err: any) {
+            const statusCode = err.response?.status;
+            const validationError = Object.values(err.response?.data?.errors || {}).flat()[0];
+            const oversized = statusCode === 413 || err.message?.includes('413');
             setStatus({
                 loading: false,
                 success: false,
-                error: err.response?.data?.message || 'Failed to submit application. Please try again.',
+                error: oversized
+                    ? 'The attached files are too large. Use PDF/JPG/PNG files under 4MB each, then submit again.'
+                    : err.response?.data?.message || (typeof validationError === 'string' ? validationError : null) || 'Failed to submit application. Please try again.',
             });
             // Auto-hide error after 5 seconds
             setTimeout(() => setStatus(prev => ({ ...prev, error: '' })), 5000);
         }
     };
-
-    // Animation Variants
-    const containerVariants: Variants = {
-        hidden: { opacity: 0 },
-        show: { opacity: 1, transition: { staggerChildren: 0.1 } }
-    };
-
-    const sectionVariants: Variants = {
-        hidden: { opacity: 0, y: 20 },
-        show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } }
-    };
-
-    // Helper component for Floating Label Inputs
-    const FloatingInput = ({ id, type, label, icon: Icon, required = true, ...props }: any) => (
-        <div className="relative group">
-            <input 
-                id={id}
-                type={type} 
-                required={required}
-                className="block px-4 pb-3 pt-6 w-full text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded-xl appearance-none focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent focus:bg-white peer transition-all shadow-sm" 
-                placeholder=" "
-                {...props}
-            />
-            <label 
-                htmlFor={id} 
-                className="absolute text-sm text-slate-500 duration-300 transform -translate-y-3 scale-75 top-4 z-10 origin-[0] left-4 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-3 peer-focus:text-blue-600 font-medium flex items-center gap-1.5 cursor-text"
-            >
-                {Icon && <Icon className="w-4 h-4" />}
-                {label}
-            </label>
-        </div>
-    );
 
     return (
         <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-200 selection:text-blue-900 relative overflow-hidden flex flex-col">
@@ -214,7 +255,27 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
                                         <div className="md:col-span-1">
                                             <FloatingInput id="age" type="number" label="Age" value={formData.age} onChange={(e: any) => setFormData({ ...formData, age: e.target.value })} />
                                         </div>
-                                        <div className="md:col-span-3">
+                                        <div className="md:col-span-1 relative group">
+                                            <select
+                                                id="gender"
+                                                required
+                                                value={formData.gender}
+                                                onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                                                className="block px-4 pb-3 pt-6 w-full text-sm font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl appearance-none focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent focus:bg-white transition-all shadow-sm cursor-pointer"
+                                            >
+                                                <option value="" disabled>Select gender</option>
+                                                {GENDERS.map((gender) => (
+                                                    <option key={gender} value={gender}>{gender}</option>
+                                                ))}
+                                            </select>
+                                            <label
+                                                htmlFor="gender"
+                                                className="absolute text-sm text-slate-500 duration-300 transform -translate-y-3 scale-75 top-4 z-10 origin-[0] left-4 font-medium pointer-events-none"
+                                            >
+                                                Gender
+                                            </label>
+                                        </div>
+                                        <div className="md:col-span-2">
                                             <FloatingInput id="address" label="Complete Address" icon={MapPin} value={formData.address} onChange={(e: any) => setFormData({ ...formData, address: e.target.value })} />
                                         </div>
                                     </div>
@@ -295,11 +356,52 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
                                     </div>
                                 </motion.section>
 
+                                {/* SECTION 4: Supporting Documents */}
+                                <motion.section variants={sectionVariants} className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200">
+                                    <div className="flex items-center gap-2 mb-6 border-b border-slate-100 pb-4">
+                                        <FileText className="w-5 h-5 text-blue-600" />
+                                        <h2 className="text-xl font-black text-slate-900">Supporting Documents</h2>
+                                    </div>
+                                    <p className="text-sm font-medium text-slate-500 mb-4">
+                                        Attach <span className="font-bold text-slate-800">3 to 5</span> documents (PDF, JPG, or PNG, 4MB each). Examples: Certificate of Enrollment, PSA Birth Certificate, Certificate of Indigency, or latest grades.
+                                    </p>
+                                    <label className="flex flex-col items-center justify-center gap-2 w-full p-6 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50 hover:border-blue-300 hover:bg-blue-50/40 cursor-pointer transition-colors">
+                                        <Upload className="w-6 h-6 text-blue-600" />
+                                        <span className="text-sm font-bold text-slate-700">Add documents</span>
+                                        <span className="text-xs font-medium text-slate-400">{documents.length} of 5 selected · minimum 3 required</span>
+                                        <input
+                                            type="file"
+                                            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                                            multiple
+                                            className="hidden"
+                                            onChange={(e) => {
+                                                addDocuments(e.target.files);
+                                                e.target.value = '';
+                                            }}
+                                        />
+                                    </label>
+                                    {documents.length > 0 && (
+                                        <ul className="mt-4 space-y-2">
+                                            {documents.map((file, index) => (
+                                                <li key={`${file.name}-${index}`} className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-slate-200 bg-white">
+                                                    <div className="min-w-0">
+                                                        <p className="text-sm font-bold text-slate-800 truncate">{file.name}</p>
+                                                        <p className="text-[11px] font-medium text-slate-400">{(file.size / 1024).toFixed(0)} KB</p>
+                                                    </div>
+                                                    <button type="button" onClick={() => removeDocument(index)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Remove document">
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </motion.section>
+
                                 {/* Submit Actions */}
                                 <motion.div variants={sectionVariants} className="pt-2 pb-10">
                                     <button
                                         type="submit"
-                                        disabled={status.loading || formData.available_schedules.length === 0}
+                                        disabled={status.loading || formData.available_schedules.length === 0 || documents.length < 3}
                                         className="w-full py-4 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-black rounded-xl shadow-xl shadow-blue-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg"
                                     >
                                         {status.loading ? (

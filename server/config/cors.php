@@ -19,10 +19,22 @@ return [
 
     'allowed_methods' => ['*'],
 
-    // DO NOT use '*'. Allow both common Vite dev URLs.
-    'allowed_origins' => ['*'],
+    'allowed_origins' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env(
+            'CORS_ALLOWED_ORIGINS',
+            'http://localhost:5173,http://127.0.0.1:5173'
+        ))
+    ))),
 
-    'allowed_origins_patterns' => [],
+    // Any private LAN origin (Wi-Fi or Ethernet) so school IPs do not need a rerun.
+    'allowed_origins_patterns' => [
+        '#^https?://localhost(:\d+)?$#',
+        '#^https?://127\.0\.0\.1(:\d+)?$#',
+        '#^https?://10\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$#',
+        '#^https?://192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$#',
+        '#^https?://172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}(:\d+)?$#',
+    ],
 
     'allowed_headers' => ['*'],
 

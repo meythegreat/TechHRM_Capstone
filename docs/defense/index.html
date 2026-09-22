@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TechHRM Midterm Capstone Defense</title>
+  <style>
+    :root {
+      --navy: #0a2342;
+      --navy-deep: #06162b;
+      --gold: #c4a35a;
+      --gold-bright: #e0c078;
+      --cream: #f6f1e7;
+      --ivory: #fcfaf6;
+      --ink: #1a2433;
+      --muted: #5c6b7a;
+      --line: #e6dccb;
+      --white: #ffffff;
+      --ok: #1f6b45;
+      --mid: #9a5b12;
+      --wait: #4d5d6e;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; height: 100%;
+      background: var(--navy-deep);
+      color: var(--ink);
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    }
+    .stage { height: 100%; display: flex; flex-direction: column; }
+    .slides { flex: 1; overflow: hidden; position: relative; }
+    .slide {
+      display: none;
+      position: absolute; inset: 0;
+      background: var(--cream);
+      padding: 44px 68px 80px;
+      flex-direction: column;
+    }
+    .slide:not(.title-slide)::before {
+      content: "";
+      position: absolute; left: 0; top: 0; bottom: 0;
+      width: 8px;
+      background: var(--gold);
+    }
+    .slide.active { display: flex; animation: rise .35s ease; }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: none; }
+    }
+    .slide h1 {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 38px;
+      line-height: 1.12;
+      margin: 0 0 22px;
+      color: var(--navy);
+      font-weight: 700;
+      max-width: 22ch;
+    }
+    .slide h2 {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.22em;
+      color: var(--gold);
+      margin: 0 0 8px;
+      font-weight: 700;
+    }
+    .slide h2::after {
+      content: "";
+      display: block;
+      width: 56px;
+      height: 2px;
+      background: var(--gold);
+      margin-top: 10px;
+    }
+    .kicker {
+      font-size: 12px;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--gold-bright);
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+    p, li { font-size: 20px; line-height: 1.4; color: var(--ink); }
+    .muted { color: var(--muted); }
+    .lede { font-size: 19px; color: var(--muted); margin: -8px 0 22px; max-width: 62ch; }
+    .small { font-size: 15px; }
+    .grid { display: grid; gap: 14px; }
+    .g2 { grid-template-columns: 1fr 1fr; }
+    .g3 { grid-template-columns: 1fr 1fr 1fr; }
+    .card {
+      background: var(--ivory);
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--gold);
+      padding: 16px 18px 18px;
+    }
+    .card strong {
+      display: block;
+      color: var(--navy);
+      font-size: 15px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .card p, .card li { font-size: 16px; margin: 0; line-height: 1.45; }
+    .card.feature {
+      background: var(--navy);
+      border: 0;
+      color: #fff;
+    }
+    .card.feature strong { color: var(--gold-bright); }
+    .card.feature p { color: #e8eef5; font-size: 18px; }
+    .card.out { border-left-color: #8a94a0; }
+    ol.problems { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+    ol.problems li {
+      background: var(--ivory);
+      border: 1px solid var(--line);
+      padding: 14px 20px 14px 72px;
+      position: relative;
+      font-size: 19px;
+    }
+    ol.problems li::before {
+      content: attr(data-n);
+      position: absolute; left: 16px; top: 50%;
+      transform: translateY(-50%);
+      font-family: Georgia, serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--gold);
+      width: 36px;
+      text-align: center;
+    }
+    .title-slide {
+      background: var(--navy);
+      color: #fff;
+      justify-content: space-between;
+      padding: 40px 68px 80px;
+    }
+    .title-slide::before { display: none; }
+    .title-slide::after {
+      content: "";
+      position: absolute; inset: 18px;
+      border: 1px solid rgba(196, 163, 90, 0.35);
+      pointer-events: none;
+    }
+    .brand { display: flex; align-items: center; gap: 18px; position: relative; z-index: 1; }
+    .seals { display: flex; align-items: center; gap: 14px; }
+    .seals img {
+      width: 86px; height: 86px;
+      object-fit: contain;
+      background: #fff;
+      border-radius: 50%;
+      padding: 3px;
+    }
+    .brand .uni {
+      font-size: 13px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--gold-bright);
+      font-weight: 700;
+    }
+    .brand .college { font-size: 15px; color: #d5e0ee; margin-top: 5px; }
+    .title-slide h1 {
+      color: #fff;
+      font-size: 72px;
+      max-width: none;
+      letter-spacing: 0.02em;
+      margin: 0 0 12px;
+    }
+    .title-slide .sub {
+      color: #c9d6e6;
+      font-size: 22px;
+      max-width: 28ch;
+      font-family: Georgia, serif;
+      font-style: italic;
+      line-height: 1.35;
+    }
+    .meta {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 32px;
+      position: relative;
+      z-index: 1;
+      padding-top: 22px;
+      border-top: 1px solid rgba(196, 163, 90, 0.4);
+    }
+    .meta h3 {
+      margin: 0 0 10px;
+      color: var(--gold-bright);
+      font-size: 11px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+    }
+    .meta p { margin: 0; font-size: 17px; color: #e8eef7; line-height: 1.55; }
+    .compare { width: 100%; border-collapse: collapse; margin-top: auto; }
+    .compare th, .compare td {
+      text-align: left;
+      padding: 12px 16px;
+      font-size: 16px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    .compare thead th {
+      background: var(--navy);
+      color: #fff;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    .compare tbody tr:nth-child(even) { background: rgba(255,255,255,.55); }
+    .compare td:nth-child(1) { font-weight: 700; color: var(--navy); width: 18%; }
+    .flow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 8px 0 20px; }
+    .pill {
+      background: var(--navy);
+      color: #fff;
+      padding: 9px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .arrow { color: var(--gold); font-weight: 900; font-size: 18px; }
+    .arch { display: flex; align-items: stretch; gap: 0; margin-bottom: 18px; }
+    .arch .box {
+      flex: 1;
+      background: var(--ivory);
+      border: 1px solid var(--line);
+      padding: 18px 12px;
+      text-align: center;
+    }
+    .arch .box:nth-child(odd) { border-top: 4px solid var(--gold); }
+    .arch .box:nth-child(even) { background: var(--navy); color: #fff; border-color: var(--navy); }
+    .arch .box:nth-child(even) b { color: var(--gold-bright); }
+    .arch .box:nth-child(even) span { color: #c5d2e2; }
+    .arch .box b { display: block; font-size: 17px; color: var(--navy); margin-bottom: 4px; }
+    .arch .box span { font-size: 13px; color: var(--muted); }
+    .arch .arrow { align-self: center; padding: 0 8px; }
+    .status { width: 100%; border-collapse: collapse; background: var(--ivory); }
+    .status th, .status td {
+      padding: 9px 14px;
+      text-align: left;
+      font-size: 15px;
+      border-bottom: 1px solid var(--line);
+    }
+    .status th {
+      background: var(--navy);
+      color: #fff;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+    .tag {
+      display: inline-block;
+      padding: 3px 10px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .done { background: #e3f4ea; color: var(--ok); }
+    .part { background: #f8ead6; color: var(--mid); }
+    .todo { background: #e8edf2; color: var(--wait); }
+    .demo-steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+    .demo-steps li {
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 16px;
+      align-items: baseline;
+      font-size: 18px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+      margin: 0;
+    }
+    .demo-steps b {
+      color: var(--navy);
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .accounts {
+      margin-top: 16px;
+      padding: 12px 16px;
+      background: var(--navy);
+      color: #dce6f2;
+      font-size: 14px;
+    }
+    .accounts code { color: var(--gold-bright); font-weight: 700; }
+    .thanks {
+      margin-top: auto;
+      padding-top: 24px;
+      border-top: 1px solid var(--line);
+      font-family: Georgia, serif;
+      font-size: 32px;
+      color: var(--navy);
+      font-style: italic;
+    }
+    .uc-slide { padding-bottom: 72px; }
+    .uc-slide h1 { font-size: 28px; margin-bottom: 6px; max-width: none; }
+    .uc-slide svg { width: 100%; flex: 1; min-height: 0; }
+    .bar {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 28px 12px 36px;
+      background: var(--navy-deep);
+      color: #d7e0ea;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      z-index: 4;
+    }
+    .bar::before {
+      content: "";
+      position: absolute; left: 0; top: 0; height: 3px;
+      width: var(--progress, 6.6%);
+      background: var(--gold);
+    }
+    .dots { display: flex; gap: 5px; }
+    .dots button {
+      width: 7px; height: 7px; border-radius: 50%;
+      border: 0; background: #3a516c; cursor: pointer; padding: 0;
+    }
+    .dots button.on { background: var(--gold); transform: scale(1.25); }
+    .help { color: #7e90a6; }
+    .notes {
+      display: none; position: fixed; right: 20px; bottom: 64px; width: 360px; max-height: 42vh;
+      overflow: auto; background: var(--navy-deep); color: #e2e8f0; padding: 16px;
+      font-size: 14px; line-height: 1.45; z-index: 5;
+      border-top: 3px solid var(--gold);
+    }
+    .notes.show { display: block; }
+    .notes h4 { margin: 0 0 8px; color: var(--gold); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; }
+    @media print {
+      html, body, .stage, .slides { height: auto; background: #fff; }
+      .slide { position: relative; display: flex !important; page-break-after: always; min-height: 100vh; animation: none; }
+      .bar, .notes { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="slides" id="slides">
+
+      <section class="slide title-slide" data-notes="Introduce the project title, group, BSIT, and that this is a midterm defense focused on problem, solution, and working progress—not the full manuscript.">
+        <div class="brand">
+          <div class="seals">
+            <img src="fcu.jpg" alt="Filamer Christian University" />
+            <img src="FCU%20CCS%20Logo.jpg" alt="College of Computer Studies" />
+            <img src="logo.jpg" alt="Work Study Program Organization" />
+          </div>
+          <div>
+            <div class="uni">Filamer Christian University, Inc.</div>
+            <div class="college">College of Computer Studies · BS Information Technology</div>
+          </div>
+        </div>
+        <div>
+          <div class="kicker">IT15 Capstone · Midterm Defense</div>
+          <h1>TechHRM</h1>
+          <p class="sub">A Work Study Program Organization Information System for Filamer Christian University, Inc.</p>
+        </div>
+        <div class="meta">
+          <div>
+            <h3>Researchers</h3>
+            <p>Miguel Angelo Basinillo<br />Yvan Dale Lastimoso<br />Mc Jersy dela Cruz<br />Ian Miguel Dumangon</p>
+          </div>
+          <div>
+            <h3>Section · Adviser · Date</h3>
+            <p>BSIT 4A · Mrs. Jonah P. Gafate<br />September 2026</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" data-notes="WSPO started in 1994 as Grassroots. 32 years. 201 working students this semester. Still paper, spreadsheets, physical files. That is the current state.">
+        <h2>01 · Project Background</h2>
+        <h1>WSPO still runs a 32-year program on paper.</h1>
+        <div class="grid g2">
+          <div class="card">
+            <strong>Current situation</strong>
+            <p>WSPO (formerly Grassroots, 1994) places working students in FCU offices. For 1st Sem A.Y. 2026–2027 it serves <b>201 working students</b> using logbooks, spreadsheets, and physical files.</p>
+          </div>
+          <div class="card">
+            <strong>What that causes</strong>
+            <p>Applications get delayed or misplaced. Attendance is hard to verify. Placement and penalties are inconsistent. Reports take too long to prepare.</p>
+          </div>
+        </div>
+        <table class="compare">
+          <thead><tr><th>Process</th><th>Existing (manual)</th><th>Proposed (TechHRM)</th></tr></thead>
+          <tbody>
+            <tr><td>Application</td><td>Paper, spreadsheets, physical files</td><td>Centralized digital records and documents</td></tr>
+            <tr><td>Placement</td><td>Manual deployment and monitoring</td><td>Digital assignment to departments</td></tr>
+            <tr><td>Attendance</td><td>Manual logs; hard to consolidate</td><td>Electronic hours in one database</td></tr>
+            <tr><td>Reports</td><td>Manual consolidation</td><td>Automated analytics for decisions</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="slide" data-notes="Read the five problems quickly. Do not expand into Chapter I paragraphs. These map 1:1 to the modules.">
+        <h2>02 · Statement of the Problem</h2>
+        <h1>Five operational problems</h1>
+        <ol class="problems">
+          <li data-n="01">Delays in work-study application processing due to manual submission and evaluation.</li>
+          <li data-n="02">Inefficient work-study placement and monitoring of working students across offices.</li>
+          <li data-n="03">Inaccurate attendance, scheduling, and financial records from manual processes.</li>
+          <li data-n="04">Inconsistent monitoring of penalties and policy compliance across assignments.</li>
+          <li data-n="05">Time-consuming report generation that delays administrative decision-making.</li>
+        </ol>
+      </section>
+
+      <section class="slide" data-notes="State the general objective once, then the five specific aims that match the five problems. Do not include the leftover inventory objective from the manuscript draft.">
+        <h2>03 · Objectives of the Study</h2>
+        <h1>What this study will accomplish</h1>
+        <div class="card feature" style="margin-bottom:14px">
+          <strong>General objective</strong>
+          <p>Design and develop TechHRM, a centralized, secure, web-based information system that automates and improves management of FCU’s Work-Study Program.</p>
+        </div>
+        <div class="grid g2">
+          <div class="card"><strong>1. Student records</strong><p>Centralize student information and application documents to speed evaluation and approval.</p></div>
+          <div class="card"><strong>2. Placement</strong><p>Assign qualified working students to departments based on office needs and available slots.</p></div>
+          <div class="card"><strong>3. Attendance &amp; timetable</strong><p>Record attendance, monitor rendered hours, and coordinate work schedules.</p></div>
+          <div class="card"><strong>4. Financial &amp; compliance</strong><p>Organize work-hour, deduction, and disciplinary records for consistent administration.</p></div>
+        </div>
+        <div class="card" style="margin-top:14px"><strong>5. Reporting and analytics</strong><p>Generate summaries and insights so WSPO can monitor operations and decide with current data.</p></div>
+      </section>
+
+      <section class="slide" data-notes="This is the proposed solution slide. Walk the flow left to right. Emphasize one platform, role-based access, not five separate tools.">
+        <h2>04 · Proposed Solution</h2>
+        <h1>One system for the full work-study lifecycle</h1>
+        <p class="lede">TechHRM replaces fragmented paper processes with role-based access to applications, placement, attendance, schedules, finances, discipline, and reports.</p>
+        <div class="flow">
+          <span class="pill">Apply</span><span class="arrow">→</span>
+          <span class="pill">Review</span><span class="arrow">→</span>
+          <span class="pill">Place</span><span class="arrow">→</span>
+          <span class="pill">Schedule</span><span class="arrow">→</span>
+          <span class="pill">Clock in/out</span><span class="arrow">→</span>
+          <span class="pill">Assess hours</span><span class="arrow">→</span>
+          <span class="pill">Report</span>
+        </div>
+        <div class="grid g3">
+          <div class="card"><strong>For working students</strong><p>Apply, track status, view schedule, record attendance, see hours, and appeal records.</p></div>
+          <div class="card"><strong>For supervisors</strong><p>Request working students, manage duties, monitor attendance, and file incidents.</p></div>
+          <div class="card"><strong>For WSPO</strong><p>Process applications, assign placements, view and print DTR, and generate reports.</p></div>
+        </div>
+      </section>
+
+      <section class="slide" data-notes="Be explicit about what is in and out. Panel often asks if this replaces SIS or payroll. Answer: no.">
+        <h2>05 · Scope and Delimitations</h2>
+        <h1>What TechHRM covers — and what it does not</h1>
+        <div class="grid g2">
+          <div class="card">
+            <strong>In scope</strong>
+            <p>WSPO of FCU only. Applications, placement, attendance, schedules, work-study financial information, disciplinary records, RBAC, and automated reports. Access on PCs and phones through the responsive website over local Wi-Fi.</p>
+          </div>
+          <div class="card out">
+            <strong>Out of scope</strong>
+            <p>Other universities. General academic records. Full institutional payroll. Offline-only operation. Public internet/cloud hosting and a native mobile app are not required for midterm use. Advanced integrations with other FCU systems (future work).</p>
+          </div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <strong>Dependencies</strong>
+          <p>Currently hosted on the local XAMPP server and reached over campus/local Wi-Fi. Phones use the same responsive website in a browser. Cloud hosting is planned after midterm.</p>
+        </div>
+      </section>
+
+      <section class="slide" data-notes="Four roles. Super Admin is system control. WSPO Staff is the coordinator who places students. Supervisor only requests headcount, duty type, and gender—not who is sent.">
+        <h2>06 · Target Users</h2>
+        <h1>Four roles, one workflow</h1>
+        <div class="grid g2">
+          <div class="card"><strong>Working Student</strong><p>Applies, views placement, clocks in/out, views schedule and tasks, tracks hours, and appeals disciplinary records.</p></div>
+          <div class="card"><strong>Department Supervisor</strong><p>Requests working students (quantity, duty, gender), manages schedules and tasks, monitors attendance, and files incidents for their office.</p></div>
+          <div class="card"><strong>WSPO Staff / Coordinator</strong><p>Reviews applications, chooses who is sent to an office, views and prints DTR, and manages compliance, hours, users, and reports.</p></div>
+          <div class="card"><strong>Super Administrator</strong><p>Oversees user accounts, roles, audit trail, documents, and university-wide operations.</p></div>
+        </div>
+      </section>
+
+      <section class="slide" data-notes="Name the six manuscript modules. You can point at the live sidebar later during demo instead of showing every screen now.">
+        <h2>07 · System Features / Modules</h2>
+        <h1>Six core modules</h1>
+        <div class="grid g3">
+          <div class="card"><strong>01 · Student Records</strong><p>Public application, documents, profiles, pipeline, and user accounts.</p></div>
+          <div class="card"><strong>02 · Placement</strong><p>Staffing requests, gender slots, coordinator assignment, office placement.</p></div>
+          <div class="card"><strong>03 · Attendance</strong><p>Secure clock-in/out, hours summary, and view/print DTR for working students and for WSPO staff/coordinator.</p></div>
+          <div class="card"><strong>04 · Timetable</strong><p>Duty schedules, edit requests, task assignment, and duty types.</p></div>
+          <div class="card"><strong>05 · Financial</strong><p>Work-hour assessment, deductions, and compensation visibility.</p></div>
+          <div class="card"><strong>06 · Reports</strong><p>Analytics dashboards, audit trail, and exportable operational summaries.</p></div>
+        </div>
+        <p class="small muted" style="margin-top:16px">Supporting features: notifications, disciplinary/compliance board, requirement review, and role-based menus.</p>
+      </section>
+
+      <section class="slide" data-notes="Keep architecture simple: User on PC or phone browser → React → Laravel API → MySQL. Midterm access is local XAMPP over Wi-Fi. Railway + Vercel are planned, not the current demo.">
+        <h2>08 · Architecture / Technology Stack</h2>
+        <h1>Web application over a centralized database</h1>
+        <div class="arch">
+          <div class="box"><b>Users</b><span>PC or phone browser</span></div>
+          <div class="arrow">→</div>
+          <div class="box"><b>React + Vite</b><span>Responsive website</span></div>
+          <div class="arrow">→</div>
+          <div class="box"><b>Laravel API</b><span>PHP, Sanctum RBAC</span></div>
+          <div class="arrow">→</div>
+          <div class="box"><b>MySQL</b><span>Central WSPO data</span></div>
+        </div>
+        <div class="grid g3">
+          <div class="card"><strong>Front end</strong><p>React, TypeScript, Vite, Tailwind CSS, Axios, Recharts</p></div>
+          <div class="card"><strong>Back end</strong><p>Laravel, Sanctum, Eloquent, secure file serving</p></div>
+          <div class="card"><strong>Delivery</strong><p>Local XAMPP on campus/Wi-Fi. Same site opens on a phone browser. Cloud (Railway/Vercel) planned after midterm.</p></div>
+        </div>
+      </section>
+
+      <section class="slide uc-slide" data-notes="Name the four actors, then the system boundary. Request Working Students belongs to the supervisor. Assign Placement belongs to WSPO. View / Print DTR is shared by the working student and WSPO staff/coordinator.">
+        <h2>09 · System Design</h2>
+        <h1>Use Case Diagram</h1>
+        <svg viewBox="0 0 1200 560" role="img" aria-label="TechHRM use case diagram">
+          <rect x="250" y="24" width="700" height="512" rx="2" fill="#fcfaf6" stroke="#0a2342" stroke-width="2"/>
+          <line x1="250" y1="68" x2="950" y2="68" stroke="#c4a35a" stroke-width="2"/>
+          <text x="600" y="52" text-anchor="middle" fill="#0a2342" font-size="16" font-family="Georgia, serif" font-weight="700">TechHRM</text>
+
+          <g fill="#fff" stroke="#0a2342" stroke-width="1.5">
+            <ellipse cx="430" cy="118" rx="118" ry="32"/>
+            <ellipse cx="430" cy="200" rx="118" ry="32"/>
+            <ellipse cx="430" cy="282" rx="118" ry="32"/>
+            <ellipse cx="430" cy="364" rx="118" ry="32"/>
+            <ellipse cx="430" cy="446" rx="118" ry="32"/>
+            <ellipse cx="770" cy="118" rx="128" ry="32"/>
+            <ellipse cx="770" cy="200" rx="128" ry="32"/>
+            <ellipse cx="770" cy="282" rx="128" ry="32"/>
+            <ellipse cx="770" cy="364" rx="128" ry="32"/>
+            <ellipse cx="770" cy="446" rx="128" ry="32"/>
+            <ellipse cx="430" cy="508" rx="128" ry="22"/>
+            <ellipse cx="770" cy="508" rx="128" ry="22"/>
+          </g>
+          <g fill="#0a2342" font-size="13" font-weight="700" text-anchor="middle" font-family="Segoe UI, sans-serif">
+            <text x="430" y="123">Submit Application</text>
+            <text x="430" y="205">Clock In / Clock Out</text>
+            <text x="430" y="287">View / Print DTR</text>
+            <text x="430" y="369">View Schedule / Tasks</text>
+            <text x="430" y="451">Appeal Penalty</text>
+            <text x="770" y="123">Review Application</text>
+            <text x="770" y="196" font-size="12">
+              <tspan x="770" dy="0">Request Working</tspan>
+              <tspan x="770" dy="14">Students</tspan>
+            </text>
+            <text x="770" y="287">Assign Placement</text>
+            <text x="770" y="369">Record Incident</text>
+            <text x="770" y="451">Generate Reports</text>
+            <text x="430" y="513">Manage Schedules &amp; Tasks</text>
+            <text x="770" y="513">Manage Users</text>
+          </g>
+
+          <g fill="none" stroke="#0a2342" stroke-width="1.2">
+            <line x1="148" y1="168" x2="312" y2="118"/>
+            <line x1="148" y1="168" x2="312" y2="200"/>
+            <line x1="148" y1="168" x2="312" y2="282"/>
+            <line x1="148" y1="168" x2="312" y2="364"/>
+            <line x1="148" y1="168" x2="312" y2="446"/>
+            <line x1="148" y1="400" x2="642" y2="200"/>
+            <line x1="148" y1="400" x2="302" y2="508"/>
+            <line x1="148" y1="400" x2="642" y2="364"/>
+            <line x1="1052" y1="168" x2="898" y2="118"/>
+            <line x1="1052" y1="168" x2="548" y2="282"/>
+            <line x1="1052" y1="168" x2="898" y2="282"/>
+            <line x1="1052" y1="168" x2="898" y2="446"/>
+            <line x1="1052" y1="168" x2="548" y2="446"/>
+            <line x1="1052" y1="400" x2="898" y2="446"/>
+            <line x1="1052" y1="400" x2="898" y2="508"/>
+          </g>
+
+          <g transform="translate(90,110)" fill="#0a2342" stroke="#0a2342" stroke-width="2.2">
+            <circle cx="0" cy="0" r="13" fill="none"/>
+            <line x1="0" y1="13" x2="0" y2="46"/>
+            <line x1="-18" y1="26" x2="18" y2="26"/>
+            <line x1="0" y1="46" x2="-15" y2="76"/>
+            <line x1="0" y1="46" x2="15" y2="76"/>
+            <text x="0" y="92" text-anchor="middle" stroke="none" font-size="12" font-weight="800">Working</text>
+            <text x="0" y="108" text-anchor="middle" stroke="none" font-size="12" font-weight="800">Student</text>
+          </g>
+          <g transform="translate(90,342)" fill="#0a2342" stroke="#0a2342" stroke-width="2.2">
+            <circle cx="0" cy="0" r="13" fill="none"/>
+            <line x1="0" y1="13" x2="0" y2="46"/>
+            <line x1="-18" y1="26" x2="18" y2="26"/>
+            <line x1="0" y1="46" x2="-15" y2="76"/>
+            <line x1="0" y1="46" x2="15" y2="76"/>
+            <text x="0" y="98" text-anchor="middle" stroke="none" font-size="12" font-weight="800">Department</text>
+            <text x="0" y="114" text-anchor="middle" stroke="none" font-size="12" font-weight="800">Supervisor</text>
+          </g>
+          <g transform="translate(1110,110)" fill="#0a2342" stroke="#0a2342" stroke-width="2.2">
+            <circle cx="0" cy="0" r="13" fill="none"/>
+            <line x1="0" y1="13" x2="0" y2="46"/>
+            <line x1="-18" y1="26" x2="18" y2="26"/>
+            <line x1="0" y1="46" x2="-15" y2="76"/>
+            <line x1="0" y1="46" x2="15" y2="76"/>
+            <text x="0" y="98" text-anchor="middle" stroke="none" font-size="12" font-weight="800">WSPO Staff</text>
+          </g>
+          <g transform="translate(1110,342)" fill="#0a2342" stroke="#0a2342" stroke-width="2.2">
+            <circle cx="0" cy="0" r="13" fill="none"/>
+            <line x1="0" y1="13" x2="0" y2="46"/>
+            <line x1="-18" y1="26" x2="18" y2="26"/>
+            <line x1="0" y1="46" x2="-15" y2="76"/>
+            <line x1="0" y1="46" x2="15" y2="76"/>
+            <text x="0" y="98" text-anchor="middle" stroke="none" font-size="12" font-weight="800">Super</text>
+            <text x="0" y="114" text-anchor="middle" stroke="none" font-size="12" font-weight="800">Administrator</text>
+          </g>
+        </svg>
+      </section>
+
+      <section class="slide" data-notes="Web core is working. Phones already use the responsive site on local Wi-Fi. Native app is not the midterm demo. UAT and cloud hosting are still ahead.">
+        <h2>10 · Current Development Status</h2>
+        <h1>Meaningful functional progress</h1>
+        <table class="status">
+          <thead><tr><th>Feature</th><th>Status</th><th>Evidence</th></tr></thead>
+          <tbody>
+            <tr><td>Application, documents, pipeline</td><td><span class="tag done">Completed</span></td><td>Public apply → WSPO review → account</td></tr>
+            <tr><td>Placement / staffing requests</td><td><span class="tag done">Completed</span></td><td>Qty, duty, gender; coordinator assigns</td></tr>
+            <tr><td>Attendance, DTR, hours</td><td><span class="tag done">Completed</span></td><td>Token clock-in; WSPO can view and print DTR</td></tr>
+            <tr><td>Schedules, tasks, compliance</td><td><span class="tag done">Completed</span></td><td>Edit requests, tasks, appeals</td></tr>
+            <tr><td>Financial assessment &amp; analytics</td><td><span class="tag done">Completed</span></td><td>Work-hour module + dashboards</td></tr>
+            <tr><td>Users, RBAC, notifications, logs</td><td><span class="tag done">Completed</span></td><td>Four roles live in the web app</td></tr>
+            <tr><td>Phone access (responsive web)</td><td><span class="tag done">Completed</span></td><td>Same site in a phone browser over local Wi-Fi</td></tr>
+            <tr><td>Formal UAT / Likert evaluation</td><td><span class="tag part">Partial</span></td><td>Internal functional tests; UAT planned</td></tr>
+            <tr><td>Cloud deploy (Railway / Vercel)</td><td><span class="tag todo">In progress</span></td><td>Local XAMPP for midterm; cloud next</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="slide demo" data-notes="Switch to the live system here. Do not click every menu. Follow this path. Have four demo accounts ready.">
+        <h2>11 · System Demonstration</h2>
+        <h1>Main process, start to finish</h1>
+        <ol class="demo-steps">
+          <li><b>Apply</b><span>Public WSPO application with documents.</span></li>
+          <li><b>Review</b><span>Coordinator processes the application in the pipeline.</span></li>
+          <li><b>Request</b><span>Supervisor requests working students: quantity, duty, gender.</span></li>
+          <li><b>Assign</b><span>Coordinator selects working students and confirms placement. Both sides are notified.</span></li>
+          <li><b>Work</b><span>Working student clocks in with the daily token and views schedule/tasks.</span></li>
+          <li><b>Record</b><span>Hours appear on DTR. WSPO staff/coordinator can view and print the official form.</span></li>
+          <li><b>Report</b><span>WSPO views analytics and audit trail.</span></li>
+        </ol>
+        <div class="accounts">Demo accounts: <code>superadmin</code> · <code>wspostaff</code> · <code>supervisor</code> · <code>student</code></div>
+      </section>
+
+      <section class="slide" data-notes="Do not invent ISO scores. Say functional testing is ongoing; UAT is the evaluation plan from Chapter III.">
+        <h2>12 · Initial Testing / Evaluation</h2>
+        <h1>What we have tested so far</h1>
+        <div class="grid g2">
+          <div class="card">
+            <strong>Completed</strong>
+            <p>Role-based functional checks on apply, place, clock-in, staffing gender rules, notifications, appeals, DTR print, and restricted menus per role.</p>
+          </div>
+          <div class="card">
+            <strong>Planned (Chapter III)</strong>
+            <p>Formal UAT with working students, supervisors, and WSPO staff. Likert questionnaire on functionality, usability, reliability, efficiency, and security. Weighted mean analysis before final defense.</p>
+          </div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <strong>Midterm evidence</strong>
+          <p>Working modules in the live system. Issues found during internal runs were fixed in later Agile iterations (placement ownership, gender slots, secure files, official DTR format).</p>
+        </div>
+      </section>
+
+      <section class="slide" data-notes="Keep this short. Show you can diagnose and fix, not that development was painless.">
+        <h2>13 · Challenges and Actions Taken</h2>
+        <h1>Problems we hit — and how we responded</h1>
+        <div class="grid g2">
+          <div class="card"><strong>Who assigns the working student?</strong><p>First design let supervisors pick names. WSPO required coordinator assignment. We split request vs. assignment and added notifications.</p></div>
+          <div class="card"><strong>Gender per slot</strong><p>Offices need specific male/female counts. Requests now carry gender per quantity, and assignment is validated against that.</p></div>
+          <div class="card"><strong>Proxy attendance</strong><p>Paper logs can be filled for someone else. We issued a supervisor daily token for clock-in instead of an open log.</p></div>
+          <div class="card"><strong>Official DTR format</strong><p>Internal tables did not match WSPO’s form. We rebuilt print view to the institutional 31-day AM/PM layout.</p></div>
+        </div>
+      </section>
+
+      <section class="slide" data-notes="Close on progress, then next steps. Invite questions. Thank the panel and adviser.">
+        <h2>14 · Conclusion / Next Steps</h2>
+        <h1>Ready for midterm; finishing toward final defense</h1>
+        <div class="grid g2">
+          <div class="card feature">
+            <strong>Accomplished</strong>
+            <p>A working web system covering the six WSPO modules, four user roles, and the main employment lifecycle from application through reporting.</p>
+          </div>
+          <div class="card">
+            <strong>Before final defense</strong>
+            <p>Formal UAT and questionnaire analysis. Cloud deployment so the site is reachable beyond local Wi-Fi. Training materials for WSPO users.</p>
+          </div>
+        </div>
+        <p class="thanks">Thank you. Questions are welcome.</p>
+      </section>
+    </div>
+
+    <aside class="notes" id="notes"><h4>Speaker notes</h4><div id="noteText"></div></aside>
+    <div class="bar" id="bar">
+      <span>TechHRM · Midterm Defense</span>
+      <div class="dots" id="dots"></div>
+      <span class="help">← → navigate · F fullscreen · N notes · P print</span>
+      <span id="count">1 / 15</span>
+    </div>
+  </div>
+  <script>
+    const slides = [...document.querySelectorAll('.slide')];
+    const dots = document.getElementById('dots');
+    const count = document.getElementById('count');
+    const notes = document.getElementById('notes');
+    const noteText = document.getElementById('noteText');
+    const bar = document.getElementById('bar');
+    let i = 0;
+    slides.forEach((_, idx) => {
+      const b = document.createElement('button');
+      b.onclick = () => show(idx);
+      dots.appendChild(b);
+    });
+    function show(n) {
+      i = (n + slides.length) % slides.length;
+      slides.forEach((s, k) => s.classList.toggle('active', k === i));
+      [...dots.children].forEach((d, k) => d.classList.toggle('on', k === i));
+      count.textContent = (i + 1) + ' / ' + slides.length;
+      noteText.textContent = slides[i].dataset.notes || '';
+      bar.style.setProperty('--progress', ((i + 1) / slides.length * 100) + '%');
+    }
+    document.addEventListener('keydown', (e) => {
+      if (['ArrowRight', 'PageDown', ' ', 'Enter'].includes(e.key)) { e.preventDefault(); show(i + 1); }
+      if (['ArrowLeft', 'PageUp', 'Backspace'].includes(e.key)) { e.preventDefault(); show(i - 1); }
+      if (e.key === 'Home') show(0);
+      if (e.key === 'End') show(slides.length - 1);
+      if (e.key === 'n' || e.key === 'N') notes.classList.toggle('show');
+      if (e.key === 'f' || e.key === 'F') document.documentElement.requestFullscreen?.();
+    });
+    document.getElementById('slides').addEventListener('click', (e) => {
+      if (e.target.closest('button, a, input')) return;
+      show(i + (e.clientX > innerWidth / 2 ? 1 : -1));
+    });
+    show(0);
+  </script>
+</body>
+</html>

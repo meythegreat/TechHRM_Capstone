@@ -1,6 +1,5 @@
 <?php
 
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\AuthController;
@@ -54,9 +53,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/logout', [AuthController::class, 'logout']);
 
-    Route::get('/user', function (Request $request) {
-        return $request->user()->load('profile');
-    });
+    Route::get('/user', [UserController::class, 'me']);
 
     Route::put('/user', [UserController::class, 'updateSelf']);
     Route::post('/user/avatar', [UserController::class, 'uploadAvatar']);
@@ -80,6 +77,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/attendance/clock-out', [AttendanceController::class, 'clockOut']);
 
     Route::get('/attendance/my-history', [AttendanceController::class, 'myHistory']);
+
+    Route::get('/student/dashboard', [DashboardController::class, 'studentOverview']);
 
     Route::get('/schedule/my-schedule', [ScheduleController::class, 'mySchedule']);
 
@@ -114,7 +113,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/attendance/all', [AttendanceController::class, 'allHistory']);
 
-        Route::patch('/attendance/{id}/approve', [AttendanceController::class, 'approve']);
+        Route::get('/attendance/student/{id}', [AttendanceController::class, 'studentHistory']);
 
         Route::post('/attendance/generate-token', [\App\Http\Controllers\AdvancedAttendanceController::class, 'generateToken']);
         Route::get('/attendance/anomalies', [\App\Http\Controllers\AdvancedAttendanceController::class, 'getAnomalyLogs']);
@@ -140,6 +139,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Department personnel is used by both the schedule and task screens.
         Route::get('/personnel', [UserController::class, 'personnel']);
+        Route::get('/department-supervisors', [UserController::class, 'departmentSupervisors']);
+        Route::get('/admin/stats', [DashboardController::class, 'getStats']);
 
         Route::get('/tasks', [\App\Http\Controllers\TaskController::class, 'index']);
 
@@ -166,11 +167,13 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Only WSPO coordinates student-to-department placement and final task verification.
         Route::get('/applications', [\App\Http\Controllers\ApplicationController::class, 'index']);
+        Route::delete('/applications/{id}', [\App\Http\Controllers\ApplicationController::class, 'destroy']);
         Route::put('/applications/{id}/status', [\App\Http\Controllers\ApplicationController::class, 'updateStatus']);
         Route::put('/applications/{id}/schedule', [\App\Http\Controllers\ApplicationController::class, 'scheduleInterview']);
         Route::put('/applications/{id}/placement', [\App\Http\Controllers\ApplicationController::class, 'assignPlacement']);
         Route::get('/applications/{id}/match', [\App\Http\Controllers\ApplicationController::class, 'getMatchingSuggestions']);
         Route::put('/students/{id}/department', [UserController::class, 'assignDepartment']);
+        Route::get('/staffing-candidates', [\App\Http\Controllers\StaffingRequestController::class, 'candidates']);
         Route::patch('/staffing-requests/{staffingRequest}', [\App\Http\Controllers\StaffingRequestController::class, 'updateStatus']);
         Route::put('/tasks/{id}/verify', [\App\Http\Controllers\TaskController::class, 'verifyTask']);
 
@@ -186,6 +189,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::middleware(['role:Supervisor'])->group(function () {
+        Route::patch('/attendance/{id}/approve', [AttendanceController::class, 'approve']);
         Route::post('/staffing-requests', [\App\Http\Controllers\StaffingRequestController::class, 'store']);
         Route::post('/tasks', [\App\Http\Controllers\TaskController::class, 'store']);
         Route::put('/tasks/{id}/notes', [\App\Http\Controllers\TaskController::class, 'addSupervisorNote']);
@@ -202,8 +206,6 @@ Route::middleware('auth:sanctum')->group(function () {
         // =================================================
 
         Route::get('/admin/dashboard-stats', [AdminController::class, 'getStats']);
-
-        Route::get('/admin/stats', [DashboardController::class, 'getStats']);
 
         // =================================================
         // REQUIREMENTS MANAGEMENT

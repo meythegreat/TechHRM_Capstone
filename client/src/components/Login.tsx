@@ -161,7 +161,7 @@ const Login = ({ onLoginSuccess, onNavigateToApply }: LoginProps) => {
                                 htmlFor="username" 
                                 className="absolute text-sm text-slate-500 duration-300 transform -translate-y-3 scale-75 top-4 z-10 origin-[0] left-4 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-3 peer-focus:text-blue-600 font-medium"
                             >
-                                Username or FCU Gmail
+                                Username
                             </label>
                         </div>
 

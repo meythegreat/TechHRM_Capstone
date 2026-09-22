@@ -94,7 +94,7 @@ const StudentDisciplinaryBoard = () => {
                         Disciplinary Board
                     </h1>
                     <p className="mt-2 text-slate-400 font-medium max-w-md">
-                        Review your official conduct records. Submit a formal appeal to the WSPO if a penalty was issued in error.
+                        Review your official conduct records. Submit a formal appeal to the WSPO coordinator if a penalty was issued in error.
                     </p>
                 </div>
 
@@ -173,7 +173,7 @@ const StudentDisciplinaryBoard = () => {
                                     )}
                                     {record.appeal_notes && (
                                         <div className="mt-3 text-xs text-slate-500 italic">
-                                            Appeal submitted. Awaiting WSPO review.
+                                            Appeal submitted. Awaiting WSPO coordinator review.
                                         </div>
                                     )}
                                 </div>
@@ -262,7 +262,7 @@ const StudentDisciplinaryBoard = () => {
                                         Your Statement
                                     </label>
                                     <p className="text-xs text-slate-400 font-medium mb-3 leading-relaxed">
-                                        Please provide a clear and respectful explanation of your side of the incident. This statement will be reviewed directly by the WSPO Administration.
+                                        Please provide a clear and respectful explanation of your side of the incident. This statement will be reviewed by the WSPO coordinator, who will decide the case.
                                     </p>
                                     <textarea
                                         autoFocus
@@ -285,7 +285,7 @@ const StudentDisciplinaryBoard = () => {
                                         disabled={!appealNotes.trim()}
                                         className="px-6 py-2.5 bg-slate-900 hover:bg-blue-600 text-white text-sm font-bold rounded-xl shadow-lg shadow-slate-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                                     >
-                                        <ShieldCheck className="w-4 h-4" /> Submit to WSPO
+                                        <ShieldCheck className="w-4 h-4" /> Submit to Coordinator
                                     </button>
                                 </div>
                             </div>

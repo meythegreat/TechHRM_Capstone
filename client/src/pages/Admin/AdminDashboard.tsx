@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 import { motion, type Variants } from 'framer-motion';
 import { 
     LayoutDashboard, 
@@ -8,16 +9,21 @@ import {
     Clock, 
     Activity, 
     ShieldCheck,
-    ChevronRight
+    ChevronRight,
+    UserPlus,
+    LogIn,
+    LogOut
 } from 'lucide-react';
 
 // Keep your original import path for the SuperAdmin redirect
 import SuperAdminDashboard from '../../components/SuperAdminDashboard';
 
 const AdminDashboard = () => {
+    const navigate = useNavigate();
     const userName = localStorage.getItem('user_name') || 'Admin';
     const userRole = localStorage.getItem('user_role') || 'Supervisor';
     const assignedOffice = localStorage.getItem('assigned_office') || 'Department Supervisor';
+    const isWspo = userRole === 'WSPO Staff';
     
     // THE SUPER ADMIN HIJACK
     // If they are a Super Admin, completely swap the view to the Command Center
@@ -30,16 +36,33 @@ const AdminDashboard = () => {
     const [stats, setStats] = useState({
         activeStudents: 0,
         pendingApprovals: 0,
-        totalHoursThisWeek: 0
+        totalHoursThisWeek: 0,
+        recentStudentActivity: [] as {
+            id: number | string;
+            student_name: string;
+            action: string;
+            description: string;
+            office?: string | null;
+            created_at: string;
+        }[]
     });
 
     const [isLoading, setIsLoading] = useState(true);
+
+    const [pendingApplications, setPendingApplications] = useState(0);
 
     useEffect(() => {
         const fetchStats = async () => {
             try {
                 const response = await axios.get('/api/admin/stats');
-                setStats(response.data);
+                setStats({
+                    activeStudents: response.data.activeStudents ?? 0,
+                    pendingApprovals: response.data.pendingApprovals ?? 0,
+                    totalHoursThisWeek: response.data.totalHoursThisWeek ?? 0,
+                    recentStudentActivity: Array.isArray(response.data.recentStudentActivity)
+                        ? response.data.recentStudentActivity
+                        : [],
+                });
             } catch (err) {
                 console.error("Failed to load dashboard stats", err);
             } finally {
@@ -47,7 +70,17 @@ const AdminDashboard = () => {
             }
         };
         fetchStats();
-    }, []);
+        const interval = setInterval(fetchStats, 30000);
+        if (isWspo) {
+            axios.get('/api/applications')
+                .then((response) => {
+                    const rows = Array.isArray(response.data) ? response.data : (response.data?.data || []);
+                    setPendingApplications(rows.filter((app: { status?: string }) => app.status !== 'Approved' && app.status !== 'Rejected').length);
+                })
+                .catch(() => setPendingApplications(0));
+        }
+        return () => clearInterval(interval);
+    }, [isWspo]);
 
     // STRICT TYPESCRIPT ANIMATION VARIANTS
     const containerVariants: Variants = {
@@ -96,7 +129,9 @@ const AdminDashboard = () => {
                         Workspace Overview
                     </h1>
                     <p className="mt-2 text-slate-400 font-medium max-w-md">
-                        Welcome back, {userName.split(' ')[0]}. Monitor your department's student workers, review pending timesheets, and manage daily operations.
+                        {isWspo
+                            ? 'Welcome back. Review new Work-Study sign-ups, then place approved students in their departments.'
+                            : "Welcome back, " + userName.split(' ')[0] + ". Monitor your department's student workers, review pending timesheets, and manage daily operations."}
                     </p>
                 </div>
 
@@ -114,7 +149,29 @@ const AdminDashboard = () => {
                 </div>
             </motion.div>
 
-            {/* --- STAT CARDS --- */}
+            {isWspo && (
+                <motion.button
+                    type="button"
+                    onClick={() => navigate('/pipeline')}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="w-full text-left bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-blue-200 hover:border-blue-400 transition-colors flex items-center justify-between gap-4"
+                >
+                    <div className="flex items-center gap-4">
+                        <div className="p-3.5 bg-blue-50 text-blue-600 rounded-2xl">
+                            <UserPlus className="w-6 h-6" />
+                        </div>
+                        <div>
+                            <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">WSPO Coordinator</p>
+                            <h3 className="text-2xl font-black text-slate-900">Review applicant sign-ups</h3>
+                            <p className="text-sm text-slate-500 font-medium mt-1">{pendingApplications} application{pendingApplications === 1 ? '' : 's'} waiting in the pipeline.</p>
+                        </div>
+                    </div>
+                    <span className="text-sm font-bold text-blue-600 flex items-center">
+                        Open Applications <ChevronRight className="w-4 h-4 ml-0.5" />
+                    </span>
+                </motion.button>
+            )}
             <motion.div 
                 variants={containerVariants}
                 initial="hidden"
@@ -132,7 +189,9 @@ const AdminDashboard = () => {
                             <Users className="w-6 h-6" />
                         </div>
                     </div>
-                    <p className="text-sm text-slate-500 mt-4 font-medium">Student workers currently assigned.</p>
+                    <p className="text-sm text-slate-500 mt-4 font-medium">
+                        {isWspo ? 'Student workers currently assigned campus-wide.' : 'Working students assigned to your supervised department.'}
+                    </p>
                 </motion.div>
 
                 {/* Pending Approvals Card */}
@@ -180,17 +239,66 @@ const AdminDashboard = () => {
                         <Activity className="w-5 h-5 text-blue-600" />
                         Recent Student Activity
                     </h3>
-                    <button className="text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors flex items-center">
-                        View All <ChevronRight className="w-4 h-4 ml-0.5" />
-                    </button>
+                    {isWspo && (
+                        <button
+                            type="button"
+                            onClick={() => navigate('/logs')}
+                            className="text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors flex items-center"
+                        >
+                            View All <ChevronRight className="w-4 h-4 ml-0.5" />
+                        </button>
+                    )}
                 </div>
                 
-                {/* Empty state placeholder for now until you wire up the live logs */}
-                <div className="p-16 text-center flex flex-col items-center">
-                    <Activity className="w-16 h-16 text-slate-300 mb-4 opacity-50" />
-                    <p className="text-lg font-bold text-slate-600">No recent activity detected.</p>
-                    <p className="text-sm text-slate-400 font-medium mt-1">Student log-ins, completions, and schedule changes will appear here.</p>
-                </div>
+                {stats.recentStudentActivity.length === 0 ? (
+                    <div className="p-16 text-center flex flex-col items-center">
+                        <Activity className="w-16 h-16 text-slate-300 mb-4 opacity-50" />
+                        <p className="text-lg font-bold text-slate-600">No recent activity detected.</p>
+                        <p className="text-sm text-slate-400 font-medium mt-1">Student log-ins, log-outs, completions, and schedule changes will appear here.</p>
+                    </div>
+                ) : (
+                    <div className="divide-y divide-slate-100">
+                        {stats.recentStudentActivity.map((item) => {
+                            const action = (item.action || '').toLowerCase();
+                            const isLogout = action.includes('logout') || action.includes('clocked out');
+                            const isLogin = action.includes('login') || action.includes('clocked in');
+                            return (
+                                <div key={item.id} className="p-5 sm:px-8 flex items-center gap-4 hover:bg-slate-50/80 transition-colors">
+                                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border ${
+                                        isLogout
+                                            ? 'bg-rose-50 text-rose-600 border-rose-100'
+                                            : isLogin
+                                                ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                                                : 'bg-blue-50 text-blue-600 border-blue-100'
+                                    }`}>
+                                        {isLogout ? <LogOut className="w-5 h-5" /> : isLogin ? <LogIn className="w-5 h-5" /> : <Activity className="w-5 h-5" />}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-black text-slate-900 truncate">{item.student_name}</p>
+                                        <p className="text-xs font-medium text-slate-500 mt-0.5 truncate">
+                                            {item.description || item.action}
+                                            {item.office ? ` · ${item.office}` : ''}
+                                        </p>
+                                    </div>
+                                    <div className="flex flex-col items-end gap-1.5 shrink-0">
+                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border ${
+                                            isLogout
+                                                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                                : isLogin
+                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                    : 'bg-slate-50 text-slate-600 border-slate-200'
+                                        }`}>
+                                            {item.action}
+                                        </span>
+                                        <span className="text-xs font-bold text-slate-400">
+                                            {new Date(item.created_at).toLocaleString()}
+                                        </span>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </motion.div>
         </div>
     );

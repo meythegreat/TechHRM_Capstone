@@ -20,10 +20,9 @@ import {
     ShieldCheck
 } from 'lucide-react';
 
-import Sidebar from './Sidebar'; 
+import Sidebar from './Sidebar';
 import NotificationBell from './NotificationBell';
-import TimesheetPrintView from './TimesheetPrintView';
-import SecureImage from './SecureImage'; // Removed .tsx extension to fix TS error
+import SecureImage from './SecureImage';
 import { normalizeFilePath, openSecureFile } from '../utils/secureFile';
 import { firstPathSegment, resolveStudentPath } from '../config/routes';
 import StudentTaskBoard from './StudentTaskBoard';
@@ -92,7 +91,8 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
         course: 'Loading...',
         year_level: '...',
         phone_number: 'Loading...',
-        assigned_office: 'Loading...'
+        assigned_office: 'Loading...',
+        supervisors: [] as string[]
     });
 
     const [history, setHistory] = useState<AttendanceRecord[]>([]);
@@ -135,7 +135,8 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                     course: user.profile?.course || 'Not Assigned',
                     year_level: user.profile?.year_level || 'N/A',
                     phone_number: user.phone_number || 'No Contact Provided',
-                    assigned_office: user.profile?.assigned_office || 'Not Assigned'
+                    assigned_office: user.profile?.assigned_office || 'Not Assigned',
+                    supervisors: Array.isArray(user.department_supervisors) ? user.department_supervisors : []
                 });
                 if (user.profile_picture) {
                     const path = normalizeFilePath(user.profile_picture);
@@ -254,7 +255,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
 
     const studentNavItems = [
         { id: 'dashboard', label: 'Dashboard', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /> },
-        { id: 'attendance', label: 'Attendance Log', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /> },
+        { id: 'attendance', label: 'Attendance / DTR', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /> },
         { id: 'assessment', label: 'Assessment', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 7h6m0 10v-3m-3 3v-6m-3 6v-9m6 13H6a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2z" /> },
         { id: 'schedule', label: 'My Schedule', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /> },
         { id: 'requirements', label: 'Requirements', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /> },
@@ -274,19 +275,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
     };
 
     return (
-        <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
-            
-            <div className="hidden print:block fixed inset-0 bg-white z-99999 overflow-visible">
-                <TimesheetPrintView 
-                    fullName={fullName} 
-                    studentProfile={studentProfile} 
-                    history={history} 
-                    totalHours={totalRenderedHours} 
-                    startDate={startDate} 
-                    endDate={endDate} 
-                />
-            </div>
-
+        <div className="flex h-screen bg-slate-50 overflow-hidden font-sans print:h-auto print:overflow-visible print:bg-white">
             <Sidebar 
                 isSidebarOpen={isSidebarOpen} 
                 setIsSidebarOpen={setIsSidebarOpen} 
@@ -297,8 +286,8 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                 userRole="Student"
             />
 
-            <div className="flex-1 flex flex-col overflow-hidden">
-                <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-6 shrink-0 relative z-50 shadow-sm">
+            <div className="flex-1 flex flex-col overflow-hidden print:overflow-visible print:h-auto">
+                <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-6 shrink-0 relative z-50 shadow-sm print:hidden">
                     <div className="flex items-center gap-4">
                         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors">
                             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
@@ -320,7 +309,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                     </div>
                 </header>
 
-                <main className="flex-1 overflow-y-auto p-4 sm:p-0 relative custom-scrollbar">
+                <main className="flex-1 overflow-y-auto p-4 sm:p-0 relative custom-scrollbar print:overflow-visible print:h-auto print:p-0">
                     <div className="max-w-6xl mx-auto space-y-6 sm:p-8">
                         
                         {message && (
@@ -680,6 +669,9 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                                 <div>
                                                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Assigned Office</label>
                                                     <input type="text" disabled value={studentProfile.assigned_office} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-bold opacity-80 cursor-not-allowed" />
+                                                    <p className="mt-2 text-xs font-semibold text-indigo-700">
+                                                        Supervisor: {studentProfile.supervisors.length > 0 ? studentProfile.supervisors.join(', ') : 'No supervisor assigned'}
+                                                    </p>
                                                 </div>
                                             </div>
                                         </motion.div>

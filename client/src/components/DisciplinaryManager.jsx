@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 
 const DisciplinaryManager = () => {
+    const currentUserRole = localStorage.getItem('user_role') || '';
+    const isCoordinator = currentUserRole === 'WSPO Staff' || currentUserRole === 'Super Admin';
     const [records, setRecords] = useState([]);
     const [students, setStudents] = useState([]);
     const [formData, setFormData] = useState({
@@ -69,7 +71,7 @@ const DisciplinaryManager = () => {
         e.preventDefault();
         setIsSubmitting(true);
         try {
-            await issueViolation(formData);
+            await issueViolation(isCoordinator ? formData : { ...formData, penalty_hours: 0, deduction_amount: 0 });
             setFormData({
                 student_id: '',
                 violation_type: 'Tardiness',
@@ -150,7 +152,7 @@ const DisciplinaryManager = () => {
                         Infraction Manager
                     </h1>
                     <p className="mt-2 text-slate-400 font-medium max-w-md">
-                        Issue official disciplinary actions, apply penalty hours, and manage ongoing student conduct cases.
+                        Issue official disciplinary actions{isCoordinator ? ', apply penalty hours,' : ''} and manage ongoing student conduct cases.
                     </p>
                 </div>
 
@@ -213,6 +215,17 @@ const DisciplinaryManager = () => {
                         </div>
 
                         <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Incident Description</label>
+                            <textarea
+                                required
+                                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:ring-2 focus:ring-red-500 focus:bg-white outline-none transition-all h-32 resize-none placeholder:text-slate-400"
+                                placeholder="Describe the incident in more detail..."
+                                value={formData.description}
+                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                            />
+                        </div>
+
+                        <div>
                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Incident Date</label>
                             <input
                                 required
@@ -238,6 +251,8 @@ const DisciplinaryManager = () => {
                             </select>
                         </div>
 
+                        {isCoordinator && (
+                        <>
                         <div>
                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Penalty Hours</label>
                             <div className="relative">
@@ -270,17 +285,8 @@ const DisciplinaryManager = () => {
                             </div>
                             <p className="text-[10px] text-slate-400 mt-1.5 font-medium">Optional fixed equivalent-value deduction applied during work-hour assessment.</p>
                         </div>
-
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Incident Description</label>
-                            <textarea
-                                required
-                                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:ring-2 focus:ring-red-500 focus:bg-white outline-none transition-all h-32 resize-none placeholder:text-slate-400"
-                                placeholder="Describe the incident in detail..."
-                                value={formData.description}
-                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                            />
-                        </div>
+                        </>
+                        )}
 
                         <button 
                             type="submit" 
@@ -362,20 +368,23 @@ const DisciplinaryManager = () => {
                                                 <span className="truncate max-w-[120px]">{record.student?.name || 'Unknown Student'}</span>
                                             </div>
                                             
-                                            {record.status !== 'Resolved' && (
+                                            {record.status !== 'Resolved' && record.status !== 'Dismissed' && (isCoordinator || record.status !== 'Pending Appeal') && (
                                                 <button 
                                                     onClick={() => setResolveModal(record)}
                                                     className="px-3 py-1.5 bg-slate-100 hover:bg-emerald-600 text-slate-700 hover:text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5"
                                                 >
-                                                    <Scale className="w-3.5 h-3.5" /> Resolve
+                                                    <Scale className="w-3.5 h-3.5" /> {record.status === 'Pending Appeal' ? 'Decide Appeal' : 'Resolve'}
                                                 </button>
+                                            )}
+                                            {!isCoordinator && record.status === 'Pending Appeal' && (
+                                                <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Awaiting coordinator</span>
                                             )}
                                         </div>
 
                                         {record.appeal_notes && (
                                             <div className="mt-4 p-3 bg-blue-50 rounded-xl border border-blue-100">
                                                 <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-1 flex items-center gap-1">
-                                                    <FileWarning className="w-3 h-3" /> Student Appeal
+                                                    <FileWarning className="w-3 h-3" /> Appeal to Coordinator
                                                 </p>
                                                 <p className="text-xs text-blue-800 font-medium italic">"{record.appeal_notes}"</p>
                                             </div>
@@ -424,7 +433,9 @@ const DisciplinaryManager = () => {
                             <div className="p-6 sm:p-8 space-y-4">
                                 <div>
                                     <p className="text-xs text-slate-500 font-medium mb-3">
-                                        Log official remarks regarding how this disciplinary issue was handled or dismissed.
+                                        {resolveModal.status === 'Pending Appeal'
+                                            ? 'The student appealed this case to the WSPO coordinator. Log the official decision below.'
+                                            : 'Log official remarks regarding how this disciplinary issue was handled or dismissed.'}
                                     </p>
                                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Resolution Remarks</label>
                                     <textarea

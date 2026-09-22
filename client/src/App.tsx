@@ -153,7 +153,7 @@ function App() {
   const currentPath = firstPathSegment(location.pathname) || 'dashboard';
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden font-sans selection:bg-blue-200 selection:text-blue-900">
+    <div className="flex h-screen bg-slate-50 overflow-hidden font-sans selection:bg-blue-200 selection:text-blue-900 print:h-auto print:overflow-visible print:bg-white">
       
       <Sidebar 
         isSidebarOpen={isSidebarOpen} 
@@ -164,10 +164,10 @@ function App() {
         userRole={userRole}
       />
 
-      <div className="flex-1 flex flex-col overflow-hidden relative">
+      <div className="flex-1 flex flex-col overflow-hidden relative print:overflow-visible print:h-auto">
         
         {/* TOP NAVIGATION HEADER */}
-        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-6 sm:px-8 z-40 sticky top-0 shadow-sm">
+        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-6 sm:px-8 z-40 sticky top-0 shadow-sm print:hidden">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
@@ -206,16 +206,16 @@ function App() {
         </header>
 
         {/* MAIN CONTENT AREA */}
-        <main className="flex-1 overflow-y-auto relative custom-scrollbar">
+        <main className="flex-1 overflow-y-auto relative custom-scrollbar print:overflow-visible print:h-auto">
           {/* Subtle background texture for the entire admin area */}
-          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-[0.02] pointer-events-none z-0"></div>
+          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-[0.02] pointer-events-none z-0 print:hidden"></div>
           
           <div className="relative z-10">
             <AnimatePresence mode="wait">
               <Routes>
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<AdminDashboard />} />
-                <Route path="/attendance" element={<AttendanceMonitor />} />
+                <Route path="/attendance" element={<AttendanceMonitor userRole={userRole} />} />
                 <Route path="/schedules" element={<ScheduleManagement />} />
                 <Route path="/requirements" element={<RequirementManagement />} />
                 <Route path="/pipeline" element={<ApplicationManager />} />

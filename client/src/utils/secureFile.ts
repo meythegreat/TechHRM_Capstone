@@ -24,7 +24,7 @@ export function normalizeFilePath(filePath: string | null | undefined): string |
         return decodeURIComponent(storageMatch[1]);
     }
 
-    if (trimmed.startsWith('avatars/') || trimmed.startsWith('requirements/')) {
+    if (trimmed.startsWith('avatars/') || trimmed.startsWith('requirements/') || trimmed.startsWith('application-documents/')) {
         return trimmed;
     }
 

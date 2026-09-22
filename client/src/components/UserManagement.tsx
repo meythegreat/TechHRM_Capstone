@@ -27,7 +27,7 @@ const FCU_DEPARTMENTS = [
 ];
 
 const UNIVERSITY_OFFICES = [
-    "University President", "Quality Assurance", "Human Resource Development Center", "Office of the Student Affairs", "University Chaplain", "Alumni Affairs", "Administration", "Buildings & Grounds", "Pollution Control", "Security Office", "Safety and Disaster Management", "Sports", "Socio-Cultural", "WSPO", "Health Services", "General Services", "Mass Media", "ICT Services Office", "Higher Education Laboratory", "Academic Affairs", "Graduate School", "College of Arts and Sciences", "College of Business and Accountancy", "College of Computer Studies", "College of Criminal Justice Education", "College of Electronic Engineering", "College of Hospitality and Tourism Management", "College of Nursing", "College of Teacher Education", "Kindergarten/Elementary", "High School", "University Registrar", "Libraries", "Guidance & Counselling Center", "NSTP", "REIID", "International Program Office", "Community Extension", "Research", "Finance", "Accounting/Budget", "Business Management", "Property Custodian", "University Enterprise"
+    "University President", "Quality Assurance", "Human Resource Development Center", "Office of the Student Affairs", "University Chaplain", "Alumni Affairs", "VP-Administration", "Superintendent Buildings & Grounds / Officer Pollution Control", "Security Office", "Safety and Disaster Management", "Sports", "Socio-Cultural", "WSPO", "Health Services", "General Services", "Mass Media", "ICT Services Office", "Higher Education Laboratory", "VP-Academic Affairs", "Graduate School", "College of Arts and Sciences", "College of Business and Accountancy", "College of Computer Studies", "College of Criminal Justice Education", "College of Electronic Engineering", "College of Hospitality and Tourism Management", "College of Nursing", "College of Teacher Education", "Kindergarten/Elementary", "High School", "University Registrar", "Director of Libraries", "Guidance & Counselling Center", "NSTP", "VP-REIID", "International Program Office", "Community Extension", "Research", "VP-Finance", "Accountant/Budget Officer", "Business Manager", "Property Custodian", "University Enterprise"
 ];
 
 interface UserRecord {
@@ -38,15 +38,20 @@ interface UserRecord {
   phone_number?: string;
   created_at: string;
   deleted_at?: string | null;
+  department_supervisors?: string[];
   profile?: {
     student_id_number?: string;
     assigned_office?: string;
+    supervised_departments?: string[];
     course?: string;
     year_level?: number;
     duty_type?: 'Clerical' | 'Janitorial' | 'Request';
     duty_request?: string | null;
+    gender?: string | null;
   };
 }
+
+const GENDERS = ['Male', 'Female'];
 
 const UserManagement = () => {
   const currentUserRole = localStorage.getItem("user_role") || "";
@@ -68,6 +73,7 @@ const UserManagement = () => {
   const [copiedField, setCopiedField] = useState<'username' | 'password' | null>(null);
 
   const [showPassword, setShowPassword] = useState(false);
+  const [departmentSupervisors, setDepartmentSupervisors] = useState<Record<string, string[]>>({});
 
   const [formData, setFormData] = useState({
     prefix: "",
@@ -82,8 +88,10 @@ const UserManagement = () => {
     course: "",
     year_level: "",
     assigned_office: "",
+    supervised_departments: [] as string[],
     duty_type: "Clerical",
     duty_request: "",
+    gender: "",
   });
 
   useEffect(() => {
@@ -93,6 +101,18 @@ const UserManagement = () => {
     }, 500);
     return () => clearTimeout(handler);
   }, [searchQuery]);
+
+  useEffect(() => {
+    axios.get('/api/department-supervisors')
+      .then((response) => setDepartmentSupervisors(response.data || {}))
+      .catch(() => setDepartmentSupervisors({}));
+  }, []);
+
+  const supervisorLabelForOffice = (office?: string) => {
+    if (!office) return 'No supervisor assigned';
+    const names = departmentSupervisors[office] || [];
+    return names.length > 0 ? names.join(', ') : 'No supervisor assigned';
+  };
 
   const showToast = (text: string, type: "success" | "error") => {
     setToastMsg({ text, type });
@@ -126,6 +146,29 @@ const UserManagement = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const toggleSupervisedDepartment = (department: string) => {
+    setFormData((current) => ({
+      ...current,
+      supervised_departments: current.supervised_departments.includes(department)
+        ? current.supervised_departments.filter((item) => item !== department)
+        : [...current.supervised_departments, department],
+    }));
+  };
+
+  // Prefixes and middle initials are abbreviations in the saved display name.
+  // Strip any entered trailing dots first so the result always contains exactly one.
+  const normalizeAbbreviation = (value: string) => {
+    const abbreviation = value.trim().replace(/\.+$/, '');
+    return abbreviation ? `${abbreviation}.` : '';
+  };
+
+  const handleAbbreviationBlur = (field: 'prefix' | 'middle_initial') => {
+    setFormData((current) => ({
+      ...current,
+      [field]: normalizeAbbreviation(current[field]),
+    }));
+  };
+
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value.replace(/[^0-9]/g, '');
     if (val.length <= 10) {
@@ -139,13 +182,13 @@ const UserManagement = () => {
       if (parts.length === 0) return { prefix, first_name, middle_initial, last_name };
 
       const prefixes = ["Mr.", "Ms.", "Mrs.", "Dr.", "Atty.", "Engr.", "Prof."];
-      if (prefixes.includes(parts[0]) || parts[0].endsWith('.')) prefix = parts.shift() || "";
+      if (prefixes.includes(parts[0]) || parts[0].endsWith('.')) prefix = normalizeAbbreviation(parts.shift() || "");
       if (parts.length > 0) last_name = parts.pop() || "";
 
       if (parts.length > 0) {
           const miCandidate = parts[parts.length - 1];
-          if (miCandidate.length === 1 || (miCandidate.length === 2 && miCandidate.endsWith('.'))) {
-              middle_initial = parts.pop()?.replace('.', '') || "";
+          if (/^[\p{L}]\.*$/u.test(miCandidate)) {
+              middle_initial = normalizeAbbreviation(parts.pop() || "");
           }
       }
       first_name = parts.join(" ");
@@ -170,7 +213,9 @@ const UserManagement = () => {
     e.preventDefault();
     setIsSubmitting(true);
 
-    const combinedName = `${formData.prefix ? formData.prefix + ' ' : ''}${formData.first_name} ${formData.middle_initial ? formData.middle_initial + '. ' : ''}${formData.last_name}`.replace(/\s+/g, ' ').trim();
+    const prefix = normalizeAbbreviation(formData.prefix);
+    const middleInitial = normalizeAbbreviation(formData.middle_initial);
+    const combinedName = `${prefix ? prefix + ' ' : ''}${formData.first_name} ${middleInitial ? middleInitial + ' ' : ''}${formData.last_name}`.replace(/\s+/g, ' ').trim();
 
     try {
       if (editingUserId) {
@@ -178,9 +223,11 @@ const UserManagement = () => {
             name: combinedName,
             phone_number: formData.phone_number ? `+63${formData.phone_number}` : '',
             role: formData.role,
-            assigned_office: formData.assigned_office
+            assigned_office: formData.assigned_office,
+            supervised_departments: formData.role === 'Supervisor' ? formData.supervised_departments : undefined
             , duty_type: formData.duty_type
             , duty_request: formData.duty_request
+            , gender: formData.gender || null
         };
         // Add password payload ONLY if admin typed a new one to reset it
         if (formData.password) {
@@ -206,9 +253,11 @@ const UserManagement = () => {
             password: genPass,
             phone_number: formData.phone_number ? `+63${formData.phone_number}` : '',
             role: formData.role,
-            assigned_office: formData.assigned_office
+            assigned_office: formData.assigned_office,
+            supervised_departments: formData.role === 'Supervisor' ? formData.supervised_departments : undefined
             , duty_type: formData.duty_type
             , duty_request: formData.duty_request
+            , gender: formData.gender || null
         };
         if (formData.role === 'Student') {
             payload.student_id_number = formData.student_id_number;
@@ -222,9 +271,16 @@ const UserManagement = () => {
         setGeneratedCredentials({ name: combinedName, username: genUser, password: genPass });
       }
       fetchUsers(currentPage);
+      axios.get('/api/department-supervisors')
+        .then((response) => setDepartmentSupervisors(response.data || {}))
+        .catch(() => {});
     } catch (error: any) {
       console.error("Error saving user:", error);
-      showToast(error.response?.data?.message || "Failed to save user details.", "error");
+      const validationError = Object.values(error.response?.data?.errors || {}).flat()[0];
+      showToast(
+        error.response?.data?.message || (typeof validationError === "string" ? validationError : null) || "Failed to save user details.",
+        "error"
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -234,8 +290,10 @@ const UserManagement = () => {
     if (!confirm('Are you sure you want to completely remove this user from the system?')) return;
     try {
       await axios.delete(`/api/users/${id}`);
+      setUsers((current) => current.filter((user) => user.id !== id));
       showToast("User deleted successfully.", "success");
-      fetchUsers(currentPage);
+      const nextPage = users.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage;
+      fetchUsers(nextPage);
     } catch (error: any) {
       showToast(error.response?.data?.message || "Failed to delete user.", "error");
     }
@@ -254,8 +312,10 @@ const UserManagement = () => {
       course: user.profile?.course || "",
       year_level: user.profile?.year_level?.toString() || "",
       assigned_office: user.profile?.assigned_office || "",
+      supervised_departments: user.profile?.supervised_departments || (user.role === 'Supervisor' && user.profile?.assigned_office ? [user.profile.assigned_office] : []),
       duty_type: user.profile?.duty_type || "Clerical",
       duty_request: user.profile?.duty_request || "",
+      gender: user.profile?.gender || "",
     });
     setIsModalOpen(true);
   };
@@ -265,7 +325,7 @@ const UserManagement = () => {
     setFormData({
       prefix: "", first_name: "", middle_initial: "", last_name: "",
       username: "", password: "", phone_number: "", role: "Student",
-      student_id_number: "", course: "", year_level: "", assigned_office: "", duty_type: "Clerical", duty_request: "",
+      student_id_number: "", course: "", year_level: "", assigned_office: "", supervised_departments: [], duty_type: "Clerical", duty_request: "", gender: "",
     });
     setIsModalOpen(true);
   };
@@ -383,11 +443,12 @@ const UserManagement = () => {
                                       {user.role === 'Student' ? (
                                           <div>
                                               <p className="text-sm font-bold text-slate-800">{user.profile?.assigned_office || 'No Office Assigned'}</p>
-                                              <p className="text-xs font-medium text-slate-500 mt-1">ID: {user.profile?.student_id_number || 'N/A'}</p>
+                                              <p className="text-xs font-medium text-slate-500 mt-1">ID: {user.profile?.student_id_number || 'N/A'}{user.profile?.gender ? ` · ${user.profile.gender}` : ''}</p>
+                                              <p className="text-xs font-semibold text-indigo-700 mt-1">Supervisor: {(user.department_supervisors && user.department_supervisors.length > 0) ? user.department_supervisors.join(', ') : supervisorLabelForOffice(user.profile?.assigned_office)}</p>
                                           </div>
                                       ) : user.role === 'Supervisor' || user.role === 'WSPO Staff' ? (
                                           <div>
-                                              <p className="text-sm font-bold text-slate-800">{user.profile?.assigned_office || 'Central Office'}</p>
+                                              <p className="text-sm font-bold text-slate-800">{user.profile?.supervised_departments?.join(', ') || user.profile?.assigned_office || 'Central Office'}</p>
                                               <p className="text-xs font-medium text-slate-400 mt-1 italic">Administrative Staff</p>
                                           </div>
                                       ) : (
@@ -516,7 +577,7 @@ const UserManagement = () => {
 
                     <div className="sm:col-span-3">
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Prefix</label>
-                        <input name="prefix" value={formData.prefix} onChange={handleInputChange} placeholder="e.g. Mr, Dr." className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all placeholder:text-slate-400" />
+                        <input name="prefix" value={formData.prefix} onChange={handleInputChange} onBlur={() => handleAbbreviationBlur('prefix')} placeholder="e.g. Mr. or Dr." className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all placeholder:text-slate-400" />
                     </div>
 
                     <div className="sm:col-span-5">
@@ -526,12 +587,20 @@ const UserManagement = () => {
 
                     <div className="sm:col-span-4">
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">M.I.</label>
-                        <input name="middle_initial" value={formData.middle_initial} onChange={handleInputChange} placeholder="D." maxLength={2} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all placeholder:text-slate-400" />
+                        <input name="middle_initial" value={formData.middle_initial} onChange={handleInputChange} onBlur={() => handleAbbreviationBlur('middle_initial')} placeholder="D." maxLength={2} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all placeholder:text-slate-400" />
                     </div>
 
                     <div className="sm:col-span-6">
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Last Name *</label>
                         <input required name="last_name" value={formData.last_name} onChange={handleInputChange} placeholder="Dela Cruz" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all placeholder:text-slate-400" />
+                    </div>
+
+                    <div className="sm:col-span-6">
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Gender *</label>
+                        <select required={formData.role !== 'Super Admin'} name="gender" value={formData.gender} onChange={handleInputChange} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all appearance-none cursor-pointer">
+                            <option value="">-- Select gender --</option>
+                            {GENDERS.map((gender) => <option key={gender} value={gender}>{gender}</option>)}
+                        </select>
                     </div>
 
                     <div className="sm:col-span-6">
@@ -571,6 +640,11 @@ const UserManagement = () => {
                             <option value="">-- Select Assigned Office / Dept --</option>
                             {UNIVERSITY_OFFICES.map(dept => <option key={`office-${dept}`} value={dept}>{dept}</option>)}
                           </select>
+                          {formData.assigned_office && (
+                            <p className="mt-2 text-xs font-semibold text-indigo-700">
+                              Supervisor: {supervisorLabelForOffice(formData.assigned_office)}
+                            </p>
+                          )}
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Course / Degree</label>
@@ -613,16 +687,24 @@ const UserManagement = () => {
 
                     {formData.role === "Supervisor" && (
                       <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Supervised Department</label>
-                        <select
-                            name="assigned_office"
-                            value={formData.assigned_office}
-                            onChange={handleInputChange}
-                            className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all appearance-none cursor-pointer"
-                        >
-                            <option value="">-- Select Supervised Department --</option>
-                            {UNIVERSITY_OFFICES.map(dept => <option key={`sup-${dept}`} value={dept}>{dept}</option>)}
-                        </select>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Supervised Departments</label>
+                        <p className="text-xs text-slate-500 mb-3">Select every department this supervisor manages.</p>
+                        <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 divide-y divide-slate-100">
+                          {UNIVERSITY_OFFICES.map((dept) => (
+                            <label key={`sup-${dept}`} className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-white transition-colors">
+                              <input
+                                type="checkbox"
+                                checked={formData.supervised_departments.includes(dept)}
+                                onChange={() => toggleSupervisedDepartment(dept)}
+                                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600"
+                              />
+                              <span className="text-sm font-bold text-slate-700">{dept}</span>
+                            </label>
+                          ))}
+                        </div>
+                        {formData.supervised_departments.length > 0 && (
+                          <p className="mt-2 text-xs font-semibold text-indigo-700">{formData.supervised_departments.length} department{formData.supervised_departments.length === 1 ? '' : 's'} selected</p>
+                        )}
                       </div>
                     )}
 

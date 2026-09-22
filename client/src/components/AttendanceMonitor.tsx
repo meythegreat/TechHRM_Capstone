@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { 
@@ -9,8 +10,26 @@ import {
     User,
     Check,
     FileBox,
-    ShieldCheck
+    ShieldCheck,
+    Printer,
+    CalendarRange,
+    Eye,
+    X
 } from 'lucide-react';
+import TimesheetPrintView from './TimesheetPrintView';
+
+const padMonth = (n: number) => String(n).padStart(2, '0');
+const currentYearMonth = () => {
+    const today = new Date();
+    return `${today.getFullYear()}-${padMonth(today.getMonth() + 1)}`;
+};
+const monthBounds = (yearMonth: string) => {
+    const [year, month] = yearMonth.split('-').map(Number);
+    const start = `${yearMonth}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const end = `${yearMonth}-${padMonth(lastDay)}`;
+    return { start, end };
+};
 
 interface AttendanceRecord {
     id: number;
@@ -21,23 +40,120 @@ interface AttendanceRecord {
     task_description: string | null;
     status: string; // pending or approved
     user: {
+        id?: number;
         name: string;
-        profile: {
-            assigned_office: string;
-            student_id_number: string;
-        }
+        profile?: {
+            assigned_office?: string;
+            student_id_number?: string;
+        } | null;
     }
 }
 
-const AttendanceMonitor = () => {
+interface StudentOption {
+    id: number;
+    name: string;
+    profile?: {
+        assigned_office?: string | null;
+        student_id_number?: string | null;
+        course?: string | null;
+        year_level?: string | number | null;
+    } | null;
+}
+
+interface StudentDtrLog {
+    id: number;
+    time_in: string;
+    time_out: string | null;
+    rendered_hours?: number | string | null;
+    computed_hours?: number | string | null;
+    work_type?: string | null;
+    attendance_type?: string | null;
+    task_description?: string | null;
+    status?: string | null;
+}
+
+interface AttendanceMonitorProps {
+    userRole?: string | null;
+}
+
+const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
+    const canApprove = userRole === 'Supervisor';
+    const canViewStudentDtr = userRole === 'Supervisor' || userRole === 'WSPO Staff' || userRole === 'Super Admin';
     const [records, setRecords] = useState<AttendanceRecord[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [filterDate, setFilterDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [toastMsg, setToastMsg] = useState<{text: string, type: 'success'|'error'} | null>(null);
+    const [students, setStudents] = useState<StudentOption[]>([]);
+    const [studentSearch, setStudentSearch] = useState('');
+    const [selectedStudentId, setSelectedStudentId] = useState<string>('');
+    const [dtrMonth, setDtrMonth] = useState(currentYearMonth());
+    const [dtrHistory, setDtrHistory] = useState<StudentDtrLog[]>([]);
+    const [dtrStudentName, setDtrStudentName] = useState('');
+    const [dtrProfile, setDtrProfile] = useState({
+        student_id_number: '',
+        course: '',
+        year_level: '',
+        assigned_office: '',
+        duty_type: '',
+        supervisors: [] as string[],
+    });
+    const [dtrLoading, setDtrLoading] = useState(false);
+    const [dtrPreviewOpen, setDtrPreviewOpen] = useState(false);
+    const [dtrReloadKey, setDtrReloadKey] = useState(0);
+    const { start: dtrStart, end: dtrEnd } = monthBounds(dtrMonth);
 
     useEffect(() => {
         fetchAttendance();
     }, [filterDate]);
+
+    useEffect(() => {
+        if (!canViewStudentDtr) return;
+        axios.get('/api/personnel')
+            .then((response) => {
+                const list = Array.isArray(response.data) ? response.data : [];
+                setStudents(list);
+                if (list.length > 0 && !selectedStudentId) {
+                    setSelectedStudentId(String(list[0].id));
+                }
+            })
+            .catch((error) => {
+                console.error('Failed to load students for DTR', error);
+            });
+    }, [canViewStudentDtr]);
+
+    useEffect(() => {
+        if (!canViewStudentDtr || !selectedStudentId) {
+            setDtrHistory([]);
+            return;
+        }
+        const loadStudentDtr = async () => {
+            setDtrLoading(true);
+            try {
+                const response = await axios.get(`/api/attendance/student/${selectedStudentId}`, {
+                    params: { start: dtrStart, end: dtrEnd },
+                });
+                const payload = response.data;
+                const student = payload.student;
+                setDtrHistory(Array.isArray(payload.history) ? payload.history : []);
+                setDtrStudentName(student?.name || 'Student');
+                setDtrProfile({
+                    student_id_number: student?.profile?.student_id_number || 'Not Assigned',
+                    course: student?.profile?.course || 'Not Assigned',
+                    year_level: student?.profile?.year_level != null ? String(student.profile.year_level) : 'N/A',
+                    assigned_office: student?.profile?.assigned_office || 'Unassigned',
+                    duty_type: student?.profile?.duty_type || '',
+                    supervisors: Array.isArray(student?.department_supervisors) ? student.department_supervisors : [],
+                });
+            } catch (error) {
+                console.error('Failed to load student DTR', error);
+                setToastMsg({ text: 'Failed to load student DTR.', type: 'error' });
+                setTimeout(() => setToastMsg(null), 3000);
+            } finally {
+                setDtrLoading(false);
+            }
+        };
+        loadStudentDtr();
+    }, [canViewStudentDtr, selectedStudentId, dtrStart, dtrEnd, dtrReloadKey]);
 
     const fetchAttendance = async () => {
         setIsLoading(true);
@@ -52,14 +168,18 @@ const AttendanceMonitor = () => {
         }
     };
 
-    const handleApprove = async (id: number) => {
+    const handleDecision = async (id: number, status: 'accepted' | 'rejected') => {
         try {
-            await axios.patch(`/api/attendance/${id}/approve`);
-            setToastMsg({ text: "Hours approved successfully!", type: 'success' });
-            fetchAttendance(); // Refresh to show new status
+            await axios.patch(`/api/attendance/${id}/approve`, { status });
+            setToastMsg({ text: status === 'accepted' ? 'Hours approved by supervisor.' : 'Hours rejected by supervisor.', type: 'success' });
+            fetchAttendance();
+            setDtrReloadKey((key) => key + 1);
         } catch (error) {
             console.error(error);
-            setToastMsg({ text: "Failed to approve hours.", type: 'error' });
+            const message = axios.isAxiosError(error)
+                ? error.response?.data?.message
+                : null;
+            setToastMsg({ text: message || 'Failed to update the timesheet.', type: 'error' });
         }
         setTimeout(() => setToastMsg(null), 3000);
     };
@@ -70,9 +190,49 @@ const AttendanceMonitor = () => {
         return new Date(timeString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
 
-    const formatHours = (hours: number | string | null) => {
+    const formatHours = (hours: number | string | null | undefined) => {
         if (!hours) return '0.00';
         return Number(hours).toFixed(2);
+    };
+
+    const hoursFor = (log: StudentDtrLog) => Number(log.computed_hours || log.rendered_hours || 0);
+    const dtrTotalHours = dtrHistory.reduce((sum, log) => sum + hoursFor(log), 0);
+
+    const filteredStudents = useMemo(() => {
+        const term = studentSearch.trim().toLowerCase();
+        if (!term) return students;
+        return students.filter((student) => {
+            const haystack = [
+                student.name,
+                student.profile?.student_id_number,
+                student.profile?.assigned_office,
+            ].join(' ').toLowerCase();
+            return haystack.includes(term);
+        });
+    }, [students, studentSearch]);
+
+    useEffect(() => {
+        if (!canViewStudentDtr || filteredStudents.length === 0) return;
+        const stillVisible = filteredStudents.some((student) => String(student.id) === selectedStudentId);
+        if (!stillVisible) {
+            setSelectedStudentId(String(filteredStudents[0].id));
+        }
+    }, [canViewStudentDtr, filteredStudents, selectedStudentId]);
+
+    const openStudentDtr = (userId?: number, timeIn?: string, preview = true) => {
+        if (!canViewStudentDtr || !userId) return;
+        setSelectedStudentId(String(userId));
+        if (timeIn) {
+            const date = new Date(timeIn);
+            if (!Number.isNaN(date.getTime())) {
+                setDtrMonth(`${date.getFullYear()}-${padMonth(date.getMonth() + 1)}`);
+            }
+        }
+        if (preview) {
+            setDtrPreviewOpen(true);
+        } else {
+            document.getElementById('student-dtr-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
     };
 
     // STRICT TYPESCRIPT VARIANTS
@@ -90,7 +250,20 @@ const AttendanceMonitor = () => {
     };
 
     return (
-        <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-8 font-sans">
+        <>
+        {canViewStudentDtr && selectedStudentId && (
+            <div className="dtr-print-page hidden print:flex" aria-hidden="true">
+                <TimesheetPrintView
+                    fullName={dtrStudentName}
+                    studentProfile={dtrProfile}
+                    history={dtrHistory}
+                    totalHours={dtrTotalHours}
+                    startDate={dtrStart}
+                    endDate={dtrEnd}
+                />
+            </div>
+        )}
+        <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-8 font-sans print:hidden">
             
             {/* DARK THEME HEADER - ATTENDANCE MONITOR */}
             <motion.div 
@@ -111,7 +284,9 @@ const AttendanceMonitor = () => {
                         Attendance Monitor
                     </h1>
                     <p className="mt-2 text-slate-400 font-medium max-w-md">
-                        Review and approve daily timesheets for your assigned student workers to verify their actual rendered hours.
+                        {canApprove
+                            ? 'See the working students in your department, open each DTR, and accept or reject hours after they time out.'
+                            : 'Review daily timesheets and open the official monthly DTR for any working student to view or print.'}
                     </p>
                 </div>
 
@@ -209,15 +384,25 @@ const AttendanceMonitor = () => {
                                         <td className="px-6 py-5 align-top">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-black shrink-0 border border-blue-100 shadow-inner">
-                                                    {record.user.name.charAt(0)}
+                                                    {(record.user.name || '?').charAt(0)}
                                                 </div>
                                                 <div>
                                                     <p className="text-sm font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
                                                         {record.user.name}
                                                     </p>
                                                     <p className="text-xs font-medium text-slate-500 flex items-center gap-1 mt-0.5">
-                                                        <User className="w-3 h-3 text-slate-400" /> {record.user.profile.student_id_number}
+                                                        <User className="w-3 h-3 text-slate-400" /> {record.user.profile?.student_id_number || 'No ID'}
                                                     </p>
+                                                    {canViewStudentDtr && record.user.id && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openStudentDtr(record.user.id, record.time_in)}
+                                                            className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-[11px] font-bold uppercase tracking-wider"
+                                                        >
+                                                            <Eye className="w-3 h-3" />
+                                                            View DTR
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         </td>
@@ -251,21 +436,47 @@ const AttendanceMonitor = () => {
                                                 </div>
 
                                                 {/* Action Button / Status */}
-                                                {record.status === 'approved' ? (
+                                                {['approved', 'accepted'].includes(String(record.status).toLowerCase()) ? (
                                                     <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold shadow-sm">
                                                         <CheckCircle2 className="w-4 h-4" />
-                                                        APPROVED
+                                                        Accepted
                                                     </span>
+                                                ) : String(record.status).toLowerCase() === 'rejected' ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-700 border border-red-200 rounded-lg text-xs font-bold shadow-sm">
+                                                        <X className="w-4 h-4" />
+                                                        Rejected
+                                                    </span>
+                                                ) : !record.time_out ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-slate-600 border border-slate-200 rounded-lg text-xs font-bold shadow-sm">
+                                                        <Clock className="w-4 h-4" />
+                                                        Awaiting time out
+                                                    </span>
+                                                ) : canApprove ? (
+                                                    <div className="flex items-center gap-1.5">
+                                                        <motion.button
+                                                            whileHover={{ scale: 1.02 }}
+                                                            whileTap={{ scale: 0.95 }}
+                                                            onClick={() => handleDecision(record.id, 'accepted')}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-colors"
+                                                        >
+                                                            <Check className="w-4 h-4" />
+                                                            Accept
+                                                        </motion.button>
+                                                        <motion.button
+                                                            whileHover={{ scale: 1.02 }}
+                                                            whileTap={{ scale: 0.95 }}
+                                                            onClick={() => handleDecision(record.id, 'rejected')}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-red-50 text-red-700 border border-red-200 rounded-lg text-xs font-bold shadow-sm transition-colors"
+                                                        >
+                                                            <X className="w-4 h-4" />
+                                                            Reject
+                                                        </motion.button>
+                                                    </div>
                                                 ) : (
-                                                    <motion.button 
-                                                        whileHover={{ scale: 1.02 }}
-                                                        whileTap={{ scale: 0.95 }}
-                                                        onClick={() => handleApprove(record.id)}
-                                                        className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold shadow-sm shadow-amber-500/20 transition-colors"
-                                                    >
-                                                        <Check className="w-4 h-4" />
-                                                        Approve
-                                                    </motion.button>
+                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-xs font-bold shadow-sm">
+                                                        <AlertCircle className="w-4 h-4" />
+                                                        Awaiting supervisor
+                                                    </span>
                                                 )}
                                             </div>
                                         </td>
@@ -276,7 +487,207 @@ const AttendanceMonitor = () => {
                     </table>
                 </div>
             </div>
+
+            {canViewStudentDtr && (
+                <div id="student-dtr-panel" className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col xl:flex-row xl:items-end justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <CalendarRange className="w-5 h-5 text-slate-400" />
+                            <div>
+                                <h3 className="text-lg font-extrabold text-slate-900">Student Daily Time Record</h3>
+                                <p className="text-xs font-medium text-slate-500">
+                                    {canApprove
+                                        ? 'Working students assigned to your department. Choose one to view or print their official WSPO DTR.'
+                                        : 'Select any working student and month to view or print their official WSPO DTR.'}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3 w-full xl:w-auto">
+                            <input
+                                type="search"
+                                value={studentSearch}
+                                onChange={(e) => setStudentSearch(e.target.value)}
+                                placeholder="Search student or ID"
+                                className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-600"
+                            />
+                            <select
+                                value={selectedStudentId}
+                                onChange={(e) => setSelectedStudentId(e.target.value)}
+                                className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-600"
+                            >
+                                {filteredStudents.length === 0 ? (
+                                    <option value="">No students found</option>
+                                ) : (
+                                    filteredStudents.map((student) => (
+                                        <option key={student.id} value={student.id}>
+                                            {student.name}{student.profile?.student_id_number ? ` · ${student.profile.student_id_number}` : ''}
+                                        </option>
+                                    ))
+                                )}
+                            </select>
+                            <input
+                                type="month"
+                                value={dtrMonth}
+                                onChange={(e) => setDtrMonth(e.target.value)}
+                                className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-600"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setDtrPreviewOpen(true)}
+                                disabled={!selectedStudentId}
+                                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-900 border border-slate-200 text-sm font-bold rounded-xl shadow-sm transition-colors"
+                            >
+                                <Eye className="w-4 h-4" />
+                                View DTR
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => window.print()}
+                                disabled={!selectedStudentId}
+                                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-sm font-bold rounded-xl shadow-sm transition-colors"
+                            >
+                                <Printer className="w-4 h-4" />
+                                Print DTR
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="px-6 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <p className="text-sm font-black text-slate-900">{dtrStudentName || 'Select a student'}</p>
+                            <p className="text-xs font-medium text-slate-500">
+                                {dtrProfile.student_id_number} · {dtrProfile.assigned_office}
+                            </p>
+                        </div>
+                        {dtrLoading && (
+                            <span className="text-xs font-bold text-blue-700 animate-pulse">Loading DTR...</span>
+                        )}
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="bg-slate-900 text-white">
+                                    <th className="px-4 py-3 text-left font-bold uppercase tracking-wider text-xs">Date</th>
+                                    <th className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs">Time In</th>
+                                    <th className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs">Time Out</th>
+                                    <th className="px-4 py-3 text-left font-bold uppercase tracking-wider text-xs">Duty</th>
+                                    <th className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs">Status</th>
+                                    <th className="px-4 py-3 text-right font-bold uppercase tracking-wider text-xs">Hours</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {dtrHistory.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={6} className="px-4 py-12 text-center text-slate-500 font-medium">
+                                            {selectedStudentId ? 'No DTR records found for this period.' : 'Choose a student to view their DTR.'}
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    dtrHistory.map((log) => (
+                                        <tr key={log.id} className="border-t border-slate-100 hover:bg-slate-50">
+                                            <td className="px-4 py-3 font-bold text-slate-900 whitespace-nowrap">
+                                                {log.time_in ? new Date(log.time_in).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                                            </td>
+                                            <td className="px-4 py-3 text-center font-mono text-slate-700">
+                                                {log.time_in ? new Date(log.time_in).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '--:--'}
+                                            </td>
+                                            <td className="px-4 py-3 text-center font-mono text-slate-700">
+                                                {log.time_out ? new Date(log.time_out).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '--:--'}
+                                            </td>
+                                            <td className="px-4 py-3 text-slate-700">
+                                                {log.work_type || log.attendance_type || 'Regular Duty'}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                                <span className={`inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${['approved', 'accepted'].includes(String(log.status).toLowerCase()) ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : String(log.status).toLowerCase() === 'rejected' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+                                                    {['approved', 'accepted'].includes(String(log.status).toLowerCase()) ? 'Accepted' : String(log.status).toLowerCase() === 'rejected' ? 'Rejected' : (log.time_out ? 'Pending' : 'Timed in')}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-right font-black font-mono text-slate-900">
+                                                {hoursFor(log).toFixed(2)}
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                            <tfoot>
+                                <tr className="bg-slate-50 border-t border-slate-200">
+                                    <td colSpan={5} className="px-4 py-3 text-right font-black uppercase tracking-wider text-xs text-slate-600">Total Hours</td>
+                                    <td className="px-4 py-3 text-right font-black font-mono text-slate-900">{dtrTotalHours.toFixed(2)}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            )}
         </div>
+
+        {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+            {canViewStudentDtr && dtrPreviewOpen && (
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 z-80 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 print:hidden"
+                    onClick={() => setDtrPreviewOpen(false)}
+                >
+                    <motion.div
+                        initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 16, scale: 0.98 }}
+                        className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-3 shrink-0">
+                            <div>
+                                <p className="text-sm font-black text-slate-900">Official WSPO DTR</p>
+                                <p className="text-xs font-medium text-slate-500">
+                                    {dtrStudentName} · {dtrProfile.student_id_number}
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => window.print()}
+                                    className="inline-flex items-center gap-2 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl"
+                                >
+                                    <Printer className="w-4 h-4" />
+                                    Print DTR
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setDtrPreviewOpen(false)}
+                                    className="p-2 rounded-xl text-slate-500 hover:bg-slate-100"
+                                    aria-label="Close DTR preview"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="overflow-y-auto bg-slate-100 p-4">
+                            {dtrLoading ? (
+                                <p className="text-center text-sm font-bold text-blue-700 py-16 animate-pulse">Loading DTR...</p>
+                            ) : (
+                                <div className="bg-white shadow-sm mx-auto w-fit max-w-full">
+                                    <TimesheetPrintView
+                                        fullName={dtrStudentName}
+                                        studentProfile={dtrProfile}
+                                        history={dtrHistory}
+                                        totalHours={dtrTotalHours}
+                                        startDate={dtrStart}
+                                        endDate={dtrEnd}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    </motion.div>
+                </motion.div>
+            )}
+        </AnimatePresence>,
+        document.body
+        )}
+        </>
     );
 };
 
