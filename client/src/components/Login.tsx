@@ -52,9 +52,9 @@ const Login = ({ onLoginSuccess, onNavigateToApply }: LoginProps) => {
     };
 
     return (
-        <div className="flex min-h-screen bg-slate-50 font-sans overflow-hidden selection:bg-blue-200 selection:text-blue-900">
+        <div className="flex min-h-screen bg-slate-50 font-sans selection:bg-blue-200 selection:text-blue-900">
             
-            {/* --- LEFT SIDE: Animated Branding Panel --- */}
+            {/* --- LEFT SIDE: Animated Branding Panel (Desktop Only) --- */}
             <motion.div 
                 initial={{ opacity: 0, x: -50 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -101,20 +101,27 @@ const Login = ({ onLoginSuccess, onNavigateToApply }: LoginProps) => {
                 </div>
             </motion.div>
 
-            {/* --- RIGHT SIDE: Login Form --- */}
-            <div className="w-full lg:w-1/2 flex items-center justify-center p-8 sm:p-12 md:p-16 bg-white relative shadow-[-20px_0_40px_-15px_rgba(0,0,0,0.05)] z-20">
+            {/* --- RIGHT SIDE: Login Form (Scrollable for mobile keyboards) --- */}
+            <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 md:p-16 bg-white relative shadow-[-20px_0_40px_-15px_rgba(0,0,0,0.05)] z-20 overflow-y-auto min-h-screen">
                 <motion.div 
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 0.2 }}
-                    className="w-full max-w-md space-y-8"
+                    className="w-full max-w-md space-y-8 my-auto py-8"
                 >
+                    {/* Mobile Branding (Visible only on small screens) */}
+                    <div className="flex flex-col items-center mb-8 lg:hidden text-center">
+                        <img src="/logo.jpg" alt="TechHRM Logo" className="w-20 h-20 rounded-full border-4 border-slate-50 shadow-md mb-4" />
+                        <h1 className="text-3xl font-black text-slate-900 tracking-tight">TechHRM</h1>
+                        <p className="text-sm font-medium text-slate-500 mt-1">FCU Work-Study Portal</p>
+                    </div>
+
                     <div>
                         <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-                            Sign in
+                            Welcome!
                         </h2>
-                        <p className="mt-2 text-sm text-slate-500 font-medium">
-                            Access your work-study portal securely.
+                        <p className="mt-2 text-base text-slate-500 font-medium">
+                            Login using your provided credentials.
                         </p>
                     </div>
 
@@ -146,7 +153,7 @@ const Login = ({ onLoginSuccess, onNavigateToApply }: LoginProps) => {
 
                     <form className="space-y-6 pt-2" onSubmit={handleLogin}>
                         
-                        {/* Username Floating Label Input */}
+                        {/* Username Floating Label Input (text-base prevents iOS zoom) */}
                         <div className="relative">
                             <input 
                                 id="username"
@@ -154,12 +161,12 @@ const Login = ({ onLoginSuccess, onNavigateToApply }: LoginProps) => {
                                 required
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
-                                className="block px-4 pb-3 pt-6 w-full text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded-xl appearance-none focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent peer transition-all shadow-sm" 
+                                className="block px-4 pb-3 pt-6 w-full text-base text-slate-900 bg-slate-50 border border-slate-200 rounded-xl appearance-none focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent peer transition-all shadow-sm" 
                                 placeholder=" "
                             />
                             <label 
                                 htmlFor="username" 
-                                className="absolute text-sm text-slate-500 duration-300 transform -translate-y-3 scale-75 top-4 z-10 origin-[0] left-4 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-3 peer-focus:text-blue-600 font-medium"
+                                className="absolute text-base text-slate-500 duration-300 transform -translate-y-3 scale-75 top-4 z-10 origin-left left-4 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-3 peer-focus:text-blue-600 font-medium"
                             >
                                 Username
                             </label>
@@ -174,27 +181,29 @@ const Login = ({ onLoginSuccess, onNavigateToApply }: LoginProps) => {
                                     required
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="block px-4 pb-3 pt-6 w-full text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded-xl appearance-none focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent peer transition-all shadow-sm pr-12" 
+                                    className="block px-4 pb-3 pt-6 w-full text-base text-slate-900 bg-slate-50 border border-slate-200 rounded-xl appearance-none focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent peer transition-all shadow-sm pr-14" 
                                     placeholder=" "
                                 />
                                 <label 
                                     htmlFor="password" 
-                                    className="absolute text-sm text-slate-500 duration-300 transform -translate-y-3 scale-75 top-4 z-10 origin-[0] left-4 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-3 peer-focus:text-blue-600 font-medium"
+                                    className="absolute text-base text-slate-500 duration-300 transform -translate-y-3 scale-75 top-4 z-10 origin-left left-4 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-3 peer-focus:text-blue-600 font-medium"
                                 >
                                     Password
                                 </label>
                                 
+                                {/* 44px Minimum Touch Target for Eye Icon */}
                                 <button 
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute inset-y-0 right-3 flex items-center justify-center p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all focus:outline-none"
+                                    className="absolute inset-y-0 right-1 w-12 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50/50 rounded-xl transition-all focus:outline-none"
                                 >
                                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                                 </button>
                             </div>
                             
                             <div className="flex justify-end">
-                                <button type="button" className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors">
+                                {/* Increased touch target for forgot password */}
+                                <button type="button" className="text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors py-2 px-1">
                                     Forgot password?
                                 </button>
                             </div>
@@ -206,7 +215,7 @@ const Login = ({ onLoginSuccess, onNavigateToApply }: LoginProps) => {
                             whileTap={{ scale: 0.98 }}
                             type="submit" 
                             disabled={isLoading}
-                            className="w-full py-3.5 mt-4 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold rounded-xl shadow-lg shadow-blue-600/25 hover:shadow-xl transition-all duration-200 flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed group"
+                            className="w-full py-4 mt-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-base font-bold rounded-xl shadow-lg shadow-blue-600/25 hover:shadow-xl transition-all duration-200 flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed group"
                         >
                             {isLoading ? (
                                 <>
@@ -223,15 +232,16 @@ const Login = ({ onLoginSuccess, onNavigateToApply }: LoginProps) => {
                     </form>
 
                     {onNavigateToApply && (
-                        <div className="pt-8 mt-8 border-t border-slate-100 text-center">
-                            <p className="text-sm text-slate-500 font-medium">Interested in the Work-Study Program?</p>
+                        <div className="pt-8 mt-8 border-t border-slate-100">
+                            <p className="text-sm text-slate-500 font-medium text-center mb-3">Interested in the Work-Study Program?</p>
+                            {/* Thumb-friendly block button with permanently visible arrow */}
                             <button
                                 type="button"
                                 onClick={onNavigateToApply}
-                                className="mt-1.5 text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors inline-flex items-center gap-1 group"
+                                className="w-full py-3.5 px-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold text-blue-700 hover:text-blue-800 transition-colors flex justify-center items-center gap-2 group"
                             >
                                 Submit an Application
-                                <ArrowRight className="w-4 h-4 opacity-0 -ml-2 group-hover:opacity-100 group-hover:ml-0 transition-all" />
+                                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                             </button>
                         </div>
                     )}

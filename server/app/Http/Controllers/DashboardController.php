@@ -38,6 +38,10 @@ class DashboardController extends Controller
             }
         }
 
+        if ($user->role !== 'Super Admin') {
+            $attendanceQuery->whereHas('user');
+        }
+
         $activeStudents = $studentsQuery->count();
 
         // Get hours logged strictly for this week
@@ -64,14 +68,15 @@ class DashboardController extends Controller
                 $q->where('role', 'Student');
             });
 
-        if ($user->role === 'Supervisor') {
-            $areas = $this->supervisedDepartmentAreas($user);
-            if ($areas === []) {
+        // Recent activity follows the same department placement as the roster.
+        $scopedStudentIds = $this->departmentStudentIds($user);
+        if ($scopedStudentIds !== null) {
+            if ($scopedStudentIds === []) {
                 $activityQuery->whereRaw('0 = 1');
+                $recentAttendanceQuery->whereRaw('0 = 1');
             } else {
-                $activityQuery->whereHas('admin.profile', function ($q) use ($areas) {
-                    $q->whereIn('assigned_office', $areas);
-                });
+                $activityQuery->whereIn('admin_id', $scopedStudentIds);
+                $recentAttendanceQuery->whereIn('user_id', $scopedStudentIds);
             }
         }
 
@@ -117,11 +122,47 @@ class DashboardController extends Controller
             ->take(10)
             ->values();
 
+        $assignedStudents = [];
+        $rosterQuery = null;
+        if ($user->role === 'Supervisor') {
+            $rosterQuery = clone $studentsQuery;
+        } elseif (app(UserController::class)->isWspoDepartmentSupervisor($user)) {
+            $wspoOffices = app(UserController::class)->officeNames('WSPO');
+            $rosterQuery = User::where('role', 'Student')->whereHas('profile', function ($q) use ($wspoOffices) {
+                $q->whereIn('assigned_office', $wspoOffices);
+            });
+        }
+
+        if ($rosterQuery) {
+            $assignedStudents = $rosterQuery
+                ->with('profile')
+                ->orderBy('name')
+                ->get()
+                ->map(function (User $student) {
+                    $profile = $student->profile;
+
+                    return [
+                        'id' => $student->id,
+                        'name' => $student->name,
+                        'phone_number' => $student->phone_number,
+                        'student_id_number' => $profile?->student_id_number,
+                        'course' => $profile?->course,
+                        'year_level' => $profile?->year_level,
+                        'gender' => $profile?->gender,
+                        'assigned_office' => $profile?->assigned_office,
+                        'duty_type' => $profile?->duty_type,
+                        'duty_request' => $profile?->duty_request,
+                    ];
+                })
+                ->values();
+        }
+
         return response()->json([
             'activeStudents' => $activeStudents,
             'pendingApprovals' => 0, // We can build the approval system later!
             'totalHoursThisWeek' => round($totalHoursThisWeek, 2),
             'recentStudentActivity' => $recentStudentActivity,
+            'assignedStudents' => $assignedStudents,
         ]);
     }
 
@@ -146,7 +187,7 @@ class DashboardController extends Controller
             ->whereNotIn('status', ['Resolved', 'Dismissed'])
             ->get();
 
-        $penaltyHours = (float) $openViolations->sum('penalty_hours');
+        $penaltyHours = DisciplinaryRecord::dutyDeductionHours($user->id);
         $creditedHours = max(0, $totalRendered - $penaltyHours);
 
         $completedShifts = $records->filter(fn (Attendance $record) => $record->time_out !== null);
@@ -229,6 +270,36 @@ class DashboardController extends Controller
         ]);
     }
 
+    /**
+     * Student ids whose activity this viewer may see.
+     * Null means the viewer is campus-wide (Super Admin, and WSPO staff who do not supervise an office).
+     *
+     * @return array<int, int>|null
+     */
+    private function departmentStudentIds(User $user): ?array
+    {
+        if ($user->role === 'Supervisor') {
+            $areas = $this->supervisedDepartmentAreas($user);
+        } elseif (app(UserController::class)->isWspoDepartmentSupervisor($user)) {
+            $areas = app(UserController::class)->officeNames('WSPO');
+        } else {
+            return null;
+        }
+
+        if ($areas === []) {
+            return [];
+        }
+
+        return User::query()
+            ->where('role', 'Student')
+            ->whereHas('profile', function ($q) use ($areas) {
+                $q->whereIn('assigned_office', $areas);
+            })
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
     private function supervisedDepartmentAreas(User $user): array
     {
         $configured = $user->profile?->supervised_departments;
@@ -267,6 +338,7 @@ class DashboardController extends Controller
             ['JHS', 'Junior High School Department'],
             ['ES', 'Elementary Department'],
             ['PS', 'Pre-School Department'],
+            ['WSPO', 'Working Students Program Office', 'WSPO Office'],
         ];
 
         $normalized = strtolower((string) preg_replace('/[^a-z0-9]/i', '', $department));

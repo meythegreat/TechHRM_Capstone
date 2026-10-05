@@ -6,6 +6,7 @@ use App\Models\Application;
 use App\Models\Notification;
 use App\Models\StaffingRequest;
 use App\Models\User;
+use App\Services\DepartmentAssignmentNotifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
@@ -157,6 +158,8 @@ class StaffingRequestController extends Controller
                 'title' => 'Office Assignment Confirmed',
                 'message' => "You have been assigned to {$office} as a working student for {$dutyLabel}.",
             ]);
+
+            app(DepartmentAssignmentNotifier::class)->notify($student, $office, $dutyLabel);
         }
 
         $assignmentNote = $genderLabel
@@ -164,14 +167,6 @@ class StaffingRequestController extends Controller
             : "{$studentNames} will be sent to {$office} for {$dutyLabel}.";
 
         $this->notifyCoordinators('Working Student Assigned', $assignmentNote);
-
-        if ($staffingRequest->requested_by) {
-            Notification::create([
-                'user_id' => $staffingRequest->requested_by,
-                'title' => 'Working Student Assigned',
-                'message' => "WSPO assigned {$studentNames} to {$office} for {$dutyLabel}.",
-            ]);
-        }
     }
 
     private function assertGendersMatch(StaffingRequest $staffingRequest, Collection $students): void

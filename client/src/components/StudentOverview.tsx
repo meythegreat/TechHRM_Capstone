@@ -1,21 +1,16 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { motion, type Variants } from 'framer-motion';
+import { REALTIME_EVENT } from '../utils/realtime';
 import { 
     Clock, 
     Calendar, 
     CheckCircle, 
     AlertCircle, 
-    FileText,
     TrendingUp,
-    Briefcase,
     Award,
-    ChevronRight,
     LayoutDashboard
 } from 'lucide-react';
-
-// IMPORT YOUR REAL TASK SERVICE!
-import { getMyTasks } from '../services/taskService';
 
 interface DashboardData {
     total_hours_rendered: number;
@@ -23,8 +18,6 @@ interface DashboardData {
     penalty_hours: number;
     required_hours: number;
     upcoming_schedules: any[];
-    recent_tasks: any[];
-    pending_tasks_count: number;
     performance_score: number;
     has_activity: boolean;
     violations: number;
@@ -36,8 +29,6 @@ const emptyDashboard = (): DashboardData => ({
     penalty_hours: 0,
     required_hours: 100,
     upcoming_schedules: [],
-    recent_tasks: [],
-    pending_tasks_count: 0,
     performance_score: 0,
     has_activity: false,
     violations: 0,
@@ -46,44 +37,49 @@ const emptyDashboard = (): DashboardData => ({
 const StudentOverview = () => {
     const [data, setData] = useState<DashboardData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const userName = localStorage.getItem('user_name') || 'Student Worker';
+    const [userName, setUserName] = useState(localStorage.getItem('user_name') || 'Student Worker');
     const [supervisorNames, setSupervisorNames] = useState<string[]>([]);
     const [assignedOffice, setAssignedOffice] = useState(localStorage.getItem('assigned_office') || '');
 
     useEffect(() => {
+        let active = true;
         const fetchDashboardData = async () => {
             try {
                 const profileRes = await axios.get('/api/user').catch(() => ({ data: {} as any }));
                 const profile = profileRes.data || {};
-                setAssignedOffice(profile.profile?.assigned_office || localStorage.getItem('assigned_office') || '');
+                if (!active) return;
+                if (profile.name) {
+                    setUserName(profile.name);
+                    localStorage.setItem('user_name', profile.name);
+                }
+                const office = profile.profile?.assigned_office || '';
+                setAssignedOffice(office || localStorage.getItem('assigned_office') || '');
+                if (office) localStorage.setItem('assigned_office', office);
                 setSupervisorNames(Array.isArray(profile.department_supervisors) ? profile.department_supervisors : []);
 
                 const dashboardRes = await axios.get('/api/student/dashboard');
-
-                // 2. Fetch REAL Dynamic Tasks
-                const tasksRes = await getMyTasks().catch(() => ({ data: [] }));
-                const realTasks = tasksRes.data || [];
-
-                // 3. Process the tasks for the dashboard
-                const recentRealTasks = [...realTasks].reverse().slice(0, 5); // Get 5 newest
-                const pendingCount = realTasks.filter((t: any) => t.status === 'Pending' || t.status === 'In Progress').length;
-
-                // 4. Combine into state
+                if (!active) return;
                 setData({
+                    ...emptyDashboard(),
                     ...dashboardRes.data,
-                    recent_tasks: recentRealTasks,
-                    pending_tasks_count: pendingCount
                 });
 
             } catch (error) {
                 console.error("Error fetching dashboard data", error);
-                setData(emptyDashboard());
+                if (active) setData(emptyDashboard());
             } finally {
-                setIsLoading(false);
+                if (active) setIsLoading(false);
             }
         };
 
         fetchDashboardData();
+        const interval = setInterval(fetchDashboardData, 5000);
+        window.addEventListener(REALTIME_EVENT, fetchDashboardData);
+        return () => {
+            active = false;
+            clearInterval(interval);
+            window.removeEventListener(REALTIME_EVENT, fetchDashboardData);
+        };
     }, []);
 
     // ANIMATION VARIANTS
@@ -124,14 +120,14 @@ const StudentOverview = () => {
                 ? 'text-amber-600'
                 : 'text-rose-600';
     const performanceNote = !data?.has_activity
-        ? 'Complete a shift or task to start your score.'
+        ? 'Complete a shift to start your score.'
         : performanceScore >= 90
             ? 'Keep up the great work!'
             : performanceScore >= 75
                 ? 'Solid standing. Stay consistent with your shifts.'
                 : performanceScore >= 50
-                    ? 'Room to improve on attendance and tasks.'
-                    : 'Needs attention. Review tasks and disciplinary records.';
+                    ? 'Room to improve on attendance.'
+                    : 'Needs attention. Review your attendance and disciplinary records.';
 
     return (
         <div className="space-y-8 font-sans">
@@ -153,7 +149,7 @@ const StudentOverview = () => {
                         Dashboard Overview
                     </h1>
                     <p className="mt-2 text-slate-400 font-medium max-w-md">
-                        Welcome back, {userName.split(' ')[0]}. Manage your hours, track tasks, and monitor your overall progress.
+                        Welcome back, {userName.split(' ')[0]}. Manage your hours and monitor your overall progress.
                     </p>
                 </div>
 
@@ -177,7 +173,7 @@ const StudentOverview = () => {
                 variants={containerVariants}
                 initial="hidden"
                 animate="show"
-                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+                className="grid grid-cols-1 md:grid-cols-3 gap-6"
             >
                 {/* Stat Card 1: Hours Rendered */}
                 <motion.div variants={itemVariants} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-blue-300 transition-colors">
@@ -221,23 +217,7 @@ const StudentOverview = () => {
                     </p>
                 </motion.div>
 
-                {/* Stat Card 3: DYNAMIC Pending Tasks */}
-                <motion.div variants={itemVariants} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-amber-300 transition-colors">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Active Tasks</p>
-                            <h3 className="text-3xl font-black text-slate-900">
-                                {data?.pending_tasks_count || 0}
-                            </h3>
-                        </div>
-                        <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl group-hover:scale-110 transition-transform">
-                            <Briefcase className="w-6 h-6" />
-                        </div>
-                    </div>
-                    <p className="text-sm text-slate-500 mt-4 font-medium">Requires your attention today.</p>
-                </motion.div>
-
-                {/* Stat Card 4: Violations */}
+                {/* Disciplinary */}
                 <motion.div variants={itemVariants} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-slate-300 transition-colors">
                     <div className="flex justify-between items-start">
                         <div>
@@ -263,7 +243,7 @@ const StudentOverview = () => {
                 variants={containerVariants}
                 initial="hidden"
                 animate="show"
-                className="grid grid-cols-1 lg:grid-cols-2 gap-8"
+                className="grid grid-cols-1 gap-8"
             >
                 {/* Upcoming Schedule */}
                 <motion.div variants={itemVariants} className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
@@ -297,49 +277,6 @@ const StudentOverview = () => {
                                     </div>
                                 ))}
                             </div>
-                        )}
-                    </div>
-                </motion.div>
-
-                {/* DYNAMIC Recent Tasks */}
-                <motion.div variants={itemVariants} className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                    <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                        <h3 className="text-lg font-black text-slate-900 flex items-center gap-2 tracking-tight">
-                            <FileText className="w-5 h-5 text-blue-600" />
-                            Recent Tasks
-                        </h3>
-                    </div>
-                    <div className="p-0 flex-1">
-                        {data?.recent_tasks.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400">
-                                <FileText className="w-12 h-12 mb-3 opacity-20" />
-                                <p className="font-bold">No recent tasks logged.</p>
-                            </div>
-                        ) : (
-                            <ul className="divide-y divide-slate-100">
-                                {data?.recent_tasks.map((task) => (
-                                    <li key={task.id} className="p-5 hover:bg-slate-50 transition-colors flex items-center justify-between group cursor-pointer">
-                                        <div>
-                                            <p className="font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
-                                                {task.title || 'Untitled Task'}
-                                            </p>
-                                            <p className="text-xs text-slate-500 font-medium mt-1">
-                                                {task.date || 'Recently Assigned'}
-                                            </p>
-                                        </div>
-                                        <div className="flex items-center gap-4">
-                                            <span className={`px-3 py-1 text-[10px] uppercase tracking-wider font-bold rounded-full border ${
-                                                task.status === 'Completed' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
-                                                task.status === 'In Progress' ? 'bg-blue-50 border-blue-200 text-blue-700 animate-pulse' :
-                                                'bg-amber-50 border-amber-200 text-amber-700'
-                                            }`}>
-                                                {task.status}
-                                            </span>
-                                            <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-600 transition-colors" />
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
                         )}
                     </div>
                 </motion.div>

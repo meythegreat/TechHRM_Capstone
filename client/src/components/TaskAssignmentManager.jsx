@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getSupervisorTasks, assignTask, addSupervisorNote, verifyTask } from '../services/taskService';
+import { withHomeDepartmentNote } from '../utils/studentAssignment';
 import { 
     ClipboardCheck, 
     Send, 
@@ -176,7 +177,7 @@ const TaskAssignmentManager = () => {
                             >
                                 <option value="" disabled>-- Select a student --</option>
                                 {students.map(s => (
-                                    <option key={s.id} value={s.id}>{s.name} ({s.profile?.student_id_number || 'No ID'})</option>
+                                    <option key={s.id} value={s.id}>{withHomeDepartmentNote(`${s.name} (${s.profile?.student_id_number || 'No ID'})`, s.profile?.course, s.profile?.assigned_office, s.profile?.year_level)}</option>
                                 ))}
                             </select>
                         </div>
@@ -348,6 +349,11 @@ const TaskAssignmentManager = () => {
                                                     {(task.student?.name || '?').charAt(0)}
                                                 </div>
                                                 <span className="truncate max-w-[100px]">{task.student?.name || 'Unknown'}</span>
+                                                {task.student?.deleted_at && (
+                                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+                                                        Account deleted
+                                                    </span>
+                                                )}
                                             </div>
                                             
                                             {isSupervisor && task.status === 'Completed' && !task.evaluation_notes && !task.supervisor_notes && (

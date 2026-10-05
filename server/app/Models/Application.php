@@ -20,6 +20,7 @@ class Application extends Model
         'contact_number',
         'year_level',
         'course',
+        'student_id_number',
         'email',
         'preferred_department',
         'available_schedules',

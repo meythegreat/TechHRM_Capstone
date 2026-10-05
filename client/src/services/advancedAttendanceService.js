@@ -3,12 +3,16 @@ import axios from 'axios';
 export const generateSecureToken = async (type, description = '') =>
     axios.post('/api/attendance/generate-token', { type, description });
 
+export const fetchLiveQr = async (type) =>
+    axios.get('/api/attendance/qr-code', { params: { type } });
+
 export const fetchAnomalyLogs = async () => axios.get('/api/attendance/anomalies');
 
-export const submitSecureClockIn = async (tokenCode, attendanceType) =>
+export const submitSecureClockIn = async (tokenCode, attendanceType, method = 'passcode') =>
     axios.post('/api/attendance/secure-clock-in', {
         token_code: tokenCode,
         attendance_type: attendanceType,
+        method,
     });
 
 export const submitSecureClockOut = async (attendanceId) =>

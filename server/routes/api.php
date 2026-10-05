@@ -13,6 +13,7 @@ use App\Http\Controllers\AdminController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\RequirementController;
 use App\Http\Controllers\FinancialController;
+use App\Http\Controllers\OfficeController;
 
 // =========================================================
 // PUBLIC ROUTES
@@ -115,8 +116,13 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/attendance/student/{id}', [AttendanceController::class, 'studentHistory']);
 
+        Route::post('/attendance/manual', [AttendanceController::class, 'storeManual']);
+        Route::patch('/attendance/{id}/times', [AttendanceController::class, 'updateTimes']);
+
         Route::post('/attendance/generate-token', [\App\Http\Controllers\AdvancedAttendanceController::class, 'generateToken']);
+        Route::get('/attendance/qr-code', [\App\Http\Controllers\AdvancedAttendanceController::class, 'currentQr']);
         Route::get('/attendance/anomalies', [\App\Http\Controllers\AdvancedAttendanceController::class, 'getAnomalyLogs']);
+        Route::patch('/attendance/{id}/approve', [AttendanceController::class, 'approve']);
 
         // =================================================
         // SCHEDULE MANAGEMENT
@@ -148,8 +154,14 @@ Route::middleware('auth:sanctum')->group(function () {
         // STAGE 5: Discipline & Compliance (Supervisor)
         // =================================================
 
+        Route::get('/disciplinary/catalog', [\App\Http\Controllers\DisciplinaryController::class, 'catalog']);
+        Route::get('/disciplinary/performance', [\App\Http\Controllers\DisciplinaryController::class, 'performanceIndex']);
+        Route::post('/disciplinary/performance', [\App\Http\Controllers\DisciplinaryController::class, 'storePerformance']);
+        Route::get('/disciplinary/awards', [\App\Http\Controllers\DisciplinaryController::class, 'awardsIndex']);
+        Route::post('/disciplinary/awards', [\App\Http\Controllers\DisciplinaryController::class, 'storeAward']);
         Route::get('/disciplinary', [\App\Http\Controllers\DisciplinaryController::class, 'index']);
         Route::post('/disciplinary', [\App\Http\Controllers\DisciplinaryController::class, 'store']);
+        Route::post('/disciplinary/{id}/decide', [\App\Http\Controllers\DisciplinaryController::class, 'decide']);
         Route::post('/disciplinary/{id}/resolve', [\App\Http\Controllers\DisciplinaryController::class, 'resolve']);
         Route::put('/disciplinary/{id}/resolve', [\App\Http\Controllers\DisciplinaryController::class, 'resolve']);
 
@@ -164,6 +176,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/users/{id}', [UserController::class, 'destroy']);
         Route::get('/logs', [ActivityLogController::class, 'index']);
         Route::get('/departments', fn () => \App\Models\Department::orderBy('name')->get(['id', 'name']));
+        Route::get('/offices', [OfficeController::class, 'index']);
 
         // Only WSPO coordinates student-to-department placement and final task verification.
         Route::get('/applications', [\App\Http\Controllers\ApplicationController::class, 'index']);
@@ -189,7 +202,6 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::middleware(['role:Supervisor'])->group(function () {
-        Route::patch('/attendance/{id}/approve', [AttendanceController::class, 'approve']);
         Route::post('/staffing-requests', [\App\Http\Controllers\StaffingRequestController::class, 'store']);
         Route::post('/tasks', [\App\Http\Controllers\TaskController::class, 'store']);
         Route::put('/tasks/{id}/notes', [\App\Http\Controllers\TaskController::class, 'addSupervisorNote']);
@@ -206,6 +218,9 @@ Route::middleware('auth:sanctum')->group(function () {
         // =================================================
 
         Route::get('/admin/dashboard-stats', [AdminController::class, 'getStats']);
+        Route::post('/offices', [OfficeController::class, 'store']);
+        Route::put('/offices/{office}', [OfficeController::class, 'update']);
+        Route::delete('/offices/{office}', [OfficeController::class, 'destroy']);
 
         // =================================================
         // REQUIREMENTS MANAGEMENT

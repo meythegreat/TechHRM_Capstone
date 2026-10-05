@@ -1,8 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { generateSecureToken, fetchAnomalyLogs } from '../services/advancedAttendanceService';
+import QRCode from 'qrcode';
+import { generateSecureToken, fetchAnomalyLogs, fetchLiveQr } from '../services/advancedAttendanceService';
 import { 
     KeyRound, 
+    QrCode,
     ShieldAlert, 
     ShieldCheck, 
     CheckCircle2, 
@@ -10,7 +13,9 @@ import {
     Clock, 
     Calendar,
     Copy,
-    Activity
+    Activity,
+    Maximize2,
+    X
 } from 'lucide-react';
 
 const SupervisorAttendanceHub = () => {
@@ -22,13 +27,101 @@ const SupervisorAttendanceHub = () => {
     const [isGenerating, setIsGenerating] = useState(false);
     const [copied, setCopied] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
-    const supervisorDepartment = localStorage.getItem('assigned_office') || 'Unassigned';
+    const [accessMode, setAccessMode] = useState('passcode');
+    const [qrSession, setQrSession] = useState(null);
+    const [qrSeconds, setQrSeconds] = useState(0);
+    const [qrLoading, setQrLoading] = useState(false);
+    const [qrExpanded, setQrExpanded] = useState(false);
+    const qrCanvasRef = useRef(null);
+    const qrExpandedCanvasRef = useRef(null);
+    const userRole = localStorage.getItem('user_role') || '';
+    const storedOffice = localStorage.getItem('assigned_office') || 'Unassigned';
+    const supervisorDepartment = userRole === 'WSPO Staff' && ['WSPO Coordinator', 'WSPO', 'Unassigned', ''].includes(storedOffice)
+        ? 'WSPO'
+        : storedOffice;
 
     const formatHours = (value) => Number(value || 0).toFixed(2);
 
     useEffect(() => {
         loadAnomalies();
     }, []);
+
+    useEffect(() => {
+        if (accessMode !== 'qr') return undefined;
+
+        let cancelled = false;
+        let refreshTimer;
+
+        const loadQr = async () => {
+            setQrLoading(true);
+            try {
+                const res = await fetchLiveQr(selectedType);
+                if (cancelled) return;
+                setQrSession(res.data);
+                setQrSeconds(Number(res.data.seconds_remaining) || 0);
+                setErrorMsg('');
+                const waitMs = Math.max(1000, (Number(res.data.seconds_remaining) || 3) * 1000 - 400);
+                refreshTimer = setTimeout(loadQr, waitMs);
+            } catch (err) {
+                if (cancelled) return;
+                console.error('Failed to load live QR', err);
+                setErrorMsg(err.response?.data?.message || 'Unable to show the live QR code. Please try again.');
+                refreshTimer = setTimeout(loadQr, 5000);
+            } finally {
+                if (!cancelled) setQrLoading(false);
+            }
+        };
+
+        loadQr();
+
+        return () => {
+            cancelled = true;
+            clearTimeout(refreshTimer);
+        };
+    }, [accessMode, selectedType]);
+
+    useEffect(() => {
+        if (accessMode !== 'qr') setQrExpanded(false);
+    }, [accessMode]);
+
+    useEffect(() => {
+        if (!qrExpanded) return undefined;
+        const onKey = (event) => {
+            if (event.key === 'Escape') setQrExpanded(false);
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [qrExpanded]);
+
+    useEffect(() => {
+        if (!qrSession?.payload) return undefined;
+        const draw = (canvas, width) => {
+            if (!canvas) return;
+            QRCode.toCanvas(canvas, qrSession.payload, {
+                width,
+                margin: 1,
+                errorCorrectionLevel: 'M',
+            }).catch((err) => {
+                console.error('Failed to draw QR', err);
+                setErrorMsg('Unable to draw the QR code.');
+            });
+        };
+        draw(qrCanvasRef.current, 240);
+        if (qrExpanded) {
+            const size = Math.max(280, Math.min(520, window.innerWidth - 64, window.innerHeight - 220));
+            draw(qrExpandedCanvasRef.current, size);
+        }
+        return undefined;
+    }, [qrSession?.payload, qrExpanded]);
+
+    useEffect(() => {
+        if (accessMode !== 'qr' || !qrSession) return undefined;
+        const timer = setInterval(() => {
+            const remaining = Math.max(0, Math.ceil((new Date(qrSession.expires_at).getTime() - Date.now()) / 1000));
+            setQrSeconds(remaining);
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [accessMode, qrSession]);
 
     const loadAnomalies = async () => {
         setIsLoading(true);
@@ -119,7 +212,7 @@ const SupervisorAttendanceHub = () => {
                         Attendance Hub
                     </h1>
                     <p className="mt-2 text-slate-400 font-medium max-w-md">
-                        Generate secure verification tokens for student shifts and monitor the system for attendance anomalies.
+                        Issue a passcode students can type, or show a QR code that refreshes every 1 minute 30 seconds.
                     </p>
                     <p className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 bg-white/10 border border-white/10 rounded-lg text-sm font-bold text-blue-200">
                         Token scope: <span className="text-white">{supervisorDepartment}</span> students only
@@ -156,9 +249,28 @@ const SupervisorAttendanceHub = () => {
                 >
                     <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200">
                         <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2 tracking-tight">
-                            <KeyRound className="w-5 h-5 text-blue-600" /> Generate Token
+                            {accessMode === 'qr' ? <QrCode className="w-5 h-5 text-blue-600" /> : <KeyRound className="w-5 h-5 text-blue-600" />}
+                            {accessMode === 'qr' ? 'Live QR' : 'Passcode'}
                         </h3>
+
+                        <div className="grid grid-cols-2 gap-2 p-1 mb-6 bg-slate-100 rounded-xl">
+                            <button
+                                type="button"
+                                onClick={() => setAccessMode('passcode')}
+                                className={`py-2.5 rounded-lg text-sm font-bold transition-all ${accessMode === 'passcode' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                Passcode
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setAccessMode('qr')}
+                                className={`py-2.5 rounded-lg text-sm font-bold transition-all ${accessMode === 'qr' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                QR code
+                            </button>
+                        </div>
                         
+                        {accessMode === 'passcode' ? (
                         <form onSubmit={handleCreateToken} className="space-y-5">
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Shift Type</label>
@@ -192,11 +304,64 @@ const SupervisorAttendanceHub = () => {
                                 {isGenerating ? 'Generating...' : <><KeyRound className="w-5 h-5" /> Generate Secure Token</>}
                             </button>
                         </form>
+                        ) : (
+                        <div className="space-y-5">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Shift Type</label>
+                                <select
+                                    value={selectedType}
+                                    onChange={(e) => setSelectedType(e.target.value)}
+                                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all appearance-none cursor-pointer"
+                                >
+                                    <option>Daily Clock</option>
+                                    <option>Meeting</option>
+                                    <option>Cleaning</option>
+                                </select>
+                            </div>
+                            <div
+                                className="flex flex-col items-center rounded-2xl border border-slate-200 bg-slate-50 p-5 select-none"
+                                onContextMenu={(e) => e.preventDefault()}
+                                onCopy={(e) => e.preventDefault()}
+                                onCut={(e) => e.preventDefault()}
+                                onDragStart={(e) => e.preventDefault()}
+                                style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+                            >
+                                <div className="relative rounded-xl bg-white">
+                                    <canvas
+                                        ref={qrCanvasRef}
+                                        draggable={false}
+                                        aria-label="Live attendance QR code"
+                                        className="pointer-events-none rounded-xl select-none"
+                                    />
+                                    <div
+                                        className="absolute inset-0"
+                                        aria-hidden="true"
+                                        onContextMenu={(e) => e.preventDefault()}
+                                    />
+                                </div>
+                                <p className="mt-4 text-sm font-black text-slate-900">
+                                    {qrLoading && !qrSession ? 'Preparing QR…' : `Refreshes in ${Math.floor(qrSeconds / 60)}:${String(qrSeconds % 60).padStart(2, '0')}`}
+                                </p>
+                                <p className="mt-2 text-center text-xs font-medium text-slate-500">
+                                    Students scan this on the screen. It cannot be saved, copied, or downloaded, and a photo stops working when it refreshes.
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => setQrExpanded(true)}
+                                    disabled={!qrSession?.payload}
+                                    className="mt-4 inline-flex items-center justify-center gap-2 w-full py-3 bg-white border border-slate-200 hover:border-blue-300 hover:text-blue-700 text-slate-800 text-sm font-bold rounded-xl transition-colors disabled:opacity-50"
+                                >
+                                    <Maximize2 className="w-4 h-4" />
+                                    Expand QR
+                                </button>
+                            </div>
+                        </div>
+                        )}
                     </div>
 
                     {/* ACTIVE TOKEN DISPLAY */}
                     <AnimatePresence>
-                        {activeToken && (
+                        {accessMode === 'passcode' && activeToken && (
                             <motion.div 
                                 initial={{ opacity: 0, scale: 0.95, y: 10 }}
                                 animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -265,6 +430,11 @@ const SupervisorAttendanceHub = () => {
                                                 </div>
                                                 <div>
                                                     <h4 className="font-bold text-slate-900 text-base">{item.user?.name || 'Unknown Student'}</h4>
+                                                    {(item.account_deleted || item.user?.deleted_at) && (
+                                                        <span className="mt-1 inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+                                                            Account deleted
+                                                        </span>
+                                                    )}
                                                     <p className="text-sm text-red-700 font-bold mt-0.5">
                                                         Trigger: {item.anomaly_reason}
                                                     </p>
@@ -289,6 +459,56 @@ const SupervisorAttendanceHub = () => {
                     </div>
                 </div>
             </div>
+            {qrExpanded && createPortal(
+                <div
+                    className="fixed inset-0 z-[80] bg-slate-950/80 flex items-center justify-center p-4 select-none"
+                    onClick={() => setQrExpanded(false)}
+                    onContextMenu={(e) => e.preventDefault()}
+                    onCopy={(e) => e.preventDefault()}
+                    onCut={(e) => e.preventDefault()}
+                    onDragStart={(e) => e.preventDefault()}
+                    style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Expanded attendance QR code"
+                >
+                    <div
+                        className="bg-white rounded-3xl p-6 sm:p-8 shadow-2xl max-w-full flex flex-col items-center"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="w-full flex items-center justify-between gap-4 mb-5">
+                            <div>
+                                <p className="text-xs font-bold text-blue-600 uppercase tracking-widest">Live QR</p>
+                                <p className="text-lg font-black text-slate-900">{selectedType}</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setQrExpanded(false)}
+                                className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700"
+                                aria-label="Close expanded QR"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="relative rounded-2xl bg-white">
+                            <canvas
+                                ref={qrExpandedCanvasRef}
+                                draggable={false}
+                                aria-label="Expanded live attendance QR code"
+                                className="pointer-events-none rounded-2xl select-none max-w-full"
+                            />
+                            <div className="absolute inset-0" aria-hidden="true" onContextMenu={(e) => e.preventDefault()} />
+                        </div>
+                        <p className="mt-5 text-2xl font-black text-slate-900 tabular-nums">
+                            {`Refreshes in ${Math.floor(qrSeconds / 60)}:${String(qrSeconds % 60).padStart(2, '0')}`}
+                        </p>
+                        <p className="mt-2 text-center text-sm font-medium text-slate-500 max-w-sm">
+                            Hold this up for students to scan. It still cannot be saved or copied.
+                        </p>
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 };

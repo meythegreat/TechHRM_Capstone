@@ -275,6 +275,11 @@ const SuperAdminDashboard = () => {
                                                 <p className="text-sm font-black text-slate-900 leading-tight group-hover:text-blue-700 transition-colors">
                                                     {record.user?.name || 'Unknown User'}
                                                 </p>
+                                                {(record.account_deleted || record.user?.deleted_at) && (
+                                                    <span className="mt-1 inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+                                                        Account deleted
+                                                    </span>
+                                                )}
                                                 <p className="text-xs font-medium text-slate-500 mt-0.5 truncate max-w-[250px] sm:max-w-full">
                                                     {record.user?.profile?.assigned_office || 'Unassigned'}
                                                 </p>

@@ -2,17 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Notification;
+use App\Models\Office;
 use App\Models\User;
 use App\Models\UserProfile;
+use App\Services\DepartmentAssignmentNotifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
 class UserController extends Controller
 {
-    private const UNIVERSITY_OFFICES = [
-        'University President', 'Quality Assurance', 'Human Resource Development Center', 'Office of the Student Affairs', 'University Chaplain', 'Alumni Affairs', 'VP-Administration', 'Superintendent Buildings & Grounds / Officer Pollution Control', 'Security Office', 'Safety and Disaster Management', 'Sports', 'Socio-Cultural', 'WSPO', 'Health Services', 'General Services', 'Mass Media', 'ICT Services Office', 'Higher Education Laboratory', 'VP-Academic Affairs', 'Graduate School', 'College of Arts and Sciences', 'College of Business and Accountancy', 'College of Computer Studies', 'College of Criminal Justice Education', 'College of Electronic Engineering', 'College of Hospitality and Tourism Management', 'College of Nursing', 'College of Teacher Education', 'Kindergarten/Elementary', 'High School', 'University Registrar', 'Director of Libraries', 'Guidance & Counselling Center', 'NSTP', 'VP-REIID', 'International Program Office', 'Community Extension', 'Research', 'VP-Finance', 'Accountant/Budget Officer', 'Business Manager', 'Property Custodian', 'University Enterprise',
-    ];
     public function index(Request $request)
     {
         $user = $request->user();
@@ -99,17 +100,15 @@ class UserController extends Controller
                     'message' => 'Your supervisor account has no assigned departments. Ask WSPO to set your departments first.',
                 ], 422);
             }
-            // Include aliases so older placement records remain visible.
+            // Match office name variants (CCS, College of Computer Studies, and so on).
+            // Academic course is not an assignment, so it does not grant access.
             $areas = array_values(array_unique(array_merge(...array_map(
                 fn (string $department) => $this->departmentAliases($department),
                 $departments
             ))));
 
             $query->whereHas('profile', function ($q) use ($areas) {
-                $q->where(function ($areaQuery) use ($areas) {
-                    $areaQuery->whereIn('assigned_office', $areas)
-                        ->orWhereIn('course', $areas);
-                });
+                $q->whereIn('assigned_office', $areas);
             });
         } elseif ($request->filled('department')) {
             $query->whereHas('profile', fn ($q) => $q->where('assigned_office', $request->department));
@@ -139,6 +138,7 @@ class UserController extends Controller
             ['JHS', 'Junior High School Department'],
             ['ES', 'Elementary Department'],
             ['PS', 'Pre-School Department'],
+            ['WSPO', 'Working Students Program Office', 'WSPO Office'],
         ];
 
         $normalized = $this->normalizeDepartment($department);
@@ -162,15 +162,73 @@ class UserController extends Controller
     private function departmentSupervisorMap(): array
     {
         $map = [];
-        $supervisors = User::with('profile')->where('role', 'Supervisor')->orderBy('name')->get();
+        $supervisors = User::with('profile')
+            ->whereIn('role', ['Supervisor', 'WSPO Staff'])
+            ->orderBy('name')
+            ->get();
 
         foreach ($supervisors as $supervisor) {
+            if ($supervisor->role === 'WSPO Staff' && !$this->isWspoDepartmentSupervisor($supervisor)) {
+                continue;
+            }
+
             foreach ($this->supervisedDepartments($supervisor) as $department) {
                 $map[$department][] = $supervisor->name;
             }
         }
 
+        foreach ($map as $department => $names) {
+            $map[$department] = array_values(array_unique($names));
+        }
+
         return $map;
+    }
+
+    public function supervisorNamesForOffice(?string $department): array
+    {
+        return $this->supervisorNamesForDepartment($department);
+    }
+
+    /** WSPO Coordinator supervises working students placed in the WSPO office. */
+    public function isWspoDepartmentSupervisor(User $user): bool
+    {
+        if ($user->role !== 'WSPO Staff') {
+            return false;
+        }
+
+        $position = trim((string) ($user->profile?->assigned_office ?? ''));
+
+        return $position === ''
+            || strcasecmp($position, 'WSPO Coordinator') === 0
+            || strcasecmp($position, 'WSPO') === 0;
+    }
+
+    /** Office name used when this person issues an attendance code. */
+    public function attendanceOffice(User $user): string
+    {
+        if ($this->isWspoDepartmentSupervisor($user)) {
+            return 'WSPO';
+        }
+
+        return $this->supervisedDepartments($user)[0] ?? '';
+    }
+
+    public function officesMatch(string $left, string $right): bool
+    {
+        $left = trim($left);
+        $right = trim($right);
+        if ($left === '' || $right === '') {
+            return false;
+        }
+
+        $aliases = array_map([$this, 'normalizeDepartment'], $this->departmentAliases($left));
+
+        return in_array($this->normalizeDepartment($right), $aliases, true);
+    }
+
+    public function officeNames(string $department): array
+    {
+        return $this->departmentAliases($department);
     }
 
     private function supervisorNamesForDepartment(?string $department): array
@@ -179,11 +237,49 @@ class UserController extends Controller
             return [];
         }
 
-        return $this->departmentSupervisorMap()[$department] ?? [];
+        $map = $this->departmentSupervisorMap();
+        $names = [];
+        foreach ($this->departmentAliases($department) as $alias) {
+            foreach ($map[$alias] ?? [] as $name) {
+                $names[] = $name;
+            }
+        }
+
+        return array_values(array_unique($names));
+    }
+
+    private function notifySupervisorsIfStudentPlaced(User $student): void
+    {
+        if ($student->role !== 'Student') {
+            return;
+        }
+
+        $office = trim((string) $student->profile?->assigned_office);
+        if ($office === '') {
+            return;
+        }
+
+        $dutyLabel = $student->profile?->duty_type === 'Request'
+            ? trim((string) $student->profile?->duty_request)
+            : trim((string) $student->profile?->duty_type);
+
+        Notification::create([
+            'user_id' => $student->id,
+            'title' => 'Office Assignment Confirmed',
+            'message' => $dutyLabel !== ''
+                ? "You have been assigned to {$office} as a working student for {$dutyLabel}."
+                : "You have been assigned to {$office} as a working student.",
+        ]);
+
+        app(DepartmentAssignmentNotifier::class)->notify($student, $office, $dutyLabel !== '' ? $dutyLabel : null);
     }
 
     private function supervisedDepartments(User $user): array
     {
+        if ($this->isWspoDepartmentSupervisor($user)) {
+            return ['WSPO'];
+        }
+
         $configured = $user->profile?->supervised_departments;
         $departments = is_array($configured) ? $configured : [];
 
@@ -208,17 +304,15 @@ class UserController extends Controller
         ))));
 
         $office = trim((string) $student->profile?->assigned_office);
-        $course = trim((string) $student->profile?->course);
 
-        return ($office !== '' && in_array($office, $areas, true))
-            || ($course !== '' && in_array($course, $areas, true));
+        return $office !== '' && in_array($office, $areas, true);
     }
 
     /** WSPO coordinator links an existing working student to a department. */
     public function assignDepartment(Request $request, string $id)
     {
         $validated = $request->validate([
-            'department' => ['required', 'string', 'in:' . implode(',', self::UNIVERSITY_OFFICES)],
+            'department' => ['required', 'string', Rule::in(Office::names())],
             'duty_type' => 'required|in:Clerical,Janitorial,Request',
             'duty_request' => 'required_if:duty_type,Request|nullable|string|max:1000',
         ]);
@@ -239,6 +333,8 @@ class UserController extends Controller
             'title' => 'Office Assignment Confirmed',
             'message' => "You have been assigned to {$office} as a working student for {$dutyLabel}.",
         ]);
+
+        app(DepartmentAssignmentNotifier::class)->notify($student, $office, $dutyLabel);
 
         $coordinators = User::whereIn('role', ['WSPO Staff', 'Super Admin'])
             ->where('id', '!=', $request->user()->id)
@@ -261,7 +357,7 @@ class UserController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'username' => 'required|string|unique:users',
+            'username' => ['required', 'string', 'max:255', Rule::unique('users', 'username')->whereNull('deleted_at')],
             'password' => 'required|string|min:6',
             'role' => 'required|string',
             'phone_number' => 'nullable|string',
@@ -269,7 +365,9 @@ class UserController extends Controller
             'duty_request' => 'required_if:duty_type,Request|nullable|string|max:1000',
         ]);
 
+        $this->abortUnlessWspoMayManageAccount($request, null, $request->input('role'));
         $this->abortIfUserAlreadyExists($request);
+        $this->assertStudentAccountProfile($request);
         $request->validate(['gender' => 'nullable|in:Male,Female']);
         $validated['password'] = bcrypt($validated['password']);
         $this->ensureOfficeIsAllowed($request);
@@ -278,6 +376,8 @@ class UserController extends Controller
         if ($this->roleUsesProfile($user->role)) {
             $user->profile()->create($this->profileAttributesForRole($user->role, $request));
         }
+
+        $this->notifySupervisorsIfStudentPlaced($user->load('profile'));
 
         return response()->json(['message' => 'User created successfully', 'user' => $user]);
     }
@@ -288,12 +388,13 @@ class UserController extends Controller
         $this->normalizeUserPayload($request);
 
         $user = \App\Models\User::findOrFail($id);
+        $this->abortUnlessWspoMayManageAccount($request, $user, $request->input('role'));
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             // The management edit form does not expose login IDs. Keep the
             // current username unless an API client explicitly sends a new one.
-            'username' => 'sometimes|required|string|unique:users,username,' . $id,
+            'username' => ['sometimes', 'required', 'string', 'max:255', Rule::unique('users', 'username')->ignore($id)->whereNull('deleted_at')],
             'role' => 'required|string',
             'phone_number' => 'nullable|string',
             'duty_type' => 'nullable|in:Clerical,Janitorial,Request',
@@ -305,8 +406,10 @@ class UserController extends Controller
         }
 
         $request->validate(['gender' => 'nullable|in:Male,Female']);
+        $this->assertStudentAccountProfile($request, $user->id);
         $this->abortIfUserAlreadyExists($request, $user->id);
         $this->ensureOfficeIsAllowed($request);
+        $previousOffice = trim((string) $user->profile?->assigned_office);
         $user->update($validated);
 
         if ($this->roleUsesProfile($user->role)) {
@@ -316,6 +419,12 @@ class UserController extends Controller
             );
         } else {
             $user->profile()->delete();
+        }
+
+        $user->load('profile');
+        $newOffice = trim((string) $user->profile?->assigned_office);
+        if ($user->role === 'Student' && $newOffice !== '' && $newOffice !== $previousOffice) {
+            $this->notifySupervisorsIfStudentPlaced($user);
         }
 
         return response()->json(['message' => 'User updated successfully', 'user' => $user->load('profile')]);
@@ -348,6 +457,32 @@ class UserController extends Controller
             'message' => 'Profile updated successfully.',
             'user' => $user->load('profile'),
         ]);
+    }
+
+    private function assertStudentAccountProfile(Request $request, ?int $ignoreUserId = null): void
+    {
+        if ($request->input('role') !== 'Student') {
+            return;
+        }
+
+        $request->validate([
+            'phone_number' => 'required|string|max:50',
+            'gender' => 'required|in:Male,Female',
+            'student_id_number' => 'required|string|max:50',
+            'course' => 'required|string|max:255',
+            'year_level' => 'required|integer|min:1|max:4',
+            'assigned_office' => 'required|string|max:255',
+        ]);
+
+        $studentId = trim((string) $request->input('student_id_number'));
+        $taken = \App\Models\UserProfile::query()
+            ->when($ignoreUserId, fn ($query) => $query->where('user_id', '!=', $ignoreUserId))
+            ->where('student_id_number', $studentId)
+            ->exists();
+
+        if ($taken) {
+            abort(422, 'This student ID number is already used.');
+        }
     }
 
     private function abortIfUserAlreadyExists(Request $request, ?int $ignoreUserId = null): void
@@ -403,6 +538,26 @@ class UserController extends Controller
         }
     }
 
+    /**
+     * WSPO staff provision and maintain working-student accounts only.
+     * Super Admin, Supervisor, and other staff accounts stay with Super Admin.
+     */
+    private function abortUnlessWspoMayManageAccount(Request $request, ?User $target = null, ?string $requestedRole = null): void
+    {
+        $actor = $request->user();
+        if (!$actor || $actor->role !== 'WSPO Staff') {
+            return;
+        }
+
+        if ($target && $target->role !== 'Student') {
+            abort(403, 'WSPO staff can only modify student accounts.');
+        }
+
+        if ($requestedRole !== null && $requestedRole !== 'Student') {
+            abort(403, 'WSPO staff can only manage student accounts.');
+        }
+    }
+
     private function roleUsesProfile(string $role): bool
     {
         return in_array($role, ['Student', 'Supervisor', 'WSPO Staff'], true);
@@ -413,13 +568,13 @@ class UserController extends Controller
         if ($request->input('role') === 'Supervisor') {
             $request->validate([
                 'supervised_departments' => ['nullable', 'array'],
-                'supervised_departments.*' => ['string', 'in:' . implode(',', self::UNIVERSITY_OFFICES)],
+                'supervised_departments.*' => ['string', Rule::in(Office::names())],
             ]);
         }
 
         if ($request->input('role') === 'Student'
             && $request->filled('assigned_office')
-            && !in_array($request->input('assigned_office'), self::UNIVERSITY_OFFICES, true)) {
+            && !in_array($request->input('assigned_office'), Office::names(), true)) {
             abort(422, 'Assigned Office / Dept must be selected from the university office list.');
         }
     }
@@ -475,9 +630,10 @@ class UserController extends Controller
         ))));
     }
 
-    public function destroy(string $id)
+    public function destroy(Request $request, string $id)
     {
         $user = User::findOrFail($id);
+        $this->abortUnlessWspoMayManageAccount($request, $user);
         $user->delete();
 
         return response()->json(['message' => 'User deleted successfully']);

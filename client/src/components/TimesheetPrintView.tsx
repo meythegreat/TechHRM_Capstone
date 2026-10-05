@@ -24,6 +24,7 @@ interface TimesheetPrintViewProps {
     };
     history: AttendanceRecord[];
     totalHours: number;
+    penaltyHours?: number;
     startDate: string;
     endDate: string;
 }
@@ -112,6 +113,7 @@ const TimesheetPrintView: React.FC<TimesheetPrintViewProps> = ({
     studentProfile,
     history,
     totalHours,
+    penaltyHours = 0,
     startDate,
 }) => {
     const monthBase = startDate ? new Date(`${startDate}T00:00:00`) : new Date();
@@ -177,6 +179,8 @@ const TimesheetPrintView: React.FC<TimesheetPrintViewProps> = ({
 
     const weekHoursTotal = workWeeks.reduce((sum, week) => sum + week.hours, 0);
     const monthHours = weekHoursTotal > 0 ? weekHoursTotal : totalHours;
+    const dutyDeduction = Math.max(0, Number(penaltyHours) || 0);
+    const netHours = Math.max(0, monthHours - dutyDeduction);
 
     return (
         <div
@@ -334,6 +338,26 @@ const TimesheetPrintView: React.FC<TimesheetPrintViewProps> = ({
                             {monthHours.toFixed(2)}
                         </td>
                     </tr>
+                    {dutyDeduction > 0 && (
+                        <>
+                            <tr>
+                                <td colSpan={2} style={{ ...cell, textAlign: 'right', fontWeight: 700, fontSize: '10px', padding: '2px 6px' }}>
+                                    Duty deduction (infraction)
+                                </td>
+                                <td style={{ ...cell, textAlign: 'center', fontWeight: 700, fontSize: '10px', padding: '2px 3px' }}>
+                                    -{dutyDeduction.toFixed(2)}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td colSpan={2} style={{ ...cell, textAlign: 'right', fontWeight: 700, fontSize: '10px', padding: '2px 6px' }}>
+                                    Credited hours
+                                </td>
+                                <td style={{ ...cell, textAlign: 'center', fontWeight: 700, fontSize: '10px', padding: '2px 3px' }}>
+                                    {netHours.toFixed(2)}
+                                </td>
+                            </tr>
+                        </>
+                    )}
                 </tbody>
             </table>
             <p className="text-center text-[9px] leading-snug my-1.5 px-4">

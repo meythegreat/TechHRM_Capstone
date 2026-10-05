@@ -22,12 +22,16 @@ class AdminUserSeeder extends Seeder
             'role' => 'Super Admin',
         ]);
 
-        // 2. WSPO Staff Account
-        User::create([
+        // 2. WSPO Staff Account — also the supervisor of working students placed in WSPO
+        $coordinator = User::create([
             'name' => 'WSPO Coordinator',
             'username' => 'wspostaff',
             'password' => Hash::make('password123'),
             'role' => 'WSPO Staff',
+        ]);
+        UserProfile::create([
+            'user_id' => $coordinator->id,
+            'assigned_office' => 'WSPO Coordinator',
         ]);
 
         // 3. Supervisor Account (e.g., Dean of CCS)

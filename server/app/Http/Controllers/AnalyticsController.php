@@ -6,26 +6,39 @@ use App\Models\Application;
 use App\Models\Attendance;
 use App\Models\DisciplinaryRecord;
 use App\Models\User;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class AnalyticsController extends Controller
 {
-    public function getDashboardStats()
+    public function getDashboardStats(Request $request)
     {
+        $includeDeleted = $request->user()->role === 'Super Admin';
         $totalStudents = User::where('role', 'Student')->count();
         $pendingApps = Application::where('status', 'Pending')->count();
 
-        $totalHoursRendered = (float) Attendance::selectRaw(
+        $hoursQuery = Attendance::query();
+        $anomalyQuery = Attendance::query()->where('is_anomaly', true);
+        if (!$includeDeleted) {
+            $hoursQuery->whereHas('user');
+            $anomalyQuery->whereHas('user');
+        }
+
+        $totalHoursRendered = (float) $hoursQuery->selectRaw(
             'SUM(COALESCE(computed_hours, rendered_hours, 0)) as total'
         )->value('total');
 
-        $anomaliesCount = Attendance::where('is_anomaly', true)->count();
-        $activePenalties = DisciplinaryRecord::where('status', 'Active')->count();
+        $anomaliesCount = $anomalyQuery->count();
+        $activePenalties = DisciplinaryRecord::query()
+            ->when(!$includeDeleted, fn ($query) => $query->whereHas('student'))
+            ->where('status', 'Active')
+            ->count();
 
         $departmentWorkload = Attendance::query()
             ->join('users', 'attendances.user_id', '=', 'users.id')
             ->leftJoin('user_profiles', 'users.id', '=', 'user_profiles.user_id')
             ->where('users.role', 'Student')
+            ->when(!$includeDeleted, fn ($query) => $query->whereNull('users.deleted_at'))
             ->select(
                 DB::raw("COALESCE(user_profiles.assigned_office, 'Unassigned') as department"),
                 DB::raw('SUM(COALESCE(attendances.computed_hours, attendances.rendered_hours, 0)) as total_hours')
@@ -50,9 +63,12 @@ class AnalyticsController extends Controller
         ]);
     }
 
-    public function exportAttendance()
+    public function exportAttendance(Request $request)
     {
-        $attendances = Attendance::with('user:id,name')->orderByDesc('time_in')->get();
+        $attendances = Attendance::query()
+            ->visibleTo($request->user()->role)
+            ->orderByDesc('time_in')
+            ->get();
 
         $filename = 'attendance_report_' . date('Y-m-d') . '.csv';
         $headers = [
@@ -73,7 +89,7 @@ class AnalyticsController extends Controller
                     : ($record->rendered_hours ?? 0);
 
                 fputcsv($file, [
-                    $record->user->name ?? 'Unknown',
+                    ($record->user->name ?? 'Unknown').($record->account_deleted ? ' (Account deleted)' : ''),
                     $record->time_in,
                     $record->time_out ?? 'Ongoing',
                     $record->attendance_type ?? 'Regular',

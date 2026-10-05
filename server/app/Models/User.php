@@ -9,6 +9,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 use App\Traits\RecordsActivity;
 
 class User extends Authenticatable
@@ -50,6 +51,37 @@ class User extends Authenticatable
         return [
             'password' => 'hashed',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::deleting(function (User $user): void {
+            if ($user->isForceDeleting()) {
+                return;
+            }
+
+            // Soft delete keeps the row, and username is unique. Free the
+            // login email so the same address can be registered again.
+            $user->releaseUsername();
+        });
+    }
+
+    public function releaseUsername(): void
+    {
+        $suffix = '#deleted-' . $this->getKey();
+        $current = (string) $this->username;
+
+        if ($current === '' || str_ends_with($current, $suffix)) {
+            return;
+        }
+
+        $released = $current . $suffix;
+        if (strlen($released) > 255) {
+            $released = substr($current, 0, 255 - strlen($suffix)) . $suffix;
+        }
+
+        DB::table('users')->where('id', $this->getKey())->update(['username' => $released]);
+        $this->username = $released;
     }
 
     public function profile()

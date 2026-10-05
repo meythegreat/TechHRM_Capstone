@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
+import { REALTIME_EVENT } from '../utils/realtime';
+import { withHomeDepartmentNote } from '../utils/studentAssignment';
 import { 
     CalendarDays, 
     Clock, 
     Plus, 
     User, 
+    Users,
     CheckCircle2, 
     AlertCircle, 
     Trash2, 
@@ -13,7 +16,10 @@ import {
     X,
     ChevronLeft,
     ChevronRight,
-    MapPin
+    MapPin,
+    Briefcase,
+    ShieldCheck,
+    Send
 } from 'lucide-react';
 
 interface UserData {
@@ -22,6 +28,8 @@ interface UserData {
     gender?: string | null;
     profile?: {
         assigned_office?: string;
+        course?: string | null;
+        year_level?: string | number | null;
         gender?: string | null;
     }
 }
@@ -38,6 +46,7 @@ interface Schedule {
     edit_request_note?: string;
     user?: {
         name: string;
+        deleted_at?: string | null;
     }
 }
 
@@ -210,7 +219,6 @@ const ScheduleManagement = () => {
 
     const fetchStudents = async () => {
         try {
-            // The API scopes supervisors to their own department.
             const response = await axios.get('/api/personnel');
             setStudents(response.data);
         } catch (error) {
@@ -218,8 +226,8 @@ const ScheduleManagement = () => {
         }
     };
 
-    const fetchSchedules = async (page: number) => {
-        setIsLoading(true);
+    const fetchSchedules = async (page: number, silent = false) => {
+        if (!silent) setIsLoading(true);
         try {
             const response = await axios.get(`/api/schedules?page=${page}`);
             setSchedules(response.data.data);
@@ -227,11 +235,25 @@ const ScheduleManagement = () => {
             setTotalPages(response.data.last_page);
         } catch (error) {
             console.error("Failed to fetch schedules", error);
-            showToast("Failed to load schedules.", "error");
+            if (!silent) showToast("Failed to load schedules.", "error");
         } finally {
-            setIsLoading(false);
+            if (!silent) setIsLoading(false);
         }
     };
+
+    useEffect(() => {
+        const refresh = () => {
+            fetchSchedules(currentPage, true);
+            fetchStudents();
+            fetchStaffingRequests();
+        };
+        const interval = setInterval(refresh, 5000);
+        window.addEventListener(REALTIME_EVENT, refresh);
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener(REALTIME_EVENT, refresh);
+        };
+    }, [currentPage]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -285,10 +307,7 @@ const ScheduleManagement = () => {
     // STRICT TYPESCRIPT VARIANTS
     const containerVariants: Variants = {
         hidden: { opacity: 0 },
-        show: {
-            opacity: 1,
-            transition: { staggerChildren: 0.05 }
-        }
+        show: { opacity: 1, transition: { staggerChildren: 0.05 } }
     };
 
     const rowVariants: Variants = {
@@ -318,7 +337,7 @@ const ScheduleManagement = () => {
                         Schedule Master
                     </h1>
                     <p className="mt-2 text-slate-400 font-medium max-w-md">
-                        Assign and manage weekly shifts for student workers. Review requested schedule modifications.
+                        Assign and manage weekly shifts for student workers. Request additional personnel or review requested schedule modifications.
                     </p>
                 </div>
 
@@ -358,19 +377,71 @@ const ScheduleManagement = () => {
                 )}
             </AnimatePresence>
 
+            {/* STAFFING REQUESTS CONSOLE (Supervisor View) */}
             {currentUserRole === 'Supervisor' && (
-                <form onSubmit={submitStaffingRequest} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
-                    <div className="sm:col-span-4"><h2 className="font-black text-slate-900">Request a Working Student</h2><p className="text-sm text-slate-500">Tell WSPO how many workers you need, the duty type, and the gender for each slot. The coordinator will assign who is sent to your office.</p></div>
-                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Duty</label><select value={staffingForm.duty_type} onChange={e => setStaffingForm({...staffingForm, duty_type: e.target.value})} className="w-full p-3 bg-slate-50 border rounded-xl"><option>Clerical</option><option>Janitorial</option><option>Request</option></select></div>
-                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Workers Needed</label><input required min="1" max="50" type="number" value={staffingForm.quantity} onChange={e => setRequestedQuantity(Number(e.target.value))} className="w-full p-3 bg-slate-50 border rounded-xl" /></div>
-                    {staffingForm.duty_type === 'Request' && <div className="sm:col-span-2"><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Specific Request</label><input required value={staffingForm.duty_request} onChange={e => setStaffingForm({...staffingForm, duty_request: e.target.value})} placeholder="Describe the required assignment" className="w-full p-3 bg-slate-50 border rounded-xl" /></div>}
-                    <div className="sm:col-span-4">
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Gender for each working student</label>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <motion.form 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    onSubmit={submitStaffingRequest} 
+                    className="bg-indigo-50/40 border border-indigo-100 rounded-3xl p-6 sm:p-8 shadow-sm flex flex-col gap-5"
+                >
+                    <div>
+                        <h2 className="text-lg font-black text-indigo-900 flex items-center gap-2 tracking-tight">
+                            <Users className="w-5 h-5" /> Request Working Students
+                        </h2>
+                        <p className="text-sm font-medium text-slate-500 mt-1">Submit an official request to WSPO to deploy new student workers to your department.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-5 items-start">
+                        <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Duty Type</label>
+                            <select 
+                                value={staffingForm.duty_type} 
+                                onChange={e => setStaffingForm({...staffingForm, duty_type: e.target.value})} 
+                                className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-600 shadow-sm"
+                            >
+                                <option>Clerical</option>
+                                <option>Janitorial</option>
+                                <option>Request</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Workers Needed</label>
+                            <input 
+                                required 
+                                min="1" 
+                                max="50" 
+                                type="number" 
+                                value={staffingForm.quantity} 
+                                onChange={e => setRequestedQuantity(Number(e.target.value))} 
+                                className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 shadow-sm" 
+                            />
+                        </div>
+                        {staffingForm.duty_type === 'Request' && (
+                            <div className="sm:col-span-2">
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Specific Duty Requirements</label>
+                                <input 
+                                    required 
+                                    value={staffingForm.duty_request} 
+                                    onChange={e => setStaffingForm({...staffingForm, duty_request: e.target.value})} 
+                                    placeholder="Describe the required assignment..." 
+                                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 shadow-sm" 
+                                />
+                            </div>
+                        )}
+                    </div>
+
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 border-b border-indigo-200/50 pb-2">Gender Allocation for requested slots</label>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                             {staffingForm.requested_genders.map((gender, index) => (
-                                <div key={`gender-slot-${index}`}>
-                                    <p className="text-[11px] font-semibold text-slate-500 mb-1">Student {index + 1}</p>
-                                    <select value={gender} onChange={(e) => setSlotGender(index, e.target.value)} className="w-full p-3 bg-slate-50 border rounded-xl">
+                                <div key={`gender-slot-${index}`} className="bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
+                                    <p className="text-[10px] font-bold text-slate-400 mb-1.5 px-1">Slot {index + 1}</p>
+                                    <select 
+                                        value={gender} 
+                                        onChange={(e) => setSlotGender(index, e.target.value)} 
+                                        className="w-full p-2 bg-slate-50 border border-slate-100 rounded-lg text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-600"
+                                    >
                                         <option value="Male">Male</option>
                                         <option value="Female">Female</option>
                                     </select>
@@ -378,61 +449,121 @@ const ScheduleManagement = () => {
                             ))}
                         </div>
                     </div>
-                    <button className="px-4 py-3 bg-blue-600 text-white font-bold rounded-xl">Send Request</button>
-                </form>
+
+                    <div className="pt-2">
+                        <button className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2">
+                            <Send className="w-4 h-4" /> Transmit Request
+                        </button>
+                    </div>
+                </motion.form>
             )}
 
+            {/* STAFFING REQUESTS LIST (WSPO & Admin View) */}
             {staffingRequests.length > 0 && (
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-                    <h2 className="font-black text-slate-900 mb-3">{currentUserRole === 'Supervisor' ? 'Your Staffing Requests' : 'Supervisor Staffing Requests'}</h2>
-                    <div className="space-y-3">
+                <div className="space-y-4">
+                    <h2 className="text-lg font-black text-slate-900 flex items-center gap-2 border-b border-slate-200 pb-2">
+                        <Briefcase className="w-5 h-5 text-indigo-600" />
+                        {currentUserRole === 'Supervisor' ? 'Your Active Staffing Requests' : 'Pending Department Requests'}
+                    </h2>
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
                         {staffingRequests.map(request => {
                             const selectedIds = assignmentSelections[request.id] || [];
                             const assignedNames = assignedStudentNames(request);
+                            
                             return (
-                                <div key={request.id} className="border rounded-xl p-3 space-y-3">
-                                    <div className="flex flex-wrap items-start justify-between gap-3">
-                                        <div>
-                                            <p className="font-bold text-slate-800">{request.department} — {request.quantity} {request.duty_type}</p>
-                                            <p className="text-sm text-slate-500">Requested by {request.requester?.name}{request.duty_request ? `: ${request.duty_request}` : ''}</p>
-                                            {(request.gender_summary || genderSummary(request.requested_genders || [])) && (
-                                                <p className="text-sm font-semibold text-slate-700 mt-1">Gender needed: {request.gender_summary || genderSummary(request.requested_genders || [])}</p>
-                                            )}
-                                            {assignedNames && <p className="text-sm font-semibold text-indigo-700 mt-1">Assigned: {assignedNames}</p>}
-                                        </div>
-                                        <span className="text-xs font-bold text-slate-500">{request.status}</span>
-                                    </div>
-                                    {currentUserRole !== 'Supervisor' && request.status === 'Pending' && (
-                                        <>
+                                <div key={request.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col justify-between hover:border-indigo-200 transition-colors">
+                                    <div>
+                                        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                                             <div>
-                                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Select working student{request.quantity > 1 ? 's' : ''} to send ({selectedIds.length}/{request.quantity})</label>
-                                                <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
-                                                    {staffingCandidates.map((student) => {
-                                                        const gender = studentGender(student);
-                                                        const remaining = remainingGenders(request, selectedIds);
-                                                        const genderLocked = (request.requested_genders || []).length > 0;
-                                                        const genderFull = genderLocked && (gender === 'Male' || gender === 'Female') && remaining[gender] <= 0 && !selectedIds.includes(student.id);
-                                                        const missingGender = genderLocked && gender !== 'Male' && gender !== 'Female';
-                                                        return (
-                                                        <label key={student.id} className={`flex items-center gap-3 px-3 py-2 ${genderFull || missingGender ? 'opacity-50' : 'cursor-pointer hover:bg-slate-50'}`}>
-                                                            <input
-                                                                type="checkbox"
-                                                                disabled={genderFull || missingGender}
-                                                                checked={selectedIds.includes(student.id)}
-                                                                onChange={() => toggleAssignedStudent(request.id, student.id, request)}
-                                                            />
-                                                            <span className="text-sm font-bold text-slate-800">{student.name}</span>
-                                                            <span className="text-xs text-slate-500">{gender || 'No gender'} · {student.profile?.assigned_office || 'Unassigned'}</span>
-                                                        </label>
-                                                        );
-                                                    })}
-                                                </div>
+                                                <h3 className="text-base font-black text-slate-900 tracking-tight">{request.department}</h3>
+                                                <p className="text-sm font-bold text-indigo-700 mt-0.5">{request.quantity} {request.duty_type} Worker{request.quantity !== 1 ? 's' : ''}</p>
+                                                <p className="text-xs font-medium text-slate-500 mt-1">Requested by: <span className="font-bold text-slate-700">{request.requester?.name}</span></p>
+                                                
+                                                {request.duty_request && (
+                                                    <div className="mt-2 p-2.5 bg-slate-50 border border-slate-100 rounded-xl">
+                                                        <p className="text-xs text-slate-600 italic">"{request.duty_request}"</p>
+                                                    </div>
+                                                )}
+                                                
+                                                {(request.gender_summary || genderSummary(request.requested_genders || [])) && (
+                                                    <div className="mt-3 inline-flex px-2.5 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-slate-200">
+                                                        Req: {request.gender_summary || genderSummary(request.requested_genders || [])}
+                                                    </div>
+                                                )}
                                             </div>
+                                            <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border shadow-sm shrink-0 ${
+                                                request.status === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                                request.status === 'Declined' ? 'bg-red-50 text-red-700 border-red-200' :
+                                                'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                            }`}>
+                                                {request.status}
+                                            </span>
+                                        </div>
+
+                                        {assignedNames && (
+                                            <div className="mb-4 p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
+                                                <p className="text-xs font-bold text-emerald-800 mb-1">Assigned Personnel:</p>
+                                                <p className="text-sm font-medium text-emerald-900">{assignedNames}</p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Action Area for WSPO Staff */}
+                                    {currentUserRole !== 'Supervisor' && request.status === 'Pending' && (
+                                        <div className="mt-4 pt-4 border-t border-slate-100">
+                                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 flex justify-between">
+                                                <span>Select Personnel to Deploy</span>
+                                                <span className={`${selectedIds.length === request.quantity ? 'text-emerald-600' : 'text-indigo-600'}`}>
+                                                    ({selectedIds.length} of {request.quantity} selected)
+                                                </span>
+                                            </label>
+                                            
+                                            <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 custom-scrollbar mb-4 bg-slate-50/50">
+                                                {staffingCandidates.map((student) => {
+                                                    const gender = studentGender(student);
+                                                    const remaining = remainingGenders(request, selectedIds);
+                                                    const genderLocked = (request.requested_genders || []).length > 0;
+                                                    const genderFull = genderLocked && (gender === 'Male' || gender === 'Female') && remaining[gender] <= 0 && !selectedIds.includes(student.id);
+                                                    const missingGender = genderLocked && gender !== 'Male' && gender !== 'Female';
+                                                    
+                                                    return (
+                                                    <label key={student.id} className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${genderFull || missingGender ? 'opacity-40 grayscale' : 'cursor-pointer hover:bg-white'}`}>
+                                                        <input
+                                                            type="checkbox"
+                                                            disabled={genderFull || missingGender}
+                                                            checked={selectedIds.includes(student.id)}
+                                                            onChange={() => toggleAssignedStudent(request.id, student.id, request)}
+                                                            className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                                                        />
+                                                        <div className="flex flex-col">
+                                                            <span className="text-sm font-bold text-slate-900">{student.name}</span>
+                                                            <span className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
+                                                                {gender || 'No gender'} • <MapPin className="w-3 h-3"/> {student.profile?.assigned_office || 'Unassigned'}
+                                                            </span>
+                                                        </div>
+                                                    </label>
+                                                    );
+                                                })}
+                                            </div>
+
                                             <div className="flex items-center gap-2">
-                                                <button type="button" onClick={() => updateStaffingRequest(request.id, 'Approved')} className="px-3 py-2 text-sm bg-emerald-600 text-white rounded-lg">Approve & Assign</button>
-                                                <button type="button" onClick={() => updateStaffingRequest(request.id, 'Declined')} className="px-3 py-2 text-sm bg-slate-200 rounded-lg">Decline</button>
+                                                <button 
+                                                    type="button" 
+                                                    disabled={selectedIds.length === 0}
+                                                    onClick={() => updateStaffingRequest(request.id, 'Approved')} 
+                                                    className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2"
+                                                >
+                                                    <CheckCircle2 className="w-4 h-4" /> Approve & Assign
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => updateStaffingRequest(request.id, 'Declined')} 
+                                                    className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-red-50 hover:text-red-600 text-slate-600 text-sm font-bold rounded-xl shadow-sm transition-colors"
+                                                >
+                                                    Decline
+                                                </button>
                                             </div>
-                                        </>
+                                        </div>
                                     )}
                                 </div>
                             );
@@ -441,13 +572,14 @@ const ScheduleManagement = () => {
                 </div>
             )}
 
-            {/* MAIN TABLE */}
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative">
+            {/* MAIN SCHEDULES TABLE */}
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative min-h-[400px]">
                 
                 {isLoading && (
                     <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-10 flex items-center justify-center">
                         <div className="flex flex-col items-center gap-3">
                             <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                            <span className="text-sm font-bold text-blue-700 animate-pulse">Loading schedules...</span>
                         </div>
                     </div>
                 )}
@@ -488,40 +620,57 @@ const ScheduleManagement = () => {
                                                     <p className="font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
                                                         {schedule.user?.name || 'Unknown User'}
                                                     </p>
+                                                    {schedule.user?.deleted_at && (
+                                                        <span className="mt-1 inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+                                                            Account deleted
+                                                        </span>
+                                                    )}
                                                     <div className="text-xs font-medium text-slate-500 flex items-center gap-1 mt-0.5">
                                                         <MapPin className="w-3 h-3 text-slate-400" /> {schedule.department}
                                                     </div>
                                                 </div>
                                             </div>
                                         </td>
+                                        
                                         <td className="px-6 py-5 align-top">
                                             <div className="flex items-center gap-2 text-sm text-slate-900 font-bold mb-1.5">
                                                 <Clock className="w-4 h-4 text-blue-500" />
                                                 {schedule.time}
                                             </div>
-                                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 uppercase tracking-widest">
+                                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 uppercase tracking-widest border border-slate-200">
                                                 {schedule.day}
                                             </span>
                                         </td>
+
                                         <td className="px-6 py-5 align-top">
                                             <p className="text-sm font-bold text-slate-800">{schedule.duty_type}</p>
                                             <p className="text-xs font-medium text-slate-500 mt-1 flex items-center gap-1">
                                                 <User className="w-3.5 h-3.5" /> Sup: {schedule.supervisor}
                                             </p>
                                         </td>
+
                                         <td className="px-6 py-5 align-top text-right">
                                             <div className="flex flex-col items-end gap-3">
                                                 {schedule.edit_request_status === 'pending' && (
-                                                    <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-left max-w-xs shadow-sm">
-                                                        <p className="text-xs font-bold text-amber-800 mb-1 flex items-center gap-1">
-                                                            <AlertCircle className="w-4 h-4" /> Edit Requested
+                                                    <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-left max-w-[280px] shadow-sm relative overflow-hidden">
+                                                        <div className="absolute top-0 right-0 w-16 h-16 bg-amber-500/10 rounded-full blur-xl"></div>
+                                                        <p className="text-xs font-black text-amber-800 mb-1.5 flex items-center gap-1.5 tracking-tight relative z-10">
+                                                            <AlertCircle className="w-4 h-4" /> Shift Edit Requested
                                                         </p>
-                                                        <p className="text-xs text-amber-700 font-medium mb-2 italic">"{schedule.edit_request_note}"</p>
-                                                        <div className="flex gap-2">
-                                                            <button onClick={() => handleEditAction(schedule.id, 'approve')} className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold shadow-sm transition-colors flex items-center gap-1">
+                                                        <p className="text-[11px] text-amber-700 font-medium mb-3 italic leading-relaxed relative z-10 bg-white/50 p-2 rounded-lg border border-amber-100">
+                                                            "{schedule.edit_request_note}"
+                                                        </p>
+                                                        <div className="flex gap-2 relative z-10">
+                                                            <button 
+                                                                onClick={() => handleEditAction(schedule.id, 'approve')} 
+                                                                className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold shadow-sm transition-colors flex items-center justify-center gap-1"
+                                                            >
                                                                 <Check className="w-3.5 h-3.5" /> Approve
                                                             </button>
-                                                            <button onClick={() => handleEditAction(schedule.id, 'reject')} className="px-3 py-1.5 bg-white border border-red-200 hover:bg-red-50 text-red-600 rounded-lg text-xs font-bold transition-colors flex items-center gap-1">
+                                                            <button 
+                                                                onClick={() => handleEditAction(schedule.id, 'reject')} 
+                                                                className="flex-1 py-1.5 bg-white border border-red-200 hover:bg-red-50 text-red-600 rounded-lg text-[11px] font-bold transition-colors flex items-center justify-center gap-1"
+                                                            >
                                                                 <X className="w-3.5 h-3.5" /> Reject
                                                             </button>
                                                         </div>
@@ -530,8 +679,8 @@ const ScheduleManagement = () => {
                                                 
                                                 <button 
                                                     onClick={() => handleDelete(schedule.id)}
-                                                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                    title="Delete Schedule"
+                                                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                                                    title="Remove Schedule"
                                                 >
                                                     <Trash2 className="w-5 h-5" />
                                                 </button>
@@ -545,27 +694,29 @@ const ScheduleManagement = () => {
                 </div>
 
                 {/* Pagination Footer */}
-                <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <span className="text-sm font-bold text-slate-500 uppercase tracking-wider">
-                        Page {currentPage} of {totalPages}
-                    </span>
-                    <div className="flex gap-2">
-                        <button 
-                            disabled={currentPage === 1} 
-                            onClick={() => setCurrentPage(p => p - 1)}
-                            className="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 transition-colors flex items-center gap-1 shadow-sm"
-                        >
-                            <ChevronLeft className="w-4 h-4" /> Prev
-                        </button>
-                        <button 
-                            disabled={currentPage === totalPages} 
-                            onClick={() => setCurrentPage(p => p + 1)}
-                            className="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 transition-colors flex items-center gap-1 shadow-sm"
-                        >
-                            Next <ChevronRight className="w-4 h-4" />
-                        </button>
+                {!isLoading && schedules.length > 0 && (
+                    <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <span className="text-sm font-medium text-slate-500">
+                            Showing page <span className="font-bold text-slate-900">{currentPage}</span> of <span className="font-bold text-slate-900">{totalPages}</span>
+                        </span>
+                        <div className="flex gap-2">
+                            <button 
+                                disabled={currentPage === 1} 
+                                onClick={() => setCurrentPage(p => p - 1)}
+                                className="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 transition-colors flex items-center gap-1 shadow-sm"
+                            >
+                                <ChevronLeft className="w-4 h-4" /> Prev
+                            </button>
+                            <button 
+                                disabled={currentPage === totalPages} 
+                                onClick={() => setCurrentPage(p => p + 1)}
+                                className="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 transition-colors flex items-center gap-1 shadow-sm"
+                            >
+                                Next <ChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
 
             {/* MODAL: ASSIGN NEW SHIFT */}
@@ -575,15 +726,15 @@ const ScheduleManagement = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                        className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
                     >
                         <motion.div 
                             initial={{ scale: 0.95, opacity: 0, y: 20 }}
                             animate={{ scale: 1, opacity: 1, y: 0 }}
                             exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                            className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden"
+                            className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden my-auto"
                         >
-                            <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                            <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center sticky top-0 z-10">
                                 <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
                                     <Plus className="w-5 h-5 text-blue-600" /> Assign New Shift
                                 </h3>
@@ -592,9 +743,17 @@ const ScheduleManagement = () => {
                                 </button>
                             </div>
 
-                            <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-6">
+                            <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                                
+                                <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex gap-3 mb-2">
+                                    <ShieldCheck className="w-5 h-5 text-blue-600 shrink-0" />
+                                    <p className="text-[11px] font-medium text-blue-800 leading-relaxed">
+                                        Use this form to manually lock a student into a specific weekly shift. This will enforce their availability and prevent unauthorized clock-ins outside of this window.
+                                    </p>
+                                </div>
+
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Select Student Worker</label>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Select Student Worker</label>
                                     <select 
                                         required 
                                         value={formData.user_id} 
@@ -602,13 +761,13 @@ const ScheduleManagement = () => {
                                         className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all appearance-none cursor-pointer"
                                     >
                                         <option value="" disabled>-- Select a student --</option>
-                                        {students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.profile?.assigned_office || 'Unassigned'})</option>)}
+                                        {students.map(s => <option key={s.id} value={s.id}>{withHomeDepartmentNote(`${s.name} (${s.profile?.assigned_office || 'Unassigned'})`, s.profile?.course, s.profile?.assigned_office, s.profile?.year_level)}</option>)}
                                     </select>
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-5">
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Day of Week</label>
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Day of Week</label>
                                         <select 
                                             value={formData.day} 
                                             onChange={e => setFormData({...formData, day: e.target.value})} 
@@ -618,7 +777,7 @@ const ScheduleManagement = () => {
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Duty Type</label>
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Duty Type</label>
                                         <select 
                                             value={formData.duty_type} 
                                             onChange={e => setFormData({...formData, duty_type: e.target.value})} 
@@ -635,32 +794,32 @@ const ScheduleManagement = () => {
 
                                 <div className="grid grid-cols-2 gap-5">
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Start Time</label>
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Start Time</label>
                                         <input required type="time" value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all cursor-pointer" />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">End Time</label>
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">End Time</label>
                                         <input required type="time" value={formData.endTime} onChange={e => setFormData({...formData, endTime: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all cursor-pointer" />
                                     </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Department</label>
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Department</label>
                                         <input required type="text" value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} placeholder="e.g. CCS Office" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all placeholder:text-slate-400 placeholder:font-medium" />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Supervisor</label>
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Supervisor</label>
                                         <input required type="text" value={formData.supervisor} onChange={e => setFormData({...formData, supervisor: e.target.value})} placeholder="e.g. Mr. Smith" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all placeholder:text-slate-400 placeholder:font-medium" />
                                     </div>
                                 </div>
 
-                                <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                                    <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors">
+                                <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
+                                    <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-200 rounded-xl transition-colors">
                                         Cancel
                                     </button>
                                     <button type="submit" disabled={isSubmitting} className="px-6 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-lg shadow-blue-600/25 disabled:opacity-50 transition-all flex items-center gap-2">
-                                        {isSubmitting ? 'Saving...' : <><CheckCircle2 className="w-4 h-4" /> Assign Shift</>}
+                                        {isSubmitting ? 'Saving...' : <><CheckCircle2 className="w-4 h-4" /> Finalize Shift</>}
                                     </button>
                                 </div>
                             </form>

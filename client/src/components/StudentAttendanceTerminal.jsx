@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
+import { Html5Qrcode } from 'html5-qrcode';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Clock, 
@@ -16,7 +17,8 @@ import {
     Activity,
     CalendarRange,
     Eye,
-    X
+    X,
+    QrCode
 } from 'lucide-react';
 import {
     fetchWorkHourSummary,
@@ -49,7 +51,14 @@ const StudentAttendanceTerminal = () => {
     });
     
     const [tokenInput, setTokenInput] = useState('');
+    const [checkInMethod, setCheckInMethod] = useState('passcode');
     const [dutyType, setDutyType] = useState('Regular');
+    const scanBusy = useRef(false);
+    const clockInRef = useRef(null);
+    const scannerRef = useRef(null);
+    const [cameraLive, setCameraLive] = useState(false);
+    const [cameraStarting, setCameraStarting] = useState(false);
+    const insecureCamera = typeof window !== 'undefined' && !window.isSecureContext;
     const [activeShift, setActiveShift] = useState(null);
     const [errorMsg, setErrorMsg] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
@@ -59,6 +68,7 @@ const StudentAttendanceTerminal = () => {
     const [dtrMonth, setDtrMonth] = useState(currentYearMonth());
     const { start: dtrStart, end: dtrEnd } = monthBounds(dtrMonth);
     const [dtrHistory, setDtrHistory] = useState([]);
+    const [dtrPenaltyHours, setDtrPenaltyHours] = useState(0);
     const [dtrPreviewOpen, setDtrPreviewOpen] = useState(false);
     const [fullName, setFullName] = useState(localStorage.getItem('user_name') || 'Student');
     const [studentProfile, setStudentProfile] = useState({
@@ -118,23 +128,92 @@ const StudentAttendanceTerminal = () => {
         }
     };
 
-    const handleClockIn = async (e) => {
-        e.preventDefault();
+    const clockInWith = async (code, method) => {
         setErrorMsg('');
         setSuccessMsg('');
         setIsLoading(true);
-        
+
         try {
-            await submitSecureClockIn(tokenInput.trim().toUpperCase(), dutyType);
-            setSuccessMsg('Shift started successfully! Work hard and stay safe.');
+            await submitSecureClockIn(code, dutyType, method);
+            setSuccessMsg(method === 'qr' ? 'QR check-in accepted. Your shift has started.' : 'Shift started successfully! Work hard and stay safe.');
             setTokenInput('');
             await loadSummary();
             await loadDtr();
         } catch (err) {
+            scanBusy.current = false;
             setErrorMsg(err.response?.data?.message || 'Failed to verify token and clock in.');
         } finally {
             setIsLoading(false);
             setTimeout(() => setSuccessMsg(''), 4000);
+        }
+    };
+
+    const handleClockIn = async (e) => {
+        e.preventDefault();
+        await clockInWith(tokenInput.trim().toUpperCase(), 'passcode');
+    };
+
+    clockInRef.current = clockInWith;
+
+    useEffect(() => {
+        setCameraLive(false);
+        return () => {
+            scanBusy.current = false;
+            const scanner = scannerRef.current;
+            scannerRef.current = null;
+            if (scanner?.isScanning) {
+                scanner.stop().catch(() => {});
+            }
+        };
+    }, [checkInMethod, activeShift]);
+
+    const startCamera = async () => {
+        if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+            setErrorMsg(`The browser will not ask for the camera on http://${window.location.host}. Open https://${window.location.host}, accept the certificate warning, then tap Turn on camera.`);
+            return;
+        }
+
+        setCameraStarting(true);
+        setErrorMsg('');
+        try {
+            let stream;
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+            } catch {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            }
+            stream.getTracks().forEach((track) => track.stop());
+            await new Promise((resolve) => setTimeout(resolve, 300));
+
+            const scanner = new Html5Qrcode('student-qr-reader');
+            scannerRef.current = scanner;
+            await scanner.start(
+                { facingMode: 'environment' },
+                { fps: 8, qrbox: { width: 220, height: 220 } },
+                (decoded) => {
+                    if (scanBusy.current) return;
+                    const raw = String(decoded || '').trim();
+                    if (!raw.startsWith('THRM1|')) return;
+                    const code = raw.slice(6).trim();
+                    if (code.length < 16) return;
+                    scanBusy.current = true;
+                    clockInRef.current?.(code, 'qr');
+                },
+                () => {}
+            );
+            setCameraLive(true);
+        } catch (err) {
+            console.error('QR scanner failed', err);
+            const name = err?.name || '';
+            if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+                setErrorMsg('Camera permission was blocked. Allow the camera for this site in the browser settings, then tap Turn on camera again.');
+            } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+                setErrorMsg('No camera was found on this device. Use the passcode instead.');
+            } else {
+                setErrorMsg('The camera could not start. Allow camera access, or use the passcode instead.');
+            }
+        } finally {
+            setCameraStarting(false);
         }
     };
 
@@ -161,7 +240,9 @@ const StudentAttendanceTerminal = () => {
             const response = await axios.get('/api/attendance/my-history', {
                 params: { start: dtrStart, end: dtrEnd },
             });
-            setDtrHistory(Array.isArray(response.data) ? response.data : []);
+            const payload = response.data;
+            setDtrHistory(Array.isArray(payload) ? payload : (payload.history ?? []));
+            setDtrPenaltyHours(Number(payload?.duty_deduction_hours || 0));
         } catch (err) {
             console.error('Failed to load DTR', err);
         }
@@ -307,35 +388,87 @@ const StudentAttendanceTerminal = () => {
                                     </div>
 
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Verification Token</label>
-                                        <div className="relative">
-                                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                                <KeyRound className="h-5 w-5 text-slate-400" />
-                                            </div>
-                                            <input
-                                                type="text"
-                                                required
-                                                value={tokenInput}
-                                                onChange={(e) => setTokenInput(e.target.value.toUpperCase())}
-                                                placeholder="Enter supervisor token..."
-                                                className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all placeholder:text-slate-400 placeholder:font-medium uppercase tracking-widest"
-                                            />
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Check-in method</label>
+                                        <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+                                            <button
+                                                type="button"
+                                                onClick={() => setCheckInMethod('passcode')}
+                                                className={`py-2.5 rounded-lg text-sm font-bold transition-all ${checkInMethod === 'passcode' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+                                            >
+                                                Passcode
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setCheckInMethod('qr')}
+                                                className={`py-2.5 rounded-lg text-sm font-bold transition-all ${checkInMethod === 'qr' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+                                            >
+                                                Scan QR
+                                            </button>
                                         </div>
                                     </div>
 
-                                    <motion.button
-                                        whileHover={{ scale: 1.02 }}
-                                        whileTap={{ scale: 0.98 }}
-                                        type="submit"
-                                        disabled={isLoading || !tokenInput}
-                                        className="w-full py-3.5 mt-2 bg-linear-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold rounded-xl shadow-lg shadow-blue-600/25 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        {isLoading ? (
-                                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                        ) : (
-                                            <>Clock In Now</>
-                                        )}
-                                    </motion.button>
+                                    {checkInMethod === 'passcode' ? (
+                                        <>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Verification Token</label>
+                                                <div className="relative">
+                                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                                        <KeyRound className="h-5 w-5 text-slate-400" />
+                                                    </div>
+                                                    <input
+                                                        type="text"
+                                                        required
+                                                        value={tokenInput}
+                                                        onChange={(e) => setTokenInput(e.target.value.toUpperCase())}
+                                                        placeholder="Enter supervisor token..."
+                                                        className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all placeholder:text-slate-400 placeholder:font-medium uppercase tracking-widest"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <motion.button
+                                                whileHover={{ scale: 1.02 }}
+                                                whileTap={{ scale: 0.98 }}
+                                                type="submit"
+                                                disabled={isLoading || !tokenInput}
+                                                className="w-full py-3.5 mt-2 bg-linear-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold rounded-xl shadow-lg shadow-blue-600/25 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                {isLoading ? (
+                                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                ) : (
+                                                    <>Clock In Now</>
+                                                )}
+                                            </motion.button>
+                                        </>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {insecureCamera && (
+                                                <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                                                    This page is open over http, so the phone will not ask for the camera. Open https://{window.location.host}, accept the certificate warning, then turn the camera on.
+                                                </p>
+                                            )}
+                                            {!cameraLive && (
+                                                <button
+                                                    type="button"
+                                                    onClick={startCamera}
+                                                    disabled={cameraStarting}
+                                                    className="w-full py-3.5 bg-slate-900 hover:bg-blue-600 text-white font-bold rounded-xl transition-all disabled:opacity-50"
+                                                >
+                                                    {cameraStarting ? 'Asking for the camera…' : 'Turn on camera'}
+                                                </button>
+                                            )}
+                                            <div id="student-qr-reader" className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 min-h-[240px]" />
+                                            <p className="text-xs font-medium text-slate-500 text-center flex items-center justify-center gap-1.5">
+                                                <QrCode className="w-3.5 h-3.5" />
+                                                Point the camera at the QR on your supervisor&apos;s screen. It changes every 1 minute 30 seconds.
+                                            </p>
+                                            {isLoading && (
+                                                <div className="flex justify-center">
+                                                    <div className="w-5 h-5 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </form>
                             </motion.div>
                         ) : (
@@ -463,9 +596,9 @@ const StudentAttendanceTerminal = () => {
                                                 <span className="text-lg font-black text-slate-900">
                                                     {formatHours(log.computed_hours || log.rendered_hours)} <span className="text-xs text-slate-500 font-bold">hrs</span>
                                                 </span>
-                                                {log.verification_code_used && (
+                                                {(log.check_in_method === 'qr' || log.verification_code_used) && (
                                                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">
-                                                        Token: {log.verification_code_used}
+                                                        {log.check_in_method === 'qr' ? 'Checked in with QR' : `Passcode: ${log.verification_code_used}`}
                                                     </span>
                                                 )}
                                                 {log.is_anomaly && (
@@ -542,7 +675,12 @@ const StudentAttendanceTerminal = () => {
                                             {log.time_out ? new Date(log.time_out).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '--:--'}
                                         </td>
                                         <td className="px-4 py-3 text-slate-700">
-                                            {log.work_type || log.attendance_type || 'Regular Duty'}
+                                            <div>{log.work_type || log.attendance_type || 'Regular Duty'}</div>
+                                            {log.check_in_method && (
+                                                <div className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                                    {log.check_in_method === 'qr' ? 'QR' : 'Passcode'}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="px-4 py-3 text-center">
                                             <span className={`inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${['approved', 'accepted'].includes(String(log.status).toLowerCase()) ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : String(log.status).toLowerCase() === 'rejected' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
@@ -605,6 +743,7 @@ const StudentAttendanceTerminal = () => {
                                         studentProfile={studentProfile}
                                         history={dtrHistory}
                                         totalHours={dtrTotalHours}
+                                        penaltyHours={dtrPenaltyHours}
                                         startDate={dtrStart}
                                         endDate={dtrEnd}
                                     />

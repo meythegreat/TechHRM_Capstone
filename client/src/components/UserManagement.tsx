@@ -26,10 +26,6 @@ const FCU_DEPARTMENTS = [
     "Pre-School Department", "Elementary Department", "Junior High School Department", "Senior High School Department", "College of Arts and Sciences", "College of Business and Accountancy", "College of Computer Studies", "College of Criminal Justice Education", "College of Engineering", "College of Hotel and Tourism Management", "College of Nursing", "College of Teacher Education", "Graduate School"
 ];
 
-const UNIVERSITY_OFFICES = [
-    "University President", "Quality Assurance", "Human Resource Development Center", "Office of the Student Affairs", "University Chaplain", "Alumni Affairs", "VP-Administration", "Superintendent Buildings & Grounds / Officer Pollution Control", "Security Office", "Safety and Disaster Management", "Sports", "Socio-Cultural", "WSPO", "Health Services", "General Services", "Mass Media", "ICT Services Office", "Higher Education Laboratory", "VP-Academic Affairs", "Graduate School", "College of Arts and Sciences", "College of Business and Accountancy", "College of Computer Studies", "College of Criminal Justice Education", "College of Electronic Engineering", "College of Hospitality and Tourism Management", "College of Nursing", "College of Teacher Education", "Kindergarten/Elementary", "High School", "University Registrar", "Director of Libraries", "Guidance & Counselling Center", "NSTP", "VP-REIID", "International Program Office", "Community Extension", "Research", "VP-Finance", "Accountant/Budget Officer", "Business Manager", "Property Custodian", "University Enterprise"
-];
-
 interface UserRecord {
   id: number;
   name: string;
@@ -56,6 +52,8 @@ const GENDERS = ['Male', 'Female'];
 const UserManagement = () => {
   const currentUserRole = localStorage.getItem("user_role") || "";
   const canManageSecurity = currentUserRole === "Super Admin" || currentUserRole === "WSPO Staff";
+  const isWspoStaff = currentUserRole === "WSPO Staff";
+  const canModifyAccount = (role: string) => currentUserRole === "Super Admin" || (isWspoStaff && role === "Student");
 
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -74,6 +72,7 @@ const UserManagement = () => {
 
   const [showPassword, setShowPassword] = useState(false);
   const [departmentSupervisors, setDepartmentSupervisors] = useState<Record<string, string[]>>({});
+  const [universityOffices, setUniversityOffices] = useState<string[]>([]);
 
   const [formData, setFormData] = useState({
     prefix: "",
@@ -106,7 +105,18 @@ const UserManagement = () => {
     axios.get('/api/department-supervisors')
       .then((response) => setDepartmentSupervisors(response.data || {}))
       .catch(() => setDepartmentSupervisors({}));
+    axios.get('/api/offices')
+      .then((response) => {
+        const names = Array.isArray(response.data) ? response.data.map((office: { name?: string }) => office.name).filter(Boolean) : [];
+        setUniversityOffices(names);
+      })
+      .catch(() => setUniversityOffices([]));
   }, []);
+
+  const officeChoices = (selected: string[] = []) => Array.from(new Set([
+    ...universityOffices,
+    ...selected.filter((name) => name && !universityOffices.includes(name)),
+  ]));
 
   const supervisorLabelForOffice = (office?: string) => {
     if (!office) return 'No supervisor assigned';
@@ -189,6 +199,9 @@ const UserManagement = () => {
           const miCandidate = parts[parts.length - 1];
           if (/^[\p{L}]\.*$/u.test(miCandidate)) {
               middle_initial = normalizeAbbreviation(parts.pop() || "");
+          } else if (parts.length > 1) {
+              const middleName = parts.pop() || "";
+              middle_initial = normalizeAbbreviation(middleName.charAt(0));
           }
       }
       first_name = parts.join(" ");
@@ -212,6 +225,12 @@ const UserManagement = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+
+    if (formData.role === 'Student' && (!formData.phone_number || !formData.gender || !formData.student_id_number.trim() || !formData.course || !formData.year_level || !formData.assigned_office)) {
+      showToast('Complete the personal profile and university details before issuing this account.', 'error');
+      setIsSubmitting(false);
+      return;
+    }
 
     const prefix = normalizeAbbreviation(formData.prefix);
     const middleInitial = normalizeAbbreviation(formData.middle_initial);
@@ -446,20 +465,33 @@ const UserManagement = () => {
                                               <p className="text-xs font-medium text-slate-500 mt-1">ID: {user.profile?.student_id_number || 'N/A'}{user.profile?.gender ? ` · ${user.profile.gender}` : ''}</p>
                                               <p className="text-xs font-semibold text-indigo-700 mt-1">Supervisor: {(user.department_supervisors && user.department_supervisors.length > 0) ? user.department_supervisors.join(', ') : supervisorLabelForOffice(user.profile?.assigned_office)}</p>
                                           </div>
-                                      ) : user.role === 'Supervisor' || user.role === 'WSPO Staff' ? (
+                                      ) : user.role === 'Supervisor' ? (
                                           <div>
                                               <p className="text-sm font-bold text-slate-800">{user.profile?.supervised_departments?.join(', ') || user.profile?.assigned_office || 'Central Office'}</p>
                                               <p className="text-xs font-medium text-slate-400 mt-1 italic">Administrative Staff</p>
+                                          </div>
+                                      ) : user.role === 'WSPO Staff' ? (
+                                          <div>
+                                              <p className="text-sm font-bold text-slate-800">{user.profile?.assigned_office || 'WSPO Coordinator'}</p>
+                                              {(!user.profile?.assigned_office || user.profile.assigned_office === 'WSPO Coordinator' || user.profile.assigned_office === 'WSPO') && (
+                                                  <p className="text-xs font-semibold text-indigo-700 mt-1">Supervisor of WSPO</p>
+                                              )}
                                           </div>
                                       ) : (
                                           <span className="text-xs font-bold text-slate-400 flex items-center gap-1"><ShieldAlert className="w-3.5 h-3.5"/> Unrestricted Access</span>
                                       )}
                                   </td>
                                   <td className="px-6 py-5 align-top text-right">
-                                      <div className="flex items-center justify-end gap-2">
-                                          <button onClick={() => openEditModal(user)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Edit Account"><Edit className="w-5 h-5" /></button>
-                                          <button onClick={() => handleDelete(user.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete Account"><Trash2 className="w-5 h-5" /></button>
-                                      </div>
+                                      {canModifyAccount(user.role) ? (
+                                          <div className="flex items-center justify-end gap-2">
+                                              <button onClick={() => openEditModal(user)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Edit Account"><Edit className="w-5 h-5" /></button>
+                                              <button onClick={() => handleDelete(user.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete Account"><Trash2 className="w-5 h-5" /></button>
+                                          </div>
+                                      ) : (
+                                          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-400" title="Only a Super Admin can change this account">
+                                              <Lock className="w-3.5 h-3.5" /> Super Admin only
+                                          </span>
+                                      )}
                                   </td>
                               </motion.tr>
                           ))
@@ -560,12 +592,19 @@ const UserManagement = () => {
                 {/* GLOBAL ROLE SELECTION */}
                 <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl">
                     <label className="block text-xs font-black text-indigo-700 uppercase tracking-widest mb-3 flex items-center gap-1.5"><ShieldCheck className="w-4 h-4"/> Security Authorization Level</label>
-                    <select name="role" value={formData.role} onChange={handleInputChange} className="w-full p-3.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 transition-all appearance-none cursor-pointer shadow-sm">
+                    <select name="role" value={isWspoStaff ? "Student" : formData.role} onChange={handleInputChange} disabled={isWspoStaff} className="w-full p-3.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 transition-all appearance-none cursor-pointer shadow-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600">
                         <option value="Student">Student Worker</option>
-                        <option value="Supervisor">Department Supervisor</option>
-                        <option value="WSPO Staff">WSPO Staff Member</option>
-                        <option value="Super Admin">Super Administrator</option>
+                        {!isWspoStaff && (
+                            <>
+                                <option value="Supervisor">Department Supervisor</option>
+                                <option value="WSPO Staff">WSPO Staff Member</option>
+                                <option value="Super Admin">Super Administrator</option>
+                            </>
+                        )}
                     </select>
+                    {isWspoStaff && (
+                        <p className="mt-2 text-xs font-semibold text-slate-500">WSPO staff can create and update student accounts only.</p>
+                    )}
                 </div>
 
                 {/* Section 1: Personal Profile */}
@@ -604,12 +643,12 @@ const UserManagement = () => {
                     </div>
 
                     <div className="sm:col-span-6">
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Contact Number</label>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Contact Number{formData.role === 'Student' ? ' *' : ''}</label>
                         <div className="flex relative">
                             <span className="inline-flex items-center pl-4 pr-2 border border-r-0 border-slate-200 rounded-l-xl bg-slate-100 text-slate-500 text-sm font-bold">
                                 +63
                             </span>
-                            <input name="phone_number" value={formData.phone_number} onChange={handlePhoneChange} placeholder="912 345 6789" className="w-full p-3.5 border border-l-0 border-slate-200 rounded-r-xl bg-slate-50 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white font-bold text-slate-900 placeholder:text-slate-400 transition-all" />
+                            <input required={formData.role === 'Student'} name="phone_number" value={formData.phone_number} onChange={handlePhoneChange} placeholder="912 345 6789" className="w-full p-3.5 border border-l-0 border-slate-200 rounded-r-xl bg-slate-50 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white font-bold text-slate-900 placeholder:text-slate-400 transition-all" />
                         </div>
                     </div>
                   </div>
@@ -625,8 +664,8 @@ const UserManagement = () => {
                     {formData.role === "Student" && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                         <div>
-                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Student ID Number</label>
-                          <input name="student_id_number" value={formData.student_id_number} onChange={handleInputChange} placeholder="FCU-2026-001" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all placeholder:text-slate-400" />
+                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Student ID Number *</label>
+                          <input required name="student_id_number" value={formData.student_id_number} onChange={handleInputChange} placeholder="FCU-2026-001" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all placeholder:text-slate-400" />
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Assigned Office / Dept</label>
@@ -638,7 +677,7 @@ const UserManagement = () => {
                             className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all appearance-none cursor-pointer"
                           >
                             <option value="">-- Select Assigned Office / Dept --</option>
-                            {UNIVERSITY_OFFICES.map(dept => <option key={`office-${dept}`} value={dept}>{dept}</option>)}
+                            {officeChoices(formData.assigned_office ? [formData.assigned_office] : []).map(dept => <option key={`office-${dept}`} value={dept}>{dept}</option>)}
                           </select>
                           {formData.assigned_office && (
                             <p className="mt-2 text-xs font-semibold text-indigo-700">
@@ -647,14 +686,18 @@ const UserManagement = () => {
                           )}
                         </div>
                         <div>
-                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Course / Degree</label>
+                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Course / Degree *</label>
                           <select
+                            required
                             name="course"
                             value={formData.course}
                             onChange={handleInputChange}
                             className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all appearance-none cursor-pointer"
                           >
                             <option value="">-- Select College/Department --</option>
+                            {formData.course && !FCU_DEPARTMENTS.includes(formData.course) && (
+                              <option value={formData.course}>{formData.course}</option>
+                            )}
                             {FCU_DEPARTMENTS.map(dept => <option key={`course-${dept}`} value={dept}>{dept}</option>)}
                           </select>
                         </div>
@@ -673,8 +716,8 @@ const UserManagement = () => {
                           </div>
                         )}
                         <div>
-                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Year Level</label>
-                          <select name="year_level" value={formData.year_level} onChange={handleInputChange} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all appearance-none cursor-pointer">
+                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Year Level *</label>
+                          <select required name="year_level" value={formData.year_level} onChange={handleInputChange} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all appearance-none cursor-pointer">
                             <option value="">-- Select Year --</option>
                             <option value="1">1st Year</option>
                             <option value="2">2nd Year</option>
@@ -690,7 +733,7 @@ const UserManagement = () => {
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Supervised Departments</label>
                         <p className="text-xs text-slate-500 mb-3">Select every department this supervisor manages.</p>
                         <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 divide-y divide-slate-100">
-                          {UNIVERSITY_OFFICES.map((dept) => (
+                          {officeChoices(formData.supervised_departments).map((dept) => (
                             <label key={`sup-${dept}`} className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-white transition-colors">
                               <input
                                 type="checkbox"

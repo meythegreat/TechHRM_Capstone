@@ -32,10 +32,7 @@ import {
     Trash2,
 } from 'lucide-react';
 import { openSecureFile } from '../utils/secureFile';
-
-const UNIVERSITY_OFFICES = [
-    "University President", "Quality Assurance", "Human Resource Development Center", "Office of the Student Affairs", "University Chaplain", "Alumni Affairs", "VP-Administration", "Superintendent Buildings & Grounds / Officer Pollution Control", "Security Office", "Safety and Disaster Management", "Sports", "Socio-Cultural", "WSPO", "Health Services", "General Services", "Mass Media", "ICT Services Office", "Higher Education Laboratory", "VP-Academic Affairs", "Graduate School", "College of Arts and Sciences", "College of Business and Accountancy", "College of Computer Studies", "College of Criminal Justice Education", "College of Electronic Engineering", "College of Hospitality and Tourism Management", "College of Nursing", "College of Teacher Education", "Kindergarten/Elementary", "High School", "University Registrar", "Director of Libraries", "Guidance & Counselling Center", "NSTP", "VP-REIID", "International Program Office", "Community Extension", "Research", "VP-Finance", "Accountant/Budget Officer", "Business Manager", "Property Custodian", "University Enterprise"
-];
+import { REALTIME_EVENT } from '../utils/realtime';
 
 const PIPELINE_STAGES = ['Pending', 'Interview', 'Training', 'For Result', 'Approved'];
 const STAGE_ORDER = PIPELINE_STAGES;
@@ -47,6 +44,53 @@ const COLUMN_CONFIG = {
     'For Result': { icon: FileSignature, color: 'text-blue-600', bg: 'bg-blue-50/50', border: 'border-blue-200', badge: 'bg-blue-100 text-blue-700' },
     'Approved': { icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50/50', border: 'border-emerald-200', badge: 'bg-emerald-100 text-emerald-700' },
 };
+
+const YEAR_LEVELS = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
+const GENDERS = ['Male', 'Female', 'Prefer not to say'];
+const DUTY_TYPES = ['Clerical', 'Janitorial', 'Request'];
+
+const middleInitialFrom = (value) => {
+    const middle = String(value || '').trim().replace(/\.+$/, '');
+    return middle ? `${middle.charAt(0).toUpperCase()}.` : '';
+};
+
+const profileFromApplication = (app) => ({
+    assigned_department: app?.preferred_department || app?.assigned_department || '',
+    duty_type: app?.duty_type || '',
+    duty_request: app?.duty_request || '',
+    first_name: app?.first_name || '',
+    middle_name: app?.middle_name || '',
+    last_name: app?.last_name || '',
+    email: app?.email || '',
+    age: app?.age ? String(app.age) : '',
+    gender: app?.gender || '',
+    address: app?.address || '',
+    contact_number: app?.contact_number || '',
+    year_level: app?.year_level || '',
+    course: app?.course || '',
+    student_id_number: app?.student_id_number || '',
+});
+
+const accountDisplayName = (profile) => {
+    const initial = middleInitialFrom(profile.middle_name);
+    return [profile.first_name, initial, profile.last_name].map((part) => String(part || '').trim()).filter(Boolean).join(' ');
+};
+
+const placementIsComplete = (profile) => Boolean(
+    profile.assigned_department
+    && profile.duty_type
+    && (profile.duty_type !== 'Request' || String(profile.duty_request || '').trim())
+    && String(profile.first_name || '').trim()
+    && String(profile.last_name || '').trim()
+    && String(profile.email || '').trim()
+    && String(profile.age || '').trim()
+    && profile.gender
+    && String(profile.address || '').trim()
+    && String(profile.contact_number || '').trim()
+    && profile.year_level
+    && String(profile.course || '').trim()
+    && String(profile.student_id_number || '').trim()
+);
 
 const canRemove = (status) => status !== 'Approved';
 
@@ -62,7 +106,7 @@ const ApplicationManager = () => {
     const [selectedApp, setSelectedApp] = useState(null);
     const [suggestions, setSuggestions] = useState([]);
     const [departments, setDepartments] = useState([]);
-    const [placementData, setPlacementData] = useState({ assigned_department: '' });
+    const [placementData, setPlacementData] = useState(profileFromApplication(null));
     const [departmentSupervisors, setDepartmentSupervisors] = useState({});
     const [interviewData, setInterviewData] = useState({ interview_date: '', interview_remarks: '' });
     const [error, setError] = useState(null);
@@ -73,13 +117,19 @@ const ApplicationManager = () => {
 
     useEffect(() => {
         fetchApplications();
-        fetch('/api/departments', { headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` } })
-            .then(res => res.ok ? res.json() : [])
-            .then(setDepartments)
+        const interval = setInterval(() => fetchApplications(true), 5000);
+        const onRealtime = () => fetchApplications(true);
+        window.addEventListener(REALTIME_EVENT, onRealtime);
+        axios.get('/api/offices')
+            .then((response) => setDepartments(Array.isArray(response.data) ? response.data : []))
             .catch(() => setDepartments([]));
         axios.get('/api/department-supervisors')
             .then((response) => setDepartmentSupervisors(response.data || {}))
             .catch(() => setDepartmentSupervisors({}));
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener(REALTIME_EVENT, onRealtime);
+        };
     }, []);
 
     const supervisorLabelForOffice = (office) => {
@@ -88,8 +138,8 @@ const ApplicationManager = () => {
         return names.length > 0 ? names.join(', ') : 'No supervisor assigned';
     };
 
-    const fetchApplications = async () => {
-        setIsLoading(true);
+    const fetchApplications = async (silent = false) => {
+        if (!silent) setIsLoading(true);
         try {
             setError(null);
             const res = await getAllApplications();
@@ -114,9 +164,7 @@ const ApplicationManager = () => {
 
         if (next === 'Approved') {
             setSelectedApp(app);
-            setPlacementData({
-                assigned_department: app.preferred_department || '',
-            });
+            setPlacementData(profileFromApplication(app));
             await loadSuggestions(app.id);
             setModalView('placement');
             return;
@@ -190,25 +238,44 @@ const ApplicationManager = () => {
     };
 
     const handleSelectSuggestion = (dept) => {
-        setPlacementData({ assigned_department: dept });
+        setPlacementData((current) => ({ ...current, assigned_department: dept }));
+    };
+
+    const updatePlacementField = (field, value) => {
+        setPlacementData((current) => ({ ...current, [field]: value }));
     };
 
     const submitPlacement = async () => {
-        if (!placementData.assigned_department) {
-            setError('Select a department before approving.');
+        if (!placementIsComplete(placementData)) {
+            setError('Complete the personal profile, university details, and type of duty before issuing a login.');
             return;
         }
+
+        const storedMiddleInitial = middleInitialFrom(placementData.middle_name) || null;
 
         try {
             const res = await assignPlacement(selectedApp.id, {
                 assigned_department: placementData.assigned_department,
+                duty_type: placementData.duty_type,
+                duty_request: placementData.duty_type === 'Request' ? placementData.duty_request.trim() : null,
+                first_name: placementData.first_name.trim(),
+                middle_name: storedMiddleInitial,
+                last_name: placementData.last_name.trim(),
+                email: placementData.email.trim(),
+                age: Number(placementData.age),
+                gender: placementData.gender,
+                address: placementData.address.trim(),
+                contact_number: placementData.contact_number.trim(),
+                year_level: placementData.year_level,
+                course: placementData.course.trim(),
+                student_id_number: placementData.student_id_number.trim(),
             });
-            setApplications((prev) => prev.map((a) => a.id === selectedApp.id ? { ...a, status: 'Approved' } : a));
+            setApplications((prev) => prev.map((a) => a.id === selectedApp.id ? { ...a, status: 'Approved', middle_name: storedMiddleInitial } : a));
             setIssuedCredentials(res.data.credentials || null);
-            setPlacementData({ assigned_department: '' });
+            setPlacementData(profileFromApplication(null));
             setModalView('');
             setError(null);
-            fetchApplications();
+            fetchApplications(true);
         } catch (err) {
             setError(err.response?.data?.message || Object.values(err.response?.data?.errors || {}).flat()[0] || 'Failed to approve this applicant.');
         }
@@ -221,7 +288,7 @@ const ApplicationManager = () => {
     };
 
     const officeOptions = Array.from(new Set([
-        ...(departments.length > 0 ? departments.map((department) => department.name) : UNIVERSITY_OFFICES),
+        ...departments.map((department) => department.name),
         ...suggestions.map((item) => item.department),
         placementData.assigned_department,
         selectedApp?.preferred_department,
@@ -643,7 +710,7 @@ const ApplicationManager = () => {
                             initial={{ scale: 0.95, opacity: 0, y: 20 }}
                             animate={{ scale: 1, opacity: 1, y: 0 }}
                             exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                            className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]"
+                            className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]"
                         >
                             <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
                                 <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
@@ -657,8 +724,9 @@ const ApplicationManager = () => {
                             <div className="p-6 sm:p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
                                 <div>
                                     <p className="text-sm font-medium text-slate-600">
-                                        Deploying <span className="font-black text-slate-900">{selectedApp.first_name} {selectedApp.last_name}</span>. Approving this applicant will issue a one-time login password.
+                                        Finish <span className="font-black text-slate-900">{accountDisplayName(placementData) || 'this applicant'}</span>&apos;s personal profile and university details first. The login is issued only after those fields are complete.
                                     </p>
+                                    <p className="mt-2 text-xs font-semibold text-indigo-700">Account name: {accountDisplayName(placementData) || '—'}</p>
                                 </div>
 
                                 {suggestions.length > 0 && (
@@ -684,22 +752,114 @@ const ApplicationManager = () => {
                                 )}
 
                                 <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Final Department</label>
-                                        <select
-                                            value={placementData.assigned_department}
-                                            onChange={(e) => setPlacementData({ ...placementData, assigned_department: e.target.value })}
-                                            className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all placeholder:text-slate-400"
-                                        >
-                                            <option value="">-- Select the assigned department --</option>
-                                            {officeOptions.map((name) => <option key={name} value={name}>{name}</option>)}
-                                        </select>
-                                        {placementData.assigned_department && (
-                                            <p className="mt-2 text-xs font-semibold text-indigo-700">
-                                                Supervisor: {supervisorLabelForOffice(placementData.assigned_department)}
-                                            </p>
+                                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-900">Personal Profile</h4>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                            First Name
+                                            <input value={placementData.first_name} onChange={(e) => updatePlacementField('first_name', e.target.value)} className="mt-2 w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600" />
+                                        </label>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                            Middle Name
+                                            <input value={placementData.middle_name} onChange={(e) => updatePlacementField('middle_name', e.target.value)} placeholder="Becomes an initial on the account" className="mt-2 w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600" />
+                                        </label>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                            Last Name
+                                            <input value={placementData.last_name} onChange={(e) => updatePlacementField('last_name', e.target.value)} className="mt-2 w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600" />
+                                        </label>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                            Email
+                                            <input type="email" value={placementData.email} onChange={(e) => updatePlacementField('email', e.target.value)} className="mt-2 w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600" />
+                                        </label>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                            Contact Number
+                                            <input value={placementData.contact_number} onChange={(e) => updatePlacementField('contact_number', e.target.value)} className="mt-2 w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600" />
+                                        </label>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                            Age
+                                            <input type="number" min="16" value={placementData.age} onChange={(e) => updatePlacementField('age', e.target.value)} className="mt-2 w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600" />
+                                        </label>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                            Gender
+                                            <select value={placementData.gender} onChange={(e) => updatePlacementField('gender', e.target.value)} className="mt-2 w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600">
+                                                <option value="">Select gender</option>
+                                                {GENDERS.map((gender) => <option key={gender} value={gender}>{gender}</option>)}
+                                            </select>
+                                        </label>
+                                    </div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                        Complete Address
+                                        <input value={placementData.address} onChange={(e) => updatePlacementField('address', e.target.value)} className="mt-2 w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600" />
+                                    </label>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-900">University Details</h4>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                            Student ID Number
+                                            <input value={placementData.student_id_number} onChange={(e) => updatePlacementField('student_id_number', e.target.value)} className="mt-2 w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600" />
+                                        </label>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                            Year Level
+                                            <select value={placementData.year_level} onChange={(e) => updatePlacementField('year_level', e.target.value)} className="mt-2 w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600">
+                                                <option value="">Select year</option>
+                                                {YEAR_LEVELS.map((year) => <option key={year} value={year}>{year}</option>)}
+                                                {placementData.year_level && !YEAR_LEVELS.includes(placementData.year_level) && (
+                                                    <option value={placementData.year_level}>{placementData.year_level}</option>
+                                                )}
+                                            </select>
+                                        </label>
+                                        <label className="sm:col-span-2 block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                            Degree / Course
+                                            <input value={placementData.course} onChange={(e) => updatePlacementField('course', e.target.value)} className="mt-2 w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600" />
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-900">Assignment</h4>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                            Final Department
+                                            <select
+                                                value={placementData.assigned_department}
+                                                onChange={(e) => updatePlacementField('assigned_department', e.target.value)}
+                                                className="mt-2 w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"
+                                            >
+                                                <option value="">-- Select the assigned department --</option>
+                                                {officeOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+                                            </select>
+                                        </label>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                            Type of Duty
+                                            <select
+                                                value={placementData.duty_type}
+                                                onChange={(e) => updatePlacementField('duty_type', e.target.value)}
+                                                className="mt-2 w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"
+                                            >
+                                                <option value="">-- Select type of duty --</option>
+                                                {DUTY_TYPES.map((duty) => <option key={duty} value={duty}>{duty}</option>)}
+                                            </select>
+                                        </label>
+                                        {placementData.duty_type === 'Request' && (
+                                            <label className="sm:col-span-2 block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                                Requested Duty Details
+                                                <input
+                                                    value={placementData.duty_request}
+                                                    onChange={(e) => updatePlacementField('duty_request', e.target.value)}
+                                                    placeholder="Describe the specific duty for this student"
+                                                    className="mt-2 w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600"
+                                                />
+                                            </label>
                                         )}
                                     </div>
+                                    {placementData.assigned_department && (
+                                        <p className="text-xs font-semibold text-indigo-700">
+                                            Supervisor: {supervisorLabelForOffice(placementData.assigned_department)}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
 
@@ -709,10 +869,10 @@ const ApplicationManager = () => {
                                 </button>
                                 <button
                                     onClick={submitPlacement}
-                                    disabled={!placementData.assigned_department}
+                                    disabled={!placementIsComplete(placementData)}
                                     className="px-6 py-2.5 text-sm font-bold text-white bg-emerald-500 hover:bg-emerald-600 rounded-xl shadow-lg shadow-emerald-500/25 disabled:opacity-50 transition-all flex items-center gap-2"
                                 >
-                                    <Briefcase className="w-4 h-4" /> Deploy & Approve
+                                    <Briefcase className="w-4 h-4" /> Issue Account
                                 </button>
                             </div>
                         </motion.div>
@@ -765,6 +925,10 @@ const ApplicationManager = () => {
                                     <div>
                                         <p className="text-[10px] font-bold text-slate-400 uppercase">Course / Year</p>
                                         <p className="text-sm font-bold text-slate-800">{selectedApp.course || '—'} · {selectedApp.year_level || '—'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase">Student ID</p>
+                                        <p className="text-sm font-bold text-slate-800">{selectedApp.student_id_number || '—'}</p>
                                     </div>
                                     <div>
                                         <p className="text-[10px] font-bold text-slate-400 uppercase">Preferred Department</p>

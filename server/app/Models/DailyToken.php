@@ -10,6 +10,7 @@ class DailyToken extends Model
     protected $fillable = [
         'token_code',
         'type',
+        'channel',
         'description',
         'generated_by',
         'expires_at',

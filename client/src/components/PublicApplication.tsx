@@ -4,7 +4,6 @@ import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { 
     User, 
     BookOpen, 
-    CalendarCheck, 
     Send, 
     ArrowLeft, 
     CheckCircle2, 
@@ -12,7 +11,6 @@ import {
     Mail,
     Phone,
     MapPin,
-    MessageSquare,
     FileText,
     Upload,
     Trash2,
@@ -28,12 +26,6 @@ type ApplicationStatus = {
     success: boolean;
     error: string;
 };
-
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-
-const DEPARTMENTS = [
-    "University President", "Quality Assurance", "Human Resource Development Center", "Office of the Student Affairs", "University Chaplain", "Alumni Affairs", "VP-Administration", "Superintendent Buildings & Grounds / Officer Pollution Control", "Security Office", "Safety and Disaster Management", "Sports", "Socio-Cultural", "WSPO", "Health Services", "General Services", "Mass Media", "ICT Services Office", "Higher Education Laboratory", "VP-Academic Affairs", "Graduate School", "College of Arts and Sciences", "College of Business and Accountancy", "College of Computer Studies", "College of Criminal Justice Education", "College of Electronic Engineering", "College of Hospitality and Tourism Management", "College of Nursing", "College of Teacher Education", "Kindergarten/Elementary", "High School", "University Registrar", "Director of Libraries", "Guidance & Counselling Center", "NSTP", "VP-REIID", "International Program Office", "Community Extension", "Research", "VP-Finance", "Accountant/Budget Officer", "Business Manager", "Property Custodian", "University Enterprise"
-];
 
 const YEAR_LEVELS = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
 const GENDERS = ['Male', 'Female', 'Prefer not to say'];
@@ -79,10 +71,6 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
         address: '',
         contact_number: '',
         year_level: '',
-        course: '',
-        preferred_department: '',
-        available_schedules: [] as string[],
-        reason_for_applying: '',
     });
     const [documents, setDocuments] = useState<File[]>([]);
     
@@ -91,15 +79,6 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
         success: false,
         error: '',
     });
-
-    const toggleDay = (day: string) => {
-        setFormData((current) => ({
-            ...current,
-            available_schedules: current.available_schedules.includes(day)
-                ? current.available_schedules.filter((selectedDay) => selectedDay !== day)
-                : [...current.available_schedules, day],
-        }));
-    };
 
     const addDocuments = (incoming: FileList | null) => {
         if (!incoming) return;
@@ -136,10 +115,6 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
             payload.append('address', formData.address);
             payload.append('contact_number', formData.contact_number);
             payload.append('year_level', formData.year_level);
-            payload.append('course', formData.course);
-            payload.append('preferred_department', formData.preferred_department);
-            payload.append('reason_for_applying', formData.reason_for_applying);
-            formData.available_schedules.forEach((day) => payload.append('available_schedules[]', day));
             documents.forEach((file) => payload.append('documents[]', file));
 
             await axios.post('/api/apply', payload);
@@ -207,7 +182,7 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
                                 </div>
                                 <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-4">Application Submitted!</h2>
                                 <p className="text-slate-500 font-medium text-lg mb-8 leading-relaxed">
-                                    Thank you for applying. The WSPO staff will review your application shortly. If you pass the initial screening, you will be contacted via your provided email to schedule an interview.
+                                    Thank you for applying. Your personal profile and university details are on file. A username and password are issued only after WSPO finalizes your placement.
                                 </p>
                                 <button 
                                     onClick={onBackToLogin}
@@ -287,72 +262,12 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
                                         <BookOpen className="w-5 h-5 text-blue-600" />
                                         <h2 className="text-xl font-black text-slate-900">Academic Details</h2>
                                     </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                                        <div className="space-y-2">
-                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Year Level</label>
-                                            <select required value={formData.year_level} onChange={(e) => setFormData({ ...formData, year_level: e.target.value })} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all appearance-none cursor-pointer">
-                                                <option value="" disabled>Select Year</option>
-                                                {YEAR_LEVELS.map((y) => <option key={y} value={y}>{y}</option>)}
-                                            </select>
-                                        </div>
-                                        <div className="md:col-span-2 space-y-2">
-                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Degree / Course</label>
-                                            <input required type="text" value={formData.course} onChange={(e) => setFormData({ ...formData, course: e.target.value })} placeholder="e.g. BS Information Technology" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all placeholder:text-slate-400 placeholder:font-medium" />
-                                        </div>
-                                    </div>
-                                    <div className="mt-5 space-y-2">
-                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Preferred Department Assignment</label>
-                                        <select required value={formData.preferred_department} onChange={(e) => setFormData({ ...formData, preferred_department: e.target.value })} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all appearance-none cursor-pointer">
-                                            <option value="" disabled>Where do you prefer to be assigned?</option>
-                                            {DEPARTMENTS.map((dept) => <option key={dept} value={dept}>{dept}</option>)}
+                                    <div className="max-w-xs space-y-2">
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Year Level</label>
+                                        <select required value={formData.year_level} onChange={(e) => setFormData({ ...formData, year_level: e.target.value })} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all appearance-none cursor-pointer">
+                                            <option value="" disabled>Select Year</option>
+                                            {YEAR_LEVELS.map((y) => <option key={y} value={y}>{y}</option>)}
                                         </select>
-                                    </div>
-                                </motion.section>
-
-                                {/* SECTION 3: Availability & Intent */}
-                                <motion.section variants={sectionVariants} className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200">
-                                    <div className="flex items-center gap-2 mb-6 border-b border-slate-100 pb-4">
-                                        <CalendarCheck className="w-5 h-5 text-blue-600" />
-                                        <h2 className="text-xl font-black text-slate-900">Availability & Intent</h2>
-                                    </div>
-                                    
-                                    <div className="mb-6">
-                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 ml-1">
-                                            Select Available Days <span className="text-red-500">*</span>
-                                        </label>
-                                        <div className="flex flex-wrap gap-2">
-                                            {DAYS.map((day) => {
-                                                const isSelected = formData.available_schedules.includes(day);
-                                                return (
-                                                    <button
-                                                        key={day}
-                                                        type="button"
-                                                        onClick={() => toggleDay(day)}
-                                                        className={`px-4 py-2.5 rounded-xl font-bold text-sm transition-all border ${
-                                                            isSelected 
-                                                            ? 'bg-blue-100 text-blue-700 border-blue-200 shadow-sm' 
-                                                            : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-slate-700'
-                                                        }`}
-                                                    >
-                                                        {day}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1 flex items-center gap-1.5">
-                                            <MessageSquare className="w-3.5 h-3.5" /> Reason for Applying
-                                        </label>
-                                        <textarea
-                                            required
-                                            rows={4}
-                                            value={formData.reason_for_applying}
-                                            onChange={(e) => setFormData({ ...formData, reason_for_applying: e.target.value })}
-                                            placeholder="Briefly state why you want to join the Work-Study Program..."
-                                            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all resize-none"
-                                        />
                                     </div>
                                 </motion.section>
 
@@ -401,7 +316,7 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
                                 <motion.div variants={sectionVariants} className="pt-2 pb-10">
                                     <button
                                         type="submit"
-                                        disabled={status.loading || formData.available_schedules.length === 0 || documents.length < 3}
+                                        disabled={status.loading || documents.length < 3}
                                         className="w-full py-4 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-black rounded-xl shadow-xl shadow-blue-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg"
                                     >
                                         {status.loading ? (

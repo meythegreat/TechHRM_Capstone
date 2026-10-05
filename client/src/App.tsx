@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Component, type ReactNode } from 'react';
 import axios from 'axios';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
@@ -25,6 +25,37 @@ import SupervisorAttendanceHub from './components/SupervisorAttendanceHub';
 import DisciplinaryManager from './components/DisciplinaryManager';
 import AdminAnalyticsDashboard from './components/AdminAnalyticsDashboard';
 import StaffProfileSettings from './components/StaffProfileSettings';
+import OfficeDirectory from './components/OfficeDirectory';
+
+class PageErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="m-6 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-500">This page could not be shown</p>
+          <h2 className="mt-2 text-2xl font-black text-slate-900">Something on this screen failed to load.</h2>
+          <p className="mt-2 max-w-xl text-sm font-medium text-slate-600">
+            Your session is still active. Open another section from the sidebar, or try this page again.
+          </p>
+          <button
+            type="button"
+            onClick={() => this.setState({ error: null })}
+            className="mt-6 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white"
+          >
+            Try again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function App() {
   const [hasToken, setHasToken] = useState<boolean>(() => Boolean(localStorage.getItem('auth_token')));
@@ -36,7 +67,7 @@ function App() {
   const [adminName, setAdminName] = useState(localStorage.getItem('user_name') || 'Admin');
   const [adminAvatar, setAdminAvatar] = useState<string | null>(() => normalizeFilePath(localStorage.getItem('profile_picture')));
   
-  const adminFirstName = adminName.split(' ')[0];
+  const adminFirstName = String(adminName || 'Admin').split(' ')[0];
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -211,6 +242,7 @@ function App() {
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-[0.02] pointer-events-none z-0 print:hidden"></div>
           
           <div className="relative z-10">
+            <PageErrorBoundary key={location.pathname}>
             <AnimatePresence mode="wait">
               <Routes>
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -227,6 +259,7 @@ function App() {
                   <>
                     <Route path="/logs" element={<ActivityLogs />} />
                     <Route path="/users" element={<UserManagement />} />
+                    <Route path="/offices" element={<OfficeDirectory />} />
                     <Route path="/analytics" element={<AdminAnalyticsDashboard />} />
                     <Route path="/financial" element={<FinancialManagement />} />
                   </>
@@ -245,6 +278,7 @@ function App() {
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Routes>
             </AnimatePresence>
+            </PageErrorBoundary>
           </div>
         </main>
       </div>

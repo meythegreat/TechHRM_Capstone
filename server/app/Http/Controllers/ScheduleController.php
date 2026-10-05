@@ -19,7 +19,13 @@ class ScheduleController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $query = Schedule::with('user:id,name');
+        if ($user->role === 'Super Admin') {
+            $query = Schedule::with(['user' => function ($relation) {
+                $relation->withTrashed()->select('id', 'name', 'deleted_at');
+            }]);
+        } else {
+            $query = Schedule::with('user:id,name')->whereHas('user');
+        }
 
         // IF THE USER IS A SUPERVISOR: Strict Department Filter
         if ($user->role === 'Supervisor') {

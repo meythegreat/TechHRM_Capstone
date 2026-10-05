@@ -1,12 +1,29 @@
 <?php
 namespace App\Http\Controllers;
 use App\Models\ActivityLog;
+use Illuminate\Http\Request;
 
 class ActivityLogController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $logs = ActivityLog::with('admin:id,name,role')->latest()->paginate(15);
+        $query = ActivityLog::query()->latest();
+
+        if ($request->user()->role === 'Super Admin') {
+            $query->with(['admin' => function ($relation) {
+                $relation->withTrashed()->select('id', 'name', 'role', 'deleted_at');
+            }]);
+        } else {
+            $query->whereHas('admin')->with('admin:id,name,role');
+        }
+
+        $logs = $query->paginate(15);
+        $logs->getCollection()->transform(function (ActivityLog $log) {
+            $log->setAttribute('account_deleted', $log->admin === null || $log->admin->trashed());
+
+            return $log;
+        });
+
         return response()->json($logs);
     }
 }

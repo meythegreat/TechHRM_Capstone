@@ -10,7 +10,14 @@ class TaskController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $query = Task::with(['student:id,name', 'supervisor:id,name']);
+        if ($user->role === 'Super Admin') {
+            $query = Task::with([
+                'student' => fn ($relation) => $relation->withTrashed()->select('id', 'name', 'deleted_at'),
+                'supervisor:id,name',
+            ]);
+        } else {
+            $query = Task::with(['student:id,name', 'supervisor:id,name'])->whereHas('student');
+        }
 
         if ($user->role === 'Student') {
             $query->where('student_id', $user->id);

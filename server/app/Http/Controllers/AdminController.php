@@ -29,7 +29,8 @@ class AdminController extends Controller
             ->get();
 
         // 3. Recent Activity (Last 5 clock-ins/outs globally)
-        $recentActivity = Attendance::with('user.profile')
+        $recentActivity = Attendance::query()
+            ->visibleTo('Super Admin')
             ->orderBy('updated_at', 'desc')
             ->take(5)
             ->get();

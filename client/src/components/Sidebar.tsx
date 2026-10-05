@@ -28,6 +28,7 @@ const staffNavItems: NavItem[] = [
     { id: 'compliance', label: 'Compliance', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M5.1 19h13.8L12 4 5.1 19z" /> },
     { id: 'logs', label: 'Audit Trail', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M6 3h9l3 3v15H6zM9 10h6m-6 4h6" /> },
     { id: 'users', label: 'User Management', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2m14-10a4 4 0 100-8 4 4 0 000 8z" /> },
+    { id: 'offices', label: 'Offices', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6" /> },
     { id: 'analytics', label: 'Reports & Analytics', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M4 19V9m6 10V5m6 14v-7m4 7V3" /> },
     { id: 'financial', label: 'Work-Hour Assessment', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /> },
     { id: 'settings', label: 'Profile Settings', icon: <><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></> },
@@ -35,7 +36,7 @@ const staffNavItems: NavItem[] = [
 
 const Sidebar: FC<SidebarProps> = ({ isSidebarOpen, setIsSidebarOpen, activeTab, setActiveTab, handleLogout, navItems, userRole }) => {
     const visibleNavItems = navItems ?? staffNavItems.filter((item) => {
-        if (['pipeline', 'logs', 'users', 'analytics', 'financial'].includes(item.id)) {
+        if (['pipeline', 'logs', 'users', 'analytics', 'financial', 'offices'].includes(item.id)) {
             return userRole === 'Super Admin' || userRole === 'WSPO Staff';
         }
         return item.id !== 'requirements' || userRole === 'Super Admin';
@@ -138,7 +139,10 @@ const Sidebar: FC<SidebarProps> = ({ isSidebarOpen, setIsSidebarOpen, activeTab,
                 <div className="p-4 border-t border-slate-100 shrink-0">
                     <button 
                         type="button" 
-                        onClick={() => void handleLogout()} 
+                        onClick={() => {
+                            if (!window.confirm('Are you sure you want to logout?')) return;
+                            void handleLogout();
+                        }} 
                         className="relative w-full flex items-center p-3 rounded-xl text-slate-500 hover:text-red-700 transition-all duration-300 group outline-none overflow-hidden"
                     >
                         {/* Hover Background */}

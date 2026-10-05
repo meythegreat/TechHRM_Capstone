@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import { emitRealtimeRefresh } from '../utils/realtime';
 
 interface Notification {
     id: number;
@@ -16,14 +17,32 @@ interface NotificationBellProps {
 export default function NotificationBell({ onNavigate }: NotificationBellProps) {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [isOpen, setIsOpen] = useState(false);
+    const [liveNotice, setLiveNotice] = useState<Notification | null>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const seenIds = useRef<Set<number> | null>(null);
+    const signatureRef = useRef('');
 
     const userRole = localStorage.getItem('user_role') || 'User'; 
 
     const fetchNotifications = async () => {
         try {
             const res = await axios.get('/api/notifications');
-            setNotifications(res.data);
+            const rows: Notification[] = Array.isArray(res.data) ? res.data : [];
+            const signature = rows.map((row) => `${row.id}:${row.is_read}`).join(',');
+            const fresh = seenIds.current
+                ? rows.filter((row) => !seenIds.current?.has(row.id) && !row.is_read)
+                : [];
+
+            if (fresh.length > 0) {
+                setLiveNotice(fresh[0]);
+            }
+            if (signatureRef.current && signatureRef.current !== signature) {
+                emitRealtimeRefresh();
+            }
+
+            seenIds.current = new Set(rows.map((row) => row.id));
+            signatureRef.current = signature;
+            setNotifications(rows);
         } catch (error) {
             console.error("Failed to fetch notifications", error);
         }
@@ -31,9 +50,22 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
 
     useEffect(() => {
         fetchNotifications();
-        const interval = setInterval(fetchNotifications, 30000);
-        return () => clearInterval(interval);
+        const interval = setInterval(fetchNotifications, 5000);
+        const onVisible = () => {
+            if (document.visibilityState === 'visible') fetchNotifications();
+        };
+        document.addEventListener('visibilitychange', onVisible);
+        return () => {
+            clearInterval(interval);
+            document.removeEventListener('visibilitychange', onVisible);
+        };
     }, []);
+
+    useEffect(() => {
+        if (!liveNotice) return;
+        const timeout = setTimeout(() => setLiveNotice(null), 8000);
+        return () => clearTimeout(timeout);
+    }, [liveNotice]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -56,7 +88,9 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
             }
         }
 
-        if (notif.title.includes('Schedule') || notif.title.includes('Working Student') || notif.title.includes('Office Assignment')) {
+        if (userRole === 'Supervisor' && notif.title.includes('Working Student Assigned')) {
+            onNavigate('dashboard');
+        } else if (notif.title.includes('Schedule') || notif.title.includes('Working Student') || notif.title.includes('Office Assignment')) {
             onNavigate(userRole === 'Student' ? 'schedule' : 'schedules');
         } else if (notif.title.includes('Timesheet')) {
             onNavigate('attendance');
@@ -73,6 +107,13 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
 
     return (
         <div className="relative" ref={dropdownRef}>
+            {liveNotice && (
+                <div className="fixed top-24 right-4 z-[70] w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-blue-100 bg-white p-4 shadow-2xl">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">New notification</p>
+                    <p className="mt-1 text-sm font-bold text-slate-900">{liveNotice.title}</p>
+                    <p className="mt-1 text-xs font-medium leading-relaxed text-slate-600">{liveNotice.message}</p>
+                </div>
+            )}
             {/* The Bell Icon */}
             <button 
                 onClick={() => setIsOpen(!isOpen)}

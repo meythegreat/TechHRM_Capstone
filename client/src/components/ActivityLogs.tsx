@@ -15,6 +15,7 @@ interface LogRecord {
     id: number;
     admin_id: number;
     admin_name: string;
+    account_deleted?: boolean;
     action: string;
     description: string;
     ip_address: string;
@@ -166,6 +167,11 @@ const ActivityLogs = () => {
                                                 <span className="text-sm font-bold text-slate-900 group-hover:text-indigo-700 transition-colors">
                                                     {log.admin_name}
                                                 </span>
+                                                {log.account_deleted && (
+                                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+                                                        Account deleted
+                                                    </span>
+                                                )}
                                             </div>
                                         </td>
                                         <td className="px-6 py-5 align-top">

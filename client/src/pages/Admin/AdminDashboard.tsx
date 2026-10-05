@@ -12,11 +12,14 @@ import {
     ChevronRight,
     UserPlus,
     LogIn,
-    LogOut
+    LogOut,
+    X
 } from 'lucide-react';
 
 // Keep your original import path for the SuperAdmin redirect
 import SuperAdminDashboard from '../../components/SuperAdminDashboard';
+import { REALTIME_EVENT } from '../../utils/realtime';
+import { formatYearLevel, homeDepartment } from '../../utils/studentAssignment';
 
 const AdminDashboard = () => {
     const navigate = useNavigate();
@@ -33,6 +36,19 @@ const AdminDashboard = () => {
 
     // --- EVERYTHING BELOW THIS LINE IS FOR SUPERVISORS & WSPO STAFF ---
     
+    type AssignedStudent = {
+        id: number;
+        name: string;
+        phone_number?: string | null;
+        student_id_number?: string | null;
+        course?: string | null;
+        year_level?: number | string | null;
+        gender?: string | null;
+        assigned_office?: string | null;
+        duty_type?: string | null;
+        duty_request?: string | null;
+    };
+
     const [stats, setStats] = useState({
         activeStudents: 0,
         pendingApprovals: 0,
@@ -44,8 +60,11 @@ const AdminDashboard = () => {
             description: string;
             office?: string | null;
             created_at: string;
-        }[]
+        }[],
+        assignedStudents: [] as AssignedStudent[],
     });
+    const [assignmentNotices, setAssignmentNotices] = useState<{ id: number; message: string; created_at: string }[]>([]);
+    const [selectedStudent, setSelectedStudent] = useState<AssignedStudent | null>(null);
 
     const [isLoading, setIsLoading] = useState(true);
 
@@ -62,6 +81,9 @@ const AdminDashboard = () => {
                     recentStudentActivity: Array.isArray(response.data.recentStudentActivity)
                         ? response.data.recentStudentActivity
                         : [],
+                    assignedStudents: Array.isArray(response.data.assignedStudents)
+                        ? response.data.assignedStudents
+                        : [],
                 });
             } catch (err) {
                 console.error("Failed to load dashboard stats", err);
@@ -69,18 +91,62 @@ const AdminDashboard = () => {
                 setIsLoading(false);
             }
         };
-        fetchStats();
-        const interval = setInterval(fetchStats, 30000);
-        if (isWspo) {
+        const fetchAssignmentNotices = async () => {
+            if (userRole === 'Super Admin') return;
+            try {
+                const response = await axios.get('/api/notifications');
+                const rows = Array.isArray(response.data) ? response.data : [];
+                setAssignmentNotices(
+                    rows
+                        .filter((notice: { title?: string; is_read?: boolean | number }) =>
+                            notice.title === 'Working Student Assigned' && !notice.is_read
+                        )
+                        .map((notice: { id: number; message: string; created_at: string }) => ({
+                            id: notice.id,
+                            message: notice.message,
+                            created_at: notice.created_at,
+                        }))
+                );
+            } catch (err) {
+                console.error('Failed to load assignment notices', err);
+            }
+        };
+        const fetchPendingApplications = () => {
+            if (!isWspo) return;
             axios.get('/api/applications')
                 .then((response) => {
                     const rows = Array.isArray(response.data) ? response.data : (response.data?.data || []);
                     setPendingApplications(rows.filter((app: { status?: string }) => app.status !== 'Approved' && app.status !== 'Rejected').length);
                 })
                 .catch(() => setPendingApplications(0));
+        };
+        const refresh = () => {
+            fetchStats();
+            fetchAssignmentNotices();
+            fetchPendingApplications();
+        };
+        refresh();
+        const interval = setInterval(refresh, 5000);
+        window.addEventListener(REALTIME_EVENT, refresh);
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener(REALTIME_EVENT, refresh);
+        };
+    }, [isWspo, userRole]);
+
+    const dismissAssignmentNotice = async (id: number) => {
+        setAssignmentNotices((current) => current.filter((notice) => notice.id !== id));
+        try {
+            await axios.patch(`/api/notifications/${id}/read`);
+        } catch (err) {
+            console.error('Failed to mark assignment notice as read', err);
         }
-        return () => clearInterval(interval);
-    }, [isWspo]);
+    };
+
+    const dutyLabel = (student: AssignedStudent) => {
+        if (student.duty_type === 'Request' && student.duty_request) return student.duty_request;
+        return student.duty_type || 'Not set';
+    };
 
     // STRICT TYPESCRIPT ANIMATION VARIANTS
     const containerVariants: Variants = {
@@ -227,6 +293,93 @@ const AdminDashboard = () => {
                 </motion.div>
             </motion.div>
 
+            <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden"
+                >
+                    <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50/50">
+                        <h3 className="text-xl font-black text-slate-900 flex items-center gap-2 tracking-tight">
+                            <Users className="w-5 h-5 text-blue-600" />
+                            {isWspo ? 'WSPO Working Students' : 'Assigned Working Students'}
+                        </h3>
+                        <p className="text-sm text-slate-500 font-medium mt-1">
+                            {isWspo
+                                ? 'Students placed in the WSPO office. Issue their attendance codes from Attendance Hub and accept their timesheets after they time out.'
+                                : 'Students placed in your department appear here. Open a student to review their details.'}
+                        </p>
+                    </div>
+
+                    {assignmentNotices.length > 0 && (
+                        <div className="divide-y divide-blue-100 bg-blue-50/70">
+                            {assignmentNotices.map((notice) => (
+                                <div key={notice.id} className="px-6 sm:px-8 py-4 flex items-start justify-between gap-4">
+                                    <div>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-blue-600">New assignment</p>
+                                        <p className="text-sm font-bold text-slate-800 mt-1">{notice.message}</p>
+                                        <p className="text-xs font-medium text-slate-500 mt-1">{new Date(notice.created_at).toLocaleString()}</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => dismissAssignmentNotice(notice.id)}
+                                        className="text-xs font-bold text-blue-700 hover:text-blue-900 shrink-0"
+                                    >
+                                        Dismiss
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {stats.assignedStudents.length === 0 ? (
+                        <div className="p-12 text-center">
+                            <Users className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                            <p className="font-bold text-slate-600">{isWspo ? 'No working students are assigned to WSPO yet.' : 'No working students are assigned to your department yet.'}</p>
+                        </div>
+                    ) : (
+                        <div className="divide-y divide-slate-100">
+                            {stats.assignedStudents.map((student) => {
+                                const homeCollege = homeDepartment(student.course, student.assigned_office);
+                                const yearLabel = formatYearLevel(student.year_level);
+                                return (
+                                <div key={student.id} className="p-5 sm:px-8 flex items-center justify-between gap-4">
+                                    <div className="min-w-0">
+                                        <p className="font-black text-slate-900 truncate">{student.name}</p>
+                                        {(yearLabel || homeCollege) && (
+                                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                                {yearLabel && (
+                                                    <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+                                                        {yearLabel}
+                                                    </span>
+                                                )}
+                                                {homeCollege && (
+                                                    <span
+                                                        title={`Originally from ${homeCollege.fullName}, assigned to this office.`}
+                                                        className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200"
+                                                    >
+                                                        From {homeCollege.shortName}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
+                                        <p className="text-xs font-medium text-slate-500 mt-1 truncate">
+                                            {student.assigned_office || 'Department'} · {dutyLabel(student)}
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedStudent(student)}
+                                        className="text-sm font-bold text-blue-600 hover:text-blue-800 shrink-0"
+                                    >
+                                        View info
+                                    </button>
+                                </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </motion.div>
+
             {/* --- RECENT ACTIVITY PREVIEW --- */}
             <motion.div 
                 initial={{ opacity: 0, y: 20 }}
@@ -300,6 +453,53 @@ const AdminDashboard = () => {
                     </div>
                 )}
             </motion.div>
+
+            {selectedStudent && (
+                <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4" onClick={() => setSelectedStudent(null)}>
+                    <div className="bg-white rounded-3xl shadow-xl w-full max-w-lg overflow-hidden" onClick={(event) => event.stopPropagation()}>
+                        <div className="p-6 border-b border-slate-100 flex items-start justify-between gap-4">
+                            <div>
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-blue-600">Working student</p>
+                                <h3 className="text-2xl font-black text-slate-900 mt-1">{selectedStudent.name}</h3>
+                                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                    {formatYearLevel(selectedStudent.year_level) && (
+                                        <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+                                            {formatYearLevel(selectedStudent.year_level)}
+                                        </span>
+                                    )}
+                                    {homeDepartment(selectedStudent.course, selectedStudent.assigned_office) && (
+                                        <span
+                                            title={`Originally from ${homeDepartment(selectedStudent.course, selectedStudent.assigned_office)?.fullName}, assigned to this office.`}
+                                            className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200"
+                                        >
+                                            From {homeDepartment(selectedStudent.course, selectedStudent.assigned_office)?.shortName}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                            <button type="button" onClick={() => setSelectedStudent(null)} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <dl className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                            {[
+                                ['Department', selectedStudent.assigned_office],
+                                ['Duty', dutyLabel(selectedStudent)],
+                                ['Student ID', selectedStudent.student_id_number],
+                                ['Course', selectedStudent.course],
+                                ['Year level', selectedStudent.year_level],
+                                ['Gender', selectedStudent.gender],
+                                ['Contact', selectedStudent.phone_number],
+                            ].map(([label, value]) => (
+                                <div key={String(label)}>
+                                    <dt className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{label}</dt>
+                                    <dd className="font-bold text-slate-800 mt-1">{value || 'Not recorded'}</dd>
+                                </div>
+                            ))}
+                        </dl>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

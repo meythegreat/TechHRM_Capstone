@@ -24,6 +24,13 @@ class AttendanceController extends Controller
             return response()->json(['message' => 'You are already clocked in!'], 422);
         }
 
+        $suspension = \App\Models\DisciplinaryRecord::activeSuspension($user->id);
+        if ($suspension) {
+            return response()->json([
+                'message' => $suspension->suspensionNotice(),
+            ], 403);
+        }
+
         // --- 2. SMART SCHEDULE CHECK ---
         $now = Carbon::now();
         $currentDay = $now->format('l'); // Gets 'Monday', 'Tuesday', etc.
@@ -132,7 +139,14 @@ class AttendanceController extends Controller
 
         $history = $query->orderBy('time_in', 'desc')->get();
 
-        return response()->json($history);
+        return response()->json([
+            'history' => $history,
+            'duty_deduction_hours' => \App\Models\DisciplinaryRecord::dutyDeductionHours(
+                $request->user()->id,
+                $request->filled('start') ? $request->start : null,
+                $request->filled('end') ? $request->end : null,
+            ),
+        ]);
     }
 
     /** Official monthly DTR for one working student. Supervisors only see students in their departments. */
@@ -143,7 +157,11 @@ class AttendanceController extends Controller
             return response()->json(['message' => 'You cannot view a student DTR.'], 403);
         }
 
-        $student = \App\Models\User::with('profile')->where('role', 'Student')->findOrFail($id);
+        $studentQuery = \App\Models\User::with('profile')->where('role', 'Student');
+        if ($actor->role === 'Super Admin') {
+            $studentQuery->withTrashed();
+        }
+        $student = $studentQuery->findOrFail($id);
 
         if ($actor->role === 'Supervisor' && !app(\App\Http\Controllers\UserController::class)->supervisorCanAccessStudent($actor, $student)) {
             return response()->json(['message' => 'You can only view DTRs for working students in your department.'], 403);
@@ -159,23 +177,7 @@ class AttendanceController extends Controller
         }
 
         $office = $student->profile?->assigned_office;
-        $supervisors = [];
-        if ($office) {
-            $supervisors = \App\Models\User::with('profile')
-                ->where('role', 'Supervisor')
-                ->get()
-                ->filter(function ($supervisor) use ($office) {
-                    $configured = $supervisor->profile?->supervised_departments;
-                    $departments = is_array($configured) ? $configured : [];
-                    if ($departments === [] && $supervisor->profile?->assigned_office) {
-                        $departments[] = $supervisor->profile->assigned_office;
-                    }
-                    return in_array($office, array_values(array_unique(array_filter(array_map('trim', $departments)))), true);
-                })
-                ->pluck('name')
-                ->values()
-                ->all();
-        }
+        $supervisors = app(\App\Http\Controllers\UserController::class)->supervisorNamesForOffice($office);
 
         return response()->json([
             'student' => [
@@ -183,8 +185,14 @@ class AttendanceController extends Controller
                 'name' => $student->name,
                 'profile' => $student->profile,
                 'department_supervisors' => $supervisors,
+                'account_deleted' => $student->trashed(),
             ],
             'history' => $query->orderBy('time_in', 'desc')->get(),
+            'duty_deduction_hours' => \App\Models\DisciplinaryRecord::dutyDeductionHours(
+                $student->id,
+                $request->filled('start') ? $request->start : null,
+                $request->filled('end') ? $request->end : null,
+            ),
         ]);
     }
 
@@ -194,8 +202,8 @@ class AttendanceController extends Controller
     {
         $user = $request->user();
 
-        // Eager load the student's user account and their specific profile
-        $query = \App\Models\Attendance::with(['user.profile'])
+        $query = \App\Models\Attendance::query()
+            ->visibleTo($user->role)
             ->orderBy('created_at', 'desc');
 
         // MULTI-TENANT CHECK: If Supervisor, lock down to their department
@@ -223,7 +231,7 @@ class AttendanceController extends Controller
         $fileName = 'WSPO_Timesheet_Export_' . date('Y-m-d') . '.csv';
 
         // Eager load the user AND their student profile for complete data
-        $attendances = Attendance::with('user.profile')->orderBy('time_in', 'desc')->get();
+        $attendances = Attendance::query()->visibleTo($request->user()->role)->orderBy('time_in', 'desc')->get();
 
         $headers = array(
             "Content-type"        => "text/csv",
@@ -286,7 +294,7 @@ class AttendanceController extends Controller
         $user = $request->user();
 
         // Fetch attendances and include the user's name and profile data
-        $query = \App\Models\Attendance::with('user.profile')->orderBy('time_in', 'desc');
+        $query = \App\Models\Attendance::query()->visibleTo($user->role)->orderBy('time_in', 'desc');
 
         // If it is a Supervisor, strictly filter to show only their department's students
         if ($user->role === 'Supervisor' && $user->department_id) {
@@ -305,7 +313,8 @@ class AttendanceController extends Controller
     {
         $user = $request->user()->loadMissing('profile');
 
-        if ($user->role !== 'Supervisor') {
+        $accounts = app(\App\Http\Controllers\UserController::class);
+        if ($user->role !== 'Supervisor' && !$accounts->isWspoDepartmentSupervisor($user)) {
             return response()->json(['message' => 'Only department supervisors can accept or reject attendance.'], 403);
         }
 
@@ -319,13 +328,7 @@ class AttendanceController extends Controller
             return response()->json(['message' => 'The student must time out for the day before this record can be accepted or rejected.'], 422);
         }
 
-        $studentOffice = $attendance->user?->profile?->assigned_office;
-        $supervisedOffices = array_values(array_filter(array_unique(array_merge(
-            is_array($user->profile?->supervised_departments) ? $user->profile->supervised_departments : [],
-            [$user->profile?->assigned_office]
-        ))));
-
-        if ($studentOffice === null || $studentOffice === '' || !in_array($studentOffice, $supervisedOffices, true)) {
+        if (!$attendance->user || !$accounts->supervisorCanAccessStudent($user, $attendance->user)) {
             return response()->json(['message' => 'You can only review attendance for students in your department.'], 403);
         }
 
@@ -341,5 +344,180 @@ class AttendanceController extends Controller
         ]);
 
         return response()->json(['message' => 'Timesheet ' . $verb . ' successfully!']);
+    }
+
+    /** Supervisor records both time in and time out on a student's DTR. */
+    public function storeManual(Request $request)
+    {
+        $supervisor = $this->departmentSupervisor($request);
+        if ($supervisor instanceof \Illuminate\Http\JsonResponse) {
+            return $supervisor;
+        }
+
+        $validated = $request->validate([
+            'user_id' => 'required|integer',
+            'date' => 'required|date_format:Y-m-d',
+            'time_in' => ['required', 'regex:/^\d{2}:\d{2}$/'],
+            'time_out' => ['required', 'regex:/^\d{2}:\d{2}$/'],
+            'task_description' => 'nullable|string|max:1000',
+        ]);
+
+        $student = \App\Models\User::with('profile')->where('role', 'Student')->findOrFail($validated['user_id']);
+        $accounts = app(\App\Http\Controllers\UserController::class);
+        if (!$accounts->supervisorCanAccessStudent($supervisor, $student)) {
+            return response()->json(['message' => 'You can only enter times for working students in your department.'], 403);
+        }
+
+        [$timeIn, $timeOut, $error] = $this->resolveManualTimes($validated['date'], $validated['time_in'], $validated['time_out']);
+        if ($error) {
+            return response()->json(['message' => $error], 422);
+        }
+
+        if ($this->manualTimesOverlap((int) $student->id, $timeIn, $timeOut)) {
+            return response()->json(['message' => 'These times overlap another DTR entry for this student.'], 422);
+        }
+
+        $hours = round($timeIn->diffInMinutes($timeOut) / 60, 2);
+        $note = trim((string) ($validated['task_description'] ?? ''));
+
+        $attendance = \App\Models\Attendance::create([
+            'user_id' => $student->id,
+            'attendance_type' => 'Regular',
+            'time_in' => $timeIn,
+            'time_out' => $timeOut,
+            'rendered_hours' => $hours,
+            'computed_hours' => $hours,
+            'work_type' => $student->profile?->duty_type ?: 'Manual Entry',
+            'task_description' => $note !== '' ? $note : 'Manually entered by supervisor.',
+            'status' => 'pending',
+            'is_anomaly' => $hours > 8,
+            'anomaly_reason' => $hours > 8 ? 'Extended continuous shifts (Exceeded 8 hours).' : null,
+        ]);
+
+        \App\Models\Notification::create([
+            'user_id' => $student->id,
+            'title' => 'DTR Times Entered',
+            'message' => 'Your supervisor entered a time in and time out for ' . $timeIn->format('M d, Y') . '.',
+        ]);
+
+        return response()->json([
+            'message' => 'Time in and time out saved on the DTR.',
+            'record' => $attendance,
+        ], 201);
+    }
+
+    /** Supervisor corrects both time in and time out on an existing DTR row. */
+    public function updateTimes(Request $request, $id)
+    {
+        $supervisor = $this->departmentSupervisor($request);
+        if ($supervisor instanceof \Illuminate\Http\JsonResponse) {
+            return $supervisor;
+        }
+
+        $validated = $request->validate([
+            'date' => 'required|date_format:Y-m-d',
+            'time_in' => ['required', 'regex:/^\d{2}:\d{2}$/'],
+            'time_out' => ['required', 'regex:/^\d{2}:\d{2}$/'],
+            'task_description' => 'nullable|string|max:1000',
+        ]);
+
+        $attendance = \App\Models\Attendance::with('user.profile')->findOrFail($id);
+        $accounts = app(\App\Http\Controllers\UserController::class);
+        if (!$attendance->user || !$accounts->supervisorCanAccessStudent($supervisor, $attendance->user)) {
+            return response()->json(['message' => 'You can only enter times for working students in your department.'], 403);
+        }
+
+        [$timeIn, $timeOut, $error] = $this->resolveManualTimes($validated['date'], $validated['time_in'], $validated['time_out']);
+        if ($error) {
+            return response()->json(['message' => $error], 422);
+        }
+
+        if ($this->manualTimesOverlap((int) $attendance->user_id, $timeIn, $timeOut, (int) $attendance->id)) {
+            return response()->json(['message' => 'These times overlap another DTR entry for this student.'], 422);
+        }
+
+        $hours = round($timeIn->diffInMinutes($timeOut) / 60, 2);
+        $payload = [
+            'time_in' => $timeIn,
+            'time_out' => $timeOut,
+            'rendered_hours' => $hours,
+            'computed_hours' => $hours,
+            'status' => 'pending',
+            'is_anomaly' => $hours > 8,
+            'anomaly_reason' => $hours > 8 ? 'Extended continuous shifts (Exceeded 8 hours).' : null,
+        ];
+
+        if ($request->exists('task_description')) {
+            $note = trim((string) ($validated['task_description'] ?? ''));
+            $payload['task_description'] = $note !== '' ? $note : 'Manually entered by supervisor.';
+        }
+
+        $attendance->update($payload);
+
+        \App\Models\Notification::create([
+            'user_id' => $attendance->user_id,
+            'title' => 'DTR Times Updated',
+            'message' => 'Your supervisor updated your time in and time out for ' . $timeIn->format('M d, Y') . '.',
+        ]);
+
+        return response()->json([
+            'message' => 'Time in and time out updated. The entry is pending acceptance again.',
+            'record' => $attendance->fresh(),
+        ]);
+    }
+
+    private function departmentSupervisor(Request $request): \App\Models\User|\Illuminate\Http\JsonResponse
+    {
+        $user = $request->user()->loadMissing('profile');
+        if ($user->role !== 'Supervisor') {
+            return response()->json(['message' => 'Only a department supervisor can enter time in and time out.'], 403);
+        }
+
+        return $user;
+    }
+
+    /** @return array{0: ?\Carbon\Carbon, 1: ?\Carbon\Carbon, 2: ?string} */
+    private function resolveManualTimes(string $date, string $timeIn, string $timeOut): array
+    {
+        $start = \Carbon\Carbon::createFromFormat('Y-m-d H:i', $date . ' ' . $timeIn);
+        $end = \Carbon\Carbon::createFromFormat('Y-m-d H:i', $date . ' ' . $timeOut);
+
+        if (!$start || !$end) {
+            return [null, null, 'Enter a valid time in and time out.'];
+        }
+
+        if ($end->lte($start)) {
+            $end = $end->copy()->addDay();
+        }
+
+        if ($start->greaterThan(now())) {
+            return [null, null, 'Time in cannot be in the future.'];
+        }
+
+        if ($end->greaterThan(now())) {
+            return [null, null, 'Time out cannot be in the future.'];
+        }
+
+        $minutes = $start->diffInMinutes($end);
+        if ($minutes < 1) {
+            return [null, null, 'Time out must be after time in.'];
+        }
+
+        if ($minutes > 16 * 60) {
+            return [null, null, 'A single duty entry cannot be longer than 16 hours.'];
+        }
+
+        return [$start, $end, null];
+    }
+
+    private function manualTimesOverlap(int $userId, \Carbon\Carbon $start, \Carbon\Carbon $end, ?int $ignoreId = null): bool
+    {
+        return \App\Models\Attendance::where('user_id', $userId)
+            ->when($ignoreId, fn ($query) => $query->where('id', '!=', $ignoreId))
+            ->where('time_in', '<', $end)
+            ->where(function ($query) use ($start) {
+                $query->whereNull('time_out')->orWhere('time_out', '>', $start);
+            })
+            ->exists();
     }
 }
