@@ -2,7 +2,7 @@
 export const STUDENT_PATHS = new Set([
   'dashboard',
   'attendance',
-  'assessment',
+  'hours',
   'schedule',
   'requirements',
   'disciplinary',
@@ -36,6 +36,7 @@ export function getStaffPathsForRole(role: string): Set<string> {
 /** Map common mistyped or cross-role URLs to the correct tab for the active portal. */
 export function resolveStudentPath(segment: string): string {
   if (segment === 'schedules') return 'schedule';
+  if (segment === 'assessment' || segment === 'earnings') return 'hours';
   if (STUDENT_PATHS.has(segment)) return segment;
   return 'dashboard';
 }

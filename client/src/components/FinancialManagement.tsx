@@ -112,7 +112,7 @@ export const FinancialManagement: React.FC = () => {
                   <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Reporting & Compliance</span>
               </div>
               <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-                  Work-Hour Assessment
+                  Hours Rendered
               </h1>
               <p className="mt-2 text-slate-400 font-medium max-w-md">
                   Calculate equivalent values for rendered hours to be forwarded as a verified report to the Finance Office.
@@ -143,7 +143,7 @@ export const FinancialManagement: React.FC = () => {
         >
             <div className="flex justify-between items-start">
                 <div>
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Total Equivalent Value Assessed</p>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Equivalent Amount</p>
                     <h3 className="text-4xl font-black text-slate-900">
                         ₱{stats.total_equivalent_value?.toFixed(2) || '0.00'}
                     </h3>
@@ -170,7 +170,7 @@ export const FinancialManagement: React.FC = () => {
                     <Clock className="w-6 h-6" />
                 </div>
             </div>
-            <p className="text-sm text-slate-500 mt-4 font-medium">Assessments requiring final review before forwarding.</p>
+            <p className="text-sm text-slate-500 mt-4 font-medium">Hours rendered awaiting final review before forwarding.</p>
         </motion.div>
       </div>
 
@@ -181,7 +181,7 @@ export const FinancialManagement: React.FC = () => {
               <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-10 flex items-center justify-center">
                   <div className="flex flex-col items-center gap-3">
                       <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-                      <span className="text-sm font-bold text-blue-700 animate-pulse">Loading assessments...</span>
+                      <span className="text-sm font-bold text-blue-700 animate-pulse">Loading hours rendered...</span>
                   </div>
               </div>
           )}
@@ -193,7 +193,7 @@ export const FinancialManagement: React.FC = () => {
                           <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Student Profile</th>
                           <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Coverage Period</th>
                           <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Verified Hours</th>
-                          <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Equivalent Assessment</th>
+                          <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Equivalent Amount</th>
                           <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider text-right">Report Status</th>
                       </tr>
                   </thead>
@@ -207,8 +207,8 @@ export const FinancialManagement: React.FC = () => {
                           <tr>
                               <td colSpan={5} className="px-6 py-16 text-center text-slate-400">
                                   <Activity className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                                  <p className="text-base font-semibold text-slate-600">No assessments found</p>
-                                  <p className="text-sm font-medium">Click "Compute Hours" to generate a new assessment block.</p>
+                                  <p className="text-base font-semibold text-slate-600">No hours rendered yet</p>
+                                  <p className="text-sm font-medium">Click "Compute Hours" to record hours rendered for a period.</p>
                               </td>
                           </tr>
                       ) : (

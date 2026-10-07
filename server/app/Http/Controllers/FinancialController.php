@@ -51,6 +51,6 @@ class FinancialController extends Controller {
             }
         });
 
-        return response()->json(['message' => 'Hours successfully assessed.']);
+        return response()->json(['message' => 'Hours rendered recorded for this period.']);
     }
 }

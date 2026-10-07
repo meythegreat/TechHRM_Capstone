@@ -20,12 +20,16 @@ export const StudentCompensationView: React.FC = () => {
     financialService
       .getStudentCompensation()
       .then((res) => setData(res))
-      .catch((err) => console.error('Failed to load work-hour assessments:', err))
+      .catch((err) => console.error('Failed to load hours rendered:', err))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) {
-    return <div className="p-8 text-center text-gray-400">Loading work-hour assessment records...</div>;
+    return <div className="p-8 text-center text-gray-400">Loading hours rendered...</div>;
+  }
+
+  if (!data) {
+    return <div className="p-8 text-center text-gray-500">Hours rendered could not be loaded.</div>;
   }
 
   return (
@@ -47,13 +51,13 @@ export const StudentCompensationView: React.FC = () => {
 
         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
           <div className="flex items-center justify-between text-gray-500 text-xs font-semibold uppercase">
-            <span>Lifetime Assessed Equivalent</span>
+            <span>Total Equivalent</span>
             <TrendingUp className="w-5 h-5 text-emerald-500" />
           </div>
           <p className="text-3xl font-bold text-gray-900 mt-3">
             ₱{data?.lifetime_equivalent_value.toLocaleString('en-US', { minimumFractionDigits: 2 })}
           </p>
-          <p className="text-xs text-emerald-600 mt-2 font-medium">Verified assessments forwarded to Finance</p>
+          <p className="text-xs text-emerald-600 mt-2 font-medium">Verified and forwarded to Finance</p>
         </div>
 
         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
@@ -69,7 +73,7 @@ export const StudentCompensationView: React.FC = () => {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="p-5 border-b border-gray-100 flex items-center justify-between">
           <div>
-            <h3 className="font-bold text-gray-900">Work-Hour Assessment Statement</h3>
+            <h3 className="font-bold text-gray-900">Period Summary</h3>
             <p className="text-xs text-gray-500 mt-0.5">
               Summary of verified rendered hours, allowances, and penalty deductions.
             </p>
@@ -93,7 +97,7 @@ export const StudentCompensationView: React.FC = () => {
               {data?.history.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="text-center py-6 text-gray-400">
-                    No finalized assessment statements yet.
+                    No finalized hours rendered yet.
                   </td>
                 </tr>
               ) : (

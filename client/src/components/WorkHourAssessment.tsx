@@ -44,7 +44,7 @@ export const WorkHourAssessment = () => {
     <div className="max-w-7xl mx-auto space-y-8 p-6">
       <div className="bg-slate-900 p-8 rounded-3xl shadow-xl flex justify-between items-center text-white">
         <div>
-          <h1 className="text-3xl font-black">Work-Hour Assessment</h1>
+          <h1 className="text-3xl font-black">Hours Rendered</h1>
           <p className="text-slate-400 mt-2">Calculate equivalent values for rendered hours to forward to the Finance Office.</p>
         </div>
         <button onClick={() => setShowCompute(true)} className="bg-blue-600 hover:bg-blue-500 px-5 py-2.5 rounded-xl font-bold flex items-center gap-2">
@@ -70,13 +70,13 @@ export const WorkHourAssessment = () => {
               <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase">Student</th>
               <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase">Period</th>
               <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase">Verified Hours</th>
-              <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase">Equivalent Assessment</th>
+              <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase">Equivalent Amount</th>
               <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {records.length === 0 ? (
-              <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500">No assessments found. Click Compute Hours to begin.</td></tr>
+              <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500">No hours rendered yet. Click Compute Hours to begin.</td></tr>
             ) : (
               records.map((r) => (
                 <tr key={r.id} className="hover:bg-slate-50">

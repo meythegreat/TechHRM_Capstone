@@ -207,7 +207,7 @@ function App() {
               <Menu className="w-6 h-6" />
             </button>
             <h2 className="text-xl font-black text-slate-800 capitalize tracking-tight hidden sm:block">
-              {currentPath.replace('-', ' ')}
+              {currentPath === 'financial' ? 'Hours Rendered' : currentPath.replace('-', ' ')}
             </h2>
           </div>
 

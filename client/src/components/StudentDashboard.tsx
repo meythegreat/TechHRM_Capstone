@@ -274,7 +274,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
     const studentNavItems = [
         { id: 'dashboard', label: 'Dashboard', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /> },
         { id: 'attendance', label: 'Attendance / DTR', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /> },
-        { id: 'assessment', label: 'Assessment', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 7h6m0 10v-3m-3 3v-6m-3 6v-9m6 13H6a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2z" /> },
+        { id: 'hours', label: 'Hours Rendered', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 7h6m0 10v-3m-3 3v-6m-3 6v-9m6 13H6a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2z" /> },
         { id: 'schedule', label: 'My Schedule', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /> },
         { id: 'requirements', label: 'Requirements', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /> },
         { id: 'disciplinary', label: 'Disciplinary Records', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /> },
@@ -309,8 +309,8 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors">
                             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
                         </button>
-                        <h2 className="text-xl font-black text-slate-800 capitalize tracking-tight hidden sm:block">
-                            {currentPath.replace('-', ' ')}
+                        <h2 className="text-xl font-black text-slate-800 tracking-tight hidden sm:block">
+                            {studentNavItems.find((item) => item.id === currentPath)?.label ?? currentPath.replace('-', ' ')}
                         </h2>
                     </div>
 
@@ -342,8 +342,8 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                         {/* 2. ATTENDANCE LOG */}
                         {currentPath === 'attendance' && <StudentAttendanceTerminal />}
 
-                        {/* 3. ASSESSMENT TAB */}
-                        {currentPath === 'assessment' && (
+                        {/* 3. HOURS RENDERED */}
+                        {currentPath === 'hours' && (
                             <motion.div variants={staggerContainer} initial="hidden" animate="show" className="space-y-6">
                                 
                                 <motion.div 
@@ -357,13 +357,13 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                     <div className="relative z-10">
                                         <div className="flex items-center gap-2 mb-2">
                                             <Wallet className="w-5 h-5 text-blue-400" />
-                                            <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Work-Hour Assessment</span>
+                                            <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Duty Summary</span>
                                         </div>
                                         <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-                                            Assessment
+                                            Hours Rendered
                                         </h1>
                                         <p className="mt-2 text-slate-400 font-medium max-w-md">
-                                            Review your estimated earnings and acquired amount based on your approved attendance logs.
+                                            Review the hours rendered from your approved attendance logs, and the equivalent amount for Finance.
                                         </p>
                                     </div>
 
