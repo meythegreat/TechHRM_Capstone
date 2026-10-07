@@ -14,6 +14,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\RequirementController;
 use App\Http\Controllers\FinancialController;
 use App\Http\Controllers\OfficeController;
+use App\Http\Controllers\HolidayController;
 
 // =========================================================
 // PUBLIC ROUTES
@@ -30,9 +31,7 @@ Route::post('/apply', [\App\Http\Controllers\ApplicationController::class, 'publ
 
 Route::middleware('auth:sanctum')->group(function () {
 
-    // Student work-hour assessment route
-    Route::get('/financial/records', [FinancialController::class, 'index']);
-    Route::post('/financial/compute-period', [FinancialController::class, 'computePeriod']);
+    Route::get('/financial/my-compensation', [FinancialController::class, 'myCompensation']);
 
     // --- STAGE 1: WSPO APPLICATION MODULE (Student) ---
     Route::post('/applications', [\App\Http\Controllers\ApplicationController::class, 'store']);
@@ -79,6 +78,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/attendance/my-history', [AttendanceController::class, 'myHistory']);
 
+    Route::get('/holidays', [HolidayController::class, 'index']);
+
     Route::get('/student/dashboard', [DashboardController::class, 'studentOverview']);
 
     Route::get('/schedule/my-schedule', [ScheduleController::class, 'mySchedule']);
@@ -120,6 +121,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/attendance/{id}/times', [AttendanceController::class, 'updateTimes']);
 
         Route::post('/attendance/generate-token', [\App\Http\Controllers\AdvancedAttendanceController::class, 'generateToken']);
+        Route::get('/attendance/passcode', [\App\Http\Controllers\AdvancedAttendanceController::class, 'currentPasscode']);
         Route::get('/attendance/qr-code', [\App\Http\Controllers\AdvancedAttendanceController::class, 'currentQr']);
         Route::get('/attendance/anomalies', [\App\Http\Controllers\AdvancedAttendanceController::class, 'getAnomalyLogs']);
         Route::patch('/attendance/{id}/approve', [AttendanceController::class, 'approve']);
@@ -175,6 +177,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/users/{id}', [UserController::class, 'update']);
         Route::delete('/users/{id}', [UserController::class, 'destroy']);
         Route::get('/logs', [ActivityLogController::class, 'index']);
+        Route::get('/logs/people', [ActivityLogController::class, 'people']);
         Route::get('/departments', fn () => \App\Models\Department::orderBy('name')->get(['id', 'name']));
         Route::get('/offices', [OfficeController::class, 'index']);
 
@@ -194,11 +197,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/financial/records', [FinancialController::class, 'index']);
         Route::post('/financial/compute-period', [FinancialController::class, 'computePeriod']);
         Route::put('/financial/records/{id}/adjustments', [FinancialController::class, 'updateAdjustments']);
+        Route::delete('/financial/records/{id}', [FinancialController::class, 'destroy']);
         Route::get('/financial/export-csv', [FinancialController::class, 'exportCsv']);
 
         // STAGE 6: Reports & Analytics
         Route::get('/analytics/dashboard', [\App\Http\Controllers\AnalyticsController::class, 'getDashboardStats']);
         Route::get('/analytics/export-attendance', [\App\Http\Controllers\AnalyticsController::class, 'exportAttendance']);
+
+        Route::post('/holidays', [HolidayController::class, 'store']);
+        Route::delete('/holidays/{holiday}', [HolidayController::class, 'destroy']);
     });
 
     Route::middleware(['role:Supervisor'])->group(function () {

@@ -47,6 +47,14 @@ export const financialService = {
     return response.data;
   },
 
+  cancelRecord: async (id: number) => {
+    const response = await axios.delete(
+      `${API_BASE_URL}/financial/records/${id}`,
+      getAuthHeaders(),
+    );
+    return response.data;
+  },
+
   getStudentCompensation: async () => {
     const response = await axios.get(
       `${API_BASE_URL}/financial/my-compensation`,

@@ -28,8 +28,8 @@ class FinancialRecord extends Model
     ];
 
     protected $casts = [
-        'period_start' => 'date',
-        'period_end' => 'date',
+        'period_start' => 'date:Y-m-d',
+        'period_end' => 'date:Y-m-d',
         'total_hours_rendered' => 'float',
         'hourly_rate' => 'float',
         'estimated_acquired_amount' => 'float',
@@ -39,6 +39,8 @@ class FinancialRecord extends Model
         'adjustment_breakdown' => 'array',
         'locked_at' => 'datetime',
     ];
+
+    protected $appends = ['estimated_gross_amount'];
 
     public function student(): BelongsTo
     {
@@ -50,15 +52,19 @@ class FinancialRecord extends Model
         return $this->belongsTo(User::class, 'processed_by');
     }
 
+    public function getEstimatedGrossAmountAttribute(): float
+    {
+        return round((float) ($this->estimated_acquired_amount ?? 0), 2);
+    }
+
     /**
      * Recalculate the assessment values based on the rendered hours.
      */
     public function recalculate(): void
     {
-        // Calculates: Estimated/acquired amount (e.g., 28 * 15) as per panel notes
+        $this->allowances = (float) ($this->allowances ?? 0);
+        $this->penalty_deductions = (float) ($this->penalty_deductions ?? 0);
         $this->estimated_acquired_amount = round($this->total_hours_rendered * $this->hourly_rate, 2);
-
-        // Calculates: Equivalent Total Amount
         $this->equivalent_total_amount = round(
             max(0, $this->estimated_acquired_amount + $this->allowances - $this->penalty_deductions),
             2

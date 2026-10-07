@@ -18,6 +18,29 @@ axios.interceptors.request.use((config) => {
   return config
 })
 
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error.response?.status
+    const requestUrl = String(error.config?.url || '')
+    const isLoginAttempt = requestUrl.includes('/api/login') || requestUrl.includes('/api/mobile/login')
+
+    if (status === 401 && !isLoginAttempt && localStorage.getItem('auth_token')) {
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('user_role')
+      localStorage.removeItem('user_name')
+      localStorage.removeItem('profile_picture')
+      if (window.location.pathname === '/') {
+        window.location.reload()
+      } else {
+        window.location.replace('/')
+      }
+    }
+
+    return Promise.reject(error)
+  },
+)
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>

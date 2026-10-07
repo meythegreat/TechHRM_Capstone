@@ -15,6 +15,7 @@ class Attendance extends Model
         'attendance_type',
         'verification_code_used',
         'check_in_method',
+        'code_owner_id',
         'time_in',
         'time_out',
         'rendered_hours',

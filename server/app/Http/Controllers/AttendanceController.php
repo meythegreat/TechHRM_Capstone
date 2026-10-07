@@ -365,7 +365,7 @@ class AttendanceController extends Controller
         $student = \App\Models\User::with('profile')->where('role', 'Student')->findOrFail($validated['user_id']);
         $accounts = app(\App\Http\Controllers\UserController::class);
         if (!$accounts->supervisorCanAccessStudent($supervisor, $student)) {
-            return response()->json(['message' => 'You can only enter times for working students in your department.'], 403);
+            return response()->json(['message' => $this->dtrAccessMessage($supervisor)], 403);
         }
 
         [$timeIn, $timeOut, $error] = $this->resolveManualTimes($validated['date'], $validated['time_in'], $validated['time_out']);
@@ -424,7 +424,7 @@ class AttendanceController extends Controller
         $attendance = \App\Models\Attendance::with('user.profile')->findOrFail($id);
         $accounts = app(\App\Http\Controllers\UserController::class);
         if (!$attendance->user || !$accounts->supervisorCanAccessStudent($supervisor, $attendance->user)) {
-            return response()->json(['message' => 'You can only enter times for working students in your department.'], 403);
+            return response()->json(['message' => $this->dtrAccessMessage($supervisor)], 403);
         }
 
         [$timeIn, $timeOut, $error] = $this->resolveManualTimes($validated['date'], $validated['time_in'], $validated['time_out']);
@@ -469,11 +469,21 @@ class AttendanceController extends Controller
     private function departmentSupervisor(Request $request): \App\Models\User|\Illuminate\Http\JsonResponse
     {
         $user = $request->user()->loadMissing('profile');
-        if ($user->role !== 'Supervisor') {
+        $accounts = app(\App\Http\Controllers\UserController::class);
+        if ($user->role !== 'Supervisor' && !$accounts->isWspoDepartmentSupervisor($user)) {
             return response()->json(['message' => 'Only a department supervisor can enter time in and time out.'], 403);
         }
 
         return $user;
+    }
+
+    private function dtrAccessMessage(\App\Models\User $supervisor): string
+    {
+        if (app(\App\Http\Controllers\UserController::class)->isWspoDepartmentSupervisor($supervisor)) {
+            return 'You can only enter times for working students assigned to your office.';
+        }
+
+        return 'You can only enter times for working students in your department.';
     }
 
     /** @return array{0: ?\Carbon\Carbon, 1: ?\Carbon\Carbon, 2: ?string} */

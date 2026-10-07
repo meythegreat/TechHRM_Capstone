@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
@@ -39,8 +40,9 @@ class AuthController extends Controller
             default => 'Management',
         };
 
-        // 5. Create Sanctum Token for secure React API requests
-        $token = $user->createToken('auth_token')->plainTextToken;
+        // 5. Create Sanctum Token for secure React API requests.
+        // The token stops working at 11:59 PM on the day it was issued.
+        $token = $this->issueSessionToken($user, 'auth_token');
 
         // 6. Audit trail (must not block login if logging fails)
         try {
@@ -121,8 +123,8 @@ class AuthController extends Controller
             return $pendingApplicantResponse;
         }
 
-        // 3. Create the Sanctum Token
-        $token = $user->createToken('mobile-auth-token')->plainTextToken;
+        // 3. Create the Sanctum Token (valid until 11:59 PM today)
+        $token = $this->issueSessionToken($user, 'mobile-auth-token');
 
         // Load the profile so the mobile app has their department/course info
         $user->load('profile');
@@ -131,6 +133,16 @@ class AuthController extends Controller
             'token' => $token,
             'user' => $user
         ], 200);
+    }
+
+    private function issueSessionToken(User $user, string $name): string
+    {
+        return $user->createToken($name, ['*'], $this->sessionExpiresAt())->plainTextToken;
+    }
+
+    private function sessionExpiresAt(): Carbon
+    {
+        return Carbon::now()->setTime(23, 59, 59);
     }
 
     private function pendingApplicantResponse(User $user)

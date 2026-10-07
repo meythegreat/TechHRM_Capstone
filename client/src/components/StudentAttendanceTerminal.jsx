@@ -54,7 +54,7 @@ const StudentAttendanceTerminal = () => {
     const [checkInMethod, setCheckInMethod] = useState('passcode');
     const [dutyType, setDutyType] = useState('Regular');
     const scanBusy = useRef(false);
-    const clockInRef = useRef(null);
+    const actionRef = useRef(null);
     const scannerRef = useRef(null);
     const [cameraLive, setCameraLive] = useState(false);
     const [cameraStarting, setCameraStarting] = useState(false);
@@ -68,6 +68,7 @@ const StudentAttendanceTerminal = () => {
     const [dtrMonth, setDtrMonth] = useState(currentYearMonth());
     const { start: dtrStart, end: dtrEnd } = monthBounds(dtrMonth);
     const [dtrHistory, setDtrHistory] = useState([]);
+    const [dtrHolidays, setDtrHolidays] = useState([]);
     const [dtrPenaltyHours, setDtrPenaltyHours] = useState(0);
     const [dtrPreviewOpen, setDtrPreviewOpen] = useState(false);
     const [fullName, setFullName] = useState(localStorage.getItem('user_name') || 'Student');
@@ -153,7 +154,33 @@ const StudentAttendanceTerminal = () => {
         await clockInWith(tokenInput.trim().toUpperCase(), 'passcode');
     };
 
-    clockInRef.current = clockInWith;
+    const clockOutWith = async (code, method) => {
+        if (!activeShift) return;
+        setErrorMsg('');
+        setSuccessMsg('');
+        setIsLoading(true);
+
+        try {
+            await submitSecureClockOut(activeShift.id, code, method);
+            setSuccessMsg(method === 'qr' ? 'QR clock-out accepted. Your shift has ended.' : 'Shift ended successfully! Great job today.');
+            setTokenInput('');
+            await loadSummary();
+            await loadDtr();
+        } catch (err) {
+            scanBusy.current = false;
+            setErrorMsg(err.response?.data?.message || 'Failed to verify token and clock out.');
+        } finally {
+            setIsLoading(false);
+            setTimeout(() => setSuccessMsg(''), 4000);
+        }
+    };
+
+    const handleClockOut = async (e) => {
+        e.preventDefault();
+        await clockOutWith(tokenInput.trim().toUpperCase(), 'passcode');
+    };
+
+    actionRef.current = activeShift ? clockOutWith : clockInWith;
 
     useEffect(() => {
         setCameraLive(false);
@@ -197,7 +224,7 @@ const StudentAttendanceTerminal = () => {
                     const code = raw.slice(6).trim();
                     if (code.length < 16) return;
                     scanBusy.current = true;
-                    clockInRef.current?.(code, 'qr');
+                    actionRef.current?.(code, 'qr');
                 },
                 () => {}
             );
@@ -246,29 +273,19 @@ const StudentAttendanceTerminal = () => {
         } catch (err) {
             console.error('Failed to load DTR', err);
         }
+        try {
+            const holidayResponse = await axios.get('/api/holidays', {
+                params: { start: dtrStart, end: dtrEnd },
+            });
+            setDtrHolidays(Array.isArray(holidayResponse.data) ? holidayResponse.data : []);
+        } catch (err) {
+            console.error('Failed to load DTR holidays', err);
+            setDtrHolidays([]);
+        }
     };
 
     const hoursFor = (log) => Number(log.computed_hours || log.rendered_hours || 0);
     const dtrTotalHours = dtrHistory.reduce((sum, log) => sum + hoursFor(log), 0);
-
-    const handleClockOut = async () => {
-        if (!activeShift) return;
-        setErrorMsg('');
-        setSuccessMsg('');
-        setIsLoading(true);
-
-        try {
-            await submitSecureClockOut(activeShift.id);
-            setSuccessMsg('Shift ended successfully! Great job today.');
-            await loadSummary(); // This will clear the activeShift automatically
-            await loadDtr();
-        } catch (err) {
-            setErrorMsg(err.response?.data?.message || 'Failed to clock out securely.');
-        } finally {
-            setIsLoading(false);
-            setTimeout(() => setSuccessMsg(''), 4000);
-        }
-    };
 
     // ANIMATION VARIANTS
     const containerVariants = {
@@ -304,7 +321,7 @@ const StudentAttendanceTerminal = () => {
                         Attendance Entry
                     </h1>
                     <p className="mt-2 text-slate-400 font-medium max-w-md">
-                        Please secure a verification token from your department supervisor to start your shift.
+                        Use your department supervisor&apos;s passcode or QR code to clock in and clock out.
                     </p>
                     <p className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 bg-white/10 border border-white/10 rounded-lg text-sm font-bold text-blue-200">
                         Your department: <span className="text-white">{assignedDepartment}</span>
@@ -424,6 +441,9 @@ const StudentAttendanceTerminal = () => {
                                                         className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all placeholder:text-slate-400 placeholder:font-medium uppercase tracking-widest"
                                                     />
                                                 </div>
+                                                <p className="mt-2 text-xs font-medium text-slate-500">
+                                                    The passcode changes every 30 seconds. Use the one currently on your supervisor&apos;s screen.
+                                                </p>
                                             </div>
 
                                             <motion.button
@@ -460,7 +480,7 @@ const StudentAttendanceTerminal = () => {
                                             <div id="student-qr-reader" className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 min-h-[240px]" />
                                             <p className="text-xs font-medium text-slate-500 text-center flex items-center justify-center gap-1.5">
                                                 <QrCode className="w-3.5 h-3.5" />
-                                                Point the camera at the QR on your supervisor&apos;s screen. It changes every 1 minute 30 seconds.
+                                                Point the camera at the QR on your supervisor&apos;s screen. It changes every 30 seconds.
                                             </p>
                                             {isLoading && (
                                                 <div className="flex justify-center">
@@ -497,22 +517,95 @@ const StudentAttendanceTerminal = () => {
                                         </p>
                                     </div>
 
-                                    <motion.button
-                                        whileHover={{ scale: 1.02 }}
-                                        whileTap={{ scale: 0.98 }}
-                                        onClick={handleClockOut}
-                                        disabled={isLoading}
-                                        className="w-full py-4 mt-6 bg-linear-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-black rounded-xl shadow-lg shadow-red-500/25 transition-all flex justify-center items-center gap-2"
-                                    >
-                                        {isLoading ? (
-                                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                        ) : (
+                                    <form onSubmit={handleClockOut} className="w-full mt-6 space-y-4 text-left">
+                                        <div>
+                                            <label className="block text-xs font-bold text-emerald-800 uppercase tracking-wider mb-2">Clock-out method</label>
+                                            <div className="grid grid-cols-2 gap-2 p-1 bg-white/70 rounded-xl">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setCheckInMethod('passcode')}
+                                                    className={`py-2.5 rounded-lg text-sm font-bold transition-all ${checkInMethod === 'passcode' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+                                                >
+                                                    Passcode
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setCheckInMethod('qr')}
+                                                    className={`py-2.5 rounded-lg text-sm font-bold transition-all ${checkInMethod === 'qr' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+                                                >
+                                                    Scan QR
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {checkInMethod === 'passcode' ? (
                                             <>
-                                                <LogOut className="w-5 h-5" />
-                                                End Shift
+                                                <div>
+                                                    <label className="block text-xs font-bold text-emerald-800 uppercase tracking-wider mb-2">Verification Token</label>
+                                                    <div className="relative">
+                                                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                                            <KeyRound className="h-5 w-5 text-slate-400" />
+                                                        </div>
+                                                        <input
+                                                            type="text"
+                                                            required
+                                                            value={tokenInput}
+                                                            onChange={(e) => setTokenInput(e.target.value.toUpperCase())}
+                                                            placeholder="Enter supervisor token..."
+                                                            className="block w-full pl-11 pr-4 py-3 bg-white border border-emerald-100 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-red-500 outline-none transition-all placeholder:text-slate-400 placeholder:font-medium uppercase tracking-widest"
+                                                        />
+                                                    </div>
+                                                    <p className="mt-2 text-xs font-medium text-emerald-800">
+                                                        The passcode changes every 30 seconds. Use the one currently on your supervisor&apos;s screen.
+                                                    </p>
+                                                </div>
+                                                <motion.button
+                                                    whileHover={{ scale: 1.02 }}
+                                                    whileTap={{ scale: 0.98 }}
+                                                    type="submit"
+                                                    disabled={isLoading || !tokenInput}
+                                                    className="w-full py-4 bg-linear-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-black rounded-xl shadow-lg shadow-red-500/25 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    {isLoading ? (
+                                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                    ) : (
+                                                        <>
+                                                            <LogOut className="w-5 h-5" />
+                                                            Clock Out
+                                                        </>
+                                                    )}
+                                                </motion.button>
                                             </>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                {insecureCamera && (
+                                                    <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                                                        This page is open over http, so the phone will not ask for the camera. Open https://{window.location.host}, accept the certificate warning, then turn the camera on.
+                                                    </p>
+                                                )}
+                                                {!cameraLive && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={startCamera}
+                                                        disabled={cameraStarting}
+                                                        className="w-full py-3.5 bg-slate-900 hover:bg-red-600 text-white font-bold rounded-xl transition-all disabled:opacity-50"
+                                                    >
+                                                        {cameraStarting ? 'Asking for the camera…' : 'Turn on camera'}
+                                                    </button>
+                                                )}
+                                                <div id="student-qr-reader" className="overflow-hidden rounded-2xl border border-emerald-100 bg-slate-900 min-h-[240px]" />
+                                                <p className="text-xs font-medium text-emerald-800 text-center flex items-center justify-center gap-1.5">
+                                                    <QrCode className="w-3.5 h-3.5" />
+                                                    Scan the live QR on your supervisor&apos;s screen to clock out. It changes every 30 seconds.
+                                                </p>
+                                                {isLoading && (
+                                                    <div className="flex justify-center">
+                                                        <div className="w-5 h-5 border-2 border-red-200 border-t-red-600 rounded-full animate-spin"></div>
+                                                    </div>
+                                                )}
+                                            </div>
                                         )}
-                                    </motion.button>
+                                    </form>
                                 </div>
                             </motion.div>
                         )}
@@ -746,6 +839,7 @@ const StudentAttendanceTerminal = () => {
                                         penaltyHours={dtrPenaltyHours}
                                         startDate={dtrStart}
                                         endDate={dtrEnd}
+                                        holidays={dtrHolidays}
                                     />
                                 </div>
                             </div>

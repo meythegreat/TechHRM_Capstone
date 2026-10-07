@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
@@ -18,6 +18,8 @@ import {
     PenLine,
     Search,
     UserCircle,
+    CalendarPlus,
+    Trash2,
 } from 'lucide-react';
 import TimesheetPrintView from './TimesheetPrintView';
 import { formatYearLevel, homeDepartment } from '../utils/studentAssignment';
@@ -82,6 +84,12 @@ interface StudentDtrLog {
     status?: string | null;
 }
 
+interface Holiday {
+    id: number;
+    date: string;
+    name: string;
+}
+
 interface AttendanceMonitorProps {
     userRole?: string | null;
 }
@@ -95,6 +103,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
     const canApprove = userRole === 'Supervisor';
     const canApproveWspoStudents = userRole === 'WSPO Staff';
     const canViewStudentDtr = userRole === 'Supervisor' || userRole === 'WSPO Staff' || userRole === 'Super Admin';
+    const canManageHolidays = userRole === 'WSPO Staff' || userRole === 'Super Admin';
     
     const [records, setRecords] = useState<AttendanceRecord[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -120,6 +129,10 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
     
     const [dtrLoading, setDtrLoading] = useState(false);
     const [dtrPreviewOpen, setDtrPreviewOpen] = useState(false);
+    const [holidays, setHolidays] = useState<Holiday[]>([]);
+    const [holidayDate, setHolidayDate] = useState(new Date().toISOString().split('T')[0]);
+    const [holidayName, setHolidayName] = useState('');
+    const [holidaySaving, setHolidaySaving] = useState(false);
     const [dtrReloadKey, setDtrReloadKey] = useState(0);
     
     // Manual Edit State
@@ -150,6 +163,21 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
         fetchAttendance(filterDate);
     }, [filterDate, fetchAttendance]);
 
+    const loadHolidays = useCallback(() => {
+        if (!canViewStudentDtr) return Promise.resolve();
+        return axios.get('/api/holidays', { params: { start: dtrStart, end: dtrEnd } })
+            .then((response) => {
+                setHolidays(Array.isArray(response.data) ? response.data : []);
+            })
+            .catch((error) => {
+                console.error('Failed to load holidays', error);
+            });
+    }, [canViewStudentDtr, dtrStart, dtrEnd]);
+
+    useEffect(() => {
+        loadHolidays();
+    }, [loadHolidays]);
+
     useEffect(() => {
         if (!canViewStudentDtr) return;
         axios.get('/api/personnel')
@@ -163,13 +191,23 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
     }, [canViewStudentDtr]);
 
     useEffect(() => {
+        setDtrProfile((current) => ({ ...current, assigned_office: '' }));
+        setManualEditingId(null);
+        setManualTimeIn('');
+        setManualTimeOut('');
+        setManualNote('');
+    }, [selectedStudentId]);
+
+    useEffect(() => {
         if (!canViewStudentDtr || !selectedStudentId) return;
+        let cancelled = false;
         const loadStudentDtr = async () => {
             setDtrLoading(true);
             try {
                 const response = await axios.get(`/api/attendance/student/${selectedStudentId}`, {
                     params: { start: dtrStart, end: dtrEnd },
                 });
+                if (cancelled) return;
                 const payload = response.data;
                 const student = payload.student;
                 setDtrHistory(Array.isArray(payload.history) ? payload.history : []);
@@ -185,14 +223,18 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                     supervisors: Array.isArray(student?.department_supervisors) ? student.department_supervisors : [],
                 });
             } catch (error) {
+                if (cancelled) return;
                 console.error('Failed to load student DTR', error);
                 setToastMsg({ text: 'Failed to load student DTR.', type: 'error' });
                 setTimeout(() => setToastMsg(null), 3000);
             } finally {
-                setDtrLoading(false);
+                if (!cancelled) setDtrLoading(false);
             }
         };
         loadStudentDtr();
+        return () => {
+            cancelled = true;
+        };
     }, [canViewStudentDtr, selectedStudentId, dtrStart, dtrEnd, dtrReloadKey]);
 
     const handleDecision = async (id: number, status: 'accepted' | 'rejected') => {
@@ -249,8 +291,11 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
         document.getElementById('manual-dtr-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     };
 
+    const selectedStudentInWspoOffice = isWspoOffice(dtrProfile.assigned_office);
+    const canEditDtr = canApprove || (canApproveWspoStudents && selectedStudentInWspoOffice);
+
     const saveManualTimes = async () => {
-        if (!canApprove || !selectedStudentId) return;
+        if (!canEditDtr || !selectedStudentId) return;
         if (!manualDate || !manualTimeIn || !manualTimeOut) {
             setToastMsg({ text: 'Enter the date, time in, and time out.', type: 'error' });
             setTimeout(() => setToastMsg(null), 3000);
@@ -317,6 +362,42 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
         setSelectedStudentId(String(filteredStudents[0].id));
     }
 
+    const saveHoliday = async (event: FormEvent) => {
+        event.preventDefault();
+        if (!canManageHolidays || !holidayDate || !holidayName.trim()) return;
+        setHolidaySaving(true);
+        try {
+            await axios.post('/api/holidays', { date: holidayDate, name: holidayName.trim() });
+            setHolidayName('');
+            const monthKey = holidayDate.slice(0, 7);
+            if (monthKey !== dtrMonth) {
+                setDtrMonth(monthKey);
+            } else {
+                await loadHolidays();
+            }
+            setToastMsg({ text: 'Holiday added. It will appear as Holiday on every DTR for that date.', type: 'success' });
+        } catch (error: unknown) {
+            const message = axios.isAxiosError(error)
+                ? (error.response?.data?.message || error.response?.data?.errors?.date?.[0] || 'Could not add that holiday.')
+                : 'Could not add that holiday.';
+            setToastMsg({ text: String(message), type: 'error' });
+        } finally {
+            setHolidaySaving(false);
+        }
+    };
+
+    const removeHoliday = async (holiday: Holiday) => {
+        if (!canManageHolidays) return;
+        try {
+            await axios.delete(`/api/holidays/${holiday.id}`);
+            setHolidays((current) => current.filter((item) => item.id !== holiday.id));
+            setToastMsg({ text: `${holiday.name} removed.`, type: 'success' });
+        } catch (error) {
+            console.error('Failed to remove holiday', error);
+            setToastMsg({ text: 'Could not remove that holiday.', type: 'error' });
+        }
+    };
+
     const openStudentDtr = (userId?: number, timeIn?: string, preview = true) => {
         if (!canViewStudentDtr || !userId) return;
         setSelectedStudentId(String(userId));
@@ -346,8 +427,8 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
 
     return (
         <>
-        {canViewStudentDtr && selectedStudentId && (
-            <div className="dtr-print-page hidden print:flex" aria-hidden="true">
+        {canViewStudentDtr && selectedStudentId && typeof document !== 'undefined' && createPortal(
+            <div className="dtr-print-page hidden print:block" aria-hidden="true">
                 <TimesheetPrintView
                     fullName={dtrStudentName}
                     studentProfile={dtrProfile}
@@ -356,8 +437,10 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                     penaltyHours={shownPenaltyHours}
                     startDate={dtrStart}
                     endDate={dtrEnd}
+                    holidays={holidays}
                 />
-            </div>
+            </div>,
+            document.body
         )}
         <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-8 font-sans print:hidden">
             
@@ -382,7 +465,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                         {canApprove
                             ? 'See the working students in your department, enter time in and time out on their DTR, and accept or reject hours.'
                             : canApproveWspoStudents
-                                ? 'Review campus timesheets. For working students assigned to WSPO, accept or reject hours after they time out.'
+                                ? 'Review campus timesheets. Enter, correct, and accept hours only for working students assigned to the WSPO office.'
                                 : 'Review daily timesheets and open the official monthly DTR for any working student to view or print.'}
                     </p>
                 </div>
@@ -613,6 +696,80 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                 </div>
             </div>
 
+            {canManageHolidays && (
+                <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden mt-10">
+                    <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center gap-3">
+                        <div className="p-3 bg-amber-50 text-amber-600 rounded-xl border border-amber-100">
+                            <CalendarPlus className="w-6 h-6" />
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-black text-slate-900 tracking-tight">DTR Holidays</h3>
+                            <p className="text-xs font-medium text-slate-500 mt-0.5">
+                                Holidays you add are marked Holiday on every student DTR. Saturdays and Sundays are marked Weekend automatically.
+                            </p>
+                        </div>
+                    </div>
+                    <form onSubmit={saveHoliday} className="px-6 py-5 grid grid-cols-1 md:grid-cols-[180px_1fr_auto] gap-4 items-end border-b border-slate-100">
+                        <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Date</label>
+                            <input
+                                type="date"
+                                value={holidayDate}
+                                onChange={(event) => setHolidayDate(event.target.value)}
+                                required
+                                className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-500"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Holiday name</label>
+                            <input
+                                type="text"
+                                value={holidayName}
+                                onChange={(event) => setHolidayName(event.target.value)}
+                                required
+                                maxLength={120}
+                                placeholder="e.g. Independence Day"
+                                className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-amber-500"
+                            />
+                        </div>
+                        <button
+                            type="submit"
+                            disabled={holidaySaving}
+                            className="h-10.5 px-5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-sm font-bold rounded-xl shadow-md shadow-amber-600/20 transition-all"
+                        >
+                            {holidaySaving ? 'Saving...' : 'Add holiday'}
+                        </button>
+                    </form>
+                    <div className="px-6 py-4">
+                        {holidays.length === 0 ? (
+                            <p className="text-sm font-medium text-slate-400">No holidays recorded for this month.</p>
+                        ) : (
+                            <ul className="divide-y divide-slate-100">
+                                {holidays.map((holiday) => (
+                                    <li key={holiday.id} className="flex items-center justify-between gap-3 py-3">
+                                        <div>
+                                            <p className="text-sm font-black text-slate-900">{holiday.name}</p>
+                                            <p className="text-xs font-medium text-slate-500">
+                                                {new Date(`${holiday.date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                                                {' · '}Remark: Holiday
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => removeHoliday(holiday)}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-red-50 text-red-700 border border-red-200 rounded-lg text-xs font-bold"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                            Remove
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* STUDENT DTR PANEL */}
             {canViewStudentDtr && (
                 <div id="student-dtr-panel" className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden mt-10">
@@ -628,7 +785,9 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                 <p className="text-xs font-medium text-slate-500 mt-0.5">
                                     {canApprove
                                         ? 'Select a student to view their DTR, enter manual overrides, or generate official printouts.'
-                                        : 'Select any working student and month to view or print their official WSPO DTR.'}
+                                        : canApproveWspoStudents
+                                            ? 'View any working student DTR. Time changes are limited to students assigned to the WSPO office.'
+                                            : 'Select any working student and month to view or print their official WSPO DTR.'}
                                 </p>
                             </div>
                         </div>
@@ -692,6 +851,9 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                             </div>
                         </div>
                     </div>
+                    <p className="mx-6 mb-6 text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 leading-relaxed">
+                        Before printing, set the print dialog margins to <span className="font-bold">None</span> and scale to <span className="font-bold">100%</span>. The DTR is positioned for the left half of the page. Extra margins or a different scale shift it, so it will not sit in the center of that half after the page is folded.
+                    </p>
 
                     {/* Selected Student Mini-Profile */}
                     <div className="px-6 py-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4 bg-white relative">
@@ -740,7 +902,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                     </div>
 
                     {/* Manual DTR Override Form */}
-                    {canApprove && (
+                    {canEditDtr && (
                         <div className="px-6 py-5 border-b border-indigo-100 bg-indigo-50/30">
                             <h4 className="text-xs font-black text-indigo-700 uppercase tracking-widest mb-3 flex items-center gap-1.5">
                                 <PenLine className="w-4 h-4" /> Manual Timesheet Override
@@ -831,13 +993,13 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                     <th className="px-6 py-3.5 font-bold uppercase tracking-wider text-[11px] text-slate-500">Duty Details</th>
                                     <th className="px-6 py-3.5 text-center font-bold uppercase tracking-wider text-[11px] text-slate-500">Status</th>
                                     <th className="px-6 py-3.5 text-right font-bold uppercase tracking-wider text-[11px] text-slate-500">Hours</th>
-                                    {canApprove && <th className="px-6 py-3.5 text-right font-bold uppercase tracking-wider text-[11px] text-slate-500">Action</th>}
+                                    {canEditDtr && <th className="px-6 py-3.5 text-right font-bold uppercase tracking-wider text-[11px] text-slate-500">Action</th>}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {shownHistory.length === 0 ? (
                                     <tr>
-                                        <td colSpan={canApprove ? 7 : 6} className="px-6 py-12 text-center text-slate-400">
+                                        <td colSpan={canEditDtr ? 7 : 6} className="px-6 py-12 text-center text-slate-400">
                                             <div className="flex flex-col items-center">
                                                 <Calendar className="w-10 h-10 mb-3 opacity-20" />
                                                 <span className="font-bold text-slate-600">{selectedStudentId ? 'No DTR records found for this period.' : 'Choose a student to view their DTR.'}</span>
@@ -876,7 +1038,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                             <td className="px-6 py-4 text-right font-black font-mono text-slate-900 text-base">
                                                 {hoursFor(log).toFixed(2)}
                                             </td>
-                                            {canApprove && (
+                                            {canEditDtr && (
                                                 <td className="px-6 py-4 text-right">
                                                     <button
                                                         type="button"
@@ -898,7 +1060,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                     <td className="px-6 py-4 text-right font-black font-mono text-indigo-700 text-lg bg-indigo-50/50">
                                         {dtrTotalHours.toFixed(2)}
                                     </td>
-                                    {canApprove && <td className="bg-indigo-50/50" />}
+                                    {canEditDtr && <td className="bg-indigo-50/50" />}
                                 </tr>
                             </tfoot>
                         </table>
@@ -951,6 +1113,9 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                 </button>
                             </div>
                         </div>
+                        <p className="px-6 py-3 text-xs font-medium text-amber-800 bg-amber-50 border-b border-amber-200 leading-relaxed">
+                            Before printing, set margins to <span className="font-bold">None</span> and scale to <span className="font-bold">100%</span>. The DTR is positioned for the left half of the page. Extra margins or a different scale shift it, so it will not sit in the center of that half after the page is folded.
+                        </p>
                         <div className="overflow-y-auto bg-slate-200/50 p-6 custom-scrollbar flex-1">
                             {dtrLoading ? (
                                 <div className="flex flex-col items-center justify-center h-64 text-indigo-600">
@@ -967,6 +1132,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                         penaltyHours={shownPenaltyHours}
                                         startDate={dtrStart}
                                         endDate={dtrEnd}
+                                        holidays={holidays}
                                     />
                                 </div>
                             )}

@@ -27,6 +27,7 @@ interface TimesheetPrintViewProps {
     penaltyHours?: number;
     startDate: string;
     endDate: string;
+    holidays?: { date: string; name?: string }[];
 }
 
 interface DaySlots {
@@ -115,11 +116,13 @@ const TimesheetPrintView: React.FC<TimesheetPrintViewProps> = ({
     totalHours,
     penaltyHours = 0,
     startDate,
+    holidays = [],
 }) => {
     const monthBase = startDate ? new Date(`${startDate}T00:00:00`) : new Date();
     const year = monthBase.getFullYear();
     const month = monthBase.getMonth();
     const monthLabel = monthBase.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const holidayDates = new Set(holidays.map((holiday) => String(holiday.date).slice(0, 10)));
 
     const byDay: Record<number, DaySlots> = {};
     history.forEach((record) => {
@@ -279,8 +282,17 @@ const TimesheetPrintView: React.FC<TimesheetPrintViewProps> = ({
                 <tbody>
                     {Array.from({ length: 31 }, (_, index) => {
                         const day = index + 1;
+                        const date = new Date(year, month, day);
                         const slots = byDay[day];
-                        const dayExists = new Date(year, month, day).getMonth() === month;
+                        const dayExists = date.getMonth() === month;
+                        const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                        const weekday = date.getDay();
+                        const remarks: string[] = [];
+                        if (dayExists && holidayDates.has(dateKey)) remarks.push('Holiday');
+                        if (dayExists && (weekday === 0 || weekday === 6)) remarks.push('Weekend');
+                        (slots?.remarks ?? []).forEach((remark) => {
+                            if (remark && !remarks.includes(remark)) remarks.push(remark);
+                        });
                         const td: React.CSSProperties = {
                             ...cell,
                             textAlign: 'center',
@@ -297,7 +309,7 @@ const TimesheetPrintView: React.FC<TimesheetPrintViewProps> = ({
                                 <td style={td}>{dayExists ? formatClock(slots?.amOut) : ''}</td>
                                 <td style={td}>{dayExists ? formatClock(slots?.pmIn) : ''}</td>
                                 <td style={td}>{dayExists ? formatClock(slots?.pmOut) : ''}</td>
-                                <td style={{ ...td, textAlign: 'left', fontSize: '8px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{dayExists ? (slots?.remarks.join(', ') || '') : ''}</td>
+                                <td style={{ ...td, textAlign: 'left', fontSize: '8px', height: 'auto', minHeight: '13px', whiteSpace: 'normal', overflow: 'visible', textOverflow: 'clip', lineHeight: 1.15 }}>{dayExists ? remarks.join(', ') : ''}</td>
                             </tr>
                         );
                     })}

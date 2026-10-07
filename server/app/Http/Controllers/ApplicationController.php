@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\Application;
 use App\Models\Notification;
 use App\Models\User;
@@ -69,6 +70,13 @@ class ApplicationController extends Controller
             return $application;
         });
 
+        $applicantName = trim(
+            $application->first_name . ' ' .
+                ($application->middle_name ? $application->middle_name . ' ' : '') .
+                $application->last_name
+        );
+        $this->recordApplicationSubmission(null, $application, $applicantName);
+
         Http::post('http://localhost:5678/webhook/techhrm/application-submitted', [
             'event' => 'application_submitted',
             'application_id' => $application->id,
@@ -111,6 +119,7 @@ class ApplicationController extends Controller
         ]);
 
         $this->storeApplicationDocuments($request, $application);
+        $this->recordApplicationSubmission($request->user(), $application);
 
         return response()->json(['message' => 'Application submitted successfully!', 'data' => $application->load('documents')], 201);
     }
@@ -412,6 +421,39 @@ class ApplicationController extends Controller
             $application->documents()->delete();
             $application->delete();
         });
+    }
+
+    private function recordApplicationSubmission($user, Application $application, ?string $actorName = null): void
+    {
+        $application->load('documents');
+
+        $documents = $application->documents->map(fn ($document) => [
+            'name' => $document->original_name,
+            'path' => $document->file_path,
+        ])->values()->all();
+
+        $count = count($documents);
+        $actorName = $actorName ?: ($user->name ?? $user->username ?? 'Applicant');
+
+        try {
+            ActivityLog::create([
+                'admin_id' => $user?->id,
+                'admin_name' => $actorName,
+                'action' => 'Submit Application',
+                'module' => 'Application',
+                'record_id' => $application->id,
+                'description' => "{$actorName} submitted an application with {$count} document".($count === 1 ? '' : 's').'.',
+                'new_values' => [
+                    'preferred_department' => $application->preferred_department,
+                    'status' => $application->status,
+                    'reason_for_applying' => $application->reason_for_applying,
+                    'documents' => $documents,
+                ],
+                'ip_address' => request()?->ip(),
+            ]);
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
     }
 
     private function storeApplicationDocuments(Request $request, Application $application): void

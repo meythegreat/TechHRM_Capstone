@@ -3,7 +3,7 @@
 @media print {
   @page {
     size: A4 portrait;
-    margin: 4mm;
+    margin: 0;
   }
 
   html,
@@ -18,10 +18,11 @@
   .dtr-print-page {
     position: fixed;
     top: 0;
+    right: auto;
+    bottom: 0;
     left: 0;
-    display: flex !important;
-    align-items: center;
-    justify-content: flex-start;
+    display: block !important;
+    box-sizing: border-box;
     width: 50%;
     height: 100%;
     margin: 0;
@@ -29,11 +30,17 @@
   }
 
   .dtr-sheet {
-    flex: 0 0 auto;
-    width: 100% !important;
-    max-width: none !important;
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: calc(100% - 16mm) !important;
+    max-width: calc(100% - 16mm) !important;
+    height: fit-content;
+    min-width: 0 !important;
     padding: 0 !important;
-    margin: 0 !important;
+    margin: auto !important;
     box-shadow: none !important;
     break-inside: avoid;
     page-break-inside: avoid;

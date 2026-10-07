@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import QRCode from 'qrcode';
-import { generateSecureToken, fetchAnomalyLogs, fetchLiveQr } from '../services/advancedAttendanceService';
+import { fetchAnomalyLogs, fetchLivePasscode, fetchLiveQr } from '../services/advancedAttendanceService';
 import { 
     KeyRound, 
     QrCode,
@@ -22,9 +22,10 @@ const SupervisorAttendanceHub = () => {
     const [selectedType, setSelectedType] = useState('Daily Clock');
     const [descInput, setDescInput] = useState('');
     const [activeToken, setActiveToken] = useState(null);
+    const [passcodeSeconds, setPasscodeSeconds] = useState(0);
+    const [passcodeLoading, setPasscodeLoading] = useState(false);
     const [anomalies, setAnomalies] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [isGenerating, setIsGenerating] = useState(false);
     const [copied, setCopied] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
     const [accessMode, setAccessMode] = useState('passcode');
@@ -34,6 +35,7 @@ const SupervisorAttendanceHub = () => {
     const [qrExpanded, setQrExpanded] = useState(false);
     const qrCanvasRef = useRef(null);
     const qrExpandedCanvasRef = useRef(null);
+    const descRef = useRef('');
     const userRole = localStorage.getItem('user_role') || '';
     const storedOffice = localStorage.getItem('assigned_office') || 'Unassigned';
     const supervisorDepartment = userRole === 'WSPO Staff' && ['WSPO Coordinator', 'WSPO', 'Unassigned', ''].includes(storedOffice)
@@ -45,6 +47,49 @@ const SupervisorAttendanceHub = () => {
     useEffect(() => {
         loadAnomalies();
     }, []);
+
+    useEffect(() => {
+        descRef.current = descInput;
+    }, [descInput]);
+
+    useEffect(() => {
+        if (accessMode !== 'passcode') return undefined;
+
+        let cancelled = false;
+        let refreshTimer;
+
+        const loadPasscode = async () => {
+            setPasscodeLoading(true);
+            try {
+                const res = await fetchLivePasscode(selectedType, descRef.current);
+                if (cancelled) return;
+                setActiveToken({
+                    token_code: res.data.token_code,
+                    expires_at: res.data.expires_at,
+                    description: res.data.description,
+                });
+                setCopied(false);
+                setPasscodeSeconds(Number(res.data.seconds_remaining) || 0);
+                setErrorMsg('');
+                const waitMs = Math.max(1000, (Number(res.data.seconds_remaining) || 3) * 1000 - 400);
+                refreshTimer = setTimeout(loadPasscode, waitMs);
+            } catch (err) {
+                if (cancelled) return;
+                console.error('Failed to load live passcode', err);
+                setErrorMsg(err.response?.data?.message || 'Unable to show the live passcode. Please try again.');
+                refreshTimer = setTimeout(loadPasscode, 5000);
+            } finally {
+                if (!cancelled) setPasscodeLoading(false);
+            }
+        };
+
+        loadPasscode();
+
+        return () => {
+            cancelled = true;
+            clearTimeout(refreshTimer);
+        };
+    }, [accessMode, selectedType]);
 
     useEffect(() => {
         if (accessMode !== 'qr') return undefined;
@@ -94,7 +139,7 @@ const SupervisorAttendanceHub = () => {
     }, [qrExpanded]);
 
     useEffect(() => {
-        if (!qrSession?.payload) return undefined;
+        if (accessMode !== 'qr' || !qrSession?.payload) return undefined;
         const draw = (canvas, width) => {
             if (!canvas) return;
             QRCode.toCanvas(canvas, qrSession.payload, {
@@ -112,7 +157,7 @@ const SupervisorAttendanceHub = () => {
             draw(qrExpandedCanvasRef.current, size);
         }
         return undefined;
-    }, [qrSession?.payload, qrExpanded]);
+    }, [accessMode, qrSession?.payload, qrExpanded]);
 
     useEffect(() => {
         if (accessMode !== 'qr' || !qrSession) return undefined;
@@ -122,6 +167,15 @@ const SupervisorAttendanceHub = () => {
         }, 1000);
         return () => clearInterval(timer);
     }, [accessMode, qrSession]);
+
+    useEffect(() => {
+        if (accessMode !== 'passcode' || !activeToken?.expires_at) return undefined;
+        const timer = setInterval(() => {
+            const remaining = Math.max(0, Math.ceil((new Date(activeToken.expires_at).getTime() - Date.now()) / 1000));
+            setPasscodeSeconds(remaining);
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [accessMode, activeToken]);
 
     const loadAnomalies = async () => {
         setIsLoading(true);
@@ -137,25 +191,7 @@ const SupervisorAttendanceHub = () => {
         }
     };
 
-    const handleCreateToken = async (e) => {
-        e.preventDefault();
-        setErrorMsg('');
-        setIsGenerating(true);
-        try {
-            const res = await generateSecureToken(selectedType, descInput);
-            if (!res.data?.token?.token_code) {
-                throw new Error('The server did not return a verification token.');
-            }
-            setActiveToken(res.data.token);
-            setDescInput('');
-            setCopied(false);
-        } catch (err) {
-            console.error('Failed to generate token', err);
-            setErrorMsg(err.response?.data?.message || err.message || 'Unable to generate a secure token. Please try again.');
-        } finally {
-            setIsGenerating(false);
-        }
-    };
+    const formatCountdown = (seconds) => `0:${String(seconds % 60).padStart(2, '0')}`;
 
     const copyToClipboard = async () => {
         if (activeToken?.token_code) {
@@ -212,7 +248,7 @@ const SupervisorAttendanceHub = () => {
                         Attendance Hub
                     </h1>
                     <p className="mt-2 text-slate-400 font-medium max-w-md">
-                        Issue a passcode students can type, or show a QR code that refreshes every 1 minute 30 seconds.
+                        Issue a passcode students can type, or show a QR code. Both refresh with a new code every 30 seconds.
                     </p>
                     <p className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 bg-white/10 border border-white/10 rounded-lg text-sm font-bold text-blue-200">
                         Token scope: <span className="text-white">{supervisorDepartment}</span> students only
@@ -271,7 +307,7 @@ const SupervisorAttendanceHub = () => {
                         </div>
                         
                         {accessMode === 'passcode' ? (
-                        <form onSubmit={handleCreateToken} className="space-y-5">
+                        <div className="space-y-5">
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Shift Type</label>
                                 <select 
@@ -294,16 +330,11 @@ const SupervisorAttendanceHub = () => {
                                     placeholder="e.g. CCS Lab 1 Maintenance"
                                     className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all placeholder:text-slate-400"
                                 />
+                                <p className="mt-2 text-xs font-medium text-slate-500">
+                                    Saved on the next passcode, which replaces the current one every 30 seconds.
+                                </p>
                             </div>
-
-                            <button 
-                                type="submit" 
-                                disabled={isGenerating}
-                                className="w-full py-3.5 bg-slate-900 hover:bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-slate-900/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                            >
-                                {isGenerating ? 'Generating...' : <><KeyRound className="w-5 h-5" /> Generate Secure Token</>}
-                            </button>
-                        </form>
+                        </div>
                         ) : (
                         <div className="space-y-5">
                             <div>
@@ -340,7 +371,7 @@ const SupervisorAttendanceHub = () => {
                                     />
                                 </div>
                                 <p className="mt-4 text-sm font-black text-slate-900">
-                                    {qrLoading && !qrSession ? 'Preparing QR…' : `Refreshes in ${Math.floor(qrSeconds / 60)}:${String(qrSeconds % 60).padStart(2, '0')}`}
+                                    {qrLoading && !qrSession ? 'Preparing QR…' : `Refreshes in ${formatCountdown(qrSeconds)}`}
                                 </p>
                                 <p className="mt-2 text-center text-xs font-medium text-slate-500">
                                     Students scan this on the screen. It cannot be saved, copied, or downloaded, and a photo stops working when it refreshes.
@@ -361,7 +392,7 @@ const SupervisorAttendanceHub = () => {
 
                     {/* ACTIVE TOKEN DISPLAY */}
                     <AnimatePresence>
-                        {accessMode === 'passcode' && activeToken && (
+                        {accessMode === 'passcode' && (activeToken || passcodeLoading) && (
                             <motion.div 
                                 initial={{ opacity: 0, scale: 0.95, y: 10 }}
                                 animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -371,7 +402,7 @@ const SupervisorAttendanceHub = () => {
                                 <h4 className="text-xs font-bold text-blue-200 uppercase tracking-widest mb-3">Active Verification Code</h4>
                                 <div className="flex items-center justify-between bg-black/20 p-4 rounded-2xl border border-white/10 backdrop-blur-md">
                                     <span className="text-3xl font-black tracking-widest font-mono select-all">
-                                        {activeToken.token_code}
+                                        {passcodeLoading && !activeToken ? '······' : activeToken?.token_code}
                                     </span>
                                     <button 
                                         onClick={copyToClipboard}
@@ -381,8 +412,11 @@ const SupervisorAttendanceHub = () => {
                                         {copied ? <CheckCircle2 className="w-5 h-5 text-emerald-400" /> : <Copy className="w-5 h-5 text-white" />}
                                     </button>
                                 </div>
-                                <p className="text-xs font-medium text-blue-200 mt-4 text-center">
-                                    Valid until {new Date(activeToken.expires_at).toLocaleString()}. Provide this code to student workers to authorize their clock-in.
+                                <p className="text-sm font-black text-white mt-4 text-center tabular-nums">
+                                    {passcodeLoading && !activeToken ? 'Preparing passcode…' : `Refreshes in ${formatCountdown(passcodeSeconds)}`}
+                                </p>
+                                <p className="text-xs font-medium text-blue-200 mt-2 text-center">
+                                    A new passcode replaces this one every 30 seconds. Students must use the code on screen.
                                 </p>
                             </motion.div>
                         )}
@@ -500,7 +534,7 @@ const SupervisorAttendanceHub = () => {
                             <div className="absolute inset-0" aria-hidden="true" onContextMenu={(e) => e.preventDefault()} />
                         </div>
                         <p className="mt-5 text-2xl font-black text-slate-900 tabular-nums">
-                            {`Refreshes in ${Math.floor(qrSeconds / 60)}:${String(qrSeconds % 60).padStart(2, '0')}`}
+                            {`Refreshes in ${formatCountdown(qrSeconds)}`}
                         </p>
                         <p className="mt-2 text-center text-sm font-medium text-slate-500 max-w-sm">
                             Hold this up for students to scan. It still cannot be saved or copied.

@@ -5,16 +5,16 @@ import {
     Calculator, 
     Wallet, 
     Clock, 
-    CheckCircle2, 
     X, 
     Activity,
     ShieldCheck,
-    SendToBack
+    Trash2
 } from 'lucide-react';
 import { financialService } from '../services/financialService';
 
 interface FinancialRecordItem {
   id: number;
+  user_id: number;
   period_start: string;
   period_end: string;
   total_hours_rendered: number;
@@ -26,15 +26,24 @@ interface FinancialRecordItem {
   };
 }
 
+const ASSESSMENT_STATUSES = ['Draft', 'Approved', 'Locked', 'Forwarded to Finance'] as const;
+
+const formatCoverageDate = (value: string) => {
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString();
+};
+
 export const FinancialManagement: React.FC = () => {
   const [records, setRecords] = useState<FinancialRecordItem[]>([]);
   const [stats, setStats] = useState({ total_equivalent_value: 0, pending_drafts: 0 });
   const [showCompute, setShowCompute] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isComputing, setIsComputing] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
 
-  const fetchRecords = async () => {
-    setIsLoading(true);
+  const fetchRecords = async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
         const res = await financialService.getRecords();
         setRecords(res.records.data || []);
@@ -56,29 +65,57 @@ export const FinancialManagement: React.FC = () => {
     const formData = new FormData(e.currentTarget);
     
     try {
-        await financialService.computePeriod({
+        const result = await financialService.computePeriod({
           period_start: formData.get('start') as string,
           period_end: formData.get('end') as string,
           hourly_rate: parseFloat(formData.get('rate') as string),
         });
         setShowCompute(false);
+        setNotice(result?.assessed > 0
+          ? `Recorded hours rendered for ${result.assessed} student${result.assessed === 1 ? '' : 's'} in this period.`
+          : (result?.message || 'No verified duty hours were found in that period.'));
         fetchRecords();
     } catch (error) {
         console.error("Failed to compute work hours", error);
+        setNotice('Computation failed. Check the period and try again.');
     } finally {
         setIsComputing(false);
     }
   };
 
-  // Helper for Status Badges
-  const getStatusBadge = (status: string) => {
-    const base = "px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border flex items-center gap-1.5 w-fit";
-    switch(status) {
-        case 'Forwarded to Finance': return `${base} bg-emerald-50 text-emerald-700 border-emerald-200`;
-        case 'Approved': return `${base} bg-blue-50 text-blue-700 border-blue-200`;
-        case 'Locked': return `${base} bg-slate-100 text-slate-700 border-slate-300`;
-        case 'Draft': return `${base} bg-amber-50 text-amber-700 border-amber-200`;
-        default: return `${base} bg-slate-50 text-slate-600 border-slate-200`;
+  const handleStatusChange = async (record: FinancialRecordItem, status: string) => {
+    if (status === record.status) return;
+    setBusyId(record.id);
+    try {
+      await financialService.updateAdjustments(record.id, {
+        status,
+        adjustment_reason: `Status set to ${status}`,
+      });
+      setNotice(`${record.student?.name || 'Student'} is now ${status}.`);
+      fetchRecords(true);
+    } catch (error) {
+      console.error('Failed to update assessment status', error);
+      setNotice('Could not update that status.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleCancel = async (record: FinancialRecordItem) => {
+    const name = record.student?.name || 'this student';
+    const period = `${formatCoverageDate(record.period_start)} to ${formatCoverageDate(record.period_end)}`;
+    if (!window.confirm(`Cancel the ${period} coverage for ${name}?`)) return;
+
+    setBusyId(record.id);
+    try {
+      await financialService.cancelRecord(record.id);
+      setNotice(`Cancelled the ${period} coverage for ${name}.`);
+      fetchRecords(true);
+    } catch (error) {
+      console.error('Failed to cancel assessment', error);
+      setNotice('Could not cancel that coverage.');
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -132,6 +169,12 @@ export const FinancialManagement: React.FC = () => {
               </button>
           </div>
       </motion.div>
+
+      {notice && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-800 text-sm font-semibold rounded-2xl px-5 py-3">
+          {notice}
+        </div>
+      )}
 
       {/* METRIC CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -194,7 +237,7 @@ export const FinancialManagement: React.FC = () => {
                           <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Coverage Period</th>
                           <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Verified Hours</th>
                           <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Equivalent Amount</th>
-                          <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider text-right">Report Status</th>
+                          <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider text-right">Status</th>
                       </tr>
                   </thead>
                   <motion.tbody 
@@ -212,9 +255,16 @@ export const FinancialManagement: React.FC = () => {
                               </td>
                           </tr>
                       ) : (
-                          records.map((r) => (
+                          Object.values(records.reduce<Record<number, FinancialRecordItem[]>>((groups, record) => {
+                              const key = record.user_id;
+                              groups[key] = groups[key] || [];
+                              groups[key].push(record);
+                              return groups;
+                          }, {})).map((coverages) => (
+                              coverages.map((r, index) => (
                               <motion.tr variants={rowVariants} key={r.id} className="hover:bg-slate-50 transition-colors group">
-                                  <td className="px-6 py-5 align-top">
+                                  {index === 0 && (
+                                  <td className="px-6 py-5 align-top border-t border-slate-100" rowSpan={coverages.length}>
                                       <div className="flex items-center gap-3">
                                           <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-black shrink-0 border border-blue-100 shadow-inner">
                                               {(r.student?.name || '?').charAt(0)}
@@ -224,10 +274,11 @@ export const FinancialManagement: React.FC = () => {
                                           </p>
                                       </div>
                                   </td>
+                                  )}
                                   
-                                  <td className="px-6 py-5 align-top">
+                                  <td className="px-6 py-5 align-top border-t border-slate-100">
                                       <div className="text-sm font-bold text-slate-800 bg-slate-100 px-3 py-1.5 rounded-lg inline-block">
-                                          {new Date(r.period_start).toLocaleDateString()} <span className="text-slate-400 mx-1">→</span> {new Date(r.period_end).toLocaleDateString()}
+                                          {formatCoverageDate(r.period_start)} <span className="text-slate-400 mx-1">→</span> {formatCoverageDate(r.period_end)}
                                       </div>
                                   </td>
 
@@ -249,17 +300,31 @@ export const FinancialManagement: React.FC = () => {
                                       </div>
                                   </td>
 
-                                  <td className="px-6 py-5 align-top text-right">
-                                      <div className="flex justify-end">
-                                          <span className={getStatusBadge(r.status)}>
-                                              {r.status === 'Forwarded to Finance' && <SendToBack className="w-3 h-3" />}
-                                              {r.status === 'Draft' && <Clock className="w-3 h-3" />}
-                                              {r.status === 'Approved' && <CheckCircle2 className="w-3 h-3" />}
-                                              {r.status}
-                                          </span>
+                                  <td className="px-6 py-5 align-top">
+                                      <div className="flex items-center justify-end gap-2">
+                                          <select
+                                              value={r.status}
+                                              disabled={busyId === r.id}
+                                              onChange={(event) => handleStatusChange(r, event.target.value)}
+                                              className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wide border border-slate-200 bg-white text-slate-700 outline-none focus:ring-2 focus:ring-blue-600 disabled:opacity-50"
+                                          >
+                                              {ASSESSMENT_STATUSES.map((status) => (
+                                                  <option key={status} value={status}>{status}</option>
+                                              ))}
+                                          </select>
+                                          <button
+                                              type="button"
+                                              disabled={busyId === r.id}
+                                              onClick={() => handleCancel(r)}
+                                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                                          >
+                                              <Trash2 className="w-3.5 h-3.5" />
+                                              Cancel
+                                          </button>
                                       </div>
                                   </td>
                               </motion.tr>
+                              ))
                           ))
                       )}
                   </motion.tbody>
