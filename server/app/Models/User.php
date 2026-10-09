@@ -26,6 +26,7 @@ class User extends Authenticatable
         'name',
         'username',
         'password',
+        'must_change_password',
         'role',
         'profile_picture',
         'phone_number',
@@ -50,6 +51,7 @@ class User extends Authenticatable
     {
         return [
             'password' => 'hashed',
+            'must_change_password' => 'boolean',
         ];
     }
 

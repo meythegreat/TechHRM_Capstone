@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use App\Models\User;
 use App\Models\Application;
 use App\Models\ActivityLog; // Imported your new ActivityLog model!
@@ -20,12 +22,12 @@ class AuthController extends Controller
         ]);
 
         // 2. Fetch user WITH their student profile eager-loaded
-        $user = User::with('profile')->where('username', $request->username)->first();
+        $user = $this->userForIdentifier($request->username)?->load('profile');
 
         // 3. Verify User and Password (Invalid login handling)
         if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json([
-                'message' => 'Invalid username or password.'
+                'message' => 'Invalid username, email, or password.'
             ], 401);
         }
 
@@ -65,6 +67,85 @@ class AuthController extends Controller
             'name' => $user->name,
             'office' => $office,
             'profile_picture' => $user->profile_picture,
+            'must_change_password' => (bool) $user->must_change_password,
+        ]);
+    }
+
+    public function forgotPassword(Request $request)
+    {
+        $request->validate([
+            'username' => 'required|string|max:255',
+        ]);
+
+        $identifier = trim($request->username);
+        $user = $this->userForIdentifier($identifier);
+
+        if (!$user) {
+            return response()->json([
+                'message' => 'No account matches that username or email.',
+            ], 404);
+        }
+
+        $email = $this->resetDestination($user, $identifier);
+
+        if (!$email) {
+            return response()->json([
+                'message' => 'This account has no email address on file. Ask the Work-Study office to reset it.',
+            ], 422);
+        }
+
+        $temporaryPassword = Str::password(12, symbols: false);
+        $payload = [
+            'event' => 'forgot_password',
+            'name' => $user->name,
+            'username' => $user->username,
+            'email' => $email,
+            'from_email' => 'techhrmwspo@gmail.com',
+            'from_name' => 'TechHRM WSPO',
+            'temporary_password' => $temporaryPassword,
+            'subject' => 'Your TechHRM temporary password',
+            'message' => $this->resetEmailBody($user, $temporaryPassword),
+        ];
+
+        try {
+            $webhook = Http::timeout(20)->post(config('services.n8n.forgot_password_webhook'), $payload);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'message' => 'Could not reach n8n to send the Gmail reset. Start n8n, then try again.',
+            ], 502);
+        }
+
+        if (!$webhook->successful()) {
+            return response()->json([
+                'message' => 'n8n did not send the Gmail reset. Check that the forgot-password workflow is active and Gmail is connected.',
+            ], 502);
+        }
+
+        $user->password = $temporaryPassword;
+        $user->must_change_password = true;
+        $user->save();
+        $user->tokens()->delete();
+
+        try {
+            ActivityLog::create([
+                'admin_id' => $user->id,
+                'admin_name' => $user->name ?? $user->username,
+                'action' => 'Password Reset',
+                'description' => 'requested a password reset. A temporary password was emailed.',
+                'ip_address' => $request->ip(),
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        $maskedEmail = $this->maskEmail($email);
+
+        return response()->json([
+            'message' => "A temporary password has been sent to this account's email, {$maskedEmail}. Sign in with it, then choose a new password.",
+            'masked_email' => $maskedEmail,
+            'account' => filter_var($user->username, FILTER_VALIDATE_EMAIL) ? $maskedEmail : $user->username,
         ]);
     }
 
@@ -102,12 +183,12 @@ class AuthController extends Controller
             'password' => 'required',
         ]);
 
-        $user = \App\Models\User::where('username', $request->username)->first();
+        $user = $this->userForIdentifier($request->username);
 
         // 1. Check if user exists and password is correct
         if (!$user || !\Illuminate\Support\Facades\Hash::check($request->password, $user->password)) {
             return response()->json([
-                'message' => 'Invalid username or password.'
+                'message' => 'Invalid username, email, or password.'
             ], 401);
         }
 
@@ -143,6 +224,119 @@ class AuthController extends Controller
     private function sessionExpiresAt(): Carbon
     {
         return Carbon::now()->setTime(23, 59, 59);
+    }
+
+    private function maskEmail(string $email): string
+    {
+        [$local, $domain] = explode('@', $email, 2);
+        $visible = mb_substr($local, 0, 2);
+        $hidden = str_repeat('*', max(mb_strlen($local) - mb_strlen($visible), 0));
+
+        return $visible . $hidden . '@' . $domain;
+    }
+
+    private function userForIdentifier(string $identifier): ?User
+    {
+        $identifier = trim($identifier);
+        $user = User::where('username', $identifier)->first();
+
+        if ($user) {
+            return $user;
+        }
+
+        $lower = strtolower($identifier);
+        $user = User::whereRaw('LOWER(username) = ?', [$lower])->first();
+
+        if ($user || !filter_var($identifier, FILTER_VALIDATE_EMAIL)) {
+            return $user;
+        }
+
+        $userId = Application::whereRaw('LOWER(email) = ?', [$lower])
+            ->whereNotNull('user_id')
+            ->latest()
+            ->value('user_id');
+
+        return $userId ? User::find($userId) : null;
+    }
+
+    private function resetDestination(User $user, string $identifier): ?string
+    {
+        if (filter_var($identifier, FILTER_VALIDATE_EMAIL)) {
+            return strtolower($identifier);
+        }
+
+        if (filter_var($user->username, FILTER_VALIDATE_EMAIL)) {
+            return strtolower($user->username);
+        }
+
+        $applicationEmail = Application::where('user_id', $user->id)->latest()->value('email');
+
+        if (is_string($applicationEmail) && filter_var($applicationEmail, FILTER_VALIDATE_EMAIL)) {
+            return strtolower($applicationEmail);
+        }
+
+        return null;
+    }
+
+    private function resetEmailBody(User $user, string $temporaryPassword): string
+    {
+        $name = htmlspecialchars($user->name ?: $user->username, ENT_QUOTES, 'UTF-8');
+        $username = htmlspecialchars($user->username, ENT_QUOTES, 'UTF-8');
+        $password = htmlspecialchars($temporaryPassword, ENT_QUOTES, 'UTF-8');
+
+        return <<<HTML
+<!DOCTYPE html>
+<html lang="en">
+<body style="margin:0;padding:0;background:#e8fbff;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#e8fbff;padding:32px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #b8f4f6;font-family:Arial,Helvetica,sans-serif;">
+          <tr>
+            <td style="background:#30f1f3;height:8px;font-size:0;line-height:0;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td style="background:#0731af;padding:28px 32px 22px;">
+              <p style="margin:0;color:#30f1f3;font-size:11px;letter-spacing:1.8px;font-weight:bold;">FILAMER CHRISTIAN UNIVERSITY</p>
+              <h1 style="margin:10px 0 0;color:#fde004;font-size:30px;line-height:1.1;">TechHRM</h1>
+              <p style="margin:8px 0 0;color:#ffffff;font-size:14px;">Work-Study Program Organization</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0;font-size:0;line-height:0;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td width="34%" style="background:#fde004;height:6px;">&nbsp;</td>
+                  <td width="33%" style="background:#096cf3;height:6px;">&nbsp;</td>
+                  <td width="33%" style="background:#c11a0d;height:6px;">&nbsp;</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <p style="margin:0 0 14px;color:#0731af;font-size:18px;font-weight:bold;">Hello {$name},</p>
+              <p style="margin:0 0 22px;color:#1e293b;font-size:15px;line-height:1.6;">A password reset was requested for your TechHRM account. Use the temporary password below to sign in. You will be asked to choose a new password before you can continue.</p>
+              <p style="margin:0 0 6px;color:#096cf3;font-size:11px;font-weight:bold;letter-spacing:1.2px;">EMAIL</p>
+              <p style="margin:0 0 18px;color:#0731af;font-size:16px;font-weight:bold;">{$username}</p>
+              <p style="margin:0 0 8px;color:#096cf3;font-size:11px;font-weight:bold;letter-spacing:1.2px;">TEMPORARY PASSWORD</p>
+              <p style="margin:0 0 24px;background:#fde004;border:2px solid #0731af;border-radius:12px;padding:16px 12px;color:#0731af;font-size:22px;font-weight:bold;letter-spacing:1px;text-align:center;">{$password}</p>
+              <p style="margin:0;color:#334155;font-size:13px;line-height:1.6;">If you did not request this, contact the Work-Study Program office.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:18px 32px;background:#0731af;">
+              <p style="margin:0;color:#fde004;font-size:13px;font-weight:bold;">TechHRM WSPO</p>
+              <p style="margin:4px 0 0;color:#30f1f3;font-size:13px;">techhrmwspo@gmail.com</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+HTML;
     }
 
     private function pendingApplicantResponse(User $user)

@@ -21,6 +21,7 @@ use App\Http\Controllers\HolidayController;
 // =========================================================
 
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
 Route::post('/mobile/login', [\App\Http\Controllers\AuthController::class, 'mobileLogin']);
 Route::post('/apply', [\App\Http\Controllers\ApplicationController::class, 'publicApply']);
 
@@ -56,6 +57,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [UserController::class, 'me']);
 
     Route::put('/user', [UserController::class, 'updateSelf']);
+    Route::post('/user/change-password', [UserController::class, 'changeTemporaryPassword']);
     Route::post('/user/avatar', [UserController::class, 'uploadAvatar']);
 
     Route::get('/secure-file', [SecureFileController::class, 'show']);

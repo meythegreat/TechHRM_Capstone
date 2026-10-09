@@ -430,6 +430,33 @@ class UserController extends Controller
         return response()->json(['message' => 'User updated successfully', 'user' => $user->load('profile')]);
     }
 
+
+    public function changeTemporaryPassword(Request $request)
+    {
+        /** @var \App\Models\User $user */
+        $user = $request->user();
+
+        if (!$user->must_change_password) {
+            return response()->json(['message' => 'A password change is not required.'], 422);
+        }
+
+        $validated = $request->validate([
+            'password' => 'required|string|min:6|confirmed',
+        ]);
+
+        if (Hash::check($validated['password'], $user->password)) {
+            return response()->json([
+                'message' => 'Choose a password that is different from the temporary password.',
+            ], 422);
+        }
+
+        $user->password = $validated['password'];
+        $user->must_change_password = false;
+        $user->save();
+
+        return response()->json(['message' => 'Password updated.']);
+    }
+
     public function updateSelf(Request $request)
     {
         /** @var \App\Models\User $user */
@@ -447,6 +474,7 @@ class UserController extends Controller
                 return response()->json(['message' => 'Current password is incorrect.'], 422);
             }
             $user->password = Hash::make($validated['password']);
+            $user->must_change_password = false;
         }
 
         $user->name = $validated['name'];

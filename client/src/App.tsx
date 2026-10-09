@@ -6,6 +6,8 @@ import { Menu, ShieldCheck } from 'lucide-react';
 import { FinancialManagement } from './components/FinancialManagement';
 
 import Login from './components/Login';
+import ForcePasswordChange from './components/ForcePasswordChange';
+import Toast from './components/Toast';
 import PublicApplication from './components/PublicApplication';
 import UserManagement from './components/UserManagement';
 import ActivityLogs from './components/ActivityLogs';
@@ -63,6 +65,8 @@ function App() {
   const [isPublicApp, setIsPublicApp] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isVerifying, setIsVerifying] = useState(true);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [passwordToast, setPasswordToast] = useState<string | null>(null);
 
   const [adminName, setAdminName] = useState(localStorage.getItem('user_name') || 'Admin');
   const [adminAvatar, setAdminAvatar] = useState<string | null>(() => normalizeFilePath(localStorage.getItem('profile_picture')));
@@ -84,6 +88,7 @@ function App() {
         const role = response.data.role;
         setUserRole(role);
         setAdminName(response.data.name);
+        setMustChangePassword(Boolean(response.data.must_change_password));
         
         if (response.data.profile_picture) {
            const path = normalizeFilePath(response.data.profile_picture);
@@ -113,7 +118,7 @@ function App() {
     }
   }, [hasToken, userRole, location.pathname, navigate]);
 
-  const handleLoginSuccess = (token: string, role: string, name: string, profilePic: string | null) => {
+  const handleLoginSuccess = (token: string, role: string, name: string, profilePic: string | null, mustChangePassword = false) => {
     localStorage.setItem('auth_token', token);
     localStorage.setItem('user_role', role);
     localStorage.setItem('user_name', name);
@@ -131,6 +136,7 @@ function App() {
     setHasToken(true);
     setUserRole(role);
     setAdminName(name);
+    setMustChangePassword(mustChangePassword);
   };
 
   const handleLogout = async () => {
@@ -146,6 +152,7 @@ function App() {
       setHasToken(false);
       setUserRole(null);
       setAdminAvatar(null);
+      setMustChangePassword(false);
       navigate('/');
     }
   };
@@ -176,7 +183,19 @@ function App() {
 
   // STUDENT LAYOUT
   if (userRole === 'Student') {
-    return <StudentDashboard onLogout={handleLogout} />;
+    return (
+      <>
+        <StudentDashboard onLogout={handleLogout} />
+
+      {mustChangePassword && (
+        <ForcePasswordChange onChanged={() => {
+          setMustChangePassword(false);
+          setPasswordToast('Your password has been updated.');
+        }} />
+      )}
+      <Toast message={passwordToast} type="success" onClose={() => setPasswordToast(null)} />
+      </>
+    );
   }
 
   // ADMIN / SUPERVISOR / WSPO STAFF LAYOUT
@@ -184,6 +203,7 @@ function App() {
   const currentPath = firstPathSegment(location.pathname) || 'dashboard';
 
   return (
+    <>
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans selection:bg-blue-200 selection:text-blue-900 print:h-auto print:overflow-visible print:bg-white">
       
       <Sidebar 
@@ -283,6 +303,15 @@ function App() {
         </main>
       </div>
     </div>
+
+      {mustChangePassword && (
+        <ForcePasswordChange onChanged={() => {
+          setMustChangePassword(false);
+          setPasswordToast('Your password has been updated.');
+        }} />
+      )}
+      <Toast message={passwordToast} type="success" onClose={() => setPasswordToast(null)} />
+    </>
   );
 
 }

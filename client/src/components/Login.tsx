@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import axios from 'axios';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Eye, EyeOff, Loader2, CheckCircle2, AlertCircle, ArrowRight } from 'lucide-react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { Eye, EyeOff, Loader2, CheckCircle2, ArrowRight, X, Mail } from 'lucide-react';
+import Toast from './Toast';
 import { normalizeFilePath } from '../utils/secureFile';
 
 interface LoginProps {
-    onLoginSuccess: (token: string, role: string, name: string, profilePic: string | null) => void;
+    onLoginSuccess: (token: string, role: string, name: string, profilePic: string | null, mustChangePassword: boolean) => void;
     onNavigateToApply: () => void;
 }
 
@@ -16,6 +17,60 @@ const Login = ({ onLoginSuccess, onNavigateToApply }: LoginProps) => {
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    const [forgotOpen, setForgotOpen] = useState(false);
+    const [forgotUsername, setForgotUsername] = useState('');
+    const [forgotLoading, setForgotLoading] = useState(false);
+    const [forgotError, setForgotError] = useState<string | null>(null);
+    const [forgotSuccess, setForgotSuccess] = useState<string | null>(null);
+    const [forgotMaskedEmail, setForgotMaskedEmail] = useState<string | null>(null);
+    const [forgotAccount, setForgotAccount] = useState<string | null>(null);
+    const reduceMotion = useReducedMotion();
+    const ease = [0.22, 1, 0.36, 1] as const;
+    const formVariants = {
+        hidden: {},
+        show: { transition: { staggerChildren: reduceMotion ? 0 : 0.08, delayChildren: reduceMotion ? 0 : 0.12 } },
+    };
+    const itemVariants = {
+        hidden: reduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 },
+        show: { opacity: 1, y: 0, transition: { duration: reduceMotion ? 0 : 0.45, ease } },
+    };
+
+    const openForgotPassword = () => {
+        setForgotUsername(username);
+        setForgotError(null);
+        setForgotSuccess(null);
+        setForgotMaskedEmail(null);
+        setForgotAccount(null);
+        setForgotOpen(true);
+    };
+
+    const closeForgotPassword = () => {
+        if (forgotLoading) return;
+        setForgotOpen(false);
+    };
+
+    const handleForgotPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setForgotLoading(true);
+        setForgotError(null);
+        setForgotSuccess(null);
+        setForgotMaskedEmail(null);
+        setForgotAccount(null);
+
+        try {
+            const response = await axios.post('/api/forgot-password', { username: forgotUsername.trim() });
+            setForgotMaskedEmail(response.data?.masked_email || null);
+            setForgotAccount(response.data?.account || forgotUsername.trim());
+            setForgotSuccess(response.data?.message || 'A temporary password has been sent to this account\'s email.');
+        } catch (err: any) {
+            const message = !err.response
+                ? 'Cannot reach the server. Ensure Laravel is running.'
+                : (err.response?.data?.message || 'Could not send the password reset.');
+            setForgotError(message);
+        } finally {
+            setForgotLoading(false);
+        }
+    };
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -25,7 +80,7 @@ const Login = ({ onLoginSuccess, onNavigateToApply }: LoginProps) => {
 
         try {
             const response = await axios.post('/api/login', { username, password });
-            const { token, role, name, office, profile_picture } = response.data;
+            const { token, role, name, office, profile_picture, must_change_password } = response.data;
 
             localStorage.setItem('auth_token', token);
             localStorage.setItem('user_role', role);
@@ -37,15 +92,14 @@ const Login = ({ onLoginSuccess, onNavigateToApply }: LoginProps) => {
 
             setSuccessMsg(`Welcome back, ${name || username}!`);
             setTimeout(() => {
-                onLoginSuccess(token, role, name || username, profile_picture || null);
-            }, 1500);
+                onLoginSuccess(token, role, name || username, profile_picture || null, Boolean(must_change_password));
+            }, 1100);
 
         } catch (err: any) {
-            if (!err.response) {
-                setError('Cannot reach the server. Ensure Laravel is running.');
-                return;
-            }
-            setError(err.response?.data?.message || 'Invalid credentials. Please try again.');
+            const message = !err.response
+                ? 'Cannot reach the server. Ensure Laravel is running.'
+                : (err.response?.data?.message || 'Invalid credentials. Please try again.');
+            setError(message);
         } finally {
             setIsLoading(false);
         }
@@ -103,61 +157,38 @@ const Login = ({ onLoginSuccess, onNavigateToApply }: LoginProps) => {
 
             {/* --- RIGHT SIDE: Login Form (Scrollable for mobile keyboards) --- */}
             <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 md:p-16 bg-white relative shadow-[-20px_0_40px_-15px_rgba(0,0,0,0.05)] z-20 overflow-y-auto min-h-screen">
-                <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.2 }}
+                <motion.div
+                    variants={formVariants}
+                    initial="hidden"
+                    animate="show"
                     className="w-full max-w-md space-y-8 my-auto py-8"
                 >
                     {/* Mobile Branding (Visible only on small screens) */}
-                    <div className="flex flex-col items-center mb-8 lg:hidden text-center">
+                    <motion.div variants={itemVariants} className="flex flex-col items-center mb-8 lg:hidden text-center">
                         <img src="/logo.jpg" alt="TechHRM Logo" className="w-20 h-20 rounded-full border-4 border-slate-50 shadow-md mb-4" />
                         <h1 className="text-3xl font-black text-slate-900 tracking-tight">TechHRM</h1>
                         <p className="text-sm font-medium text-slate-500 mt-1">FCU Work-Study Portal</p>
-                    </div>
+                    </motion.div>
 
-                    <div>
+                    <motion.div variants={itemVariants}>
                         <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
                             Welcome!
                         </h2>
                         <p className="mt-2 text-base text-slate-500 font-medium">
                             Login using your provided credentials.
                         </p>
-                    </div>
+                    </motion.div>
 
-                    {/* Animated Toasts */}
-                    <AnimatePresence mode="wait">
-                        {error && (
-                            <motion.div 
-                                initial={{ opacity: 0, height: 0, y: -10 }}
-                                animate={{ opacity: 1, height: 'auto', y: 0 }}
-                                exit={{ opacity: 0, height: 0 }}
-                                className="p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3 shadow-sm overflow-hidden"
-                            >
-                                <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-                                <span className="text-sm font-semibold text-red-800">{error}</span>
-                            </motion.div>
-                        )}
-                        {successMsg && (
-                            <motion.div 
-                                initial={{ opacity: 0, height: 0, y: -10 }}
-                                animate={{ opacity: 1, height: 'auto', y: 0 }}
-                                exit={{ opacity: 0, height: 0 }}
-                                className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center gap-3 shadow-sm overflow-hidden"
-                            >
-                                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                                <span className="text-sm font-semibold text-emerald-800">{successMsg}</span>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
+                    <Toast message={error} type="error" onClose={() => setError(null)} />
 
-                    <form className="space-y-6 pt-2" onSubmit={handleLogin}>
+                    <motion.form variants={itemVariants} className="space-y-6 pt-2" onSubmit={handleLogin}>
                         
                         {/* Username Floating Label Input (text-base prevents iOS zoom) */}
                         <div className="relative">
                             <input 
                                 id="username"
-                                type="text" 
+                                type="text"
+                                autoComplete="username"
                                 required
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
@@ -168,7 +199,7 @@ const Login = ({ onLoginSuccess, onNavigateToApply }: LoginProps) => {
                                 htmlFor="username" 
                                 className="absolute text-base text-slate-500 duration-300 transform -translate-y-3 scale-75 top-4 z-10 origin-left left-4 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-3 peer-focus:text-blue-600 font-medium"
                             >
-                                Username
+                                Username or email
                             </label>
                         </div>
 
@@ -203,7 +234,11 @@ const Login = ({ onLoginSuccess, onNavigateToApply }: LoginProps) => {
                             
                             <div className="flex justify-end">
                                 {/* Increased touch target for forgot password */}
-                                <button type="button" className="text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors py-2 px-1">
+                                <button
+                                    type="button"
+                                    onClick={openForgotPassword}
+                                    className="text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors py-2 px-1"
+                                >
                                     Forgot password?
                                 </button>
                             </div>
@@ -229,10 +264,10 @@ const Login = ({ onLoginSuccess, onNavigateToApply }: LoginProps) => {
                                 </>
                             )}
                         </motion.button>
-                    </form>
+                    </motion.form>
 
                     {onNavigateToApply && (
-                        <div className="pt-8 mt-8 border-t border-slate-100">
+                        <motion.div variants={itemVariants} className="pt-8 mt-8 border-t border-slate-100">
                             <p className="text-sm text-slate-500 font-medium text-center mb-3">Interested in the Work-Study Program?</p>
                             {/* Thumb-friendly block button with permanently visible arrow */}
                             <button
@@ -243,9 +278,149 @@ const Login = ({ onLoginSuccess, onNavigateToApply }: LoginProps) => {
                                 Submit an Application
                                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                             </button>
-                        </div>
+                        </motion.div>
                     )}
                 </motion.div>
+
+                <AnimatePresence>
+                    {forgotOpen && (
+                        <motion.div
+                            key="forgot-password"
+                            initial={reduceMotion ? false : { opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={reduceMotion ? { opacity: 1 } : { opacity: 0 }}
+                            transition={{ duration: reduceMotion ? 0 : 0.2 }}
+                            className="absolute inset-0 z-40 flex items-center justify-center bg-slate-900/45 p-6 backdrop-blur-sm"
+                            onClick={closeForgotPassword}
+                        >
+                            <motion.div
+                                role="dialog"
+                                aria-modal="true"
+                                aria-labelledby="forgot-password-title"
+                                initial={reduceMotion ? false : { opacity: 0, y: 16, scale: 0.97 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 8 }}
+                                transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 320, damping: 26 }}
+                                className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
+                                onClick={(event) => event.stopPropagation()}
+                            >
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+                                            <Mail className="h-5 w-5" />
+                                        </div>
+                                        <div>
+                                            <h3 id="forgot-password-title" className="text-lg font-black text-slate-900">Forgot password</h3>
+                                            <p className="text-sm font-medium text-slate-500">We will email a temporary password through Gmail.</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={closeForgotPassword}
+                                        className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                                        aria-label="Close"
+                                    >
+                                        <X className="h-5 w-5" />
+                                    </button>
+                                </div>
+
+                                {forgotSuccess ? (
+                                    <div className="mt-6 rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                                        <p className="text-sm font-semibold text-emerald-800">
+                                            A temporary password has been sent to this account&apos;s email.
+                                        </p>
+                                        {forgotAccount && forgotAccount !== forgotMaskedEmail && (
+                                            <>
+                                                <p className="mt-3 text-xs font-bold uppercase tracking-widest text-emerald-700">Account</p>
+                                                <p className="mt-1 text-sm font-black text-emerald-800">{forgotAccount}</p>
+                                            </>
+                                        )}
+                                        {forgotMaskedEmail && (
+                                            <p
+                                                className="mt-3 rounded-lg px-3 py-2 text-center font-mono text-sm font-bold tracking-wide"
+                                                style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
+                                            >
+                                                {forgotMaskedEmail}
+                                            </p>
+                                        )}
+                                        <p className="mt-3 text-sm font-medium text-emerald-800">Sign in with it, then choose a new password.</p>
+                                        <button
+                                            type="button"
+                                            onClick={closeForgotPassword}
+                                            className="mt-4 w-full rounded-xl bg-blue-600 py-3 text-sm font-bold text-white hover:bg-blue-700"
+                                        >
+                                            Back to sign in
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <form className="mt-6 space-y-4" onSubmit={handleForgotPassword}>
+                                        <div className="relative">
+                                            <input
+                                                id="forgot-email"
+                                                type="text"
+                                                autoComplete="username"
+                                                required
+                                                autoFocus
+                                                value={forgotUsername}
+                                                onChange={(event) => setForgotUsername(event.target.value)}
+                                                className="block w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 pb-3 pt-6 text-base text-slate-900 shadow-sm transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-600 peer"
+                                                placeholder=" "
+                                            />
+                                            <label
+                                                htmlFor="forgot-email"
+                                                className="absolute left-4 top-4 z-10 origin-left -translate-y-3 scale-75 transform text-base font-medium text-slate-500 duration-300 peer-placeholder-shown:translate-y-0 peer-placeholder-shown:scale-100 peer-focus:-translate-y-3 peer-focus:scale-75 peer-focus:text-blue-600"
+                                            >
+                                                Username or email
+                                            </label>
+                                        </div>
+
+                                        {forgotError && (
+                                            <p className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                                                {forgotError}
+                                            </p>
+                                        )}
+
+                                        <button
+                                            type="submit"
+                                            disabled={forgotLoading}
+                                            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-600/25 disabled:cursor-not-allowed disabled:opacity-70"
+                                        >
+                                            {forgotLoading ? (
+                                                <>
+                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                    Sending reset email...
+                                                </>
+                                            ) : (
+                                                'Send temporary password'
+                                            )}
+                                        </button>
+                                    </form>
+                                )}
+                            </motion.div>
+                        </motion.div>
+                    )}
+                    {successMsg && (
+                        <motion.div
+                            key="welcome"
+                            initial={reduceMotion ? false : { opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={reduceMotion ? { opacity: 1 } : { opacity: 0 }}
+                            transition={{ duration: reduceMotion ? 0 : 0.3, ease }}
+                            className="absolute inset-0 z-30 flex items-center justify-center bg-white/80 backdrop-blur-md"
+                        >
+                            <motion.div
+                                initial={reduceMotion ? false : { opacity: 0, scale: 0.92, y: 12 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 320, damping: 24 }}
+                                className="flex flex-col items-center px-8 text-center"
+                            >
+                                <CheckCircle2 className="h-14 w-14 text-emerald-500" />
+                                <p className="mt-4 text-2xl font-black text-slate-900">{successMsg}</p>
+                                <p className="mt-2 text-sm font-medium text-slate-500">Opening your portal…</p>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
         </div>
     );
