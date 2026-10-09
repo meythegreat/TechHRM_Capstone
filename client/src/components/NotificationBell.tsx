@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import axios from 'axios';
+import { X } from 'lucide-react';
 import { emitRealtimeRefresh } from '../utils/realtime';
+import { playNotificationSound } from '../sounds';
 
 interface Notification {
     id: number;
@@ -35,6 +39,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
 
             if (fresh.length > 0) {
                 setLiveNotice(fresh[0]);
+                playNotificationSound();
             }
             if (signatureRef.current && signatureRef.current !== signature) {
                 emitRealtimeRefresh();
@@ -101,18 +106,44 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
         }
 
         setIsOpen(false);
+        setLiveNotice(null);
+    };
+
+    const dismissNotification = async (id: number) => {
+        setNotifications((current) => current.filter((item) => item.id !== id));
+        setLiveNotice((current) => (current?.id === id ? null : current));
+        try {
+            await axios.delete(`/api/notifications/${id}`);
+        } catch (error) {
+            console.error('Failed to dismiss notification', error);
+            fetchNotifications();
+        }
     };
 
     const unreadCount = notifications.filter(n => !n.is_read).length;
 
     return (
         <div className="relative" ref={dropdownRef}>
-            {liveNotice && (
-                <div className="fixed top-24 right-4 z-[70] w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-blue-100 bg-white p-4 shadow-2xl">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">New notification</p>
+            {liveNotice && createPortal(
+                <div
+                    role="status"
+                    className="corner-popup fixed top-24 right-4 z-[70] w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-blue-100 bg-white p-4 shadow-2xl"
+                >
+                    <div className="flex items-start justify-between gap-3">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">New notification</p>
+                        <button
+                            type="button"
+                            aria-label="Dismiss notification"
+                            onClick={() => setLiveNotice(null)}
+                            className="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
                     <p className="mt-1 text-sm font-bold text-slate-900">{liveNotice.title}</p>
                     <p className="mt-1 text-xs font-medium leading-relaxed text-slate-600">{liveNotice.message}</p>
-                </div>
+                </div>,
+                document.body,
             )}
             {/* The Bell Icon */}
             <button 
@@ -131,21 +162,32 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
             </button>
 
             {/* The Dropdown Container */}
+            {isOpen && <div className="fixed inset-0 z-40 sm:hidden" onClick={() => setIsOpen(false)} />}
+            <AnimatePresence>
             {isOpen && (
-                <>
-                    {/* Invisible mobile overlay to capture outside clicks easily */}
-                    <div className="fixed inset-0 z-40 sm:hidden" onClick={() => setIsOpen(false)}></div>
-                    
-                    {/* MOBILE POLISH MAGIC:
-                        - On mobile: fixed position, floating safely below the header with safe margins (left-4 right-4 top-20).
-                        - On desktop (sm:): absolute positioning, attached to the right of the bell.
-                    */}
-                    <div className="fixed sm:absolute left-4 right-4 sm:left-auto top-20 sm:top-auto sm:right-0 sm:mt-2 sm:w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden">
+                    <motion.div
+                        key="notification-menu"
+                        initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                        transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                        className="fixed sm:absolute left-4 right-4 sm:left-auto top-20 sm:top-auto sm:right-0 sm:mt-2 sm:w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden origin-top-right"
+                    >
                         
                         {/* Header */}
-                        <div className="bg-gray-50/80 backdrop-blur-sm px-4 py-3 border-b border-gray-100 flex justify-between items-center">
+                        <div className="bg-gray-50/80 backdrop-blur-sm px-4 py-3 border-b border-gray-100 flex justify-between items-center gap-3">
                             <h3 className="text-sm font-bold text-gray-900">Notifications</h3>
-                            {unreadCount > 0 && <span className="text-[10px] font-extrabold text-blue-700 bg-blue-100 px-2 py-1 rounded-full uppercase tracking-wider">{unreadCount} New</span>}
+                            <div className="flex items-center gap-2">
+                                {unreadCount > 0 && <span className="text-[10px] font-extrabold text-blue-700 bg-blue-100 px-2 py-1 rounded-full uppercase tracking-wider">{unreadCount} New</span>}
+                                <button
+                                    type="button"
+                                    aria-label="Close notifications"
+                                    onClick={() => setIsOpen(false)}
+                                    className="rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition-colors"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
                         </div>
 
                         {/* List */}
@@ -162,11 +204,24 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
                                         onClick={() => handleNotificationClick(notif)}
                                         className={`p-4 border-b border-gray-50 cursor-pointer transition-colors ${notif.is_read ? 'bg-white opacity-70 hover:bg-gray-50' : 'bg-blue-50/40 hover:bg-blue-50/60'}`}
                                     >
-                                        <div className="flex justify-between items-start mb-1">
+                                        <div className="flex justify-between items-start gap-2 mb-1">
                                             <h4 className={`text-sm ${notif.is_read ? 'font-semibold text-gray-700' : 'font-bold text-gray-900'}`}>
                                                 {notif.title}
                                             </h4>
-                                            {!notif.is_read && <span className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 flex-shrink-0 shadow-sm shadow-blue-300"></span>}
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                {!notif.is_read && <span className="w-2 h-2 rounded-full bg-blue-500 shadow-sm shadow-blue-300"></span>}
+                                                <button
+                                                    type="button"
+                                                    aria-label={`Dismiss ${notif.title}`}
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        dismissNotification(notif.id);
+                                                    }}
+                                                    className="rounded-lg p-1 text-slate-400 hover:bg-white hover:text-slate-700 transition-colors"
+                                                >
+                                                    <X className="w-3.5 h-3.5" />
+                                                </button>
+                                            </div>
                                         </div>
                                         <p className="text-xs text-gray-600 leading-relaxed font-medium">{notif.message}</p>
                                         <p className="text-[10px] text-gray-400 mt-2 font-bold uppercase tracking-wider">
@@ -176,9 +231,9 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
                                 ))
                             )}
                         </div>
-                    </div>
-                </>
+                    </motion.div>
             )}
+            </AnimatePresence>
         </div>
     );
 }

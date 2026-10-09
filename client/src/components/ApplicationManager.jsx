@@ -101,6 +101,7 @@ const getNextStage = (status) => {
 };
 
 const ApplicationManager = () => {
+    const isAudit = localStorage.getItem('user_role') === 'Super Admin';
     const [applications, setApplications] = useState([]);
     const [modalView, setModalView] = useState('');
     const [selectedApp, setSelectedApp] = useState(null);
@@ -144,7 +145,8 @@ const ApplicationManager = () => {
             setError(null);
             const res = await getAllApplications();
             const payload = res.data;
-            setApplications(Array.isArray(payload) ? payload : (payload?.data || []));
+            const rows = Array.isArray(payload) ? payload : (payload?.data || []);
+            setApplications(isAudit ? rows.filter((app) => app.source === 'website') : rows);
         } catch (err) {
             setError('Failed to fetch applications');
         } finally {
@@ -406,7 +408,9 @@ const ApplicationManager = () => {
                         Applicant Sign-ups
                     </h1>
                     <p className="mt-2 text-slate-400 font-medium max-w-md">
-                        Review every student who applied to the Work-Study Program, open their documents, and move them through placement.
+                        {isAudit
+                            ? 'Website applications only. View documents and the stage breakdown. This account cannot move, decline, or place applicants.'
+                            : 'Review every student who applied to the Work-Study Program, open their documents, and move them through placement.'}
                     </p>
                 </div>
 
@@ -483,9 +487,9 @@ const ApplicationManager = () => {
                                                 >
                                                     <Eye className="w-3.5 h-3.5" /> View
                                                 </button>
-                                                {declineButton(app)}
-                                                {deleteButton(app)}
-                                                {nextStageButton(app)}
+                                                {!isAudit && declineButton(app)}
+                                                {!isAudit && deleteButton(app)}
+                                                {!isAudit && nextStageButton(app)}
                                             </div>
                                         </td>
                                     </tr>
@@ -566,7 +570,7 @@ const ApplicationManager = () => {
                                                 >
                                                     <Eye className="w-3.5 h-3.5 shrink-0" /> View application
                                                 </button>
-                                                {(canRemove(app.status) || getNextStage(app.status)) && (
+                                                {!isAudit && (canRemove(app.status) || getNextStage(app.status)) && (
                                                     <div className="flex flex-col gap-2">
                                                         {nextStageButton(app, 'card')}
                                                         {declineButton(app, 'card')}
@@ -979,9 +983,9 @@ const ApplicationManager = () => {
                             </div>
                             {getNextStage(selectedApp.status) || canRemove(selectedApp.status) ? (
                                 <div className="p-6 border-t border-slate-100 bg-slate-50 flex flex-wrap justify-end gap-3 shrink-0">
-                                    {deleteButton(selectedApp, 'primary')}
-                                    {declineButton(selectedApp, 'primary')}
-                                    {nextStageButton(selectedApp, 'primary')}
+                                    {!isAudit && deleteButton(selectedApp, 'primary')}
+                                    {!isAudit && declineButton(selectedApp, 'primary')}
+                                    {!isAudit && nextStageButton(selectedApp, 'primary')}
                                 </div>
                             ) : null}
                         </motion.div>

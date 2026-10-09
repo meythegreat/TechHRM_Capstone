@@ -26,6 +26,7 @@ class Application extends Model
         'available_schedules',
         'reason_for_applying',
         'status',
+        'source',
         'interview_date',
         'interview_remarks',
         'assigned_department',

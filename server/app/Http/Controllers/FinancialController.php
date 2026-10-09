@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Attendance;
+use App\Support\SuperAdminAudit;
 use App\Models\DisciplinaryRecord;
 use App\Models\FinancialRecord;
 use App\Models\User;
@@ -27,6 +28,7 @@ class FinancialController extends Controller
 
     public function computePeriod(Request $request)
     {
+        SuperAdminAudit::denyMutation($request);
         $request->validate([
             'period_start' => 'required|date',
             'period_end' => 'required|date|after_or_equal:period_start',
@@ -94,6 +96,7 @@ class FinancialController extends Controller
 
     public function updateAdjustments(Request $request, $id)
     {
+        SuperAdminAudit::denyMutation($request);
         $record = FinancialRecord::findOrFail($id);
 
         $validated = $request->validate([
@@ -140,8 +143,9 @@ class FinancialController extends Controller
         ]);
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
+        SuperAdminAudit::denyMutation($request);
         $record = FinancialRecord::findOrFail($id);
         $record->delete();
 

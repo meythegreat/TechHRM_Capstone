@@ -1,5 +1,6 @@
 import type { FC, ReactNode } from 'react';
 import { motion } from 'framer-motion';
+import ThemeToggle from './ThemeToggle';
 
 interface NavItem {
     id: string;
@@ -135,8 +136,9 @@ const Sidebar: FC<SidebarProps> = ({ isSidebarOpen, setIsSidebarOpen, activeTab,
                     })}
                 </nav>
 
-                {/* BOTTOM LOGOUT BUTTON */}
-                <div className="p-4 border-t border-slate-100 shrink-0">
+                {/* BOTTOM ACTIONS */}
+                <div className="p-4 border-t border-slate-100 shrink-0 space-y-1">
+                    <ThemeToggle layout="menu" expanded={isSidebarOpen} />
                     <button 
                         type="button" 
                         onClick={() => {

@@ -291,18 +291,23 @@ class UserController extends Controller
         return array_values(array_unique(array_filter(array_map('trim', $departments))));
     }
 
-    public function supervisorCanAccessStudent(User $supervisor, User $student): bool
+    /** Office names (including aliases) whose students this supervisor may see. */
+    public function supervisedOfficeAreas(User $supervisor): array
     {
         $departments = $this->supervisedDepartments($supervisor);
         if ($departments === []) {
-            return false;
+            return [];
         }
 
-        $areas = array_values(array_unique(array_merge(...array_map(
+        return array_values(array_unique(array_merge(...array_map(
             fn (string $department) => $this->departmentAliases($department),
             $departments
         ))));
+    }
 
+    public function supervisorCanAccessStudent(User $supervisor, User $student): bool
+    {
+        $areas = $this->supervisedOfficeAreas($supervisor);
         $office = trim((string) $student->profile?->assigned_office);
 
         return $office !== '' && in_array($office, $areas, true);
@@ -429,7 +434,6 @@ class UserController extends Controller
 
         return response()->json(['message' => 'User updated successfully', 'user' => $user->load('profile')]);
     }
-
 
     public function changeTemporaryPassword(Request $request)
     {

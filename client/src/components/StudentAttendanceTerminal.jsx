@@ -8,7 +8,6 @@ import {
     KeyRound, 
     Briefcase, 
     History, 
-    AlertCircle, 
     CheckCircle2, 
     LogIn, 
     LogOut, 
@@ -26,6 +25,8 @@ import {
     submitSecureClockOut,
 } from '../services/advancedAttendanceService';
 import TimesheetPrintView from './TimesheetPrintView';
+import Toast from './Toast';
+import { playAccessAcceptedSound, playAccessRejectedSound } from '../sounds';
 
 const padMonth = (n) => String(n).padStart(2, '0');
 
@@ -136,16 +137,17 @@ const StudentAttendanceTerminal = () => {
 
         try {
             await submitSecureClockIn(code, dutyType, method);
+            playAccessAcceptedSound();
             setSuccessMsg(method === 'qr' ? 'QR check-in accepted. Your shift has started.' : 'Shift started successfully! Work hard and stay safe.');
             setTokenInput('');
             await loadSummary();
             await loadDtr();
         } catch (err) {
             scanBusy.current = false;
+            playAccessRejectedSound();
             setErrorMsg(err.response?.data?.message || 'Failed to verify token and clock in.');
         } finally {
             setIsLoading(false);
-            setTimeout(() => setSuccessMsg(''), 4000);
         }
     };
 
@@ -162,16 +164,17 @@ const StudentAttendanceTerminal = () => {
 
         try {
             await submitSecureClockOut(activeShift.id, code, method);
+            playAccessAcceptedSound();
             setSuccessMsg(method === 'qr' ? 'QR clock-out accepted. Your shift has ended.' : 'Shift ended successfully! Great job today.');
             setTokenInput('');
             await loadSummary();
             await loadDtr();
         } catch (err) {
             scanBusy.current = false;
+            playAccessRejectedSound();
             setErrorMsg(err.response?.data?.message || 'Failed to verify token and clock out.');
         } finally {
             setIsLoading(false);
-            setTimeout(() => setSuccessMsg(''), 4000);
         }
     };
 
@@ -340,25 +343,14 @@ const StudentAttendanceTerminal = () => {
                 </div>
             </motion.div>
 
-            {/* Error/Success Toasts */}
-            <AnimatePresence mode="wait">
-                {errorMsg && (
-                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 shadow-sm">
-                            <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
-                            <span className="text-sm font-bold text-red-800">{errorMsg}</span>
-                        </div>
-                    </motion.div>
-                )}
-                {successMsg && (
-                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3 shadow-sm">
-                            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                            <span className="text-sm font-bold text-emerald-800">{successMsg}</span>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            <Toast
+                message={errorMsg || successMsg || null}
+                type={errorMsg ? 'error' : 'success'}
+                onClose={() => {
+                    setErrorMsg('');
+                    setSuccessMsg('');
+                }}
+            />
 
             <motion.div 
                 variants={containerVariants}
@@ -830,7 +822,7 @@ const StudentAttendanceTerminal = () => {
                                 </button>
                             </div>
                             <div className="overflow-y-auto bg-slate-100 p-4">
-                                <div className="bg-white shadow-sm mx-auto w-fit max-w-full">
+                                <div className="dtr-paper bg-white shadow-sm mx-auto w-fit max-w-full">
                                     <TimesheetPrintView
                                         fullName={fullName}
                                         studentProfile={studentProfile}

@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ConductPanels } from './ConductPanels';
+import ComboFilter from './ComboFilter';
 import { decideViolation, getAllViolations, getConductCatalog, issueViolation, resolveViolation } from '../services/disciplinaryService';
 import { withHomeDepartmentNote } from '../utils/studentAssignment';
 import { 
@@ -20,7 +21,10 @@ import {
 
 const DisciplinaryManager = () => {
     const currentUserRole = localStorage.getItem('user_role') || '';
-    const isCoordinator = currentUserRole === 'WSPO Staff' || currentUserRole === 'Super Admin';
+    const isAudit = currentUserRole === 'Super Admin';
+    const isCoordinator = currentUserRole === 'WSPO Staff';
+    const [auditFilters, setAuditFilters] = useState({ name: '', department: '', offense: '' });
+    const [departments, setDepartments] = useState([]);
     const [records, setRecords] = useState([]);
     const [students, setStudents] = useState([]);
     const emptyForm = () => ({
@@ -48,6 +52,14 @@ const DisciplinaryManager = () => {
     const [offenseCatalog, setOffenseCatalog] = useState({ minor: [], major: [] });
 
     useEffect(() => {
+        if (isAudit) {
+            axios.get('/api/offices')
+                .then((res) => {
+                    const names = (Array.isArray(res.data) ? res.data : []).map((office) => office.name).filter(Boolean);
+                    setDepartments(names);
+                })
+                .catch(() => setDepartments([]));
+        }
         fetchRecords();
         getConductCatalog()
             .then((res) => setOffenseCatalog({ minor: res.data.minor || [], major: res.data.major || [] }))
@@ -211,6 +223,19 @@ const DisciplinaryManager = () => {
     );
 
     const activeCasesCount = records.filter(r => r.status !== 'Resolved').length;
+    const visibleRecords = useMemo(() => {
+        if (!isAudit) return records;
+        const name = auditFilters.name.trim().toLowerCase();
+        const department = auditFilters.department.trim();
+        const offense = auditFilters.offense.trim().toLowerCase();
+        return records.filter((record) => {
+            if (name && !String(record.student?.name || '').toLowerCase().includes(name)) return false;
+            const office = String(record.student?.profile?.assigned_office || '');
+            if (department && office !== department) return false;
+            if (offense && !`${record.violation_type || ''} ${record.offense_level || ''}`.toLowerCase().includes(offense)) return false;
+            return true;
+        });
+    }, [records, isAudit, auditFilters]);
 
     // ANIMATION VARIANTS
     const containerVariants = {
@@ -254,7 +279,9 @@ const DisciplinaryManager = () => {
                         Infraction Manager
                     </h1>
                     <p className="mt-2 text-slate-400 font-medium max-w-md">
-                        Record minor and major offenses, performance outcomes, and year-end awards. Only department supervisors and the WSPO coordinator use this record.
+                        {isAudit
+                            ? 'Read-only list of recorded infractions. Filter by student, department, or offense type.'
+                            : 'Record minor and major offenses, performance outcomes, and year-end awards. Only department supervisors and the WSPO coordinator use this record.'}
                     </p>
                 </div>
 
@@ -271,7 +298,7 @@ const DisciplinaryManager = () => {
                 </div>
             </motion.div>
 
-            <div className="flex flex-wrap gap-2">
+            {!isAudit && <div className="flex flex-wrap gap-2">
                 {[
                     ['offenses', 'Offenses'],
                     ['performance', 'Performance'],
@@ -286,17 +313,25 @@ const DisciplinaryManager = () => {
                         {label}
                     </button>
                 ))}
-            </div>
+            </div>}
 
-            {section !== 'offenses' && (
+            {!isAudit && section !== 'offenses' && (
                 <ConductPanels section={section} students={students} records={records} isCoordinator={isCoordinator} />
             )}
 
-            {section === 'offenses' && (
+            {(isAudit || section === 'offenses') && (
+            <div className="space-y-6">
+            {isAudit && (
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <input value={auditFilters.name} onChange={(event) => setAuditFilters({ ...auditFilters, name: event.target.value })} placeholder="Student name" className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none" />
+                    <ComboFilter commitOnType={false} value={auditFilters.department} onChange={(department) => setAuditFilters({ ...auditFilters, department })} options={departments} placeholder="All departments" emptyLabel="All departments" />
+                    <input value={auditFilters.offense} onChange={(event) => setAuditFilters({ ...auditFilters, offense: event.target.value })} placeholder="Type of offense" className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none" />
+                </div>
+            )}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
                 
                 {/* LEFT COLUMN: ISSUE VIOLATION FORM */}
-                <motion.div 
+                {!isAudit && <motion.div 
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.1 }}
@@ -480,11 +515,11 @@ const DisciplinaryManager = () => {
                             {isSubmitting ? 'Saving...' : <><Send className="w-5 h-5" /> {isCoordinator ? 'Issue Infraction' : 'Report Infraction'}</>}
                         </button>
                     </form>
-                </motion.div>
+                </motion.div>}
 
                 {/* RIGHT COLUMN: CASE GRID */}
-                <div className="lg:col-span-2">
-                    {records.length === 0 ? (
+                <div className={isAudit ? 'lg:col-span-3' : 'lg:col-span-2'}>
+                    {visibleRecords.length === 0 ? (
                         <div className="bg-white rounded-3xl p-16 text-center border border-slate-200 flex flex-col items-center shadow-sm">
                             <ShieldCheck className="w-16 h-16 text-emerald-400 mb-4 opacity-50" />
                             <h3 className="text-xl font-bold text-slate-700">No Disciplinary Records</h3>
@@ -498,7 +533,7 @@ const DisciplinaryManager = () => {
                             className="grid grid-cols-1 md:grid-cols-2 gap-5"
                         >
                             <AnimatePresence>
-                                {records.map((record) => (
+                                {visibleRecords.map((record) => (
                                     <motion.div 
                                         layout
                                         variants={itemVariants}
@@ -573,7 +608,7 @@ const DisciplinaryManager = () => {
                                                 )}
                                             </div>
                                             
-                                            {needsDecision(record) && (
+                                            {!isAudit && needsDecision(record) && (
                                                 <button
                                                     onClick={() => openDecide(record)}
                                                     className="px-3 py-1.5 bg-slate-900 hover:bg-red-600 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5"
@@ -581,7 +616,7 @@ const DisciplinaryManager = () => {
                                                     <Gavel className="w-3.5 h-3.5" /> Decide Penalty
                                                 </button>
                                             )}
-                                            {!needsDecision(record) && record.status !== 'Resolved' && record.status !== 'Dismissed' && (isCoordinator || record.status !== 'Pending Appeal') && (
+                                            {!isAudit && !needsDecision(record) && record.status !== 'Resolved' && record.status !== 'Dismissed' && (isCoordinator || record.status !== 'Pending Appeal') && (
                                                 <button 
                                                     onClick={() => setResolveModal(record)}
                                                     className="px-3 py-1.5 bg-slate-100 hover:bg-emerald-600 text-slate-700 hover:text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5"
@@ -617,6 +652,7 @@ const DisciplinaryManager = () => {
                         </motion.div>
                     )}
                 </div>
+            </div>
             </div>
             )}
 

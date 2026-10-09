@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Schedule;
+use App\Support\SuperAdminAudit;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 
@@ -33,6 +34,10 @@ class ScheduleController extends Controller
             $query->where('department', $myDepartment);
         }
 
+        if ($request->boolean('audit') && $user->role === 'Super Admin') {
+            return response()->json($query->latest()->get());
+        }
+
         $schedules = $query->latest()->paginate(10);
         return response()->json($schedules);
     }
@@ -40,6 +45,7 @@ class ScheduleController extends Controller
     // 3. For Assigning a New Shift (WITH SMART OVERLAP PREVENTION)
     public function store(Request $request)
     {
+        SuperAdminAudit::denyMutation($request);
         $validated = $request->validate([
             'user_id' => 'required|exists:users,id',
             'day' => 'required|string',
@@ -105,8 +111,9 @@ class ScheduleController extends Controller
     }
 
     // 4. For Removing a Shift
-    public function destroy(int $id)
+    public function destroy(Request $request, int $id)
     {
+        SuperAdminAudit::denyMutation($request);
         $schedule = Schedule::findOrFail($id);
         $schedule->delete();
 
@@ -151,8 +158,9 @@ class ScheduleController extends Controller
     }
 
     // Clear the pending edit request badge
-    public function resolveRequest($id)
+    public function resolveRequest(Request $request, $id)
     {
+        SuperAdminAudit::denyMutation($request);
         $schedule = Schedule::findOrFail($id);
         $schedule->update([
             'edit_request_status' => 'none',

@@ -7,7 +7,6 @@ import {
     Send, 
     ArrowLeft, 
     CheckCircle2, 
-    AlertCircle,
     Mail,
     Phone,
     MapPin,
@@ -16,6 +15,8 @@ import {
     Trash2,
     Loader2
 } from 'lucide-react';
+import ThemeToggle from './ThemeToggle';
+import Toast from './Toast';
 
 interface PublicApplicationProps {
     onBackToLogin: () => void;
@@ -130,8 +131,6 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
                     ? 'The attached files are too large. Use PDF/JPG/PNG files under 4MB each, then submit again.'
                     : err.response?.data?.message || (typeof validationError === 'string' ? validationError : null) || 'Failed to submit application. Please try again.',
             });
-            // Auto-hide error after 5 seconds
-            setTimeout(() => setStatus(prev => ({ ...prev, error: '' })), 5000);
         }
     };
 
@@ -149,12 +148,15 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
                         <img src="/logo.jpg" alt="TechHRM Logo" className="w-10 h-10 rounded-full border border-slate-100 shadow-sm" />
                         <span className="font-black text-blue-950 text-xl tracking-tight hidden sm:block">TechHRM</span>
                     </div>
-                    <button 
-                        onClick={onBackToLogin}
-                        className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors"
-                    >
-                        <ArrowLeft className="w-4 h-4" /> Back to Login
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <ThemeToggle />
+                        <button 
+                            onClick={onBackToLogin}
+                            className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors"
+                        >
+                            <ArrowLeft className="w-4 h-4" /> Back to Login
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -201,15 +203,11 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
                                 onSubmit={handleSubmit} 
                                 className="space-y-6"
                             >
-                                {/* Error Toast */}
-                                <AnimatePresence>
-                                    {status.error && (
-                                        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }} className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 shadow-sm">
-                                            <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
-                                            <span className="text-sm font-bold text-red-800">{status.error}</span>
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
+                                <Toast
+                                    message={status.error || null}
+                                    type="error"
+                                    onClose={() => setStatus((prev) => ({ ...prev, error: '' }))}
+                                />
 
                                 {/* SECTION 1: Personal Information */}
                                 <motion.section variants={sectionVariants} className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200">

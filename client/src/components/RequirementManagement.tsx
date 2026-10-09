@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
+import Toast from './Toast';
 import { openSecureFile } from '../utils/secureFile';
 import { 
     FileText, 
@@ -14,6 +15,7 @@ import {
     X,
     User
 } from 'lucide-react';
+import AuditPager, { pageSlice } from './AuditPager';
 
 interface Requirement {
     id: number;
@@ -32,8 +34,10 @@ interface Requirement {
 }
 
 const RequirementManagement = () => {
+    const isAudit = localStorage.getItem('user_role') === 'Super Admin';
     const [requirements, setRequirements] = useState<Requirement[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [page, setPage] = useState(1);
     const [toastMsg, setToastMsg] = useState<{text: string, type: 'success' | 'error'} | null>(null);
 
     // Reject Modal State
@@ -59,7 +63,6 @@ const RequirementManagement = () => {
 
     const showToast = (text: string, type: 'success' | 'error') => {
         setToastMsg({ text, type });
-        setTimeout(() => setToastMsg(null), 3000);
     };
 
     const handleUpdateStatus = async (id: number, status: 'verified' | 'rejected', remarks: string = '') => {
@@ -79,6 +82,11 @@ const RequirementManagement = () => {
         }
     };
 
+    const visibleRequirements = useMemo(() => {
+        const rows = isAudit ? requirements.filter((item) => item.status === 'verified') : requirements;
+        return [...rows].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    }, [requirements, isAudit]);
+    const pagedRequirements = pageSlice(visibleRequirements, page);
     const pendingCount = requirements.filter(r => r.status === 'pending').length;
 
     // STRICT TYPESCRIPT VARIANTS
@@ -117,7 +125,9 @@ const RequirementManagement = () => {
                         Document Verification
                     </h1>
                     <p className="mt-2 text-slate-400 font-medium max-w-md">
-                        Review uploaded student requirements. Verify valid documents or reject them with feedback for correction.
+                        {isAudit
+                            ? 'Students whose documents passed review, newest first. Open a file to view the submission.'
+                            : 'Review uploaded student requirements. Verify valid documents or reject them with feedback for correction.'}
                     </p>
                 </div>
 
@@ -134,27 +144,11 @@ const RequirementManagement = () => {
                 </div>
             </motion.div>
 
-            {/* Animated Toasts */}
-            <AnimatePresence>
-                {toastMsg && (
-                    <motion.div 
-                        initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        className={`p-4 rounded-xl border flex items-center gap-3 shadow-sm ${
-                            toastMsg.type === 'success' ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'
-                        }`}
-                    >
-                        {toastMsg.type === 'success' 
-                            ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                            : <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
-                        }
-                        <span className={`text-sm font-bold ${toastMsg.type === 'success' ? 'text-emerald-800' : 'text-red-800'}`}>
-                            {toastMsg.text}
-                        </span>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            <Toast
+                message={toastMsg?.text ?? null}
+                type={toastMsg?.type}
+                onClose={() => setToastMsg(null)}
+            />
 
             {/* MAIN TABLE */}
             <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative">
@@ -183,16 +177,16 @@ const RequirementManagement = () => {
                             animate={!isLoading ? "show" : "hidden"}
                             className="divide-y divide-slate-100"
                         >
-                            {!isLoading && requirements.length === 0 ? (
+                            {!isLoading && pagedRequirements.rows.length === 0 ? (
                                 <tr>
                                     <td colSpan={4} className="px-6 py-16 text-center text-slate-400">
                                         <FileText className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                                        <p className="text-base font-semibold text-slate-600">No documents found</p>
-                                        <p className="text-sm font-medium">Students have not uploaded any requirements yet.</p>
+                                        <p className="text-base font-semibold text-slate-600">{isAudit ? 'No passed documents' : 'No documents found'}</p>
+                                        <p className="text-sm font-medium">{isAudit ? 'Verified submissions will appear here, newest first.' : 'Students have not uploaded any requirements yet.'}</p>
                                     </td>
                                 </tr>
                             ) : (
-                                requirements.map((req) => (
+                                pagedRequirements.rows.map((req) => (
                                     <motion.tr variants={rowVariants} key={req.id} className="hover:bg-slate-50 transition-colors group">
                                         
                                         {/* Student Details Column */}
@@ -248,7 +242,9 @@ const RequirementManagement = () => {
 
                                         {/* Verification Action Column */}
                                         <td className="px-6 py-5 align-top text-right">
-                                            {req.status === 'pending' ? (
+                                            {isAudit ? (
+                                                <span className="text-xs font-bold text-emerald-600">Passed</span>
+                                            ) : req.status === 'pending' ? (
                                                 <div className="flex flex-col items-end gap-2">
                                                     <button 
                                                         onClick={() => handleUpdateStatus(req.id, 'verified')}
@@ -279,6 +275,7 @@ const RequirementManagement = () => {
                         </motion.tbody>
                     </table>
                 </div>
+                {isAudit && <AuditPager page={pagedRequirements.page} totalPages={pagedRequirements.totalPages} total={pagedRequirements.total} onPage={setPage} />}
             </div>
 
             {/* REJECT MODAL */}

@@ -9,6 +9,7 @@ use App\Models\StudentPerformanceReview;
 use App\Models\User;
 use App\Services\DepartmentAssignmentNotifier;
 use App\Support\OffenseCatalog;
+use App\Support\SuperAdminAudit;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -19,7 +20,7 @@ class DisciplinaryController extends Controller
     {
         if ($request->user()->role === 'Super Admin') {
             $query = DisciplinaryRecord::with([
-                'student' => fn ($relation) => $relation->withTrashed()->select('id', 'name', 'deleted_at'),
+                'student' => fn ($relation) => $relation->withTrashed()->select('id', 'name', 'deleted_at')->with('profile:id,user_id,assigned_office'),
                 'issuer:id,name',
                 'reporter:id,name',
             ]);
@@ -43,6 +44,7 @@ class DisciplinaryController extends Controller
 
     public function store(Request $request)
     {
+        SuperAdminAudit::denyMutation($request);
         $canSetPenalties = $this->isCoordinator($request->user());
 
         $validated = $request->validate([
@@ -93,6 +95,7 @@ class DisciplinaryController extends Controller
     /** Coordinator sets the penalty on a reported infraction, or changes an open case. */
     public function decide(Request $request, $id)
     {
+        SuperAdminAudit::denyMutation($request);
         if (!$this->isCoordinator($request->user())) {
             return response()->json(['message' => 'Only the WSPO coordinator can decide an infraction.'], 403);
         }
@@ -113,6 +116,7 @@ class DisciplinaryController extends Controller
 
     public function resolve(Request $request, $id)
     {
+        SuperAdminAudit::denyMutation($request);
         $record = DisciplinaryRecord::findOrFail($id);
         $user = $request->user();
 
@@ -233,6 +237,7 @@ class DisciplinaryController extends Controller
 
     public function storePerformance(Request $request)
     {
+        SuperAdminAudit::denyMutation($request);
         $validated = $request->validate([
             'student_id' => 'required|exists:users,id',
             'school_year' => ['required', 'regex:/^\d{4}-\d{4}$/'],
@@ -300,6 +305,7 @@ class DisciplinaryController extends Controller
 
     public function storeAward(Request $request)
     {
+        SuperAdminAudit::denyMutation($request);
         if (!$this->isCoordinator($request->user())) {
             return response()->json(['message' => 'Only the WSPO coordinator records year-end awards.'], 403);
         }

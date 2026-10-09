@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import AuditPager, { pageSlice } from './AuditPager';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getSupervisorTasks, assignTask, addSupervisorNote, verifyTask } from '../services/taskService';
@@ -20,6 +21,9 @@ import {
 const TaskAssignmentManager = () => {
     const userRole = localStorage.getItem('user_role');
     const isSupervisor = userRole === 'Supervisor';
+    const isAudit = userRole === 'Super Admin';
+    const [studentPage, setStudentPage] = useState(1);
+    const [taskPage, setTaskPage] = useState(1);
     const [tasks, setTasks] = useState([]);
     const [students, setStudents] = useState([]);
     const [formData, setFormData] = useState({
@@ -100,6 +104,15 @@ const TaskAssignmentManager = () => {
     };
 
     const normalizeStatus = (status) => status === 'Assigned' ? 'Pending' : status;
+    const pagedStudents = pageSlice(students, studentPage);
+    const pagedTasks = pageSlice(tasks, taskPage);
+    const visibleStudents = isAudit ? pagedStudents.rows : students;
+    const visibleTasks = isAudit ? pagedTasks.rows : tasks;
+    const studentsByOffice = useMemo(() => visibleStudents.reduce((groups, student) => {
+        const department = student.profile?.assigned_office || 'Unassigned';
+        (groups[department] ||= []).push(student);
+        return groups;
+    }, {}), [visibleStudents]);
     const activeTasksCount = tasks.filter(t => ['Pending', 'Assigned', 'In Progress'].includes(t.status)).length;
 
     // ANIMATION VARIANTS
@@ -134,7 +147,9 @@ const TaskAssignmentManager = () => {
                         Task Management
                     </h1>
                     <p className="mt-2 text-slate-400 font-medium max-w-md">
-                        {isSupervisor
+                        {isAudit
+                            ? 'Read-only list of assigned working students and the tasks given to them.'
+                            : isSupervisor
                             ? 'Give tasks to student workers enrolled in your department, then submit evaluations to WSPO.'
                             : 'Verify department supervisor evaluations after student work is completed.'}
                     </p>
@@ -268,11 +283,7 @@ const TaskAssignmentManager = () => {
                                 <p className="text-sm text-slate-500 py-3">No working students have been assigned to a department yet.</p>
                             ) : (
                                 <div className="space-y-3 max-h-64 overflow-y-auto custom-scrollbar pr-1">
-                                    {Object.entries(students.reduce((groups, student) => {
-                                        const department = student.profile?.assigned_office || 'Unassigned';
-                                        (groups[department] ||= []).push(student);
-                                        return groups;
-                                    }, {})).map(([department, members]) => (
+                                    {Object.entries(studentsByOffice).map(([department, members]) => (
                                         <div key={department} className="p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
                                             <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-2">{department}</p>
                                             <div className="flex flex-wrap gap-2">
@@ -282,19 +293,21 @@ const TaskAssignmentManager = () => {
                                     ))}
                                 </div>
                             )}
+                            {isAudit && <div className="mt-4"><AuditPager page={pagedStudents.page} totalPages={pagedStudents.totalPages} total={pagedStudents.total} onPage={setStudentPage} /></div>}
                         </div>
                     )}
                     {isLoading ? (
                         <div className="flex justify-center p-12">
                             <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
                         </div>
-                    ) : tasks.length === 0 ? (
+                    ) : visibleTasks.length === 0 ? (
                         <div className="bg-white rounded-3xl p-16 text-center border border-slate-200 flex flex-col items-center shadow-sm">
                             <Briefcase className="w-16 h-16 text-slate-300 mb-4 opacity-50" />
                             <h3 className="text-xl font-bold text-slate-700">No Tasks Deployed</h3>
                             <p className="text-slate-500 mt-2">Use the form to assign tasks to your student workers.</p>
                         </div>
                     ) : (
+                        <>
                         <motion.div 
                             variants={containerVariants}
                             initial="hidden"
@@ -302,7 +315,7 @@ const TaskAssignmentManager = () => {
                             className="grid grid-cols-1 md:grid-cols-2 gap-5"
                         >
                             <AnimatePresence>
-                                {tasks.map((task) => (
+                                {visibleTasks.map((task) => (
                                     <motion.div 
                                         layout
                                         variants={itemVariants}
@@ -364,7 +377,7 @@ const TaskAssignmentManager = () => {
                                                     <MessageSquare className="w-3.5 h-3.5" /> Evaluate
                                                 </button>
                                             )}
-                                            {!isSupervisor && task.status === 'For Verification' && (
+                                            {!isAudit && !isSupervisor && task.status === 'For Verification' && (
                                                 <button onClick={() => setNoteModal(task.id)} className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5">
                                                     <CheckCircle2 className="w-3.5 h-3.5" /> Verify
                                                 </button>
@@ -383,6 +396,8 @@ const TaskAssignmentManager = () => {
                                 ))}
                             </AnimatePresence>
                         </motion.div>
+                        {isAudit && <div className="mt-4"><AuditPager page={pagedTasks.page} totalPages={pagedTasks.totalPages} total={pagedTasks.total} onPage={setTaskPage} /></div>}
+                        </>
                     )}
                 </div>
             </div>

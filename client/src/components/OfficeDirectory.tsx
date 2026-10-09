@@ -1,16 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { motion, AnimatePresence, type Variants } from 'framer-motion';
+import { motion, type Variants } from 'framer-motion';
+import Toast from './Toast';
 import { 
     Building2, 
-    CheckCircle2, 
-    AlertCircle, 
     Pencil, 
     Plus, 
     Search, 
     Trash2, 
     X,
-    ShieldCheck,
     MapPin,
     Users,
     UserCheck
@@ -42,10 +40,30 @@ const OfficeDirectory = () => {
     const [editingName, setEditingName] = useState('');
     const [busyId, setBusyId] = useState<number | 'new' | null>(null);
     const [toast, setToast] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+    const [breakdown, setBreakdown] = useState<{
+        office: string;
+        supervisors: { id: number; name: string }[];
+        students: { id: number; name: string; student_id_number?: string | null; course?: string | null }[];
+        requests: { id: number; duty_type: string; quantity: number; status: string; requester?: string | null; duty_request?: string | null }[];
+    } | null>(null);
+    const [breakdownLoading, setBreakdownLoading] = useState(false);
+
+    const openBreakdown = async (office: OfficeRecord) => {
+        setBreakdown({ office: office.name, supervisors: [], students: [], requests: [] });
+        setBreakdownLoading(true);
+        try {
+            const response = await axios.get(`/api/offices/${office.id}/breakdown`);
+            setBreakdown(response.data);
+        } catch (error) {
+            showToast(errorMessage(error, 'Could not load that office.'), 'error');
+            setBreakdown(null);
+        } finally {
+            setBreakdownLoading(false);
+        }
+    };
 
     const showToast = (text: string, type: 'success' | 'error') => {
         setToast({ text, type });
-        window.setTimeout(() => setToast(null), 3200);
     };
 
     const loadOffices = async () => {
@@ -222,27 +240,11 @@ const OfficeDirectory = () => {
                 )}
             </motion.div>
 
-            {/* ANIMATED TOASTS */}
-            <AnimatePresence>
-                {toast && (
-                    <motion.div 
-                        initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        className={`p-4 rounded-xl border flex items-center gap-3 shadow-sm ${
-                            toast.type === 'success' ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'
-                        }`}
-                    >
-                        {toast.type === 'success' 
-                            ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                            : <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
-                        }
-                        <span className={`text-sm font-bold ${toast.type === 'success' ? 'text-emerald-800' : 'text-red-800'}`}>
-                            {toast.text}
-                        </span>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            <Toast
+                message={toast?.text ?? null}
+                type={toast?.type}
+                onClose={() => setToast(null)}
+            />
 
             {/* MAIN DATA TABLE */}
             <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative min-h-[400px]">
@@ -286,7 +288,7 @@ const OfficeDirectory = () => {
                                     const isEditing = editingId === office.id;
                                     
                                     return (
-                                        <motion.tr variants={rowVariants} key={office.id} className="hover:bg-slate-50 transition-colors group">
+                                        <motion.tr variants={rowVariants} key={office.id} onClick={() => { if (!isEditing) void openBreakdown(office); }} className="hover:bg-slate-50 transition-colors group cursor-pointer">
                                             <td className="px-6 py-5 align-top">
                                                 {isEditing ? (
                                                     <input
@@ -323,7 +325,7 @@ const OfficeDirectory = () => {
                                             </td>
 
                                             {canEdit && (
-                                                <td className="px-6 py-5 align-middle text-right">
+                                                <td className="px-6 py-5 align-middle text-right" onClick={(event) => event.stopPropagation()}>
                                                     <div className="flex items-center justify-end gap-2">
                                                         {isEditing ? (
                                                             <>
@@ -375,6 +377,66 @@ const OfficeDirectory = () => {
                     </table>
                 </div>
             </div>
+
+            {breakdown && (
+                <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setBreakdown(null)}>
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col" onClick={(event) => event.stopPropagation()}>
+                        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                            <div>
+                                <p className="text-xs font-bold uppercase tracking-widest text-indigo-600">Office breakdown</p>
+                                <h3 className="text-xl font-black text-slate-900">{breakdown.office}</h3>
+                            </div>
+                            <button type="button" onClick={() => setBreakdown(null)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="overflow-y-auto p-6 space-y-6">
+                            {breakdownLoading ? (
+                                <div className="py-10 flex justify-center">
+                                    <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+                                </div>
+                            ) : (
+                                <>
+                                    <section>
+                                        <h4 className="text-sm font-black text-slate-900 mb-2 flex items-center gap-2"><UserCheck className="w-4 h-4 text-indigo-600" /> Assigned supervisors</h4>
+                                        {breakdown.supervisors.length === 0 ? <p className="text-sm text-slate-500">No supervisor assigned.</p> : (
+                                            <ul className="divide-y divide-slate-100 border border-slate-100 rounded-2xl">
+                                                {breakdown.supervisors.map((person) => <li key={person.id} className="px-4 py-3 text-sm font-bold text-slate-800">{person.name}</li>)}
+                                            </ul>
+                                        )}
+                                    </section>
+                                    <section>
+                                        <h4 className="text-sm font-black text-slate-900 mb-2 flex items-center gap-2"><Users className="w-4 h-4 text-indigo-600" /> Assigned students</h4>
+                                        {breakdown.students.length === 0 ? <p className="text-sm text-slate-500">No students assigned.</p> : (
+                                            <ul className="divide-y divide-slate-100 border border-slate-100 rounded-2xl">
+                                                {breakdown.students.map((student) => (
+                                                    <li key={student.id} className="px-4 py-3 flex justify-between gap-3">
+                                                        <span className="text-sm font-bold text-slate-800">{student.name}</span>
+                                                        <span className="text-xs text-slate-500">{student.student_id_number || student.course || '—'}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </section>
+                                    <section>
+                                        <h4 className="text-sm font-black text-slate-900 mb-2">Requests</h4>
+                                        {breakdown.requests.length === 0 ? <p className="text-sm text-slate-500">No staffing requests for this office.</p> : (
+                                            <ul className="divide-y divide-slate-100 border border-slate-100 rounded-2xl">
+                                                {breakdown.requests.map((request) => (
+                                                    <li key={request.id} className="px-4 py-3">
+                                                        <p className="text-sm font-bold text-slate-800">{request.quantity} {request.duty_type} · {request.status}</p>
+                                                        <p className="text-xs text-slate-500">{request.requester || 'Unknown requester'}{request.duty_request ? ` · ${request.duty_request}` : ''}</p>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </section>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

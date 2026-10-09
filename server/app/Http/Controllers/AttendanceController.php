@@ -200,21 +200,7 @@ class AttendanceController extends Controller
     // Fetch all attendance records for the Admin/Supervisor Dashboard
     public function index(Request $request)
     {
-        $user = $request->user();
-
-        $query = \App\Models\Attendance::query()
-            ->visibleTo($user->role)
-            ->orderBy('created_at', 'desc');
-
-        // MULTI-TENANT CHECK: If Supervisor, lock down to their department
-        if ($user->role === 'Supervisor') {
-            $myDepartment = $user->profile->assigned_office ?? 'Unassigned';
-
-            // Only fetch attendance where the student's assigned_office matches the supervisor's
-            $query->whereHas('user.profile', function($q) use ($myDepartment) {
-                $q->where('assigned_office', $myDepartment);
-            });
-        }
+        $query = $this->monitorQuery($request)->orderBy('created_at', 'desc');
 
         // Optional: Filter by specific date if passed from React
         if ($request->has('date') && $request->date !== '') {
@@ -223,6 +209,46 @@ class AttendanceController extends Controller
 
         $records = $query->get();
         return response()->json($records);
+    }
+
+    // Dates that still have timed-out records waiting for a supervisor decision.
+    public function pendingDates(Request $request)
+    {
+        $rows = $this->pendingApprovalQuery($this->monitorQuery($request))
+            ->selectRaw('DATE(time_in) as attendance_date, COUNT(*) as pending_count')
+            ->groupByRaw('DATE(time_in)')
+            ->orderByDesc('attendance_date')
+            ->get();
+
+        return response()->json($rows->map(fn ($row) => [
+            'date' => Carbon::parse($row->attendance_date)->toDateString(),
+            'count' => (int) $row->pending_count,
+        ])->values());
+    }
+
+    private function monitorQuery(Request $request)
+    {
+        $user = $request->user();
+
+        $query = Attendance::query()->visibleTo($user->role);
+
+        // MULTI-TENANT CHECK: If Supervisor, lock down to their department
+        if ($user->role === 'Supervisor') {
+            $myDepartment = $user->profile->assigned_office ?? 'Unassigned';
+
+            $query->whereHas('user.profile', function ($q) use ($myDepartment) {
+                $q->where('assigned_office', $myDepartment);
+            });
+        }
+
+        return $query;
+    }
+
+    private function pendingApprovalQuery($query)
+    {
+        return $query
+            ->whereNotNull('time_out')
+            ->whereRaw("LOWER(COALESCE(status, '')) NOT IN ('accepted', 'approved', 'rejected')");
     }
 
     // 5. Admin View: Export to CSV (Excel)

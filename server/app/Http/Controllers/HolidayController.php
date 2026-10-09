@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Holiday;
+use App\Support\SuperAdminAudit;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -31,6 +32,7 @@ class HolidayController extends Controller
 
     public function store(Request $request)
     {
+        SuperAdminAudit::denyMutation($request);
         $validated = $request->validate([
             'date' => ['required', 'date', Rule::unique('holidays', 'date')],
             'name' => ['required', 'string', 'max:120'],
@@ -45,8 +47,9 @@ class HolidayController extends Controller
         return response()->json($this->payload($holiday), 201);
     }
 
-    public function destroy(Holiday $holiday)
+    public function destroy(Request $request, Holiday $holiday)
     {
+        SuperAdminAudit::denyMutation($request);
         $holiday->delete();
 
         return response()->json(['message' => 'Holiday removed.']);

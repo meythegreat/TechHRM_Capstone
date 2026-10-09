@@ -69,6 +69,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/notifications', [NotificationController::class, 'index']);
 
     Route::patch('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+    Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
 
     // =====================================================
     // WORKING STUDENT FEATURES
@@ -114,6 +115,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // =================================================
 
         Route::get('/attendance', [AttendanceController::class, 'index']);
+        Route::get('/attendance/pending-dates', [AttendanceController::class, 'pendingDates']);
 
         Route::get('/attendance/all', [AttendanceController::class, 'allHistory']);
 
@@ -182,6 +184,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/logs/people', [ActivityLogController::class, 'people']);
         Route::get('/departments', fn () => \App\Models\Department::orderBy('name')->get(['id', 'name']));
         Route::get('/offices', [OfficeController::class, 'index']);
+        Route::get('/offices/{office}/breakdown', [OfficeController::class, 'breakdown']);
 
         // Only WSPO coordinates student-to-department placement and final task verification.
         Route::get('/applications', [\App\Http\Controllers\ApplicationController::class, 'index']);
@@ -227,6 +230,8 @@ Route::middleware('auth:sanctum')->group(function () {
         // =================================================
 
         Route::get('/admin/dashboard-stats', [AdminController::class, 'getStats']);
+        Route::get('/admin/enrolled-roster', [AdminController::class, 'enrolledRoster']);
+        Route::get('/admin/active-now', [AdminController::class, 'activeNow']);
         Route::post('/offices', [OfficeController::class, 'store']);
         Route::put('/offices/{office}', [OfficeController::class, 'update']);
         Route::delete('/offices/{office}', [OfficeController::class, 'destroy']);

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
+import Toast from './Toast';
 import { 
     Terminal, 
     Users, 
@@ -11,8 +12,23 @@ import {
     ShieldCheck, 
     AlertCircle,
     CheckCircle2,
-    Wifi
+    Wifi,
+    X
 } from 'lucide-react';
+
+interface EnrolledOffice {
+    office: string;
+    students: { id: number; name: string; student_id_number?: string | null; course?: string | null }[];
+}
+
+interface ActiveStudent {
+    id: number;
+    time_in: string;
+    user?: {
+        name?: string;
+        profile?: { assigned_office?: string | null; student_id_number?: string | null } | null;
+    } | null;
+}
 
 interface DashboardStats {
     total_students: number;
@@ -27,6 +43,39 @@ const SuperAdminDashboard = () => {
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [enrolledOpen, setEnrolledOpen] = useState(false);
+    const [activeOpen, setActiveOpen] = useState(false);
+    const [enrolled, setEnrolled] = useState<EnrolledOffice[]>([]);
+    const [activeStudents, setActiveStudents] = useState<ActiveStudent[]>([]);
+    const [popupLoading, setPopupLoading] = useState(false);
+
+    const openEnrolled = async () => {
+        setEnrolledOpen(true);
+        setPopupLoading(true);
+        try {
+            const response = await axios.get('/api/admin/enrolled-roster');
+            setEnrolled(Array.isArray(response.data) ? response.data : []);
+        } catch (err) {
+            console.error('Failed to load enrolled roster', err);
+            setEnrolled([]);
+        } finally {
+            setPopupLoading(false);
+        }
+    };
+
+    const openActive = async () => {
+        setActiveOpen(true);
+        setPopupLoading(true);
+        try {
+            const response = await axios.get('/api/admin/active-now');
+            setActiveStudents(Array.isArray(response.data) ? response.data : []);
+        } catch (err) {
+            console.error('Failed to load active students', err);
+            setActiveStudents([]);
+        } finally {
+            setPopupLoading(false);
+        }
+    };
 
     useEffect(() => {
         fetchStats();
@@ -129,15 +178,11 @@ const SuperAdminDashboard = () => {
                 </div>
             </motion.div>
 
-            {/* ERROR TOAST (Non-blocking) */}
-            <AnimatePresence>
-                {error && (
-                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 shadow-sm">
-                        <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
-                        <span className="text-sm font-bold text-red-800">Telemetry Disconnected: {error}</span>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            <Toast
+                message={error ? `Telemetry Disconnected: ${error}` : null}
+                type="error"
+                onClose={() => setError(null)}
+            />
 
             {/* --- TELEMETRY STAT CARDS --- */}
             <motion.div 
@@ -146,22 +191,24 @@ const SuperAdminDashboard = () => {
                 animate="show"
                 className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
             >
-                <motion.div variants={itemVariants} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-blue-300 transition-colors">
+                <motion.button type="button" onClick={() => void openEnrolled()} variants={itemVariants} className="text-left bg-white p-6 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-blue-300 transition-colors">
                     <div className="flex justify-between items-start">
                         <div>
                             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Total Enrolled</p>
+                            <p className="text-[11px] font-medium text-blue-600 mb-1">View students by office</p>
                             <h3 className="text-4xl font-black text-slate-900">{stats?.total_students || 0}</h3>
                         </div>
                         <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl group-hover:scale-110 transition-transform">
                             <Users className="w-6 h-6" />
                         </div>
                     </div>
-                </motion.div>
+                </motion.button>
 
-                <motion.div variants={itemVariants} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-emerald-300 transition-colors">
+                <motion.button type="button" onClick={() => void openActive()} variants={itemVariants} className="text-left bg-white p-6 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-emerald-300 transition-colors">
                     <div className="flex justify-between items-start">
                         <div>
                             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Active Now</p>
+                            <p className="text-[11px] font-medium text-emerald-600 mb-1">View students clocked in</p>
                             <h3 className="text-4xl font-black text-slate-900 flex items-center gap-3">
                                 {stats?.active_now || 0}
                                 {stats?.active_now ? <span className="w-3 h-3 bg-emerald-500 rounded-full animate-ping"></span> : null}
@@ -171,7 +218,7 @@ const SuperAdminDashboard = () => {
                             <Activity className="w-6 h-6" />
                         </div>
                     </div>
-                </motion.div>
+                </motion.button>
 
                 <motion.div variants={itemVariants} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-purple-300 transition-colors">
                     <div className="flex justify-between items-start">
@@ -306,6 +353,74 @@ const SuperAdminDashboard = () => {
                     </div>
                 </motion.div>
             </motion.div>
+
+            <AnimatePresence>
+                {(enrolledOpen || activeOpen) && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4"
+                        onClick={() => { setEnrolledOpen(false); setActiveOpen(false); }}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.96, y: 12 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.96, y: 12 }}
+                            onClick={(event) => event.stopPropagation()}
+                            className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col"
+                        >
+                            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                                <h3 className="text-xl font-black text-slate-900">
+                                    {enrolledOpen ? 'Enrolled students by office' : 'Students clocked in'}
+                                </h3>
+                                <button type="button" onClick={() => { setEnrolledOpen(false); setActiveOpen(false); }} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <div className="overflow-y-auto p-6 space-y-5">
+                                {popupLoading ? (
+                                    <div className="py-10 flex justify-center">
+                                        <div className="w-8 h-8 border-4 border-slate-200 border-t-purple-600 rounded-full animate-spin" />
+                                    </div>
+                                ) : enrolledOpen ? (
+                                    enrolled.length === 0 ? (
+                                        <p className="text-sm font-medium text-slate-500">No enrolled students found.</p>
+                                    ) : enrolled.map((group) => (
+                                        <div key={group.office}>
+                                            <p className="text-xs font-black uppercase tracking-widest text-purple-700 mb-2">{group.office} · {group.students.length}</p>
+                                            <ul className="divide-y divide-slate-100 border border-slate-100 rounded-2xl">
+                                                {group.students.map((student) => (
+                                                    <li key={student.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                                                        <span className="font-bold text-slate-900 text-sm">{student.name}</span>
+                                                        <span className="text-xs font-medium text-slate-500">{student.student_id_number || student.course || '—'}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    ))
+                                ) : activeStudents.length === 0 ? (
+                                    <p className="text-sm font-medium text-slate-500">No students are clocked in right now.</p>
+                                ) : (
+                                    <ul className="divide-y divide-slate-100 border border-slate-100 rounded-2xl">
+                                        {activeStudents.map((record) => (
+                                            <li key={record.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                                                <div>
+                                                    <p className="font-bold text-slate-900 text-sm">{record.user?.name || 'Unknown'}</p>
+                                                    <p className="text-xs text-slate-500">{record.user?.profile?.assigned_office || 'Unassigned'}</p>
+                                                </div>
+                                                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-md">
+                                                    In {formatTime(record.time_in)}
+                                                </span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, type FormEvent } from 'react
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
+import Toast from './Toast';
 import { 
     Calendar, 
     Clock, 
@@ -20,11 +21,30 @@ import {
     UserCircle,
     CalendarPlus,
     Trash2,
+    ChevronLeft,
+    ChevronRight,
 } from 'lucide-react';
 import TimesheetPrintView from './TimesheetPrintView';
 import { formatYearLevel, homeDepartment } from '../utils/studentAssignment';
 
 const padMonth = (n: number) => String(n).padStart(2, '0');
+const localIsoDate = (date = new Date()) =>
+    `${date.getFullYear()}-${padMonth(date.getMonth() + 1)}-${padMonth(date.getDate())}`;
+const shiftIsoDate = (iso: string, days: number) => {
+    const [year, month, day] = iso.split('-').map(Number);
+    const date = new Date(year, (month || 1) - 1, day || 1);
+    date.setDate(date.getDate() + days);
+    return localIsoDate(date);
+};
+const formatFilterDate = (iso: string) => {
+    const [year, month, day] = iso.split('-').map(Number);
+    return new Date(year, (month || 1) - 1, day || 1).toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+    });
+};
 const currentYearMonth = () => {
     const today = new Date();
     return `${today.getFullYear()}-${padMonth(today.getMonth() + 1)}`;
@@ -90,6 +110,11 @@ interface Holiday {
     name: string;
 }
 
+interface PendingDate {
+    date: string;
+    count: number;
+}
+
 interface AttendanceMonitorProps {
     userRole?: string | null;
 }
@@ -107,7 +132,8 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
     
     const [records, setRecords] = useState<AttendanceRecord[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [filterDate, setFilterDate] = useState<string>(new Date().toISOString().split('T')[0]);
+    const [filterDate, setFilterDate] = useState<string>(localIsoDate());
+    const [pendingDates, setPendingDates] = useState<PendingDate[]>([]);
     const [toastMsg, setToastMsg] = useState<{text: string, type: 'success'|'error'} | null>(null);
     
     const [students, setStudents] = useState<StudentOption[]>([]);
@@ -159,9 +185,24 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
             });
     }, []);
 
+    const fetchPendingDates = useCallback(() => {
+        return axios.get('/api/attendance/pending-dates')
+            .then((response) => {
+                const dates = Array.isArray(response.data) ? response.data : [];
+                setPendingDates(dates.filter((item: PendingDate) => item?.date && Number(item.count) > 0));
+            })
+            .catch((error) => {
+                console.error('Failed to load pending attendance dates', error);
+            });
+    }, []);
+
     useEffect(() => {
         fetchAttendance(filterDate);
     }, [filterDate, fetchAttendance]);
+
+    useEffect(() => {
+        fetchPendingDates();
+    }, [fetchPendingDates]);
 
     const loadHolidays = useCallback(() => {
         if (!canViewStudentDtr) return Promise.resolve();
@@ -226,7 +267,6 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                 if (cancelled) return;
                 console.error('Failed to load student DTR', error);
                 setToastMsg({ text: 'Failed to load student DTR.', type: 'error' });
-                setTimeout(() => setToastMsg(null), 3000);
             } finally {
                 if (!cancelled) setDtrLoading(false);
             }
@@ -243,13 +283,13 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
             setToastMsg({ text: status === 'accepted' ? 'Hours approved by supervisor.' : 'Hours rejected by supervisor.', type: 'success' });
             setIsLoading(true);
             fetchAttendance(filterDate);
+            fetchPendingDates();
             setDtrReloadKey((key) => key + 1);
         } catch (error) {
             console.error(error);
             const message = axios.isAxiosError(error) ? error.response?.data?.message : null;
             setToastMsg({ text: message || 'Failed to update the timesheet.', type: 'error' });
         }
-        setTimeout(() => setToastMsg(null), 3000);
     };
 
     const formatTime = (timeString: string | null) => {
@@ -298,7 +338,6 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
         if (!canEditDtr || !selectedStudentId) return;
         if (!manualDate || !manualTimeIn || !manualTimeOut) {
             setToastMsg({ text: 'Enter the date, time in, and time out.', type: 'error' });
-            setTimeout(() => setToastMsg(null), 3000);
             return;
         }
 
@@ -318,13 +357,13 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
             resetManualForm();
             setIsLoading(true);
             fetchAttendance(filterDate);
+            fetchPendingDates();
             setDtrReloadKey((key) => key + 1);
         } catch (error) {
             const message = axios.isAxiosError(error) ? error.response?.data?.message : null;
             setToastMsg({ text: message || 'Failed to save the times.', type: 'error' });
         } finally {
             setManualSaving(false);
-            setTimeout(() => setToastMsg(null), 3000);
         }
     };
 
@@ -425,6 +464,19 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
         show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } }
     };
 
+    const today = localIsoDate();
+    const pendingOnDate = pendingDates.find((item) => item.date === filterDate) ?? null;
+    const pendingTotal = pendingDates.reduce((sum, item) => sum + Number(item.count), 0);
+    const earlierPending = pendingDates.find((item) => item.date < filterDate)?.date ?? null;
+    const laterPending = [...pendingDates].reverse().find((item) => item.date > filterDate)?.date ?? null;
+    const jumpPendingDate = earlierPending ?? laterPending;
+
+    const goToDate = (date: string) => {
+        if (!date || date === filterDate) return;
+        setIsLoading(true);
+        setFilterDate(date);
+    };
+
     return (
         <>
         {canViewStudentDtr && selectedStudentId && typeof document !== 'undefined' && createPortal(
@@ -470,48 +522,106 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                     </p>
                 </div>
 
-                <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex flex-col items-start sm:items-end w-full md:w-auto">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                        Active Date Filter
-                    </label>
-                    <div className="relative group w-full">
-                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                            <Calendar className="h-4 w-4 text-blue-400 group-hover:text-blue-300 transition-colors" />
-                        </div>
-                        <input
-                            type="date"
-                            value={filterDate}
-                            onChange={(e) => {
-                                setIsLoading(true);
-                                setFilterDate(e.target.value);
-                            }}
-                            className="block w-full sm:w-48 pl-10 pr-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm font-bold text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all cursor-pointer hover:bg-slate-800"
-                        />
+                <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-5 py-4 rounded-2xl flex flex-col items-stretch w-full md:w-[22rem]">
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                        <label htmlFor="attendance-date-filter" className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            Active Date Filter
+                        </label>
+                        {pendingOnDate ? (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-400/40 text-[10px] font-bold uppercase tracking-wider">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                                {pendingOnDate.count} pending
+                            </span>
+                        ) : pendingTotal > 0 ? (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-700/80 text-slate-300 border border-slate-600 text-[10px] font-bold uppercase tracking-wider">
+                                {pendingTotal} pending elsewhere
+                            </span>
+                        ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-400/30 text-[10px] font-bold uppercase tracking-wider">
+                                No pending
+                            </span>
+                        )}
                     </div>
+                    <div className="flex items-center gap-2 w-full">
+                        <button
+                            type="button"
+                            aria-label="Previous day"
+                            onClick={() => goToDate(shiftIsoDate(filterDate, -1))}
+                            className="shrink-0 w-10 h-10 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-200 hover:bg-slate-700 hover:text-white transition-colors flex items-center justify-center"
+                        >
+                            <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <div className="relative group flex-1 min-w-0">
+                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                <Calendar className={`h-4 w-4 transition-colors ${pendingOnDate ? 'text-amber-400' : 'text-blue-400 group-hover:text-blue-300'}`} />
+                            </div>
+                            <input
+                                id="attendance-date-filter"
+                                type="date"
+                                value={filterDate}
+                                max={today}
+                                onChange={(e) => {
+                                    if (!e.target.value) return;
+                                    goToDate(e.target.value);
+                                }}
+                                className={`block w-full pl-10 pr-3 py-2.5 bg-slate-800/80 border rounded-xl text-sm font-bold text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all cursor-pointer hover:bg-slate-800 ${pendingOnDate ? 'border-amber-400/70' : 'border-slate-700'}`}
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            aria-label="Next day"
+                            disabled={filterDate >= today}
+                            onClick={() => goToDate(shiftIsoDate(filterDate, 1))}
+                            className="shrink-0 w-10 h-10 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-200 hover:bg-slate-700 hover:text-white transition-colors flex items-center justify-center disabled:opacity-40 disabled:hover:bg-slate-800/80 disabled:hover:text-slate-200"
+                        >
+                            <ChevronRight className="w-4 h-4" />
+                        </button>
+                    </div>
+                    <div className="mt-3 flex items-center gap-2 w-full">
+                        <select
+                            aria-label="Jump to a date with pending approvals"
+                            value={pendingOnDate ? filterDate : ''}
+                            disabled={pendingDates.length === 0}
+                            onChange={(e) => {
+                                if (e.target.value) goToDate(e.target.value);
+                            }}
+                            className="min-w-0 flex-1 px-3 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-xs font-bold text-white outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <option value="">
+                                {pendingDates.length === 0 ? 'No dates with pending approvals' : 'Jump to pending date'}
+                            </option>
+                            {pendingDates.map((item) => (
+                                <option key={item.date} value={item.date}>
+                                    {formatFilterDate(item.date)} · {item.count} pending
+                                </option>
+                            ))}
+                        </select>
+                        <button
+                            type="button"
+                            disabled={!jumpPendingDate}
+                            onClick={() => jumpPendingDate && goToDate(jumpPendingDate)}
+                            className="shrink-0 px-3 py-2 rounded-xl bg-amber-500/15 border border-amber-400/40 text-amber-200 text-xs font-bold uppercase tracking-wider hover:bg-amber-500/25 transition-colors disabled:opacity-40 disabled:hover:bg-amber-500/15"
+                        >
+                            Next
+                        </button>
+                    </div>
+                    {filterDate !== today && (
+                        <button
+                            type="button"
+                            onClick={() => goToDate(today)}
+                            className="mt-2 self-end text-[10px] font-bold uppercase tracking-widest text-blue-300 hover:text-white transition-colors"
+                        >
+                            Back to today
+                        </button>
+                    )}
                 </div>
             </motion.div>
 
-            {/* Animated Toasts */}
-            <AnimatePresence>
-                {toastMsg && (
-                    <motion.div 
-                        initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        className={`p-4 rounded-xl border flex items-center gap-3 shadow-sm ${
-                            toastMsg.type === 'success' ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'
-                        }`}
-                    >
-                        {toastMsg.type === 'success' 
-                            ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                            : <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
-                        }
-                        <span className={`text-sm font-bold ${toastMsg.type === 'success' ? 'text-emerald-800' : 'text-red-800'}`}>
-                            {toastMsg.text}
-                        </span>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            <Toast
+                message={toastMsg?.text ?? null}
+                type={toastMsg?.type}
+                onClose={() => setToastMsg(null)}
+            />
 
             {/* MAIN ATTENDANCE TABLE */}
             <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative">
@@ -548,7 +658,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                         <div className="flex flex-col items-center justify-center text-slate-400">
                                             <FileBox className="w-12 h-12 mb-3 opacity-20" />
                                             <p className="text-base font-semibold text-slate-600">No records found</p>
-                                            <p className="text-sm font-medium">There are no attendance logs for {new Date(filterDate).toLocaleDateString()}.</p>
+                                            <p className="text-sm font-medium">There are no attendance logs for {formatFilterDate(filterDate)}.</p>
                                         </div>
                                     </td>
                                 </tr>
@@ -1123,7 +1233,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                     <p className="text-sm font-bold uppercase tracking-widest animate-pulse">Generating Document...</p>
                                 </div>
                             ) : (
-                                <div className="bg-white shadow-lg mx-auto w-fit max-w-full rounded-lg overflow-hidden border border-slate-200">
+                                <div className="dtr-paper bg-white shadow-lg mx-auto w-fit max-w-full rounded-lg overflow-hidden border border-slate-200">
                                     <TimesheetPrintView
                                         fullName={dtrStudentName}
                                         studentProfile={dtrProfile}

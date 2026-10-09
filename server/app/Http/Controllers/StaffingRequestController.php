@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Application;
+use App\Support\SuperAdminAudit;
 use App\Models\Notification;
 use App\Models\StaffingRequest;
 use App\Models\User;
@@ -107,6 +108,7 @@ class StaffingRequestController extends Controller
 
     public function updateStatus(Request $request, StaffingRequest $staffingRequest)
     {
+        SuperAdminAudit::denyMutation($request);
         $validated = $request->validate([
             'status' => 'required|in:Pending,Approved,Fulfilled,Declined',
             'student_ids' => 'required_if:status,Approved,Fulfilled|array',

@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
+import Toast from './Toast';
 import { REALTIME_EVENT } from '../utils/realtime';
 import { withHomeDepartmentNote } from '../utils/studentAssignment';
 import { 
@@ -19,8 +20,38 @@ import {
     MapPin,
     Briefcase,
     ShieldCheck,
-    Send
+    Send,
+    Search
 } from 'lucide-react';
+import AuditPager, { pageSlice } from './AuditPager';
+import ComboFilter from './ComboFilter';
+
+const HOUR_OPTIONS = Array.from({ length: 12 }, (_, index) => String(index + 1));
+const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0'));
+
+const scheduleMatchesClock = (rawTime: string, hour: string, minute: string, meridiem: string) => {
+    const wantedHour = hour.trim();
+    const wantedMinute = minute.trim();
+    const wantedMeridiem = meridiem.trim().toUpperCase();
+    if (!wantedHour && !wantedMinute && !wantedMeridiem) return true;
+
+    const clocks = [...String(rawTime || '').matchAll(/(\d{1,2}):(\d{2})\s*(am|pm)?/gi)];
+    if (clocks.length === 0) return false;
+
+    return clocks.some((match) => {
+        let clockHour = Number(match[1]);
+        const clockMinute = match[2];
+        let clockMeridiem = match[3]?.toUpperCase();
+        if (!clockMeridiem) {
+            clockMeridiem = clockHour >= 12 ? 'PM' : 'AM';
+        }
+        clockHour = clockHour % 12 || 12;
+        if (wantedHour && clockHour !== Number(wantedHour)) return false;
+        if (wantedMinute && clockMinute !== wantedMinute.padStart(2, '0')) return false;
+        if (wantedMeridiem && clockMeridiem !== wantedMeridiem) return false;
+        return true;
+    });
+};
 
 interface UserData {
     id: number;
@@ -64,6 +95,11 @@ const ScheduleManagement = () => {
     // Global Toast State
     const [toastMsg, setToastMsg] = useState<{text: string, type: 'success' | 'error'} | null>(null);
     const currentUserRole = localStorage.getItem('user_role') || '';
+    const isAudit = currentUserRole === 'Super Admin';
+    const [auditFilters, setAuditFilters] = useState({ date: '', hour: '', minute: '', meridiem: '', department: '', name: '' });
+    const [departments, setDepartments] = useState<string[]>([]);
+    const [requestPage, setRequestPage] = useState(1);
+    const [schedulePage, setSchedulePage] = useState(1);
     const [staffingRequests, setStaffingRequests] = useState<any[]>([]);
     const [staffingCandidates, setStaffingCandidates] = useState<UserData[]>([]);
     const [assignmentSelections, setAssignmentSelections] = useState<Record<number, number[]>>({});
@@ -85,15 +121,30 @@ const ScheduleManagement = () => {
         if (currentUserRole !== 'Supervisor') {
             fetchStaffingCandidates();
         }
+        if (isAudit) {
+            axios.get('/api/offices')
+                .then((response) => {
+                    const names = (Array.isArray(response.data) ? response.data : [])
+                        .map((office: { name?: string }) => office.name)
+                        .filter((name: string | undefined): name is string => Boolean(name));
+                    setDepartments(names);
+                })
+                .catch(() => setDepartments([]));
+        }
     }, []);
 
     useEffect(() => {
+        if (isAudit) return;
         fetchSchedules(currentPage);
     }, [currentPage]);
 
+    useEffect(() => {
+        if (!isAudit) return;
+        fetchSchedules(1);
+    }, []);
+
     const showToast = (text: string, type: 'success' | 'error') => {
         setToastMsg({ text, type });
-        setTimeout(() => setToastMsg(null), 3000);
     };
 
     const fetchStaffingRequests = async () => {
@@ -229,10 +280,15 @@ const ScheduleManagement = () => {
     const fetchSchedules = async (page: number, silent = false) => {
         if (!silent) setIsLoading(true);
         try {
-            const response = await axios.get(`/api/schedules?page=${page}`);
-            setSchedules(response.data.data);
-            setCurrentPage(response.data.current_page);
-            setTotalPages(response.data.last_page);
+            const response = await axios.get(isAudit ? '/api/schedules?audit=1' : `/api/schedules?page=${page}`);
+            if (isAudit) {
+                setSchedules(Array.isArray(response.data) ? response.data : []);
+                setTotalPages(1);
+            } else {
+                setSchedules(response.data.data);
+                setCurrentPage(response.data.current_page);
+                setTotalPages(response.data.last_page);
+            }
         } catch (error) {
             console.error("Failed to fetch schedules", error);
             if (!silent) showToast("Failed to load schedules.", "error");
@@ -315,6 +371,38 @@ const ScheduleManagement = () => {
         show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } }
     };
 
+    const auditWeekday = auditFilters.date
+        ? new Date(`${auditFilters.date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' })
+        : '';
+
+    const filteredRequests = useMemo(() => {
+        if (!isAudit) return staffingRequests;
+        const name = auditFilters.name.trim().toLowerCase();
+        return staffingRequests.filter((request) => {
+            if (auditFilters.department && request.department !== auditFilters.department) return false;
+            if (auditFilters.date && String(request.created_at || '').slice(0, 10) !== auditFilters.date) return false;
+            if (name && !`${request.requester?.name || ''} ${request.department}`.toLowerCase().includes(name)) return false;
+            return true;
+        });
+    }, [isAudit, staffingRequests, auditFilters]);
+
+    const filteredSchedules = useMemo(() => {
+        if (!isAudit) return schedules;
+        const name = auditFilters.name.trim().toLowerCase();
+        return schedules.filter((schedule) => {
+            if (auditFilters.department && schedule.department !== auditFilters.department) return false;
+            if (auditWeekday && schedule.day !== auditWeekday) return false;
+            if (!scheduleMatchesClock(schedule.time, auditFilters.hour, auditFilters.minute, auditFilters.meridiem)) return false;
+            if (name && !`${schedule.user?.name || ''} ${schedule.supervisor || ''}`.toLowerCase().includes(name)) return false;
+            return true;
+        });
+    }, [isAudit, schedules, auditFilters, auditWeekday]);
+
+    const pagedRequests = pageSlice(filteredRequests, requestPage);
+    const pagedSchedules = pageSlice(filteredSchedules, schedulePage);
+    const visibleRequests = isAudit ? pagedRequests.rows : staffingRequests;
+    const visibleSchedules = isAudit ? pagedSchedules.rows : schedules;
+
     return (
         <div className="max-w-7xl mx-auto space-y-8 font-sans p-4 sm:p-8">
             
@@ -337,11 +425,13 @@ const ScheduleManagement = () => {
                         Schedule Master
                     </h1>
                     <p className="mt-2 text-slate-400 font-medium max-w-md">
-                        Assign and manage weekly shifts for student workers. Request additional personnel or review requested schedule modifications.
+                        {isAudit
+                            ? 'Read-only list of department requests and assigned schedules across offices.'
+                            : 'Assign and manage weekly shifts for student workers. Request additional personnel or review requested schedule modifications.'}
                     </p>
                 </div>
 
-                <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-4">
+                {!isAudit && <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-4">
                     <div className="flex flex-col text-right">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Quick Action</span>
                         <span className="text-sm font-medium text-slate-300">Deploy new worker</span>
@@ -352,30 +442,42 @@ const ScheduleManagement = () => {
                     >
                         <Plus className="w-4 h-4" /> Assign Shift
                     </button>
-                </div>
+                </div>}
             </motion.div>
 
-            {/* Animated Toasts */}
-            <AnimatePresence>
-                {toastMsg && (
-                    <motion.div 
-                        initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        className={`p-4 rounded-xl border flex items-center gap-3 shadow-sm ${
-                            toastMsg.type === 'success' ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'
-                        }`}
-                    >
-                        {toastMsg.type === 'success' 
-                            ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                            : <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
-                        }
-                        <span className={`text-sm font-bold ${toastMsg.type === 'success' ? 'text-emerald-800' : 'text-red-800'}`}>
-                            {toastMsg.text}
+            {isAudit && (
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 grid grid-cols-1 lg:grid-cols-[auto_1fr_auto_auto] gap-3 items-end">
+                    <label className="block">
+                        <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Date</span>
+                        <input type="date" value={auditFilters.date} onChange={(event) => { setAuditFilters({ ...auditFilters, date: event.target.value }); setRequestPage(1); setSchedulePage(1); }} className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none" />
+                    </label>
+                    <div>
+                        <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Time</span>
+                        <div className="grid grid-cols-3 gap-2">
+                            <ComboFilter value={auditFilters.hour} onChange={(hour) => { setAuditFilters({ ...auditFilters, hour }); setSchedulePage(1); }} options={HOUR_OPTIONS} placeholder="Hour" emptyLabel="Hour" />
+                            <ComboFilter value={auditFilters.minute} onChange={(minute) => { setAuditFilters({ ...auditFilters, minute }); setSchedulePage(1); }} options={MINUTE_OPTIONS} placeholder="Min" emptyLabel="Min" />
+                            <ComboFilter value={auditFilters.meridiem} onChange={(meridiem) => { setAuditFilters({ ...auditFilters, meridiem: meridiem.toUpperCase() }); setSchedulePage(1); }} options={['AM', 'PM']} placeholder="AM/PM" emptyLabel="AM/PM" />
+                        </div>
+                    </div>
+                    <label className="block min-w-[220px]">
+                        <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Department</span>
+                        <ComboFilter commitOnType={false} value={auditFilters.department} onChange={(department) => { setAuditFilters({ ...auditFilters, department }); setRequestPage(1); setSchedulePage(1); }} options={departments} placeholder="All departments" emptyLabel="All departments" />
+                    </label>
+                    <label className="block">
+                        <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Name</span>
+                        <span className="flex items-center gap-2 px-3 bg-slate-50 border border-slate-200 rounded-xl">
+                            <Search className="w-4 h-4 text-slate-400" />
+                            <input value={auditFilters.name} onChange={(event) => { setAuditFilters({ ...auditFilters, name: event.target.value }); setRequestPage(1); setSchedulePage(1); }} placeholder="Name" className="w-full py-2.5 bg-transparent text-sm font-medium outline-none" />
                         </span>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                    </label>
+                </div>
+            )}
+
+            <Toast
+                message={toastMsg?.text ?? null}
+                type={toastMsg?.type}
+                onClose={() => setToastMsg(null)}
+            />
 
             {/* STAFFING REQUESTS CONSOLE (Supervisor View) */}
             {currentUserRole === 'Supervisor' && (
@@ -459,14 +561,14 @@ const ScheduleManagement = () => {
             )}
 
             {/* STAFFING REQUESTS LIST (WSPO & Admin View) */}
-            {staffingRequests.length > 0 && (
+            {(isAudit ? filteredRequests.length > 0 || staffingRequests.length > 0 : staffingRequests.length > 0) && (
                 <div className="space-y-4">
                     <h2 className="text-lg font-black text-slate-900 flex items-center gap-2 border-b border-slate-200 pb-2">
                         <Briefcase className="w-5 h-5 text-indigo-600" />
-                        {currentUserRole === 'Supervisor' ? 'Your Active Staffing Requests' : 'Pending Department Requests'}
+                        {currentUserRole === 'Supervisor' ? 'Your Active Staffing Requests' : isAudit ? 'Department Requests' : 'Pending Department Requests'}
                     </h2>
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-                        {staffingRequests.map(request => {
+                        {visibleRequests.map(request => {
                             const selectedIds = assignmentSelections[request.id] || [];
                             const assignedNames = assignedStudentNames(request);
                             
@@ -509,7 +611,7 @@ const ScheduleManagement = () => {
                                     </div>
 
                                     {/* Action Area for WSPO Staff */}
-                                    {currentUserRole !== 'Supervisor' && request.status === 'Pending' && (
+                                    {!isAudit && currentUserRole !== 'Supervisor' && request.status === 'Pending' && (
                                         <div className="mt-4 pt-4 border-t border-slate-100">
                                             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 flex justify-between">
                                                 <span>Select Personnel to Deploy</span>
@@ -569,6 +671,7 @@ const ScheduleManagement = () => {
                             );
                         })}
                     </div>
+                    {isAudit && <AuditPager page={pagedRequests.page} totalPages={pagedRequests.totalPages} total={pagedRequests.total} onPage={setRequestPage} />}
                 </div>
             )}
 
@@ -600,7 +703,7 @@ const ScheduleManagement = () => {
                             animate={!isLoading ? "show" : "hidden"}
                             className="divide-y divide-slate-100"
                         >
-                            {!isLoading && schedules.length === 0 ? (
+                            {!isLoading && visibleSchedules.length === 0 ? (
                                 <tr>
                                     <td colSpan={4} className="px-6 py-16 text-center text-slate-400">
                                         <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-20" />
@@ -609,7 +712,7 @@ const ScheduleManagement = () => {
                                     </td>
                                 </tr>
                             ) : (
-                                schedules.map((schedule) => (
+                                visibleSchedules.map((schedule) => (
                                     <motion.tr variants={rowVariants} key={schedule.id} className="hover:bg-slate-50 transition-colors group">
                                         <td className="px-6 py-5 align-top">
                                             <div className="flex items-center gap-3">
@@ -660,7 +763,7 @@ const ScheduleManagement = () => {
                                                         <p className="text-[11px] text-amber-700 font-medium mb-3 italic leading-relaxed relative z-10 bg-white/50 p-2 rounded-lg border border-amber-100">
                                                             "{schedule.edit_request_note}"
                                                         </p>
-                                                        <div className="flex gap-2 relative z-10">
+                                                        {!isAudit && <div className="flex gap-2 relative z-10">
                                                             <button 
                                                                 onClick={() => handleEditAction(schedule.id, 'approve')} 
                                                                 className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold shadow-sm transition-colors flex items-center justify-center gap-1"
@@ -673,17 +776,17 @@ const ScheduleManagement = () => {
                                                             >
                                                                 <X className="w-3.5 h-3.5" /> Reject
                                                             </button>
-                                                        </div>
+                                                        </div>}
                                                     </div>
                                                 )}
                                                 
-                                                <button 
+                                                {!isAudit && <button 
                                                     onClick={() => handleDelete(schedule.id)}
                                                     className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
                                                     title="Remove Schedule"
                                                 >
                                                     <Trash2 className="w-5 h-5" />
-                                                </button>
+                                                </button>}
                                             </div>
                                         </td>
                                     </motion.tr>
@@ -693,8 +796,9 @@ const ScheduleManagement = () => {
                     </table>
                 </div>
 
-                {/* Pagination Footer */}
-                {!isLoading && schedules.length > 0 && (
+                {isAudit ? (
+                    <AuditPager page={pagedSchedules.page} totalPages={pagedSchedules.totalPages} total={pagedSchedules.total} onPage={setSchedulePage} />
+                ) : !isLoading && schedules.length > 0 && (
                     <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
                         <span className="text-sm font-medium text-slate-500">
                             Showing page <span className="font-bold text-slate-900">{currentPage}</span> of <span className="font-bold text-slate-900">{totalPages}</span>

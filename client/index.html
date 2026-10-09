@@ -2,10 +2,42 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/jpeg" href="/logo.jpg" />
     <link rel="stylesheet" href="./src/index.css">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>client</title>
+    <title>TechHRM</title>
+    <script>
+      try {
+        var override = JSON.parse(localStorage.getItem('techhrm-theme-override') || 'null');
+        var now = new Date();
+        var theme = override && override.until > now.getTime() ? override.theme : null;
+        if (!theme) {
+          var lat = 11.5854, lng = 122.7511, zenith = 90.833;
+          var toRad = Math.PI / 180, toDeg = 180 / Math.PI;
+          var start = Date.UTC(now.getFullYear(), 0, 0);
+          var n = Math.floor((Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - start) / 86400000);
+          var event = function (rising) {
+            var lngHour = lng / 15;
+            var t = n + ((rising ? 6 : 18) - lngHour) / 24;
+            var M = 0.9856 * t - 3.289;
+            var L = (M + 1.916 * Math.sin(M * toRad) + 0.02 * Math.sin(2 * M * toRad) + 282.634 + 360) % 360;
+            var RA = (toDeg * Math.atan(0.91764 * Math.tan(L * toRad)) + 360) % 360;
+            RA = (RA + (Math.floor(L / 90) * 90 - Math.floor(RA / 90) * 90)) / 15;
+            var sinDec = 0.39782 * Math.sin(L * toRad);
+            var cosH = (Math.cos(zenith * toRad) - sinDec * Math.sin(lat * toRad)) / (Math.cos(Math.asin(sinDec)) * Math.cos(lat * toRad));
+            cosH = Math.min(1, Math.max(-1, cosH));
+            var H = ((rising ? 360 - toDeg * Math.acos(cosH) : toDeg * Math.acos(cosH))) / 15;
+            var T = (H + RA - 0.06571 * t - 6.622) % 24;
+            if (T < 0) T += 24;
+            var UT = T - lngHour;
+            return Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) + UT * 3600000;
+          };
+          var ms = now.getTime();
+          theme = ms >= event(true) && ms < event(false) ? 'light' : 'dark';
+        }
+        document.documentElement.classList.toggle('dark', theme === 'dark');
+      } catch (e) {}
+    </script>
   </head>
   <body class="bg-slate-50">
     <div id="root"></div>

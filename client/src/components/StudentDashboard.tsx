@@ -2,7 +2,9 @@ import StudentOverview from './StudentOverview';
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { motion, type Variants } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion, type Variants } from 'framer-motion';
+import PageTransition from './PageTransition';
+import Toast from './Toast';
 import { 
     Wallet, 
     TrendingUp, 
@@ -213,7 +215,6 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
             setMessage({ text: error.response?.data?.message || 'Failed to send request.', type: 'error' });
         } finally {
             setIsLoading(false);
-            setTimeout(() => setMessage(null), 3000);
         }
     };
 
@@ -221,7 +222,6 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
         e.preventDefault();
         if (!uploadFile) {
             setMessage({ text: 'Please select a file to upload.', type: 'error' });
-            setTimeout(() => setMessage(null), 3000);
             return;
         }
 
@@ -242,7 +242,6 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
             setMessage({ text: error.response?.data?.message || 'Failed to upload document.', type: 'error' });
         } finally {
             setIsLoading(false);
-            setTimeout(() => setMessage(null), 4000);
         }
     };
 
@@ -262,7 +261,6 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
             setMessage({ text: 'Failed to upload image. Ensure it is under 2MB.', type: 'error' });
         } finally {
             setIsLoading(false);
-            setTimeout(() => setMessage(null), 3000);
         }
     };
 
@@ -290,6 +288,8 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
         hidden: { opacity: 0, y: 20 },
         show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
     };
+    const reduceMotion = useReducedMotion();
+    const pageEase = [0.22, 1, 0.36, 1] as const;
 
     return (
         <div className="flex h-screen bg-slate-50 overflow-hidden font-sans print:h-auto print:overflow-visible print:bg-white">
@@ -309,9 +309,18 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors">
                             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
                         </button>
-                        <h2 className="text-xl font-black text-slate-800 tracking-tight hidden sm:block">
-                            {studentNavItems.find((item) => item.id === currentPath)?.label ?? currentPath.replace('-', ' ')}
-                        </h2>
+                        <AnimatePresence mode="wait" initial={false}>
+                            <motion.h2
+                                key={currentPath}
+                                initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={reduceMotion ? { opacity: 1 } : { opacity: 0, y: -6 }}
+                                transition={{ duration: reduceMotion ? 0 : 0.22, ease: pageEase }}
+                                className="text-xl font-black text-slate-800 tracking-tight hidden sm:block"
+                            >
+                                {studentNavItems.find((item) => item.id === currentPath)?.label ?? currentPath.replace('-', ' ')}
+                            </motion.h2>
+                        </AnimatePresence>
                     </div>
 
                     <div className="flex items-center gap-4">
@@ -329,13 +338,13 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                 <main className="flex-1 overflow-y-auto p-4 sm:p-0 relative custom-scrollbar print:overflow-visible print:h-auto print:p-0">
                     <div className="max-w-6xl mx-auto space-y-6 sm:p-8">
                         
-                        {message && (
-                            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className={`p-4 rounded-xl border font-bold text-sm flex items-center gap-3 shadow-sm ${message.type === 'success' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-red-50 text-red-800 border-red-200'}`}>
-                                {message.type === 'success' ? <CheckCircle2 className="w-5 h-5 shrink-0" /> : <AlertCircle className="w-5 h-5 shrink-0" />}
-                                <span>{message.text}</span>
-                            </motion.div>
-                        )}
+                        <Toast
+                            message={message?.text ?? null}
+                            type={message?.type}
+                            onClose={() => setMessage(null)}
+                        />
 
+                        <PageTransition pageKey={currentPath}>
                         {/* 1. DASHBOARD */}
                         {currentPath === 'dashboard' && <StudentOverview />}
 
@@ -694,14 +703,22 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                 </div>
                             </motion.div>
                         )}
+                        </PageTransition>
                     </div>
                 </main>
             </div>
 
             {/* REQUEST EDIT MODAL */}
+            <AnimatePresence>
             {isEditModalOpen && (
-                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8">
+                <motion.div
+                    key="edit-request"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                >
+                    <motion.div initial={{ opacity: 0, scale: 0.95, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 8 }} className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8">
                         <h3 className="text-xl font-black text-slate-900 mb-6 tracking-tight">Request Schedule Edit</h3>
                         <form onSubmit={handleRequestEdit} className="space-y-5">
                             <div>
@@ -723,8 +740,9 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                             </div>
                         </form>
                     </motion.div>
-                </div>
+                </motion.div>
             )}
+            </AnimatePresence>
         </div>
     );
 };

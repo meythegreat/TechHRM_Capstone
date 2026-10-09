@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Support\SuperAdminAudit;
 use App\Models\Application;
 use App\Models\Notification;
 use App\Models\User;
@@ -63,6 +64,7 @@ class ApplicationController extends Controller
                 'available_schedules' => $validated['available_schedules'] ?? null,
                 'reason_for_applying' => $validated['reason_for_applying'] ?? null,
                 'status' => 'Pending',
+                'source' => 'website',
             ]);
 
             $this->storeApplicationDocuments($request, $application);
@@ -116,6 +118,7 @@ class ApplicationController extends Controller
             'available_schedules' => $validated['available_schedules'],
             'reason_for_applying' => $validated['reason_for_applying'],
             'status' => 'Pending',
+            'source' => 'portal',
         ]);
 
         $this->storeApplicationDocuments($request, $application);
@@ -150,6 +153,7 @@ class ApplicationController extends Controller
     // 3. COORDINATOR: Update Workflow (Pending -> Interview -> Training -> Approved)
     public function updateStatus(Request $request, $id)
     {
+        SuperAdminAudit::denyMutation($request);
         $application = Application::findOrFail($id);
 
         $request->validate([
@@ -174,8 +178,9 @@ class ApplicationController extends Controller
         ]);
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
+        SuperAdminAudit::denyMutation($request);
         $application = Application::findOrFail($id);
 
         if ($application->status === 'Approved') {
@@ -192,6 +197,7 @@ class ApplicationController extends Controller
     // 4. COORDINATOR: Final Placement/Matching
     public function assignPlacement(Request $request, $id)
     {
+        SuperAdminAudit::denyMutation($request);
         $application = Application::findOrFail($id);
 
         $validated = $request->validate([
@@ -306,6 +312,7 @@ class ApplicationController extends Controller
         // COORDINATOR: Schedule Interview
     public function scheduleInterview(Request $request, $id)
     {
+        SuperAdminAudit::denyMutation($request);
         $application = Application::findOrFail($id);
 
         $validated = $request->validate([

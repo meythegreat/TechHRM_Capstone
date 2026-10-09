@@ -1,5 +1,283 @@
 @import 'tailwindcss';
 
+/* Dark mode remaps the light surfaces and dark text already used across the app.
+   Print stays on the original light palette. */
+@media screen {
+  html.dark {
+    color-scheme: dark;
+    --color-slate-50: #0a1020;
+    --color-slate-100: #172033;
+    --color-slate-200: #2a3950;
+    --color-gray-50: #0a1020;
+    --color-gray-100: #172033;
+    --color-blue-50: #172554;
+    --color-emerald-50: #022c22;
+    --color-amber-50: #451a03;
+    --color-red-50: #450a0a;
+    --color-indigo-50: #1e1b4b;
+    --color-purple-50: #3b0764;
+    --color-rose-50: #4c0519;
+    --color-red-100: #7f1d1d;
+    --color-amber-100: #78350f;
+    --color-indigo-100: #312e81;
+    --color-amber-200: #92400e;
+    --color-red-200: #991b1b;
+    --color-indigo-200: #3730a3;
+    --color-purple-200: #6b21a8;
+    --color-gray-300: #3d4f68;
+    color: #e2e8f0;
+    scrollbar-color: #3d4f68 #0a1020;
+  }
+
+  html.dark body {
+    background-color: #0a1020;
+    color: #e2e8f0;
+  }
+
+  /* Native menus stay readable. Dark-mode text colors were washing out option lists. */
+  html.dark select,
+  html.dark option {
+    background-color: #141c2e;
+    color: #f8fafc;
+  }
+
+/* Filter menus stay black text on a white sheet in both themes. */
+.combo-filter-input,
+.combo-filter-menu {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  color-scheme: light;
+}
+
+.combo-filter-input input {
+  color: #0f172a !important;
+  background: transparent !important;
+}
+
+.combo-filter-input input::placeholder {
+  color: #64748b !important;
+}
+
+.combo-filter-menu button {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+}
+
+.combo-filter-menu button:hover,
+.combo-filter-menu button[data-selected='true'] {
+  background-color: #dbeafe !important;
+  color: #1d4ed8 !important;
+}
+
+  html.dark :is(.bg-white, .hover\:bg-white:hover, .focus\:bg-white:focus) {
+    background-color: #141c2e;
+  }
+
+  /* The official DTR is a paper form and stays light in dark mode. */
+  html.dark .dtr-sheet.bg-white,
+  html.dark .dtr-paper.bg-white {
+    background-color: #fff;
+    color: #000;
+    color-scheme: light;
+  }
+
+  html.dark .bg-white\/80 { background-color: rgb(20 28 46 / 0.88); }
+  html.dark .bg-white\/70 { background-color: rgb(20 28 46 / 0.8); }
+  html.dark .bg-white\/60 { background-color: rgb(20 28 46 / 0.72); }
+  html.dark .bg-white\/50 { background-color: rgb(20 28 46 / 0.62); }
+
+  html.dark .bg-slate-900 { background-color: #10284a; }
+  html.dark .bg-slate-800 { background-color: #163056; }
+  html.dark .hover\:bg-slate-800:hover { background-color: #1c3c68; }
+
+  html.dark :is(
+    .bg-blue-100,
+    .hover\:bg-blue-100:hover,
+    .bg-emerald-100,
+    .bg-gray-200,
+    .bg-blue-200
+  ) {
+    background-color: #1e3a8a;
+  }
+
+  html.dark .group:hover .group-hover\:bg-blue-100 {
+    background-color: #1e3a8a;
+  }
+
+  html.dark .disabled\:bg-blue-300:disabled {
+    background-color: #1e3a8a;
+  }
+
+  html.dark :is(
+    .border-blue-100,
+    .border-blue-200,
+    .border-emerald-100,
+    .border-emerald-200,
+    .border-emerald-300,
+    .border-gray-100,
+    .border-gray-200,
+    .border-slate-300,
+    .border-red-100,
+    .border-indigo-300,
+    .border-amber-300,
+    .border-purple-200,
+    .border-blue-300
+  ) {
+    border-color: #3d4f68;
+  }
+
+  html.dark :is(.hover\:border-blue-300:hover, .hover\:border-blue-400:hover, .hover\:border-blue-200:hover) {
+    border-color: #60a5fa;
+  }
+
+  html.dark .group:hover .group-hover\:border-blue-400 {
+    border-color: #60a5fa;
+  }
+
+  html.dark :is(.text-slate-900, .hover\:text-slate-900:hover, .text-gray-900, .text-blue-950) {
+    color: #f8fafc;
+  }
+
+  html.dark :is(.text-slate-800, .text-gray-800, .text-blue-900, .hover\:text-blue-900:hover) {
+    color: #e2e8f0;
+  }
+
+  html.dark .selection\:text-blue-900 ::selection {
+    color: #dbeafe;
+  }
+
+  html.dark :is(.text-slate-700, .hover\:text-slate-700:hover, .text-gray-700) {
+    color: #cbd5e1;
+  }
+
+  html.dark :is(
+    .text-slate-600,
+    .hover\:text-slate-600:hover,
+    .disabled\:text-slate-600:disabled,
+    .text-gray-600,
+    .hover\:text-gray-600:hover,
+    .text-slate-500,
+    .text-gray-500,
+    .text-slate-400,
+    .text-gray-400
+  ) {
+    color: #94a3b8;
+  }
+
+  html.dark .group:hover .group-hover\:text-slate-600 {
+    color: #cbd5e1;
+  }
+
+  html.dark .placeholder\:text-slate-400::placeholder {
+    color: #64748b;
+  }
+
+  html.dark .text-slate-300 {
+    color: #cbd5e1;
+  }
+
+  html.dark :is(
+    .text-blue-800,
+    .hover\:text-blue-800:hover,
+    .text-blue-700,
+    .hover\:text-blue-700:hover,
+    .text-blue-600,
+    .hover\:text-blue-600:hover
+  ) {
+    color: #93c5fd;
+  }
+
+  html.dark .group:hover .group-hover\:text-blue-700,
+  html.dark .peer:focus ~ .peer-focus\:text-blue-600 {
+    color: #93c5fd;
+  }
+
+  html.dark :is(.text-red-800, .text-red-700, .hover\:text-red-700:hover, .text-red-600, .hover\:text-red-600:hover, .text-rose-800, .text-rose-700, .text-rose-600) {
+    color: #fca5a5;
+  }
+
+  html.dark .group:hover .group-hover\:text-red-700,
+  html.dark .group:hover .group-hover\:text-red-500 {
+    color: #fca5a5;
+  }
+
+  html.dark :is(.text-emerald-900, .text-emerald-800, .text-emerald-700, .text-emerald-600) {
+    color: #6ee7b7;
+  }
+
+  html.dark :is(.text-amber-800, .text-amber-700, .text-amber-600) {
+    color: #fcd34d;
+  }
+
+  html.dark :is(.text-indigo-900, .text-indigo-700, .hover\:text-indigo-700:hover, .text-indigo-600, .hover\:text-indigo-600:hover) {
+    color: #a5b4fc;
+  }
+
+  html.dark .group:hover .group-hover\:text-indigo-700 {
+    color: #a5b4fc;
+  }
+
+  html.dark :is(.text-purple-700, .text-purple-600) {
+    color: #d8b4fe;
+  }
+
+  html.dark .recharts-cartesian-grid line {
+    stroke: #2a3950;
+  }
+
+  html.dark .recharts-cartesian-axis-tick text {
+    fill: #94a3b8;
+  }
+
+  html.dark .recharts-default-tooltip {
+    background-color: #141c2e !important;
+    border: 1px solid #2a3950 !important;
+    color: #f8fafc;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  html.theme-animate,
+  html.theme-animate body,
+  html.theme-animate :where(
+    header,
+    aside,
+    main,
+    nav,
+    button,
+    a,
+    input,
+    select,
+    textarea,
+    table,
+    [class*='bg-'],
+    [class*='text-'],
+    [class*='border-']
+  ) {
+    transition-property: background-color, color, border-color, fill, stroke, box-shadow !important;
+    transition-duration: 0.4s !important;
+    transition-timing-function: ease !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 @media print {
   @page {
     size: A4 portrait;
@@ -50,4 +328,17 @@
     width: 46px !important;
     height: 46px !important;
   }
+}
+
+@keyframes corner-popup-in {
+  from { opacity: 0; transform: translateX(28px); }
+  to { opacity: 1; transform: none; }
+}
+
+.corner-popup {
+  animation: corner-popup-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .corner-popup { animation: none; }
 }

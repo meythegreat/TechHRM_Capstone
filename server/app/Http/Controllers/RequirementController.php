@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Requirement;
+use App\Support\SuperAdminAudit;
 use Illuminate\Support\Facades\Storage;
 
 class RequirementController extends Controller
@@ -65,6 +66,7 @@ class RequirementController extends Controller
     // 4. ADMIN/SUPERVISOR: Verify or Reject
     public function updateStatus(Request $request, string $id)
     {
+        SuperAdminAudit::denyMutation($request);
         $request->validate([
             'status' => 'required|in:verified,rejected',
             'remarks' => 'nullable|string'

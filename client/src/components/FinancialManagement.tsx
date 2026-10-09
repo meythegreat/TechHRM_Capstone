@@ -34,6 +34,7 @@ const formatCoverageDate = (value: string) => {
 };
 
 export const FinancialManagement: React.FC = () => {
+  const isAudit = localStorage.getItem('user_role') === 'Super Admin';
   const [records, setRecords] = useState<FinancialRecordItem[]>([]);
   const [stats, setStats] = useState({ total_equivalent_value: 0, pending_drafts: 0 });
   const [showCompute, setShowCompute] = useState(false);
@@ -152,11 +153,13 @@ export const FinancialManagement: React.FC = () => {
                   Hours Rendered
               </h1>
               <p className="mt-2 text-slate-400 font-medium max-w-md">
-                  Calculate equivalent values for rendered hours to be forwarded as a verified report to the Finance Office.
+                  {isAudit
+                    ? 'Status of hours rendered as recorded by the coordinator. This account cannot compute hours or change status.'
+                    : 'Calculate equivalent values for rendered hours to be forwarded as a verified report to the Finance Office.'}
               </p>
           </div>
 
-          <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-4">
+          {!isAudit && <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-4">
               <div className="flex flex-col text-right">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Quick Action</span>
                   <span className="text-sm font-medium text-slate-300">Run Period Calculation</span>
@@ -167,7 +170,7 @@ export const FinancialManagement: React.FC = () => {
               >
                   <Calculator className="w-4 h-4" /> Compute Hours
               </button>
-          </div>
+          </div>}
       </motion.div>
 
       {notice && (
@@ -302,6 +305,11 @@ export const FinancialManagement: React.FC = () => {
 
                                   <td className="px-6 py-5 align-top">
                                       <div className="flex items-center justify-end gap-2">
+                                          {isAudit ? (
+                                              <span className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wide border border-slate-200 bg-slate-50 text-slate-700">
+                                                  {r.status}
+                                              </span>
+                                          ) : (
                                           <select
                                               value={r.status}
                                               disabled={busyId === r.id}
@@ -312,7 +320,8 @@ export const FinancialManagement: React.FC = () => {
                                                   <option key={status} value={status}>{status}</option>
                                               ))}
                                           </select>
-                                          <button
+                                          )}
+                                          {!isAudit && <button
                                               type="button"
                                               disabled={busyId === r.id}
                                               onClick={() => handleCancel(r)}
@@ -320,7 +329,7 @@ export const FinancialManagement: React.FC = () => {
                                           >
                                               <Trash2 className="w-3.5 h-3.5" />
                                               Cancel
-                                          </button>
+                                          </button>}
                                       </div>
                                   </td>
                               </motion.tr>

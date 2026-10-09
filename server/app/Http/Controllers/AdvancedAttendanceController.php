@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Attendance;
+use App\Support\SuperAdminAudit;
 use App\Models\DailyToken;
 use App\Models\Notification;
 use Carbon\Carbon;
@@ -17,6 +18,7 @@ class AdvancedAttendanceController extends Controller
 
     public function generateToken(Request $request)
     {
+        SuperAdminAudit::denyMutation($request);
         $validated = $request->validate([
             'type' => 'required|in:Daily Clock,Cleaning,Meeting',
             'description' => 'nullable|string|max:255',
@@ -38,6 +40,7 @@ class AdvancedAttendanceController extends Controller
 
     public function currentPasscode(Request $request)
     {
+        SuperAdminAudit::denyMutation($request);
         $validated = $request->validate([
             'type' => 'required|in:Daily Clock,Cleaning,Meeting',
             'description' => 'nullable|string|max:255',
@@ -63,6 +66,7 @@ class AdvancedAttendanceController extends Controller
 
     public function currentQr(Request $request)
     {
+        SuperAdminAudit::denyMutation($request);
         $validated = $request->validate([
             'type' => 'required|in:Daily Clock,Cleaning,Meeting',
         ]);
@@ -86,11 +90,25 @@ class AdvancedAttendanceController extends Controller
 
     public function getAnomalyLogs(Request $request)
     {
-        return Attendance::query()
-            ->visibleTo($request->user()->role)
-            ->where('is_anomaly', true)
-            ->latest('time_in')
-            ->get();
+        $user = $request->user()->loadMissing('profile');
+        $accounts = app(UserController::class);
+
+        $query = Attendance::query()
+            ->visibleTo($user->role)
+            ->where('is_anomaly', true);
+
+        if ($user->role === 'Supervisor' || $accounts->isWspoDepartmentSupervisor($user)) {
+            $areas = $accounts->supervisedOfficeAreas($user);
+            if ($areas === []) {
+                $query->whereRaw('0 = 1');
+            } else {
+                $query->whereHas('user.profile', function ($profile) use ($areas) {
+                    $profile->whereIn('assigned_office', $areas);
+                });
+            }
+        }
+
+        return $query->latest('time_in')->get();
     }
 
     public function secureClockIn(Request $request)

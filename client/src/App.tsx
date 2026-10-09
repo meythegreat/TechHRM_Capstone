@@ -1,7 +1,8 @@
 import { useState, useEffect, Component, type ReactNode } from 'react';
 import axios from 'axios';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import PageTransition from './components/PageTransition';
 import { Menu, ShieldCheck } from 'lucide-react';
 import { FinancialManagement } from './components/FinancialManagement';
 
@@ -13,6 +14,8 @@ import UserManagement from './components/UserManagement';
 import ActivityLogs from './components/ActivityLogs';
 import StudentDashboard from './components/StudentDashboard';
 import AttendanceMonitor from './components/AttendanceMonitor';
+import SuperAdminTimesheets from './components/SuperAdminTimesheets';
+import SuperAdminAttendanceAudit from './components/SuperAdminAttendanceAudit';
 import AdminDashboard from './pages/Admin/AdminDashboard';
 import Sidebar from './components/Sidebar';
 import NotificationBell from './components/NotificationBell';
@@ -21,6 +24,33 @@ import SecureImage from './components/SecureImage';
 import ScheduleManagement from './components/ScheduleManagement';
 import { normalizeFilePath } from './utils/secureFile';
 import { firstPathSegment, resolveStaffPath } from './config/routes';
+
+const STAFF_PAGE_TITLES: Record<string, string> = {
+  dashboard: 'Dashboard',
+  attendance: 'Timesheets',
+  schedules: 'Schedules',
+  requirements: 'Document Review',
+  pipeline: 'Applications',
+  tasks: 'Task Management',
+  'attendance-hub': 'Attendance Hub',
+  compliance: 'Compliance',
+  logs: 'Audit Trail',
+  users: 'User Management',
+  offices: 'Offices',
+  analytics: 'Reports & Analytics',
+  financial: 'Hours Rendered',
+  settings: 'Profile Settings',
+};
+
+const STUDENT_PAGE_TITLES: Record<string, string> = {
+  dashboard: 'Dashboard',
+  attendance: 'Attendance / DTR',
+  hours: 'Hours Rendered',
+  schedule: 'My Schedule',
+  requirements: 'Requirements',
+  disciplinary: 'Disciplinary Records',
+  settings: 'Settings',
+};
 import ApplicationManager from './components/ApplicationManager';
 import TaskAssignmentManager from './components/TaskAssignmentManager';
 import SupervisorAttendanceHub from './components/SupervisorAttendanceHub';
@@ -75,6 +105,8 @@ function App() {
 
   const location = useLocation();
   const navigate = useNavigate();
+  const reduceMotion = useReducedMotion();
+  const pageEase = [0.22, 1, 0.36, 1] as const;
 
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
@@ -118,6 +150,17 @@ function App() {
     }
   }, [hasToken, userRole, location.pathname, navigate]);
 
+  useEffect(() => {
+    if (!hasToken) {
+      document.title = isPublicApp ? 'Apply · TechHRM' : 'Sign in · TechHRM';
+      return;
+    }
+    const segment = firstPathSegment(location.pathname);
+    const titles = userRole === 'Student' ? STUDENT_PAGE_TITLES : STAFF_PAGE_TITLES;
+    const feature = titles[segment];
+    document.title = feature ? `${feature} · TechHRM` : 'TechHRM';
+  }, [hasToken, isPublicApp, userRole, location.pathname]);
+
   const handleLoginSuccess = (token: string, role: string, name: string, profilePic: string | null, mustChangePassword = false) => {
     localStorage.setItem('auth_token', token);
     localStorage.setItem('user_role', role);
@@ -157,53 +200,44 @@ function App() {
     }
   };
 
-  // PREMIUM LOADING SCREEN
-  if (isVerifying) {
-    return (
+  const canManageUsers = userRole === 'Super Admin' || userRole === 'WSPO Staff';
+  const currentPath = firstPathSegment(location.pathname) || 'dashboard';
+  const screen = isVerifying ? 'verify' : hasToken ? 'session' : 'guest';
+  const shellMotion = reduceMotion
+    ? { initial: false as const, animate: { opacity: 1 }, exit: { opacity: 1 }, transition: { duration: 0 } }
+    : screen === 'session'
+      ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 }, transition: { duration: 0.4, ease: pageEase } }
+      : {
+          initial: { opacity: 0, y: screen === 'guest' ? 18 : 0 },
+          animate: { opacity: 1, y: 0 },
+          exit: { opacity: 0, y: screen === 'guest' ? -12 : 0 },
+          transition: { duration: 0.45, ease: pageEase },
+        };
+
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+    <motion.div key={screen} {...shellMotion} className={screen === 'session' ? 'h-screen print:h-auto' : 'min-h-screen'}>
+    {isVerifying ? (
       <div className="flex h-screen items-center justify-center bg-slate-50 font-sans">
         <div className="flex flex-col items-center gap-4">
             <div className="w-12 h-12 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin"></div>
             <p className="text-slate-500 font-bold animate-pulse tracking-widest uppercase text-sm">Verifying Secure Session</p>
         </div>
       </div>
-    );
-  }
-
-  // PUBLIC ROUTES
-  if (!hasToken) {
-    return isPublicApp ? (
-      <PublicApplication onBackToLogin={() => setIsPublicApp(false)} />
+    ) : !hasToken ? (
+      <PageTransition pageKey={isPublicApp ? 'apply' : 'login'}>
+        {isPublicApp ? (
+          <PublicApplication onBackToLogin={() => setIsPublicApp(false)} />
+        ) : (
+          <Login
+            onLoginSuccess={handleLoginSuccess}
+            onNavigateToApply={() => setIsPublicApp(true)}
+          />
+        )}
+      </PageTransition>
+    ) : userRole === 'Student' ? (
+      <StudentDashboard onLogout={handleLogout} />
     ) : (
-      <Login 
-        onLoginSuccess={handleLoginSuccess} 
-        onNavigateToApply={() => setIsPublicApp(true)} 
-      />
-    );
-  }
-
-  // STUDENT LAYOUT
-  if (userRole === 'Student') {
-    return (
-      <>
-        <StudentDashboard onLogout={handleLogout} />
-
-      {mustChangePassword && (
-        <ForcePasswordChange onChanged={() => {
-          setMustChangePassword(false);
-          setPasswordToast('Your password has been updated.');
-        }} />
-      )}
-      <Toast message={passwordToast} type="success" onClose={() => setPasswordToast(null)} />
-      </>
-    );
-  }
-
-  // ADMIN / SUPERVISOR / WSPO STAFF LAYOUT
-  const canManageUsers = userRole === 'Super Admin' || userRole === 'WSPO Staff';
-  const currentPath = firstPathSegment(location.pathname) || 'dashboard';
-
-  return (
-    <>
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans selection:bg-blue-200 selection:text-blue-900 print:h-auto print:overflow-visible print:bg-white">
       
       <Sidebar 
@@ -226,9 +260,18 @@ function App() {
             >
               <Menu className="w-6 h-6" />
             </button>
-            <h2 className="text-xl font-black text-slate-800 capitalize tracking-tight hidden sm:block">
-              {currentPath === 'financial' ? 'Hours Rendered' : currentPath.replace('-', ' ')}
-            </h2>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.h2
+                key={currentPath}
+                initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reduceMotion ? { opacity: 1 } : { opacity: 0, y: -6 }}
+                transition={{ duration: reduceMotion ? 0 : 0.22, ease: pageEase }}
+                className="text-xl font-black text-slate-800 capitalize tracking-tight hidden sm:block"
+              >
+                {currentPath === 'financial' ? 'Hours Rendered' : currentPath.replace('-', ' ')}
+              </motion.h2>
+            </AnimatePresence>
           </div>
 
           <div className="flex items-center gap-5">
@@ -262,17 +305,17 @@ function App() {
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-[0.02] pointer-events-none z-0 print:hidden"></div>
           
           <div className="relative z-10">
-            <PageErrorBoundary key={location.pathname}>
-            <AnimatePresence mode="wait">
-              <Routes>
+            <PageTransition pageKey={location.pathname}>
+            <PageErrorBoundary>
+              <Routes location={location}>
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<AdminDashboard />} />
-                <Route path="/attendance" element={<AttendanceMonitor userRole={userRole} />} />
+                <Route path="/attendance" element={userRole === 'Super Admin' ? <SuperAdminTimesheets /> : <AttendanceMonitor userRole={userRole} />} />
                 <Route path="/schedules" element={<ScheduleManagement />} />
                 <Route path="/requirements" element={<RequirementManagement />} />
                 <Route path="/pipeline" element={<ApplicationManager />} />
                 <Route path="/tasks" element={<TaskAssignmentManager />} />
-                <Route path="/attendance-hub" element={<SupervisorAttendanceHub />} />
+                <Route path="/attendance-hub" element={userRole === 'Super Admin' ? <SuperAdminAttendanceAudit /> : <SupervisorAttendanceHub />} />
                 <Route path="/compliance" element={<DisciplinaryManager />} />
                 
                 {canManageUsers && (
@@ -297,21 +340,22 @@ function App() {
                 />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Routes>
-            </AnimatePresence>
             </PageErrorBoundary>
+            </PageTransition>
           </div>
         </main>
       </div>
     </div>
-
-      {mustChangePassword && (
-        <ForcePasswordChange onChanged={() => {
-          setMustChangePassword(false);
-          setPasswordToast('Your password has been updated.');
-        }} />
-      )}
-      <Toast message={passwordToast} type="success" onClose={() => setPasswordToast(null)} />
-    </>
+    )}
+    {hasToken && mustChangePassword && (
+      <ForcePasswordChange onChanged={() => {
+        setMustChangePassword(false);
+        setPasswordToast('Your password has been updated.');
+      }} />
+    )}
+    <Toast message={passwordToast} type="success" onClose={() => setPasswordToast(null)} />
+    </motion.div>
+    </AnimatePresence>
   );
 
 }

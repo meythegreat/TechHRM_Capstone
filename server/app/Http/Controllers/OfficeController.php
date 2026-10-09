@@ -6,6 +6,7 @@ use App\Models\Application;
 use App\Models\Office;
 use App\Models\StaffingRequest;
 use App\Models\StudentPerformanceReview;
+use App\Models\User;
 use App\Models\UserProfile;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -49,6 +50,64 @@ class OfficeController extends Controller
         });
 
         return response()->json($offices);
+    }
+
+    public function breakdown(Office $office)
+    {
+        $name = $office->name;
+
+        $students = User::with('profile:id,user_id,assigned_office,student_id_number,course,year_level')
+            ->where('role', 'Student')
+            ->whereHas('profile', fn ($query) => $query->where('assigned_office', $name))
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (User $user) => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'student_id_number' => $user->profile->student_id_number ?? null,
+                'course' => $user->profile->course ?? null,
+                'year_level' => $user->profile->year_level ?? null,
+            ])
+            ->values();
+
+        $supervisors = User::with('profile:id,user_id,assigned_office,supervised_departments')
+            ->where('role', 'Supervisor')
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->filter(function (User $user) use ($name) {
+                $departments = is_array($user->profile?->supervised_departments) ? $user->profile->supervised_departments : [];
+                if ($departments === [] && $user->profile?->assigned_office) {
+                    $departments = [$user->profile->assigned_office];
+                }
+                return in_array($name, array_map('strval', $departments), true);
+            })
+            ->map(fn (User $user) => [
+                'id' => $user->id,
+                'name' => $user->name,
+            ])
+            ->values();
+
+        $requests = StaffingRequest::with('requester:id,name')
+            ->where('department', $name)
+            ->latest()
+            ->get()
+            ->map(fn (StaffingRequest $item) => [
+                'id' => $item->id,
+                'duty_type' => $item->duty_type,
+                'duty_request' => $item->duty_request,
+                'quantity' => $item->quantity,
+                'status' => $item->status,
+                'requester' => $item->requester?->name,
+                'created_at' => $item->created_at,
+            ])
+            ->values();
+
+        return response()->json([
+            'office' => $name,
+            'supervisors' => $supervisors,
+            'students' => $students,
+            'requests' => $requests,
+        ]);
     }
 
     public function store(Request $request)

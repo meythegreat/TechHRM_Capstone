@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { motion } from 'framer-motion';
-import { UserCircle, ShieldCheck, Camera, Eye, EyeOff, CheckCircle2, AlertCircle } from 'lucide-react';
+import Toast from './Toast';
+import { UserCircle, ShieldCheck, Camera, Eye, EyeOff } from 'lucide-react';
 import SecureImage from './SecureImage';
 import { normalizeFilePath } from '../utils/secureFile';
 
@@ -48,7 +49,6 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
 
     const showFeedback = (text: string, type: 'success' | 'error') => {
         setMessage({ text, type });
-        setTimeout(() => setMessage(null), 4000);
     };
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -143,12 +143,11 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
                 </div>
             </motion.div>
 
-            {message && (
-                <div className={`p-4 rounded-xl border flex items-center gap-3 ${message.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-red-50 border-red-100 text-red-800'}`}>
-                    {message.type === 'success' ? <CheckCircle2 className="w-5 h-5 shrink-0" /> : <AlertCircle className="w-5 h-5 shrink-0" />}
-                    <span className="text-sm font-bold">{message.text}</span>
-                </div>
-            )}
+            <Toast
+                message={message?.text ?? null}
+                type={message?.type}
+                onClose={() => setMessage(null)}
+            />
 
             <form onSubmit={handleSave} className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200 space-y-8">
                 <div className="flex flex-col md:flex-row gap-10 items-start">

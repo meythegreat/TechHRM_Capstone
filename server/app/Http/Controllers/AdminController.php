@@ -44,4 +44,38 @@ class AdminController extends Controller
             'recent_activity' => $recentActivity
         ]);
     }
+
+    public function enrolledRoster()
+    {
+        $students = User::with('profile')
+            ->where('role', 'Student')
+            ->orderBy('name')
+            ->get()
+            ->groupBy(fn (User $user) => $user->profile?->assigned_office ?: 'Unassigned')
+            ->sortKeys();
+
+        return response()->json($students->map(function ($group, $office) {
+            return [
+                'office' => $office,
+                'students' => $group->map(fn (User $user) => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'student_id_number' => $user->profile?->student_id_number,
+                    'course' => $user->profile?->course,
+                    'year_level' => $user->profile?->year_level,
+                ])->values(),
+            ];
+        })->values());
+    }
+
+    public function activeNow()
+    {
+        $rows = Attendance::query()
+            ->visibleTo('Super Admin')
+            ->whereNull('time_out')
+            ->orderByDesc('time_in')
+            ->get();
+
+        return response()->json($rows);
+    }
 }

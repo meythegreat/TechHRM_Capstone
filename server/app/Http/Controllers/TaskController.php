@@ -108,7 +108,7 @@ class TaskController extends Controller
 
     public function verifyTask(Request $request, $id)
     {
-        abort_unless(in_array($request->user()->role, ['WSPO Staff', 'Super Admin'], true), 403);
+        abort_unless($request->user()->role === 'WSPO Staff', 403, 'Super Admin access is read-only.');
         $task = Task::where('status', 'For Verification')->findOrFail($id);
 
         $request->validate([

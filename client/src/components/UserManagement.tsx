@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
+import Toast from "./Toast";
 import {
     Users,
     UserPlus,
@@ -107,7 +108,9 @@ const UserManagement = () => {
       .catch(() => setDepartmentSupervisors({}));
     axios.get('/api/offices')
       .then((response) => {
-        const names = Array.isArray(response.data) ? response.data.map((office: { name?: string }) => office.name).filter(Boolean) : [];
+        const names = Array.isArray(response.data)
+          ? response.data.map((office: { name?: string }) => office.name).filter((name): name is string => Boolean(name))
+          : [];
         setUniversityOffices(names);
       })
       .catch(() => setUniversityOffices([]));
@@ -126,7 +129,6 @@ const UserManagement = () => {
 
   const showToast = (text: string, type: "success" | "error") => {
     setToastMsg({ text, type });
-    setTimeout(() => setToastMsg(null), 3000);
   };
 
   const fetchUsers = async (page: number, search: string = searchQuery) => {
@@ -407,15 +409,11 @@ const UserManagement = () => {
         )}
       </motion.div>
 
-      {/* TOASTS */}
-      <AnimatePresence>
-          {toastMsg && (
-              <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className={`p-4 rounded-xl border flex items-center gap-3 shadow-sm ${toastMsg.type === 'success' ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
-                  {toastMsg.type === 'success' ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" /> : <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />}
-                  <span className={`text-sm font-bold ${toastMsg.type === 'success' ? 'text-emerald-800' : 'text-red-800'}`}>{toastMsg.text}</span>
-              </motion.div>
-          )}
-      </AnimatePresence>
+      <Toast
+          message={toastMsg?.text ?? null}
+          type={toastMsg?.type}
+          onClose={() => setToastMsg(null)}
+      />
 
       {/* MAIN TABLE */}
       <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative min-h-[400px]">

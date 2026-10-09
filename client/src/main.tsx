@@ -4,6 +4,11 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
 import axios from 'axios'
 import './index.css'
+import { scheduleThemeSync } from './theme'
+import { armSounds } from './sounds'
+
+scheduleThemeSync()
+armSounds()
 
 // In dev, Vite proxies /api to Laravel (see vite.config.ts) — avoids CORS issues.
 axios.defaults.baseURL = import.meta.env.DEV ? '' : 'http://localhost:8000'
