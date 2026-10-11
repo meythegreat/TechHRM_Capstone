@@ -60,10 +60,10 @@ class DashboardController extends Controller
                 $q->whereIn('action', ['System Login', 'System Logout'])
                     ->orWhere('action', 'not like', '%Attendance%');
             })
-            ->with(['admin:id,name,role', 'admin.profile']);
+            ->with(['admin:id,name,role,profile_picture', 'admin.profile']);
 
         $recentAttendanceQuery = (clone $attendanceQuery)
-            ->with(['user:id,name,role', 'user.profile'])
+            ->with(['user:id,name,role,profile_picture', 'user.profile'])
             ->whereHas('user', function ($q) {
                 $q->where('role', 'Student');
             });
@@ -88,6 +88,7 @@ class DashboardController extends Controller
                 return [
                     'id' => 'log-'.$log->id,
                     'student_name' => $log->admin_name ?: ($log->admin?->name ?? 'Student'),
+                    'profile_picture' => $log->admin?->profile_picture,
                     'action' => $log->action,
                     'description' => $log->description,
                     'office' => $log->admin?->profile?->assigned_office,
@@ -105,6 +106,7 @@ class DashboardController extends Controller
                 return [
                     'id' => 'attendance-'.$record->id.'-'.($clockedOut ? 'out' : 'in'),
                     'student_name' => $record->user?->name ?? 'Student',
+                    'profile_picture' => $record->user?->profile_picture,
                     'action' => $clockedOut ? 'Clocked Out' : 'Clocked In',
                     'description' => $clockedOut
                         ? 'clocked out of their shift.'
@@ -144,6 +146,7 @@ class DashboardController extends Controller
                     return [
                         'id' => $student->id,
                         'name' => $student->name,
+                        'profile_picture' => $student->profile_picture,
                         'phone_number' => $student->phone_number,
                         'student_id_number' => $profile?->student_id_number,
                         'course' => $profile?->course,

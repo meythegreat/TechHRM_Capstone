@@ -17,9 +17,9 @@ export default function PageTransition({ pageKey, children, className = '' }: Pa
       <motion.div
         key={pageKey}
         className={className}
-        initial={reduceMotion ? false : { opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={reduceMotion ? { opacity: 1 } : { opacity: 0, y: -6 }}
+        initial={reduceMotion ? false : { opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={reduceMotion ? { opacity: 1 } : { opacity: 0 }}
         transition={{ duration: reduceMotion ? 0 : 0.28, ease }}
       >
         {children}

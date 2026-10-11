@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import Toast from './Toast';
@@ -13,19 +14,24 @@ import {
     AlertCircle,
     CheckCircle2,
     Wifi,
-    X
+    X,
+    UserPlus
 } from 'lucide-react';
+import { REALTIME_EVENT } from '../utils/realtime';
+import { bindPopup } from '../utils/popupDismiss';
+import UserAvatar from './UserAvatar';
 
 interface EnrolledOffice {
     office: string;
-    students: { id: number; name: string; student_id_number?: string | null; course?: string | null }[];
+    students: { id: number; name: string; profile_picture?: string | null; student_id_number?: string | null; course?: string | null }[];
 }
 
 interface ActiveStudent {
     id: number;
     time_in: string;
-    user?: {
+        user?: {
         name?: string;
+        profile_picture?: string | null;
         profile?: { assigned_office?: string | null; student_id_number?: string | null } | null;
     } | null;
 }
@@ -39,8 +45,17 @@ interface DashboardStats {
     recent_activity: any[];
 }
 
+interface LiveNotice {
+    id: number;
+    title: string;
+    message: string;
+    is_read: number | boolean;
+}
+
 const SuperAdminDashboard = () => {
+    const navigate = useNavigate();
     const [stats, setStats] = useState<DashboardStats | null>(null);
+    const [notices, setNotices] = useState<LiveNotice[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [enrolledOpen, setEnrolledOpen] = useState(false);
@@ -77,11 +92,83 @@ const SuperAdminDashboard = () => {
         }
     };
 
+    const fetchNotices = async () => {
+        try {
+            const response = await axios.get('/api/notifications');
+            const rows: LiveNotice[] = Array.isArray(response.data) ? response.data : [];
+            setNotices(rows.filter((notice) => !notice.is_read).slice(0, 5));
+        } catch (err) {
+            console.error('Failed to load notifications', err);
+        }
+    };
+
+    const openNotice = async (notice: LiveNotice) => {
+        setNotices((current) => current.filter((item) => item.id !== notice.id));
+        try {
+            await axios.patch(`/api/notifications/${notice.id}/read`);
+        } catch (err) {
+            console.error('Failed to mark notification as read', err);
+        }
+        if (notice.title.includes('Signup') || notice.title.includes('Application')) {
+            navigate('/pipeline');
+        } else if (notice.title.includes('Account')) {
+            navigate('/users');
+        }
+    };
+
+    const markNoticeRead = async (id: number) => {
+        setNotices((current) => current.filter((item) => item.id !== id));
+        try {
+            await axios.patch(`/api/notifications/${id}/read`);
+        } catch (err) {
+            console.error('Failed to mark notification as read', err);
+            fetchNotices();
+        }
+    };
+
+    const deleteNotice = async (id: number) => {
+        setNotices((current) => current.filter((item) => item.id !== id));
+        try {
+            await axios.delete(`/api/notifications/${id}`);
+        } catch (err) {
+            console.error('Failed to delete notification', err);
+            fetchNotices();
+        }
+    };
+
+    const markAllNoticesRead = async () => {
+        setNotices([]);
+        try {
+            await axios.patch('/api/notifications/read-all');
+        } catch (err) {
+            console.error('Failed to mark all notifications as read', err);
+            fetchNotices();
+        }
+    };
+
+    const clearAllNotices = async () => {
+        if (!window.confirm('Clear all notifications? This deletes every notification.')) return;
+        setNotices([]);
+        try {
+            await axios.delete('/api/notifications');
+        } catch (err) {
+            console.error('Failed to clear notifications', err);
+            fetchNotices();
+        }
+    };
+
     useEffect(() => {
-        fetchStats();
-        // Auto-refresh every 30 seconds for a true "Live" dashboard feel
-        const interval = setInterval(fetchStats, 30000);
-        return () => clearInterval(interval);
+        const refresh = () => {
+            fetchStats();
+            fetchNotices();
+        };
+        refresh();
+        const interval = setInterval(refresh, 5000);
+        window.addEventListener(REALTIME_EVENT, refresh);
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener(REALTIME_EVENT, refresh);
+        };
     }, []);
 
     const fetchStats = async () => {
@@ -177,6 +264,36 @@ const SuperAdminDashboard = () => {
                     </div>
                 </div>
             </motion.div>
+
+            {notices.length > 0 && (
+                <div className="bg-white rounded-3xl shadow-sm border border-purple-200 overflow-hidden">
+                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                        <h2 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                            <UserPlus className="w-4 h-4 text-purple-600" />
+                            Live notifications
+                        </h2>
+                        <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
+                            <button type="button" onClick={() => void markAllNoticesRead()} className="text-[10px] font-bold uppercase tracking-wider text-blue-700">Mark all read</button>
+                            <button type="button" onClick={() => void clearAllNotices()} className="text-[10px] font-bold uppercase tracking-wider text-rose-600">Clear all</button>
+                            <span className="text-[10px] font-extrabold text-purple-700 bg-purple-100 px-2 py-1 rounded-full uppercase tracking-wider">{notices.length} new</span>
+                        </div>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                        {notices.map((notice) => (
+                            <div key={notice.id} className="px-6 py-4 hover:bg-purple-50/60 transition-colors">
+                                <button type="button" onClick={() => void openNotice(notice)} className="w-full text-left">
+                                    <p className="text-sm font-bold text-slate-900">{notice.title}</p>
+                                    <p className="text-xs font-medium text-slate-600 mt-1">{notice.message}</p>
+                                </button>
+                                <div className="mt-2 flex items-center gap-3">
+                                    <button type="button" onClick={() => void markNoticeRead(notice.id)} className="text-[10px] font-bold uppercase tracking-wider text-blue-700">Mark read</button>
+                                    <button type="button" onClick={() => void deleteNotice(notice.id)} className="text-[10px] font-bold uppercase tracking-wider text-rose-600">Delete</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             <Toast
                 message={error ? `Telemetry Disconnected: ${error}` : null}
@@ -315,9 +432,11 @@ const SuperAdminDashboard = () => {
                                             key={record.id} 
                                             className="p-5 flex items-center gap-4 hover:bg-white transition-colors group"
                                         >
-                                            <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-600 flex items-center justify-center font-black border border-slate-200 shadow-inner group-hover:scale-105 transition-transform">
-                                                {record.user?.name?.charAt(0) || '?'}
-                                            </div>
+                                            <UserAvatar
+                                                name={record.user?.name}
+                                                picture={record.user?.profile_picture}
+                                                className="w-12 h-12 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-base group-hover:scale-105 transition-transform"
+                                            />
                                             <div className="flex-1">
                                                 <p className="text-sm font-black text-slate-900 leading-tight group-hover:text-blue-700 transition-colors">
                                                     {record.user?.name || 'Unknown User'}
@@ -360,8 +479,8 @@ const SuperAdminDashboard = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4"
-                        onClick={() => { setEnrolledOpen(false); setActiveOpen(false); }}
+                        className="fixed inset-0 z-[80] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4"
+                        {...bindPopup(() => { setEnrolledOpen(false); setActiveOpen(false); })}
                     >
                         <motion.div
                             initial={{ scale: 0.96, y: 12 }}
@@ -392,7 +511,10 @@ const SuperAdminDashboard = () => {
                                             <ul className="divide-y divide-slate-100 border border-slate-100 rounded-2xl">
                                                 {group.students.map((student) => (
                                                     <li key={student.id} className="px-4 py-3 flex items-center justify-between gap-3">
-                                                        <span className="font-bold text-slate-900 text-sm">{student.name}</span>
+                                                        <span className="font-bold text-slate-900 text-sm flex items-center gap-3">
+                                                            <UserAvatar name={student.name} picture={student.profile_picture} className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs" />
+                                                            {student.name}
+                                                        </span>
                                                         <span className="text-xs font-medium text-slate-500">{student.student_id_number || student.course || '—'}</span>
                                                     </li>
                                                 ))}
@@ -405,9 +527,12 @@ const SuperAdminDashboard = () => {
                                     <ul className="divide-y divide-slate-100 border border-slate-100 rounded-2xl">
                                         {activeStudents.map((record) => (
                                             <li key={record.id} className="px-4 py-3 flex items-center justify-between gap-3">
-                                                <div>
+                                                <div className="flex items-center gap-3">
+                                                    <UserAvatar name={record.user?.name} picture={record.user?.profile_picture} className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs" />
+                                                    <div>
                                                     <p className="font-bold text-slate-900 text-sm">{record.user?.name || 'Unknown'}</p>
                                                     <p className="text-xs text-slate-500">{record.user?.profile?.assigned_office || 'Unassigned'}</p>
+                                                    </div>
                                                 </div>
                                                 <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-md">
                                                     In {formatTime(record.time_in)}

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ApplicationDocument;
 use App\Models\Requirement;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -68,7 +69,11 @@ class SecureFileController extends Controller
     private function userCanAccess($user, string $path): bool
     {
         if (str_starts_with($path, 'avatars/')) {
-            return $user->profile_picture === $path;
+            if ($user->profile_picture === $path) {
+                return true;
+            }
+
+            return User::withTrashed()->where('profile_picture', $path)->exists();
         }
 
         if (str_starts_with($path, 'requirements/')) {

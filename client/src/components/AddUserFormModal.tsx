@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { FC, FormEvent } from 'react';
 import axios from 'axios';
+import { bindPopup } from '../utils/popupDismiss';
 
 interface AddUserFormModalProps {
     isOpen: boolean;
@@ -70,7 +71,7 @@ const AddUserFormModal: FC<AddUserFormModalProps> = ({ isOpen, onClose, onSucces
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden overflow-y-auto bg-gray-900/50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-x-hidden overflow-y-auto bg-gray-900/50 backdrop-blur-sm" {...bindPopup(onClose)}>
             <div className="relative w-full max-w-md p-6 mx-auto bg-white rounded-2xl shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto">
                 <div className="flex items-center justify-between mb-5">
                     <h3 className="text-xl font-bold text-gray-900">Add New User</h3>

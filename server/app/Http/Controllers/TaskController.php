@@ -12,11 +12,11 @@ class TaskController extends Controller
         $user = $request->user();
         if ($user->role === 'Super Admin') {
             $query = Task::with([
-                'student' => fn ($relation) => $relation->withTrashed()->select('id', 'name', 'deleted_at'),
-                'supervisor:id,name',
+                'student' => fn ($relation) => $relation->withTrashed()->select('id', 'name', 'profile_picture', 'deleted_at'),
+                'supervisor:id,name,profile_picture',
             ]);
         } else {
-            $query = Task::with(['student:id,name', 'supervisor:id,name'])->whereHas('student');
+            $query = Task::with(['student:id,name,profile_picture', 'supervisor:id,name,profile_picture'])->whereHas('student');
         }
 
         if ($user->role === 'Student') {

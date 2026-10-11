@@ -20,12 +20,12 @@ class DisciplinaryController extends Controller
     {
         if ($request->user()->role === 'Super Admin') {
             $query = DisciplinaryRecord::with([
-                'student' => fn ($relation) => $relation->withTrashed()->select('id', 'name', 'deleted_at')->with('profile:id,user_id,assigned_office'),
-                'issuer:id,name',
-                'reporter:id,name',
+                'student' => fn ($relation) => $relation->withTrashed()->select('id', 'name', 'profile_picture', 'deleted_at')->with('profile:id,user_id,assigned_office'),
+                'issuer:id,name,profile_picture',
+                'reporter:id,name,profile_picture',
             ]);
         } else {
-            $query = DisciplinaryRecord::with(['student:id,name', 'issuer:id,name', 'reporter:id,name'])
+            $query = DisciplinaryRecord::with(['student:id,name,profile_picture', 'issuer:id,name,profile_picture', 'reporter:id,name,profile_picture'])
                 ->whereHas('student');
         }
 

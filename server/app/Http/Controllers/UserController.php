@@ -7,6 +7,8 @@ use App\Models\Office;
 use App\Models\User;
 use App\Models\UserProfile;
 use App\Services\DepartmentAssignmentNotifier;
+use App\Services\StaffNotifier;
+use App\Support\AccountLogin;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -37,6 +39,7 @@ class UserController extends Controller
                 // Search main User table
                 $q->where('name', 'LIKE', "%{$searchTerm}%")
                   ->orWhere('username', 'LIKE', "%{$searchTerm}%")
+                  ->orWhere('email', 'LIKE', "%{$searchTerm}%")
                   ->orWhere('role', 'LIKE', "%{$searchTerm}%")
                   // Search related Profile table
                   ->orWhereHas('profile', function($profileQuery) use ($searchTerm) {
@@ -362,7 +365,8 @@ class UserController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'username' => ['required', 'string', 'max:255', Rule::unique('users', 'username')->whereNull('deleted_at')],
+            'username' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255'],
             'password' => 'required|string|min:6',
             'role' => 'required|string',
             'phone_number' => 'nullable|string',
@@ -372,6 +376,8 @@ class UserController extends Controller
 
         $this->abortUnlessWspoMayManageAccount($request, null, $request->input('role'));
         $this->abortIfUserAlreadyExists($request);
+        $this->assertLoginIdentityAvailable($validated['username'], $validated['email']);
+        $validated['email'] = strtolower(trim($validated['email']));
         $this->assertStudentAccountProfile($request);
         $request->validate(['gender' => 'nullable|in:Male,Female']);
         $validated['password'] = bcrypt($validated['password']);
@@ -383,6 +389,12 @@ class UserController extends Controller
         }
 
         $this->notifySupervisorsIfStudentPlaced($user->load('profile'));
+
+        app(StaffNotifier::class)->notify(
+            'New Account',
+            "{$user->name} was added as {$user->role}.",
+            array_values(array_filter([(int) $request->user()->id, (int) $user->id]))
+        );
 
         return response()->json(['message' => 'User created successfully', 'user' => $user]);
     }
@@ -399,7 +411,8 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             // The management edit form does not expose login IDs. Keep the
             // current username unless an API client explicitly sends a new one.
-            'username' => ['sometimes', 'required', 'string', 'max:255', Rule::unique('users', 'username')->ignore($id)->whereNull('deleted_at')],
+            'username' => ['sometimes', 'required', 'string', 'max:255'],
+            'email' => ['sometimes', 'nullable', 'string', 'email', 'max:255'],
             'role' => 'required|string',
             'phone_number' => 'nullable|string',
             'duty_type' => 'nullable|in:Clerical,Janitorial,Request',
@@ -413,6 +426,12 @@ class UserController extends Controller
         $request->validate(['gender' => 'nullable|in:Male,Female']);
         $this->assertStudentAccountProfile($request, $user->id);
         $this->abortIfUserAlreadyExists($request, $user->id);
+        $loginUsername = $validated['username'] ?? $user->username;
+        $loginEmail = array_key_exists('email', $validated) ? $validated['email'] : $user->email;
+        $this->assertLoginIdentityAvailable($loginUsername, $loginEmail, (int) $user->id);
+        if (array_key_exists('email', $validated)) {
+            $validated['email'] = $loginEmail ? strtolower(trim((string) $loginEmail)) : null;
+        }
         $this->ensureOfficeIsAllowed($request);
         $previousOffice = trim((string) $user->profile?->assigned_office);
         $user->update($validated);
@@ -550,6 +569,22 @@ class UserController extends Controller
             if ($idQuery->exists()) {
                 abort(422, 'A user with this student ID already exists.');
             }
+        }
+    }
+
+    private function assertLoginIdentityAvailable(string $username, ?string $email, ?int $ignoreUserId = null): void
+    {
+        if (AccountLogin::identifierTaken($username, $ignoreUserId)) {
+            abort(422, 'This username is already used by another account.');
+        }
+
+        $email = strtolower(trim((string) $email));
+        if ($email === '') {
+            return;
+        }
+
+        if (AccountLogin::identifierTaken($email, $ignoreUserId)) {
+            abort(422, 'This email is already used by another account.');
         }
     }
 

@@ -18,7 +18,9 @@ import {
 
 // Keep your original import path for the SuperAdmin redirect
 import SuperAdminDashboard from '../../components/SuperAdminDashboard';
+import { bindPopup } from '../../utils/popupDismiss';
 import { REALTIME_EVENT } from '../../utils/realtime';
+import UserAvatar from '../../components/UserAvatar';
 import { formatYearLevel, homeDepartment } from '../../utils/studentAssignment';
 
 const AdminDashboard = () => {
@@ -39,6 +41,7 @@ const AdminDashboard = () => {
     type AssignedStudent = {
         id: number;
         name: string;
+        profile_picture?: string | null;
         phone_number?: string | null;
         student_id_number?: string | null;
         course?: string | null;
@@ -56,6 +59,7 @@ const AdminDashboard = () => {
         recentStudentActivity: [] as {
             id: number | string;
             student_name: string;
+            profile_picture?: string | null;
             action: string;
             description: string;
             office?: string | null;
@@ -343,7 +347,9 @@ const AdminDashboard = () => {
                                 const yearLabel = formatYearLevel(student.year_level);
                                 return (
                                 <div key={student.id} className="p-5 sm:px-8 flex items-center justify-between gap-4">
-                                    <div className="min-w-0">
+                                    <div className="min-w-0 flex items-center gap-3">
+                                        <UserAvatar name={student.name} picture={student.profile_picture} className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-sm" />
+                                        <div className="min-w-0">
                                         <p className="font-black text-slate-900 truncate">{student.name}</p>
                                         {(yearLabel || homeCollege) && (
                                             <div className="mt-1 flex flex-wrap items-center gap-1.5">
@@ -365,6 +371,7 @@ const AdminDashboard = () => {
                                         <p className="text-xs font-medium text-slate-500 mt-1 truncate">
                                             {student.assigned_office || 'Department'} · {dutyLabel(student)}
                                         </p>
+                                        </div>
                                     </div>
                                     <button
                                         type="button"
@@ -417,6 +424,7 @@ const AdminDashboard = () => {
                             const isLogin = action.includes('login') || action.includes('clocked in');
                             return (
                                 <div key={item.id} className="p-5 sm:px-8 flex items-center gap-4 hover:bg-slate-50/80 transition-colors">
+                                    <UserAvatar name={item.student_name} picture={item.profile_picture} className="w-11 h-11 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-sm" />
                                     <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border ${
                                         isLogout
                                             ? 'bg-rose-50 text-rose-600 border-rose-100'
@@ -455,7 +463,7 @@ const AdminDashboard = () => {
             </motion.div>
 
             {selectedStudent && (
-                <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4" onClick={() => setSelectedStudent(null)}>
+                <div className="fixed inset-0 z-[80] bg-slate-900/50 flex items-center justify-center p-4" {...bindPopup(() => setSelectedStudent(null))}>
                     <div className="bg-white rounded-3xl shadow-xl w-full max-w-lg overflow-hidden" onClick={(event) => event.stopPropagation()}>
                         <div className="p-6 border-b border-slate-100 flex items-start justify-between gap-4">
                             <div>

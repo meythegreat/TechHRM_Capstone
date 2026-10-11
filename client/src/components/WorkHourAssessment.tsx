@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calculator } from 'lucide-react';
 import { financialService } from '../services/financialService';
+import { bindPopup } from '../utils/popupDismiss';
 
 export const WorkHourAssessment = () => {
   const [records, setRecords] = useState<any[]>([]);
@@ -95,7 +96,7 @@ export const WorkHourAssessment = () => {
       </div>
 
       {showCompute && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] flex items-center justify-center p-4" {...bindPopup(() => setShowCompute(false))}>
           <form onSubmit={handleCompute} className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md space-y-6">
             <h3 className="text-xl font-black text-slate-900">Compute Work Hours</h3>
             <input name="start" type="date" required className="w-full p-3 bg-slate-50 border rounded-xl" />

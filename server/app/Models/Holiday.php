@@ -9,12 +9,14 @@ class Holiday extends Model
 {
     protected $fillable = [
         'date',
+        'end_date',
         'name',
         'created_by',
     ];
 
     protected $casts = [
         'date' => 'date',
+        'end_date' => 'date',
     ];
 
     public function creator(): BelongsTo

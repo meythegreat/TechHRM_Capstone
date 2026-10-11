@@ -17,7 +17,8 @@ class FinancialController extends Controller
 
     public function index(Request $request)
     {
-        $records = FinancialRecord::with('student:id,name')->orderByDesc('period_start')->get();
+        $records = FinancialRecord::with('student:id,name,profile_picture')->orderByDesc('period_start')->get();
+        $this->refreshOpenCoverages($records);
         $stats = [
             'total_equivalent_value' => (float) FinancialRecord::whereIn('status', ['Approved', 'Locked', 'Forwarded to Finance'])->sum('equivalent_total_amount'),
             'pending_drafts' => FinancialRecord::where('status', 'Draft')->count(),
@@ -139,7 +140,7 @@ class FinancialController extends Controller
 
         return response()->json([
             'message' => 'Hours rendered updated.',
-            'record' => $record->load('student:id,name'),
+            'record' => $record->load('student:id,name,profile_picture'),
         ]);
     }
 
@@ -158,6 +159,7 @@ class FinancialController extends Controller
         $history = FinancialRecord::where('user_id', $user->id)
             ->orderByDesc('period_start')
             ->get();
+        $this->refreshOpenCoverages($history);
 
         $latest = $history->first();
         if ($latest) {
@@ -197,7 +199,8 @@ class FinancialController extends Controller
 
     public function exportCsv(Request $request)
     {
-        $records = FinancialRecord::with('student:id,name')->orderByDesc('period_start')->get();
+        $records = FinancialRecord::with('student:id,name,profile_picture')->orderByDesc('period_start')->get();
+        $this->refreshOpenCoverages($records);
         $filename = 'hours_rendered_' . date('Y-m-d') . '.csv';
         $headers = [
             'Content-type' => 'text/csv',
@@ -241,6 +244,36 @@ class FinancialController extends Controller
         };
 
         return response()->stream($callback, 200, $headers);
+    }
+
+    private function refreshOpenCoverages($records): void
+    {
+        foreach ($records as $record) {
+            if (!in_array($record->status, ['Draft', 'Approved'], true)) {
+                continue;
+            }
+
+            $start = Carbon::parse($record->period_start)->startOfDay();
+            $end = Carbon::parse($record->period_end)->endOfDay();
+            $hours = round($this->verifiedHours($record->user_id, $start, $end, $record->id, true), 2);
+            $penalty = $this->penaltyAmount(
+                $record->user_id,
+                $start->toDateString(),
+                $end->toDateString(),
+                (float) $record->hourly_rate,
+                $hours
+            );
+
+            if (abs((float) $record->total_hours_rendered - $hours) < 0.001
+                && abs((float) $record->penalty_deductions - $penalty['amount']) < 0.001) {
+                continue;
+            }
+
+            $record->total_hours_rendered = $hours;
+            $record->penalty_deductions = $penalty['amount'];
+            $record->recalculate();
+            $record->save();
+        }
     }
 
     private function verifiedHours(int $userId, Carbon $start, Carbon $end, ?int $exceptRecordId = null, bool $respectEarlierCoverages = false): float

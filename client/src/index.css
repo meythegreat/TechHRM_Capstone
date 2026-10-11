@@ -73,6 +73,10 @@
     background-color: #141c2e;
   }
 
+  html.dark .group:hover .group-hover\:bg-white {
+    background-color: #141c2e;
+  }
+
   /* The official DTR is a paper form and stays light in dark mode. */
   html.dark .dtr-sheet.bg-white,
   html.dark .dtr-paper.bg-white {
@@ -81,10 +85,21 @@
     color-scheme: light;
   }
 
+  html.dark .bg-white\/95 { background-color: rgb(20 28 46 / 0.95); }
+  html.dark .bg-white\/90 { background-color: rgb(20 28 46 / 0.92); }
   html.dark .bg-white\/80 { background-color: rgb(20 28 46 / 0.88); }
   html.dark .bg-white\/70 { background-color: rgb(20 28 46 / 0.8); }
   html.dark .bg-white\/60 { background-color: rgb(20 28 46 / 0.72); }
   html.dark .bg-white\/50 { background-color: rgb(20 28 46 / 0.62); }
+
+  /* Sidebar wordmark uses a dark gradient; flip the stops so it stays readable. */
+  html.dark .from-slate-900 {
+    --tw-gradient-from: #f8fafc;
+  }
+
+  html.dark .to-slate-700 {
+    --tw-gradient-to: #cbd5e1;
+  }
 
   html.dark .bg-slate-900 { background-color: #10284a; }
   html.dark .bg-slate-800 { background-color: #163056; }

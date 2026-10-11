@@ -5,11 +5,13 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import PageTransition from './components/PageTransition';
 import { Menu, ShieldCheck } from 'lucide-react';
 import { FinancialManagement } from './components/FinancialManagement';
+import { REALTIME_EVENT } from './utils/realtime';
 
 import Login from './components/Login';
 import ForcePasswordChange from './components/ForcePasswordChange';
 import Toast from './components/Toast';
 import PublicApplication from './components/PublicApplication';
+import ApplicationStatusLookup from './components/ApplicationStatusLookup';
 import UserManagement from './components/UserManagement';
 import ActivityLogs from './components/ActivityLogs';
 import StudentDashboard from './components/StudentDashboard';
@@ -49,6 +51,7 @@ const STUDENT_PAGE_TITLES: Record<string, string> = {
   schedule: 'My Schedule',
   requirements: 'Requirements',
   disciplinary: 'Disciplinary Records',
+  application: 'Application Status',
   settings: 'Settings',
 };
 import ApplicationManager from './components/ApplicationManager';
@@ -92,7 +95,7 @@ class PageErrorBoundary extends Component<{ children: ReactNode }, { error: Erro
 function App() {
   const [hasToken, setHasToken] = useState<boolean>(() => Boolean(localStorage.getItem('auth_token')));
   const [userRole, setUserRole] = useState<string | null>(localStorage.getItem('user_role'));
-  const [isPublicApp, setIsPublicApp] = useState(false);
+  const [guestView, setGuestView] = useState<'login' | 'apply' | 'track'>('login');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isVerifying, setIsVerifying] = useState(true);
   const [mustChangePassword, setMustChangePassword] = useState(false);
@@ -107,6 +110,17 @@ function App() {
   const navigate = useNavigate();
   const reduceMotion = useReducedMotion();
   const pageEase = [0.22, 1, 0.36, 1] as const;
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      const overlays = document.querySelectorAll<HTMLElement>('[data-popup-overlay="true"]');
+      const top = overlays[overlays.length - 1] as (HTMLElement & { onpopupclose?: () => void }) | undefined;
+      top?.onpopupclose?.();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
@@ -126,6 +140,9 @@ function App() {
            const path = normalizeFilePath(response.data.profile_picture);
            setAdminAvatar(path);
            if (path) localStorage.setItem('profile_picture', path);
+        } else {
+           setAdminAvatar(null);
+           localStorage.removeItem('profile_picture');
         }
       })
       .catch(() => {
@@ -135,6 +152,34 @@ function App() {
         setIsVerifying(false);
       });
   }, []);
+
+  useEffect(() => {
+    if (!hasToken || !userRole || userRole === 'Student') return;
+    const refreshProfile = () => {
+      axios.get('/api/user')
+        .then((response) => {
+          if (response.data.name) {
+            setAdminName(response.data.name);
+            localStorage.setItem('user_name', response.data.name);
+          }
+          if (response.data.profile_picture) {
+            const path = normalizeFilePath(response.data.profile_picture);
+            setAdminAvatar(path);
+            if (path) localStorage.setItem('profile_picture', path);
+          } else {
+            setAdminAvatar(null);
+            localStorage.removeItem('profile_picture');
+          }
+        })
+        .catch(() => {});
+    };
+    const interval = setInterval(refreshProfile, 5000);
+    window.addEventListener(REALTIME_EVENT, refreshProfile);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener(REALTIME_EVENT, refreshProfile);
+    };
+  }, [hasToken, userRole]);
 
   useEffect(() => {
     if (hasToken && userRole && userRole !== 'Student') {
@@ -152,14 +197,14 @@ function App() {
 
   useEffect(() => {
     if (!hasToken) {
-      document.title = isPublicApp ? 'Apply · TechHRM' : 'Sign in · TechHRM';
+      document.title = guestView === 'apply' ? 'Apply · TechHRM' : guestView === 'track' ? 'Track application · TechHRM' : 'Sign in · TechHRM';
       return;
     }
     const segment = firstPathSegment(location.pathname);
     const titles = userRole === 'Student' ? STUDENT_PAGE_TITLES : STAFF_PAGE_TITLES;
     const feature = titles[segment];
     document.title = feature ? `${feature} · TechHRM` : 'TechHRM';
-  }, [hasToken, isPublicApp, userRole, location.pathname]);
+  }, [hasToken, guestView, userRole, location.pathname]);
 
   const handleLoginSuccess = (token: string, role: string, name: string, profilePic: string | null, mustChangePassword = false) => {
     localStorage.setItem('auth_token', token);
@@ -225,13 +270,19 @@ function App() {
         </div>
       </div>
     ) : !hasToken ? (
-      <PageTransition pageKey={isPublicApp ? 'apply' : 'login'}>
-        {isPublicApp ? (
-          <PublicApplication onBackToLogin={() => setIsPublicApp(false)} />
+      <PageTransition pageKey={guestView}>
+        {guestView === 'apply' ? (
+          <PublicApplication onBackToLogin={() => setGuestView('login')} />
+        ) : guestView === 'track' ? (
+          <ApplicationStatusLookup
+            onBackToLogin={() => setGuestView('login')}
+            onNavigateToApply={() => setGuestView('apply')}
+          />
         ) : (
           <Login
             onLoginSuccess={handleLoginSuccess}
-            onNavigateToApply={() => setIsPublicApp(true)}
+            onNavigateToApply={() => setGuestView('apply')}
+            onNavigateToTrack={() => setGuestView('track')}
           />
         )}
       </PageTransition>
@@ -302,9 +353,9 @@ function App() {
         {/* MAIN CONTENT AREA */}
         <main className="flex-1 overflow-y-auto relative custom-scrollbar print:overflow-visible print:h-auto">
           {/* Subtle background texture for the entire admin area */}
-          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-[0.02] pointer-events-none z-0 print:hidden"></div>
+          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-[0.02] pointer-events-none -z-10 print:hidden"></div>
           
-          <div className="relative z-10">
+          <div className="relative">
             <PageTransition pageKey={location.pathname}>
             <PageErrorBoundary>
               <Routes location={location}>

@@ -3,6 +3,8 @@ import axios from 'axios';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import Toast from './Toast';
 import { REALTIME_EVENT } from '../utils/realtime';
+import { bindPopup } from '../utils/popupDismiss';
+import UserAvatar from './UserAvatar';
 import { withHomeDepartmentNote } from '../utils/studentAssignment';
 import { 
     CalendarDays, 
@@ -77,6 +79,7 @@ interface Schedule {
     edit_request_note?: string;
     user?: {
         name: string;
+        profile_picture?: string | null;
         deleted_at?: string | null;
     }
 }
@@ -716,9 +719,11 @@ const ScheduleManagement = () => {
                                     <motion.tr variants={rowVariants} key={schedule.id} className="hover:bg-slate-50 transition-colors group">
                                         <td className="px-6 py-5 align-top">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-black shrink-0 border border-blue-100 shadow-inner">
-                                                    {(schedule.user?.name || '?').charAt(0)}
-                                                </div>
+                                                <UserAvatar
+                                                    name={schedule.user?.name}
+                                                    picture={schedule.user?.profile_picture}
+                                                    className="w-10 h-10 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-sm"
+                                                />
                                                 <div>
                                                     <p className="font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
                                                         {schedule.user?.name || 'Unknown User'}
@@ -830,7 +835,8 @@ const ScheduleManagement = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
+                        className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4 overflow-y-auto"
+                        {...bindPopup(() => setIsModalOpen(false))}
                     >
                         <motion.div 
                             initial={{ scale: 0.95, opacity: 0, y: 20 }}

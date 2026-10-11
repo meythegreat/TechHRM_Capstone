@@ -11,8 +11,10 @@ export const getAllApplications = async () => {
 };
 
 export const updateApplicationStatus = async (id, status) => {
-    const value = typeof status === 'string' ? status : status?.status;
-    return await axios.put(`${API_URL}/${id}/status`, { status: value });
+    const payload = typeof status === 'string'
+        ? { status }
+        : { status: status?.status, rejection_reason: status?.rejection_reason };
+    return await axios.put(`${API_URL}/${id}/status`, payload);
 };
 
 export const assignPlacement = async (id, placementData) => {

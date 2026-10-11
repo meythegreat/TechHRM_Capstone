@@ -82,16 +82,44 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const handleNotificationClick = async (notif: Notification) => {
-        if (!notif.is_read) {
-            setNotifications(notifications.map(n => n.id === notif.id ? { ...n, is_read: 1 } : n));
-            try {
-                await axios.patch(`/api/notifications/${notif.id}/read`);
-            } catch (error) {
-                console.error("Failed to mark as read", error);
-                fetchNotifications();
-            }
+    const markAsRead = async (notif: Notification) => {
+        if (notif.is_read) return;
+        setNotifications((current) => current.map((item) => item.id === notif.id ? { ...item, is_read: 1 } : item));
+        setLiveNotice((current) => (current?.id === notif.id ? null : current));
+        try {
+            await axios.patch(`/api/notifications/${notif.id}/read`);
+        } catch (error) {
+            console.error('Failed to mark as read', error);
+            fetchNotifications();
         }
+    };
+
+    const markAllRead = async () => {
+        setNotifications((current) => current.map((item) => ({ ...item, is_read: 1 })));
+        setLiveNotice(null);
+        try {
+            await axios.patch('/api/notifications/read-all');
+        } catch (error) {
+            console.error('Failed to mark all as read', error);
+            fetchNotifications();
+        }
+    };
+
+    const clearAll = async () => {
+        if (notifications.length === 0) return;
+        if (!window.confirm('Clear all notifications? This deletes every notification.')) return;
+        setNotifications([]);
+        setLiveNotice(null);
+        try {
+            await axios.delete('/api/notifications');
+        } catch (error) {
+            console.error('Failed to clear notifications', error);
+            fetchNotifications();
+        }
+    };
+
+    const handleNotificationClick = async (notif: Notification) => {
+        await markAsRead(notif);
 
         if (userRole === 'Supervisor' && notif.title.includes('Working Student Assigned')) {
             onNavigate('dashboard');
@@ -101,6 +129,10 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
             onNavigate('attendance');
         } else if (notif.title.includes('Requirement')) {
             onNavigate('requirements');
+        } else if (notif.title.includes('Signup') || notif.title.includes('Application')) {
+            onNavigate('pipeline');
+        } else if (notif.title.includes('Account')) {
+            onNavigate('users');
         } else if (notif.title.includes('Appeal') || notif.title.includes('Disciplinary')) {
             onNavigate(userRole === 'Student' ? 'disciplinary' : 'compliance');
         }
@@ -142,6 +174,10 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
                     </div>
                     <p className="mt-1 text-sm font-bold text-slate-900">{liveNotice.title}</p>
                     <p className="mt-1 text-xs font-medium leading-relaxed text-slate-600">{liveNotice.message}</p>
+                    <div className="mt-3 flex items-center gap-3">
+                        <button type="button" onClick={() => markAsRead(liveNotice)} className="text-[10px] font-bold uppercase tracking-wider text-blue-700">Mark read</button>
+                        <button type="button" onClick={() => dismissNotification(liveNotice.id)} className="text-[10px] font-bold uppercase tracking-wider text-rose-600">Delete</button>
+                    </div>
                 </div>,
                 document.body,
             )}
@@ -171,7 +207,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -8, scale: 0.98 }}
                         transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                        className="fixed sm:absolute left-4 right-4 sm:left-auto top-20 sm:top-auto sm:right-0 sm:mt-2 sm:w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden origin-top-right"
+                        className="fixed sm:absolute left-4 right-4 sm:left-auto top-20 sm:top-auto sm:right-0 sm:mt-2 sm:w-96 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden origin-top-right"
                     >
                         
                         {/* Header */}
@@ -189,6 +225,25 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
                                 </button>
                             </div>
                         </div>
+                        {notifications.length > 0 && (
+                            <div className="px-4 py-2 border-b border-gray-100 flex flex-wrap items-center gap-x-4 gap-y-1 bg-white">
+                                <button
+                                    type="button"
+                                    onClick={markAllRead}
+                                    disabled={unreadCount === 0}
+                                    className="text-[10px] font-bold uppercase tracking-wider text-blue-700 disabled:text-slate-300"
+                                >
+                                    Mark all read
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={clearAll}
+                                    className="text-[10px] font-bold uppercase tracking-wider text-rose-600"
+                                >
+                                    Clear all
+                                </button>
+                            </div>
+                        )}
 
                         {/* List */}
                         <div className="max-h-[60vh] sm:max-h-80 overflow-y-auto custom-scrollbar">
@@ -224,6 +279,30 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
                                             </div>
                                         </div>
                                         <p className="text-xs text-gray-600 leading-relaxed font-medium">{notif.message}</p>
+                                        <div className="mt-2 flex items-center gap-3">
+                                            {!notif.is_read && (
+                                                <button
+                                                    type="button"
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        markAsRead(notif);
+                                                    }}
+                                                    className="text-[10px] font-bold uppercase tracking-wider text-blue-700"
+                                                >
+                                                    Mark read
+                                                </button>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    dismissNotification(notif.id);
+                                                }}
+                                                className="text-[10px] font-bold uppercase tracking-wider text-rose-600"
+                                            >
+                                                Delete
+                                            </button>
+                                        </div>
                                         <p className="text-[10px] text-gray-400 mt-2 font-bold uppercase tracking-wider">
                                             {new Date(notif.created_at).toLocaleDateString()} at {new Date(notif.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                         </p>

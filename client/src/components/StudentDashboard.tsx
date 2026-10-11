@@ -19,18 +19,23 @@ import {
     Camera, 
     Check,
     Briefcase,
-    ShieldCheck
+    ShieldCheck,
+    Eye,
+    EyeOff,
 } from 'lucide-react';
 
 import Sidebar from './Sidebar';
 import NotificationBell from './NotificationBell';
 import SecureImage from './SecureImage';
+import AvatarCropDialog from './AvatarCropDialog';
 import { normalizeFilePath, openSecureFile } from '../utils/secureFile';
 import { firstPathSegment, resolveStudentPath } from '../config/routes';
-import { REALTIME_EVENT } from '../utils/realtime';
+import { REALTIME_EVENT, emitRealtimeRefresh } from '../utils/realtime';
+import { bindPopup } from '../utils/popupDismiss';
 import StudentDisciplinaryBoard from './StudentDisciplinaryBoard';
 import StudentAttendanceTerminal from './StudentAttendanceTerminal';
 import { StudentCompensationView } from './StudentCompensationView';
+import ApplicationStatusTracker from './ApplicationStatusTracker';
 
 interface AttendanceRecord {
     id: number;
@@ -87,6 +92,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
     const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
     const [avatarPath, setAvatarPath] = useState<string | null>(() => normalizeFilePath(localStorage.getItem('profile_picture')));
+    const [cropSource, setCropSource] = useState<string | null>(null);
 
     const [studentProfile, setStudentProfile] = useState({
         student_id_number: 'Loading...',
@@ -109,6 +115,14 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
     const [requirements, setRequirements] = useState<RequirementRecord[]>([]);
     const [docType, setDocType] = useState('Medical Clearance');
     const [uploadFile, setUploadFile] = useState<File | null>(null);
+    const [accountPhone, setAccountPhone] = useState('');
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [isSavingPassword, setIsSavingPassword] = useState(false);
+    const [profileReady, setProfileReady] = useState(false);
 
     useEffect(() => {
         if (!localStorage.getItem('auth_token')) return;
@@ -144,10 +158,15 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                 assigned_office: user.profile?.assigned_office || 'Not Assigned',
                 supervisors: Array.isArray(user.department_supervisors) ? user.department_supervisors : []
             });
+            setAccountPhone(user.phone_number || '');
+            setProfileReady(true);
             if (user.profile_picture) {
                 const path = normalizeFilePath(user.profile_picture);
                 setAvatarPath(path);
                 if (path) localStorage.setItem('profile_picture', path);
+            } else {
+                setAvatarPath(null);
+                localStorage.removeItem('profile_picture');
             }
         } catch (error) {
             console.error("Failed to fetch profile", error);
@@ -245,9 +264,29 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
         }
     };
 
-    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const closeCrop = () => {
+        setCropSource((current) => {
+            if (current) URL.revokeObjectURL(current);
+            return null;
+        });
+    };
+
+    const handleImageSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
+        e.target.value = '';
         if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            setMessage({ text: 'Choose a JPG or PNG image.', type: 'error' });
+            return;
+        }
+        setCropSource((current) => {
+            if (current) URL.revokeObjectURL(current);
+            return URL.createObjectURL(file);
+        });
+    };
+
+    const uploadCroppedAvatar = async (file: File) => {
+        closeCrop();
         const formData = new FormData();
         formData.append('avatar', file);
         setIsLoading(true);
@@ -256,11 +295,45 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
             const path = normalizeFilePath(response.data.profile_picture);
             setAvatarPath(path);
             if (path) localStorage.setItem('profile_picture', path);
+            emitRealtimeRefresh();
             setMessage({ text: 'Profile picture updated successfully!', type: 'success' });
-        } catch (err: any) {
+        } catch {
             setMessage({ text: 'Failed to upload image. Ensure it is under 2MB.', type: 'error' });
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleChangePassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newPassword) {
+            setMessage({ text: 'Enter a new password.', type: 'error' });
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            setMessage({ text: 'New password and confirmation do not match.', type: 'error' });
+            return;
+        }
+
+        setIsSavingPassword(true);
+        try {
+            await axios.put('/api/user', {
+                name: fullName,
+                phone_number: accountPhone,
+                password: newPassword,
+                password_confirmation: confirmPassword,
+                current_password: currentPassword,
+            });
+            setCurrentPassword('');
+            setNewPassword('');
+            setConfirmPassword('');
+            setMessage({ text: 'Password updated.', type: 'success' });
+        } catch (error: any) {
+            const validation = error.response?.data?.errors;
+            const firstError = validation ? Object.values(validation).flat()[0] : null;
+            setMessage({ text: firstError || error.response?.data?.message || 'Failed to update password.', type: 'error' });
+        } finally {
+            setIsSavingPassword(false);
         }
     };
 
@@ -276,6 +349,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
         { id: 'schedule', label: 'My Schedule', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /> },
         { id: 'requirements', label: 'Requirements', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /> },
         { id: 'disciplinary', label: 'Disciplinary Records', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /> },
+        { id: 'application', label: 'Application Status', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6M7 3h7l5 5v13a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z" /> },
         { id: 'settings', label: 'Settings', icon: <><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></> }
     ];
 
@@ -347,6 +421,8 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                         <PageTransition pageKey={currentPath}>
                         {/* 1. DASHBOARD */}
                         {currentPath === 'dashboard' && <StudentOverview />}
+
+                        {currentPath === 'application' && <ApplicationStatusTracker />}
 
                         {/* 2. ATTENDANCE LOG */}
                         {currentPath === 'attendance' && <StudentAttendanceTerminal />}
@@ -667,13 +743,13 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                                 <div className="w-40 h-40 bg-slate-100 rounded-full border-4 border-white shadow-xl flex items-center justify-center overflow-hidden">
                                                     {avatarPath ? <SecureImage filePath={avatarPath} altText="Profile" className="w-full h-full object-cover" /> : <span className="text-slate-400 font-black text-5xl">{firstName.charAt(0)}</span>}
                                                 </div>
-                                                <label htmlFor="avatarUpload" className="absolute inset-0 bg-slate-900/60 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 cursor-pointer backdrop-blur-sm">
-                                                    <Camera className="w-8 h-8 text-white mb-1" />
-                                                    <span className="text-white text-xs font-bold uppercase tracking-wider">Update Photo</span>
+                                                <label htmlFor="avatarUpload" className="absolute bottom-1 right-1 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg cursor-pointer">
+                                                    <Camera className="w-5 h-5" />
+                                                    <span className="sr-only">Change photo</span>
                                                 </label>
-                                                <input type="file" id="avatarUpload" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                                                <input type="file" id="avatarUpload" accept="image/*" onChange={handleImageSelected} className="hidden" />
                                             </div>
-                                            <p className="text-xs text-slate-500 font-medium mt-4 text-center">Allowed formats: JPG, PNG. Max size: 2MB.</p>
+                                            <p className="text-xs text-slate-500 font-medium mt-4 text-center">Tap the camera button, then crop the photo into a circle. JPG or PNG, up to 2MB.</p>
                                         </motion.div>
                                         
                                         <motion.div variants={cardVariants} className="flex-1 w-full space-y-6">
@@ -701,6 +777,65 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                         </motion.div>
                                     </div>
                                 </div>
+
+                                <form onSubmit={handleChangePassword} className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200 space-y-5">
+                                    <div>
+                                        <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">Change Password</h2>
+                                        <p className="text-sm text-slate-500 mt-1">Use your current password to set a new one.</p>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                                        <div className="relative">
+                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Current Password</label>
+                                            <input
+                                                type={showCurrentPassword ? 'text' : 'password'}
+                                                value={currentPassword}
+                                                onChange={(e) => setCurrentPassword(e.target.value)}
+                                                required
+                                                autoComplete="current-password"
+                                                className="w-full p-3.5 pr-12 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"
+                                            />
+                                            <button type="button" onClick={() => setShowCurrentPassword(!showCurrentPassword)} className="absolute right-3 top-[38px] text-slate-400 hover:text-blue-600">
+                                                {showCurrentPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                            </button>
+                                        </div>
+                                        <div className="relative">
+                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">New Password</label>
+                                            <input
+                                                type={showNewPassword ? 'text' : 'password'}
+                                                value={newPassword}
+                                                onChange={(e) => setNewPassword(e.target.value)}
+                                                required
+                                                minLength={6}
+                                                autoComplete="new-password"
+                                                className="w-full p-3.5 pr-12 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"
+                                            />
+                                            <button type="button" onClick={() => setShowNewPassword(!showNewPassword)} className="absolute right-3 top-[38px] text-slate-400 hover:text-blue-600">
+                                                {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                            </button>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Confirm Password</label>
+                                            <input
+                                                type="password"
+                                                value={confirmPassword}
+                                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                                required
+                                                minLength={6}
+                                                autoComplete="new-password"
+                                                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-end">
+                                        <button
+                                            type="submit"
+                                            disabled={isSavingPassword || !profileReady}
+                                            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-600/25 disabled:opacity-50 transition-all"
+                                        >
+                                            {isSavingPassword ? 'Saving...' : 'Update Password'}
+                                        </button>
+                                    </div>
+                                </form>
                             </motion.div>
                         )}
                         </PageTransition>
@@ -716,7 +851,8 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                    className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] flex items-center justify-center p-4"
+                    {...bindPopup(() => setIsEditModalOpen(false))}
                 >
                     <motion.div initial={{ opacity: 0, scale: 0.95, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 8 }} className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8">
                         <h3 className="text-xl font-black text-slate-900 mb-6 tracking-tight">Request Schedule Edit</h3>
@@ -743,6 +879,9 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                 </motion.div>
             )}
             </AnimatePresence>
+            {cropSource && (
+                <AvatarCropDialog imageUrl={cropSource} onCancel={closeCrop} onConfirm={uploadCroppedAvatar} />
+            )}
         </div>
     );
 };

@@ -3,19 +3,20 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Support\AccountLogin;
 use App\Support\SuperAdminAudit;
 use App\Models\Application;
+use App\Models\ApplicationStatusEvent;
 use App\Models\Notification;
 use App\Models\User;
 use App\Models\UserProfile;
 use App\Services\DepartmentAssignmentNotifier;
+use App\Services\StaffNotifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 
 class ApplicationController extends Controller
 {
@@ -26,7 +27,7 @@ class ApplicationController extends Controller
             'first_name' => 'required|string|max:255',
             'middle_name' => 'nullable|string|max:255',
             'last_name' => 'required|string|max:255',
-            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'username')->whereNull('deleted_at')],
+            'email' => ['required', 'string', 'email', 'max:255'],
             'age' => 'required|integer|min:16',
             'gender' => 'required|string|in:Male,Female,Prefer not to say',
             'address' => 'required|string',
@@ -65,35 +66,30 @@ class ApplicationController extends Controller
                 'reason_for_applying' => $validated['reason_for_applying'] ?? null,
                 'status' => 'Pending',
                 'source' => 'website',
+                'tracking_code' => $this->makeTrackingCode(),
             ]);
 
             $this->storeApplicationDocuments($request, $application);
+            $this->recordStatus($application, 'Pending', 'Application submitted');
 
             return $application;
         });
 
-        $applicantName = trim(
-            $application->first_name . ' ' .
-                ($application->middle_name ? $application->middle_name . ' ' : '') .
-                $application->last_name
-        );
+        $applicantName = $this->applicantName($application);
         $this->recordApplicationSubmission(null, $application, $applicantName);
-
-        Http::post('http://localhost:5678/webhook/techhrm/application-submitted', [
+        app(StaffNotifier::class)->notify(
+            'New Signup',
+            "{$applicantName} submitted a working-student application."
+        );
+        $this->notifyN8nApplicationStatus($application, 'Pending', [
             'event' => 'application_submitted',
-            'application_id' => $application->id,
-            'applicant_name' => trim(
-                $application->first_name . ' ' .
-                    ($application->middle_name ? $application->middle_name . ' ' : '') .
-                    $application->last_name
-            ),
-            'email' => $validated['email'],
-            'status' => $application->status,
             'submitted_at' => $application->created_at,
         ]);
 
         return response()->json([
-            'message' => 'Application submitted. Complete your personal profile and university details now. A login is issued only after placement is finalized.'
+            'message' => 'Application submitted. A username and password are issued only after placement is finalized. You will be able to sign in with that username or this email.',
+            'tracking_code' => $application->tracking_code,
+            'tracker' => $this->presentTracker($application),
         ], 201);
     }
 
@@ -119,10 +115,20 @@ class ApplicationController extends Controller
             'reason_for_applying' => $validated['reason_for_applying'],
             'status' => 'Pending',
             'source' => 'portal',
+            'tracking_code' => $this->makeTrackingCode(),
         ]);
 
         $this->storeApplicationDocuments($request, $application);
+        $this->recordStatus($application, 'Pending', 'Application submitted');
         $this->recordApplicationSubmission($request->user(), $application);
+        app(StaffNotifier::class)->notify(
+            'New Signup',
+            "{$request->user()->name} submitted a working-student application."
+        );
+        $this->notifyN8nApplicationStatus($application, 'Pending', [
+            'event' => 'application_submitted',
+            'submitted_at' => $application->created_at,
+        ]);
 
         return response()->json(['message' => 'Application submitted successfully!', 'data' => $application->load('documents')], 201);
     }
@@ -130,24 +136,66 @@ class ApplicationController extends Controller
     // 2. STUDENT: Check own application status
     public function myApplication(Request $request)
     {
-        $application = Application::with('documents')->where('user_id', $request->user()->id)->first();
+        $application = Application::with(['documents', 'statusEvents', 'applicant.profile'])
+            ->where('user_id', $request->user()->id)
+            ->first();
 
         if (!$application) {
             return response()->json(null, 404);
         }
 
-        return response()->json($application);
+        return response()->json($this->presentTracker($application, true));
+    }
+
+    // PUBLIC: Look up progress with the email and tracking code from submission.
+    public function publicStatus(Request $request)
+    {
+        $validated = $request->validate([
+            'email' => 'required|email',
+            'tracking_code' => 'required|string|max:20',
+        ]);
+
+        $code = strtoupper(trim($validated['tracking_code']));
+        $application = Application::with(['statusEvents', 'applicant.profile'])
+            ->where('tracking_code', $code)
+            ->first();
+
+        $emailMatches = $application
+            && strcasecmp((string) $application->email, trim($validated['email'])) === 0;
+
+        if (!$emailMatches) {
+            return response()->json([
+                'message' => 'No application matches that email and tracking code.',
+            ], 404);
+        }
+
+        return response()->json($this->presentTracker($application));
     }
 
     // 3. COORDINATOR: View all applications
     public function index()
     {
-        $this->purgeDeclinedApplications();
+        $with = ['applicant.profile', 'documents', 'statusEvents'];
 
-        return Application::with(['applicant', 'documents'])
+        $active = Application::with($with)
             ->where('status', '!=', 'Rejected')
             ->orderBy('created_at', 'desc')
             ->get();
+
+        $archive = Application::withTrashed()
+            ->with($with)
+            ->where(function ($query) {
+                $query->where('status', 'Rejected')
+                    ->orWhereNotNull('deleted_at');
+            })
+            ->orderByDesc('deleted_at')
+            ->orderByDesc('updated_at')
+            ->get();
+
+        return response()->json([
+            'data' => $active,
+            'archive' => $archive,
+        ]);
     }
 
     // 3. COORDINATOR: Update Workflow (Pending -> Interview -> Training -> Approved)
@@ -157,20 +205,26 @@ class ApplicationController extends Controller
         $application = Application::findOrFail($id);
 
         $request->validate([
-            'status' => 'required|in:Pending,Interview,Training,For Result,Approved,Rejected'
+            'status' => 'required|in:Pending,Interview,Training,For Result,Approved,Rejected',
+            'rejection_reason' => 'required_if:status,Rejected|nullable|string|max:1000',
         ]);
 
         if ($request->status === 'Rejected') {
-            $this->notifyN8nApplicationStatus($application, 'Rejected');
-            $this->purgeApplication($application);
+            $reason = trim((string) $request->input('rejection_reason'));
+            $application->update(['status' => 'Rejected']);
+            $this->recordStatus($application, 'Rejected', $reason);
+            $this->notifyN8nApplicationStatus($application, 'Rejected', [
+                'rejection_reason' => $reason,
+            ]);
 
-            return response()->json(['message' => 'Applicant declined and removed.']);
+            return response()->json(['message' => 'Applicant declined. A rejection email has been sent, and their tracker now shows Not Approved.']);
         }
 
         $application->update([
             'status' => $request->status
         ]);
 
+        $this->recordStatus($application, $request->status);
         $this->notifyN8nApplicationStatus($application, $request->status);
 
         return response()->json([
@@ -226,6 +280,10 @@ class ApplicationController extends Controller
         );
 
         $tempPassword = 'FCU-' . strtoupper(Str::random(5)) . '!' . random_int(0, 9);
+        $loginEmail = strtolower(trim($validated['email']));
+        $loginUsername = ($applicant && !filter_var($applicant->username, FILTER_VALIDATE_EMAIL))
+            ? $applicant->username
+            : AccountLogin::generateUsername($validated['first_name'], $validated['last_name']);
         $middleInitial = $this->middleInitial($validated['middle_name'] ?? null);
         $storedMiddleName = $middleInitial !== '' ? $middleInitial : null;
         $studentName = $this->displayName(
@@ -240,12 +298,12 @@ class ApplicationController extends Controller
         $dutyRequest = $validated['duty_type'] === 'Request' ? trim((string) ($validated['duty_request'] ?? '')) : null;
         $dutyLabel = $validated['duty_type'] === 'Request' ? (string) $dutyRequest : $validated['duty_type'];
 
-        $applicant = DB::transaction(function () use ($application, $validated, $applicant, $tempPassword, $studentName, $office, $storedMiddleName, $dutyRequest) {
+        $applicant = DB::transaction(function () use ($application, $validated, $applicant, $tempPassword, $studentName, $office, $storedMiddleName, $dutyRequest, $loginEmail, $loginUsername) {
             $application->update([
                 'first_name' => $validated['first_name'],
                 'middle_name' => $storedMiddleName,
                 'last_name' => $validated['last_name'],
-                'email' => $validated['email'],
+                'email' => $loginEmail,
                 'age' => $validated['age'],
                 'gender' => $validated['gender'],
                 'address' => $validated['address'],
@@ -261,7 +319,8 @@ class ApplicationController extends Controller
             if (!$applicant) {
                 $applicant = User::create([
                     'name' => $studentName,
-                    'username' => $validated['email'],
+                    'username' => $loginUsername,
+                    'email' => $loginEmail,
                     'password' => $tempPassword,
                     'role' => 'Student',
                     'phone_number' => $validated['contact_number'],
@@ -269,7 +328,8 @@ class ApplicationController extends Controller
                 $application->update(['user_id' => $applicant->id]);
             } else {
                 $applicant->name = $studentName;
-                $applicant->username = $validated['email'];
+                $applicant->username = $loginUsername;
+                $applicant->email = $loginEmail;
                 $applicant->phone_number = $validated['contact_number'];
                 $applicant->password = $tempPassword;
                 $applicant->save();
@@ -297,6 +357,14 @@ class ApplicationController extends Controller
             'message' => "You have been assigned to {$office} as a working student for {$dutyLabel}.",
         ]);
 
+        $application->refresh();
+        $this->recordStatus($application, 'Approved');
+        $this->recordStatus($application, 'Assigned', "{$office} · {$dutyLabel}");
+        $this->notifyN8nApplicationStatus($application, 'Approved', [
+            'assigned_department' => $office,
+            'assigned_duty' => $dutyLabel,
+        ]);
+
         app(DepartmentAssignmentNotifier::class)->notify($applicant, $office, $dutyLabel);
 
         return response()->json([
@@ -304,6 +372,7 @@ class ApplicationController extends Controller
             'credentials' => [
                 'name' => $studentName,
                 'username' => $applicant->username,
+                'email' => $applicant->email,
                 'password' => $tempPassword,
             ],
         ]);
@@ -326,7 +395,18 @@ class ApplicationController extends Controller
             'status' => 'Interview' // Automatically move to Interview status
         ]);
 
-        $this->notifyN8nApplicationStatus($application, 'Interview');
+        $interviewLabel = $application->interview_date
+            ?->timezone(config('app.timezone'))
+            ->format('M j, Y g:i A');
+        $note = 'Interview scheduled for ' . $interviewLabel;
+        if (!empty($validated['interview_remarks'])) {
+            $note .= '. ' . $validated['interview_remarks'];
+        }
+        $this->recordStatus($application, 'Interview', $note);
+        $this->notifyN8nApplicationStatus($application, 'Interview', [
+            'interview_date' => $interviewLabel,
+            'interview_remarks' => $application->interview_remarks,
+        ]);
 
         return response()->json(['message' => 'Interview scheduled successfully!']);
     }
@@ -379,40 +459,114 @@ class ApplicationController extends Controller
         return response()->json(['suggestions' => $suggestions]);
     }
 
-    private function purgeDeclinedApplications(): void
+    private function notifyN8nApplicationStatus(Application $application, string $status, array $extra = []): void
     {
-        Application::with(['documents', 'applicant'])
-            ->where('status', 'Rejected')
-            ->get()
-            ->each(fn (Application $application) => $this->purgeApplication($application));
-    }
-
-    private function notifyN8nApplicationStatus(Application $application, string $status): void
-    {
-        Http::timeout(5)->post('http://localhost:5678/webhook/techhrm/application-submitted', [
+        $payload = array_merge([
             'event' => 'application_status_updated',
             'application_id' => $application->id,
-            'applicant_name' => trim(
-                $application->first_name . ' ' .
-                    ($application->middle_name ? $application->middle_name . ' ' : '') .
-                    $application->last_name
-            ),
+            'applicant_name' => $this->applicantName($application),
             'email' => $application->email,
             'status' => $status,
-            'updated_at' => now(),
+            'tracking_code' => $application->tracking_code,
+            'updated_at' => now()->toIso8601String(),
+        ], $extra);
+
+        try {
+            Http::timeout(5)->asJson()->post('http://localhost:5678/webhook/techhrm/application-submitted', $payload);
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
+    }
+
+    private function recordStatus(Application $application, string $status, ?string $note = null): void
+    {
+        $latest = $application->statusEvents()->latest('id')->first();
+        if ($latest && $latest->status === $status) {
+            if ($note && $latest->note !== $note) {
+                $latest->update(['note' => $note, 'occurred_at' => now()]);
+            }
+            return;
+        }
+
+        $application->statusEvents()->create([
+            'status' => $status,
+            'note' => $note,
+            'occurred_at' => now(),
         ]);
+    }
+
+    private function makeTrackingCode(): string
+    {
+        do {
+            $code = 'WSPO-' . strtoupper(Str::random(6));
+        } while (Application::where('tracking_code', $code)->exists());
+
+        return $code;
+    }
+
+    private function applicantName(Application $application): string
+    {
+        return trim(
+            $application->first_name . ' ' .
+                ($application->middle_name ? $application->middle_name . ' ' : '') .
+                $application->last_name
+        );
+    }
+
+    private function presentTracker(Application $application, bool $includePrivate = false): array
+    {
+        $application->loadMissing(['statusEvents', 'documents', 'applicant.profile']);
+        $profile = $application->applicant?->profile;
+        $duty = null;
+        if ($profile) {
+            $duty = $profile->duty_type === 'Request' ? $profile->duty_request : $profile->duty_type;
+        }
+
+        $assigned = filled($application->assigned_department);
+        $currentStage = $application->status === 'Rejected'
+            ? 'Rejected'
+            : ($assigned ? 'Assigned' : $application->status);
+        $rejectionReason = $application->statusEvents
+            ->firstWhere('status', 'Rejected')
+            ?->note;
+
+        $payload = [
+            'status' => $application->status,
+            'current_stage' => $currentStage,
+            'rejection_reason' => $rejectionReason,
+            'applicant_name' => $this->applicantName($application),
+            'preferred_department' => $application->preferred_department,
+            'interview_date' => $application->interview_date,
+            'interview_remarks' => $application->interview_remarks,
+            'assigned_department' => $application->assigned_department,
+            'assigned_position' => $application->assigned_position,
+            'assigned_duty' => $duty,
+            'submitted_at' => $application->created_at,
+            'events' => $application->statusEvents->map(fn (ApplicationStatusEvent $event) => [
+                'status' => $event->status,
+                'note' => $event->note,
+                'occurred_at' => $event->occurred_at,
+            ])->values(),
+        ];
+
+        if ($includePrivate) {
+            $payload['id'] = $application->id;
+            $payload['tracking_code'] = $application->tracking_code;
+            $payload['email'] = $application->email;
+            $payload['documents'] = $application->documents->map(fn ($document) => [
+                'id' => $document->id,
+                'original_name' => $document->original_name,
+                'file_path' => $document->file_path,
+            ])->values();
+        }
+
+        return $payload;
     }
 
     private function purgeApplication(Application $application): void
     {
         DB::transaction(function () use ($application) {
-            $application->loadMissing(['documents', 'applicant']);
-
-            foreach ($application->documents as $document) {
-                if ($document->file_path) {
-                    Storage::disk('local')->delete($document->file_path);
-                }
-            }
+            $application->loadMissing('applicant');
 
             $applicant = $application->applicant;
             $removeAccount = $application->status !== 'Approved'
@@ -420,13 +574,17 @@ class ApplicationController extends Controller
                 && $applicant->role === 'Student';
 
             if ($removeAccount) {
+                // Detach first so deleting the unused account does not cascade
+                // away the application row kept for the audit list.
+                $application->user_id = null;
+                $application->save();
                 $applicant->tokens()->delete();
                 $applicant->forceDelete();
-                return;
             }
 
-            $application->documents()->delete();
-            $application->delete();
+            if (!$application->trashed()) {
+                $application->delete();
+            }
         });
     }
 
@@ -483,15 +641,12 @@ class ApplicationController extends Controller
         ?int $ignoreUserId = null,
         ?int $ignoreApplicationId = null
     ): void {
-        $emailTaken = User::query()
-            ->when($ignoreUserId, fn ($query) => $query->where('id', '!=', $ignoreUserId))
-            ->where('username', $email)
-            ->exists();
+        $emailTaken = AccountLogin::identifierTaken($email, $ignoreUserId);
 
         $emailOnApplication = Application::query()
             ->when($ignoreApplicationId, fn ($query) => $query->where('id', '!=', $ignoreApplicationId))
             ->where('status', '!=', 'Rejected')
-            ->where('email', $email)
+            ->whereRaw('LOWER(email) = ?', [strtolower(trim($email))])
             ->exists();
 
         if ($emailTaken || $emailOnApplication) {

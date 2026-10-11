@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { motion, type Variants } from 'framer-motion';
 import Toast from './Toast';
+import { bindPopup } from '../utils/popupDismiss';
 import { 
     Building2, 
     Pencil, 
@@ -379,7 +380,7 @@ const OfficeDirectory = () => {
             </div>
 
             {breakdown && (
-                <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setBreakdown(null)}>
+                <div className="fixed inset-0 z-[80] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4" {...bindPopup(() => setBreakdown(null))}>
                     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col" onClick={(event) => event.stopPropagation()}>
                         <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                             <div>

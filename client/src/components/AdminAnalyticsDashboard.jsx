@@ -12,6 +12,7 @@ import {
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getDashboardStats, downloadCSV } from '../services/analyticsService';
+import { REALTIME_EVENT } from '../utils/realtime';
 import { 
     PieChart, 
     Download, 
@@ -31,19 +32,27 @@ const AdminAnalyticsDashboard = () => {
     const [isExporting, setIsExporting] = useState(false);
 
     useEffect(() => {
-        const fetchStats = async () => {
-            setIsLoading(true);
+        const fetchStats = async (silent = false) => {
+            if (!silent) setIsLoading(true);
             try {
                 const res = await getDashboardStats();
                 setStats(res.data);
+                setError(null);
             } catch (err) {
                 console.error('Failed to load analytics', err);
                 setError('Unable to load analytics data.');
             } finally {
-                setIsLoading(false);
+                if (!silent) setIsLoading(false);
             }
         };
         fetchStats();
+        const refresh = () => fetchStats(true);
+        const interval = setInterval(refresh, 5000);
+        window.addEventListener(REALTIME_EVENT, refresh);
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener(REALTIME_EVENT, refresh);
+        };
     }, []);
 
     const exportToPDF = () => {

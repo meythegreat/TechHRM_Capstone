@@ -5,6 +5,9 @@ import { ConductPanels } from './ConductPanels';
 import ComboFilter from './ComboFilter';
 import { decideViolation, getAllViolations, getConductCatalog, issueViolation, resolveViolation } from '../services/disciplinaryService';
 import { withHomeDepartmentNote } from '../utils/studentAssignment';
+import UserAvatar from './UserAvatar';
+import { REALTIME_EVENT } from '../utils/realtime';
+import { bindPopup } from '../utils/popupDismiss';
 import { 
     Scale, 
     ShieldAlert, 
@@ -61,6 +64,9 @@ const DisciplinaryManager = () => {
                 .catch(() => setDepartments([]));
         }
         fetchRecords();
+        const refresh = () => fetchRecords(true);
+        const interval = setInterval(refresh, 5000);
+        window.addEventListener(REALTIME_EVENT, refresh);
         getConductCatalog()
             .then((res) => setOffenseCatalog({ minor: res.data.minor || [], major: res.data.major || [] }))
             .catch(() => {});
@@ -80,17 +86,21 @@ const DisciplinaryManager = () => {
                 setStudents(studentUsers);
             })
             .catch(err => console.error('Failed to load students', err));
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener(REALTIME_EVENT, refresh);
+        };
     }, []);
 
-    const fetchRecords = async () => {
-        setIsLoading(true);
+    const fetchRecords = async (silent = false) => {
+        if (!silent) setIsLoading(true);
         try {
             const res = await getAllViolations();
             setRecords(res.data);
         } catch (err) {
             console.error('Failed to fetch records', err);
         } finally {
-            setIsLoading(false);
+            if (!silent) setIsLoading(false);
         }
     };
 
@@ -597,9 +607,11 @@ const DisciplinaryManager = () => {
 
                                         <div className="pt-4 border-t border-slate-100 flex items-center justify-between mt-auto">
                                             <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
-                                                <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center border border-slate-200">
-                                                    {(record.student?.name || '?').charAt(0)}
-                                                </div>
+                                                <UserAvatar
+                                                    name={record.student?.name}
+                                                    picture={record.student?.profile_picture}
+                                                    className="w-6 h-6 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-[10px]"
+                                                />
                                                 <span className="truncate max-w-[120px]">{record.student?.name || 'Unknown Student'}</span>
                                                 {record.student?.deleted_at && (
                                                     <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
@@ -663,7 +675,8 @@ const DisciplinaryManager = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] flex items-center justify-center p-4"
+                        {...bindPopup(() => setResolveModal(null))}
                     >
                         <motion.div 
                             initial={{ scale: 0.95, opacity: 0, y: 20 }}
@@ -733,7 +746,8 @@ const DisciplinaryManager = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] flex items-center justify-center p-4"
+                        {...bindPopup(() => setDecideModal(null))}
                     >
                         <motion.div
                             initial={{ scale: 0.95, opacity: 0, y: 20 }}

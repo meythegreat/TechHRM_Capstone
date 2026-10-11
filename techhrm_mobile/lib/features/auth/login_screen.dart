@@ -30,7 +30,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final password = _passwordController.text;
 
     if (username.isEmpty || password.isEmpty) {
-      setState(() => _errorMessage = "Please enter both username and password.");
+      setState(() => _errorMessage = "Please enter a username or email, and a password.");
       return;
     }
 
@@ -131,7 +131,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 TextField(
                   controller: _usernameController,
                   decoration: InputDecoration(
-                    labelText: 'Username',
+                    labelText: 'Username or Email',
                     prefixIcon: const Icon(Icons.person_outline),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     filled: true,

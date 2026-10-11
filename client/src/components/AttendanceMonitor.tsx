@@ -3,6 +3,9 @@ import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import Toast from './Toast';
+import UserAvatar from './UserAvatar';
+import { REALTIME_EVENT } from '../utils/realtime';
+import { bindPopup } from '../utils/popupDismiss';
 import { 
     Calendar, 
     Clock, 
@@ -18,8 +21,8 @@ import {
     X,
     PenLine,
     Search,
-    UserCircle,
     CalendarPlus,
+    Pencil,
     Trash2,
     ChevronLeft,
     ChevronRight,
@@ -69,6 +72,7 @@ interface AttendanceRecord {
     user: {
         id?: number;
         name: string;
+        profile_picture?: string | null;
         profile?: {
             assigned_office?: string;
             student_id_number?: string;
@@ -83,6 +87,7 @@ interface AttendanceRecord {
 interface StudentOption {
     id: number;
     name: string;
+    profile_picture?: string | null;
     profile?: {
         assigned_office?: string | null;
         student_id_number?: string | null;
@@ -107,6 +112,7 @@ interface StudentDtrLog {
 interface Holiday {
     id: number;
     date: string;
+    end_date?: string | null;
     name: string;
 }
 
@@ -157,8 +163,11 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
     const [dtrPreviewOpen, setDtrPreviewOpen] = useState(false);
     const [holidays, setHolidays] = useState<Holiday[]>([]);
     const [holidayDate, setHolidayDate] = useState(new Date().toISOString().split('T')[0]);
+    const [holidayEndDate, setHolidayEndDate] = useState(new Date().toISOString().split('T')[0]);
+    const [holidaySpan, setHolidaySpan] = useState<'single' | 'multiple'>('single');
     const [holidayName, setHolidayName] = useState('');
     const [holidaySaving, setHolidaySaving] = useState(false);
+    const [editingHolidayId, setEditingHolidayId] = useState<number | null>(null);
     const [dtrReloadKey, setDtrReloadKey] = useState(0);
     
     // Manual Edit State
@@ -198,6 +207,13 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
 
     useEffect(() => {
         fetchAttendance(filterDate);
+        const refresh = () => fetchAttendance(filterDate);
+        const interval = setInterval(refresh, 5000);
+        window.addEventListener(REALTIME_EVENT, refresh);
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener(REALTIME_EVENT, refresh);
+        };
     }, [filterDate, fetchAttendance]);
 
     useEffect(() => {
@@ -221,14 +237,23 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
 
     useEffect(() => {
         if (!canViewStudentDtr) return;
-        axios.get('/api/personnel')
-            .then((response) => {
-                const list = Array.isArray(response.data) ? response.data : [];
-                setStudents(list);
-            })
-            .catch((error) => {
-                console.error('Failed to load students for DTR', error);
-            });
+        const loadStudents = () => {
+            axios.get('/api/personnel')
+                .then((response) => {
+                    const list = Array.isArray(response.data) ? response.data : [];
+                    setStudents(list);
+                })
+                .catch((error) => {
+                    console.error('Failed to load students for DTR', error);
+                });
+        };
+        loadStudents();
+        const interval = setInterval(loadStudents, 5000);
+        window.addEventListener(REALTIME_EVENT, loadStudents);
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener(REALTIME_EVENT, loadStudents);
+        };
     }, [canViewStudentDtr]);
 
     useEffect(() => {
@@ -401,24 +426,72 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
         setSelectedStudentId(String(filteredStudents[0].id));
     }
 
+    const formatHolidayWhen = (holiday: Pick<Holiday, 'date' | 'end_date'>) => {
+        const startLabel = new Date(`${holiday.date.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+        const endKey = (holiday.end_date || holiday.date).slice(0, 10);
+        if (endKey === holiday.date.slice(0, 10)) return startLabel;
+        const endLabel = new Date(`${endKey}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+        const start = new Date(`${holiday.date.slice(0, 10)}T00:00:00`);
+        const end = new Date(`${endKey}T00:00:00`);
+        const days = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+        return `${startLabel} – ${endLabel} · ${days} days`;
+    };
+
+    const beginHolidayEdit = (holiday: Holiday) => {
+        const end = (holiday.end_date || holiday.date).slice(0, 10);
+        setEditingHolidayId(holiday.id);
+        setHolidayDate(holiday.date.slice(0, 10));
+        setHolidayEndDate(end);
+        setHolidaySpan(end === holiday.date.slice(0, 10) ? 'single' : 'multiple');
+        setHolidayName(holiday.name);
+        document.getElementById('dtr-holiday-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+
+    const cancelHolidayEdit = () => {
+        setEditingHolidayId(null);
+        setHolidayName('');
+        setHolidaySpan('single');
+    };
+
     const saveHoliday = async (event: FormEvent) => {
         event.preventDefault();
-        if (!canManageHolidays || !holidayDate || !holidayName.trim()) return;
+        const endDate = holidaySpan === 'multiple' ? holidayEndDate : holidayDate;
+        if (!canManageHolidays || !holidayDate || !endDate || !holidayName.trim()) return;
+        if (endDate < holidayDate) {
+            setToastMsg({ text: 'The end date must be on or after the start date.', type: 'error' });
+            return;
+        }
         setHolidaySaving(true);
+        const wasEditing = editingHolidayId !== null;
+        const coversManyDays = endDate !== holidayDate;
+        const payload = { date: holidayDate, end_date: endDate, name: holidayName.trim() };
         try {
-            await axios.post('/api/holidays', { date: holidayDate, name: holidayName.trim() });
+            if (editingHolidayId) {
+                await axios.put(`/api/holidays/${editingHolidayId}`, payload);
+            } else {
+                await axios.post('/api/holidays', payload);
+            }
             setHolidayName('');
+            setEditingHolidayId(null);
+            setHolidaySpan('single');
             const monthKey = holidayDate.slice(0, 7);
             if (monthKey !== dtrMonth) {
                 setDtrMonth(monthKey);
             } else {
                 await loadHolidays();
             }
-            setToastMsg({ text: 'Holiday added. It will appear as Holiday on every DTR for that date.', type: 'success' });
+            setToastMsg({
+                text: wasEditing
+                    ? 'Holiday updated. The DTR remark follows the new dates and name.'
+                    : coversManyDays
+                        ? 'Holiday added. Every day in that range is marked Holiday on the DTR.'
+                        : 'Holiday added. It will appear as Holiday on every DTR for that date.',
+                type: 'success',
+            });
         } catch (error: unknown) {
             const message = axios.isAxiosError(error)
-                ? (error.response?.data?.message || error.response?.data?.errors?.date?.[0] || 'Could not add that holiday.')
-                : 'Could not add that holiday.';
+                ? (error.response?.data?.message || error.response?.data?.errors?.date?.[0] || error.response?.data?.errors?.end_date?.[0] || 'Could not save that holiday.')
+                : 'Could not save that holiday.';
             setToastMsg({ text: String(message), type: 'error' });
         } finally {
             setHolidaySaving(false);
@@ -430,6 +503,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
         try {
             await axios.delete(`/api/holidays/${holiday.id}`);
             setHolidays((current) => current.filter((item) => item.id !== holiday.id));
+            if (editingHolidayId === holiday.id) cancelHolidayEdit();
             setToastMsg({ text: `${holiday.name} removed.`, type: 'success' });
         } catch (error) {
             console.error('Failed to remove holiday', error);
@@ -679,9 +753,11 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                         {/* Student Worker Column */}
                                         <td className="px-6 py-5 align-top">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-black shrink-0 border border-blue-100 shadow-inner">
-                                                    {studentName.charAt(0)}
-                                                </div>
+                                                <UserAvatar
+                                                    name={studentName}
+                                                    picture={record.user?.profile_picture}
+                                                    className="w-10 h-10 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-sm"
+                                                />
                                                 <div>
                                                     <p className="text-sm font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
                                                         {studentName}
@@ -815,21 +891,59 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                         <div>
                             <h3 className="text-xl font-black text-slate-900 tracking-tight">DTR Holidays</h3>
                             <p className="text-xs font-medium text-slate-500 mt-0.5">
-                                Holidays you add are marked Holiday on every student DTR. Saturdays and Sundays are marked Weekend automatically.
+                                Add one date, or a range of dates. Every day in the range is marked Holiday on student DTRs. Saturdays and Sundays are marked Saturday or Sunday automatically.
                             </p>
                         </div>
                     </div>
-                    <form onSubmit={saveHoliday} className="px-6 py-5 grid grid-cols-1 md:grid-cols-[180px_1fr_auto] gap-4 items-end border-b border-slate-100">
+                    <form id="dtr-holiday-form" onSubmit={saveHoliday} className="px-6 py-5 border-b border-slate-100 space-y-4">
+                        <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+                            {([
+                                ['single', 'Single date'],
+                                ['multiple', 'Multiple dates'],
+                            ] as const).map(([value, label]) => (
+                                <button
+                                    key={value}
+                                    type="button"
+                                    onClick={() => {
+                                        setHolidaySpan(value);
+                                        if (value === 'multiple' && holidayEndDate < holidayDate) setHolidayEndDate(holidayDate);
+                                    }}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                                        holidaySpan === value ? 'bg-white text-amber-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                                    }`}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                        <div className={`grid grid-cols-1 gap-4 items-end ${holidaySpan === 'multiple' ? 'md:grid-cols-[160px_160px_1fr_auto]' : 'md:grid-cols-[180px_1fr_auto]'}`}>
                         <div>
-                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Date</label>
+                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">{holidaySpan === 'multiple' ? 'Start date' : 'Date'}</label>
                             <input
                                 type="date"
                                 value={holidayDate}
-                                onChange={(event) => setHolidayDate(event.target.value)}
+                                onChange={(event) => {
+                                    const next = event.target.value;
+                                    setHolidayDate(next);
+                                    if (holidayEndDate < next) setHolidayEndDate(next);
+                                }}
                                 required
                                 className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-500"
                             />
                         </div>
+                        {holidaySpan === 'multiple' && (
+                            <div>
+                                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">End date</label>
+                                <input
+                                    type="date"
+                                    value={holidayEndDate}
+                                    min={holidayDate}
+                                    onChange={(event) => setHolidayEndDate(event.target.value)}
+                                    required
+                                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-500"
+                                />
+                            </div>
+                        )}
                         <div>
                             <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Holiday name</label>
                             <input
@@ -842,13 +956,25 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                 className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-amber-500"
                             />
                         </div>
-                        <button
-                            type="submit"
-                            disabled={holidaySaving}
-                            className="h-10.5 px-5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-sm font-bold rounded-xl shadow-md shadow-amber-600/20 transition-all"
-                        >
-                            {holidaySaving ? 'Saving...' : 'Add holiday'}
-                        </button>
+                        <div className="flex items-center gap-2">
+                            {editingHolidayId && (
+                                <button
+                                    type="button"
+                                    onClick={cancelHolidayEdit}
+                                    className="h-10.5 px-4 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-bold rounded-xl"
+                                >
+                                    Cancel
+                                </button>
+                            )}
+                            <button
+                                type="submit"
+                                disabled={holidaySaving}
+                                className="h-10.5 px-5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-sm font-bold rounded-xl shadow-md shadow-amber-600/20 transition-all"
+                            >
+                                {holidaySaving ? 'Saving...' : editingHolidayId ? 'Save changes' : 'Add holiday'}
+                            </button>
+                        </div>
+                        </div>
                     </form>
                     <div className="px-6 py-4">
                         {holidays.length === 0 ? (
@@ -856,22 +982,32 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                         ) : (
                             <ul className="divide-y divide-slate-100">
                                 {holidays.map((holiday) => (
-                                    <li key={holiday.id} className="flex items-center justify-between gap-3 py-3">
+                                    <li key={holiday.id} className={`flex items-center justify-between gap-3 py-3 ${editingHolidayId === holiday.id ? 'bg-amber-50/70 -mx-3 px-3 rounded-xl' : ''}`}>
                                         <div>
                                             <p className="text-sm font-black text-slate-900">{holiday.name}</p>
                                             <p className="text-xs font-medium text-slate-500">
-                                                {new Date(`${holiday.date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                                                {formatHolidayWhen(holiday)}
                                                 {' · '}Remark: Holiday
                                             </p>
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => removeHoliday(holiday)}
-                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-red-50 text-red-700 border border-red-200 rounded-lg text-xs font-bold"
-                                        >
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                            Remove
-                                        </button>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <button
+                                                type="button"
+                                                onClick={() => beginHolidayEdit(holiday)}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold"
+                                            >
+                                                <Pencil className="w-3.5 h-3.5" />
+                                                Edit
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => removeHoliday(holiday)}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-red-50 text-red-700 border border-red-200 rounded-lg text-xs font-bold"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                                Remove
+                                            </button>
+                                        </div>
                                     </li>
                                 ))}
                             </ul>
@@ -968,9 +1104,11 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                     {/* Selected Student Mini-Profile */}
                     <div className="px-6 py-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4 bg-white relative">
                         <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-full bg-slate-100 border-2 border-slate-200 flex items-center justify-center text-slate-500 shadow-sm shrink-0">
-                                <UserCircle className="w-6 h-6" />
-                            </div>
+                            <UserAvatar
+                                name={dtrStudentName}
+                                picture={students.find((student) => String(student.id) === selectedStudentId)?.profile_picture}
+                                className="w-12 h-12 rounded-full bg-slate-100 border-2 border-slate-200 text-slate-600 text-base"
+                            />
                             <div>
                                 <h4 className="text-base font-black text-slate-900 flex items-center gap-2">
                                     {dtrStudentName || 'Select a student'}
@@ -1187,8 +1325,8 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 print:hidden"
-                    onClick={() => setDtrPreviewOpen(false)}
+                    className="fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 print:hidden"
+                    {...bindPopup(() => setDtrPreviewOpen(false))}
                 >
                     <motion.div
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}

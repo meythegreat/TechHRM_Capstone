@@ -25,6 +25,7 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'username',
+        'email',
         'password',
         'must_change_password',
         'role',
@@ -62,16 +63,22 @@ class User extends Authenticatable
                 return;
             }
 
-            // Soft delete keeps the row, and username is unique. Free the
-            // login email so the same address can be registered again.
+            // Soft delete keeps the row, and username/email are unique. Free
+            // both so the same login can be registered again.
             $user->releaseUsername();
         });
     }
 
     public function releaseUsername(): void
     {
+        $this->archiveUniqueColumn('username');
+        $this->archiveUniqueColumn('email');
+    }
+
+    private function archiveUniqueColumn(string $column): void
+    {
         $suffix = '#deleted-' . $this->getKey();
-        $current = (string) $this->username;
+        $current = (string) ($this->{$column} ?? '');
 
         if ($current === '' || str_ends_with($current, $suffix)) {
             return;
@@ -82,8 +89,8 @@ class User extends Authenticatable
             $released = substr($current, 0, 255 - strlen($suffix)) . $suffix;
         }
 
-        DB::table('users')->where('id', $this->getKey())->update(['username' => $released]);
-        $this->username = $released;
+        DB::table('users')->where('id', $this->getKey())->update([$column => $released]);
+        $this->{$column} = $released;
     }
 
     public function profile()

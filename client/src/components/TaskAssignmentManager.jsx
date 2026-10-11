@@ -4,6 +4,9 @@ import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getSupervisorTasks, assignTask, addSupervisorNote, verifyTask } from '../services/taskService';
 import { withHomeDepartmentNote } from '../utils/studentAssignment';
+import UserAvatar from './UserAvatar';
+import { REALTIME_EVENT } from '../utils/realtime';
+import { bindPopup } from '../utils/popupDismiss';
 import { 
     ClipboardCheck, 
     Send, 
@@ -40,29 +43,35 @@ const TaskAssignmentManager = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => { 
-        fetchTasks(); 
+        fetchTasks();
+        const refresh = () => fetchTasks(true);
+        const interval = setInterval(refresh, 5000);
+        window.addEventListener(REALTIME_EVENT, refresh);
         
         if (isSupervisor) {
             axios.get('/api/personnel')
                 .then(res => setStudents(res.data))
                 .catch(err => console.error('Error fetching department personnel:', err));
         } else {
-            // Coordinators can review all currently deployed working students.
             axios.get('/api/personnel')
                 .then(res => setStudents(res.data))
                 .catch(err => console.error('Error fetching working students:', err));
         }
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener(REALTIME_EVENT, refresh);
+        };
     }, []);
 
-    const fetchTasks = async () => {
-        setIsLoading(true);
+    const fetchTasks = async (silent = false) => {
+        if (!silent) setIsLoading(true);
         try {
             const res = await getSupervisorTasks();
             setTasks(res.data);
         } catch (err) {
             console.error('Failed to fetch tasks', err);
         } finally {
-            setIsLoading(false);
+            if (!silent) setIsLoading(false);
         }
     };
 
@@ -358,9 +367,11 @@ const TaskAssignmentManager = () => {
 
                                         <div className="pt-4 border-t border-slate-100 flex items-center justify-between mt-auto">
                                             <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
-                                                <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center border border-blue-200">
-                                                    {(task.student?.name || '?').charAt(0)}
-                                                </div>
+                                                <UserAvatar
+                                                    name={task.student?.name}
+                                                    picture={task.student?.profile_picture}
+                                                    className="w-6 h-6 rounded-full bg-blue-100 border border-blue-200 text-blue-700 text-[10px]"
+                                                />
                                                 <span className="truncate max-w-[100px]">{task.student?.name || 'Unknown'}</span>
                                                 {task.student?.deleted_at && (
                                                     <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
@@ -409,7 +420,8 @@ const TaskAssignmentManager = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] flex items-center justify-center p-4"
+                        {...bindPopup(() => setNoteModal(null))}
                     >
                         <motion.div 
                             initial={{ scale: 0.95, opacity: 0, y: 20 }}

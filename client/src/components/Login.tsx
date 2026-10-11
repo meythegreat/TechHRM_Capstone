@@ -22,9 +22,10 @@ import { normalizeFilePath } from '../utils/secureFile';
 interface LoginProps {
     onLoginSuccess: (token: string, role: string, name: string, profilePic: string | null, mustChangePassword: boolean) => void;
     onNavigateToApply: () => void;
+    onNavigateToTrack?: () => void;
 }
 
-const Login = ({ onLoginSuccess, onNavigateToApply }: LoginProps) => {
+const Login = ({ onLoginSuccess, onNavigateToApply, onNavigateToTrack }: LoginProps) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
@@ -320,6 +321,15 @@ const Login = ({ onLoginSuccess, onNavigateToApply }: LoginProps) => {
                                 Submit an Application
                                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                             </button>
+                            {onNavigateToTrack && (
+                                <button
+                                    type="button"
+                                    onClick={onNavigateToTrack}
+                                    className="w-full mt-3 py-3.5 px-4 bg-white hover:bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 hover:text-slate-900 transition-all"
+                                >
+                                    Track an Application
+                                </button>
+                            )}
                         </motion.div>
                     )}
                 </motion.div>

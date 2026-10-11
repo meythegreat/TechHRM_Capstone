@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Clock, CheckCircle2, TrendingUp } from 'lucide-react';
 import { financialService } from '../services/financialService';
+import { REALTIME_EVENT } from '../utils/realtime';
 
 export const StudentCompensationView: React.FC = () => {
   const [data, setData] = useState<{
@@ -17,11 +18,28 @@ export const StudentCompensationView: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    financialService
-      .getStudentCompensation()
-      .then((res) => setData(res))
-      .catch((err) => console.error('Failed to load hours rendered:', err))
-      .finally(() => setLoading(false));
+    let active = true;
+    const load = (silent = false) => {
+      if (!silent) setLoading(true);
+      financialService
+        .getStudentCompensation()
+        .then((res) => {
+          if (active) setData(res);
+        })
+        .catch((err) => console.error('Failed to load hours rendered:', err))
+        .finally(() => {
+          if (active && !silent) setLoading(false);
+        });
+    };
+    load();
+    const refresh = () => load(true);
+    const interval = setInterval(refresh, 5000);
+    window.addEventListener(REALTIME_EVENT, refresh);
+    return () => {
+      active = false;
+      clearInterval(interval);
+      window.removeEventListener(REALTIME_EVENT, refresh);
+    };
   }, []);
 
   if (loading) {

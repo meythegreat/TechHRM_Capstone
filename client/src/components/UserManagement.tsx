@@ -2,6 +2,9 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import Toast from "./Toast";
+import UserAvatar from "./UserAvatar";
+import { REALTIME_EVENT } from "../utils/realtime";
+import { bindPopup } from "../utils/popupDismiss";
 import {
     Users,
     UserPlus,
@@ -31,7 +34,9 @@ interface UserRecord {
   id: number;
   name: string;
   username: string;
+  email?: string | null;
   role: string;
+  profile_picture?: string | null;
   phone_number?: string;
   created_at: string;
   deleted_at?: string | null;
@@ -68,8 +73,8 @@ const UserManagement = () => {
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
 
   // State for showing generated credentials
-  const [generatedCredentials, setGeneratedCredentials] = useState<{name: string, username: string, password: string} | null>(null);
-  const [copiedField, setCopiedField] = useState<'username' | 'password' | null>(null);
+  const [generatedCredentials, setGeneratedCredentials] = useState<{name: string, username: string, email: string, password: string} | null>(null);
+  const [copiedField, setCopiedField] = useState<'username' | 'email' | 'password' | null>(null);
 
   const [showPassword, setShowPassword] = useState(false);
   const [departmentSupervisors, setDepartmentSupervisors] = useState<Record<string, string[]>>({});
@@ -81,6 +86,7 @@ const UserManagement = () => {
     middle_initial: "",
     last_name: "",
     username: "",
+    email: "",
     password: "", // Kept for resetting forgotten passwords
     phone_number: "",
     role: "Student",
@@ -101,6 +107,16 @@ const UserManagement = () => {
     }, 500);
     return () => clearTimeout(handler);
   }, [searchQuery]);
+
+  useEffect(() => {
+    const refresh = () => fetchUsers(currentPage, searchQuery, true);
+    const interval = setInterval(refresh, 5000);
+    window.addEventListener(REALTIME_EVENT, refresh);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener(REALTIME_EVENT, refresh);
+    };
+  }, [currentPage, searchQuery]);
 
   useEffect(() => {
     axios.get('/api/department-supervisors')
@@ -131,8 +147,8 @@ const UserManagement = () => {
     setToastMsg({ text, type });
   };
 
-  const fetchUsers = async (page: number, search: string = searchQuery) => {
-    setIsLoading(true);
+  const fetchUsers = async (page: number, search: string = searchQuery, silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       const response = await axios.get('/api/users', { params: { page, search } });
       const data = response.data.data || response.data;
@@ -145,7 +161,7 @@ const UserManagement = () => {
       console.error("Failed to fetch users", error);
       showToast("Failed to load user records.", "error");
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
@@ -242,6 +258,7 @@ const UserManagement = () => {
       if (editingUserId) {
         const payload: any = {
             name: combinedName,
+            email: formData.email.trim(),
             phone_number: formData.phone_number ? `+63${formData.phone_number}` : '',
             role: formData.role,
             assigned_office: formData.assigned_office,
@@ -271,6 +288,7 @@ const UserManagement = () => {
         const payload: any = {
             name: combinedName,
             username: genUser,
+            email: formData.email.trim(),
             password: genPass,
             phone_number: formData.phone_number ? `+63${formData.phone_number}` : '',
             role: formData.role,
@@ -289,7 +307,7 @@ const UserManagement = () => {
         await axios.post('/api/users', payload);
 
         setIsModalOpen(false);
-        setGeneratedCredentials({ name: combinedName, username: genUser, password: genPass });
+        setGeneratedCredentials({ name: combinedName, username: genUser, email: formData.email.trim(), password: genPass });
       }
       fetchUsers(currentPage);
       axios.get('/api/department-supervisors')
@@ -326,6 +344,7 @@ const UserManagement = () => {
     setFormData({
       prefix, first_name, middle_initial, last_name,
       username: user.username,
+      email: user.email || "",
       password: "", // Leave blank. If typed in, it resets the forgotten password.
       phone_number: user.phone_number?.replace('+63', '') || "",
       role: user.role,
@@ -345,13 +364,13 @@ const UserManagement = () => {
     setEditingUserId(null);
     setFormData({
       prefix: "", first_name: "", middle_initial: "", last_name: "",
-      username: "", password: "", phone_number: "", role: "Student",
+      username: "", email: "", password: "", phone_number: "", role: "Student",
       student_id_number: "", course: "", year_level: "", assigned_office: "", supervised_departments: [], duty_type: "Clerical", duty_request: "", gender: "",
     });
     setIsModalOpen(true);
   };
 
-  const copyToClipboard = (text: string, field: 'username' | 'password') => {
+  const copyToClipboard = (text: string, field: 'username' | 'email' | 'password') => {
       navigator.clipboard.writeText(text);
       setCopiedField(field);
       setTimeout(() => setCopiedField(null), 2000);
@@ -448,10 +467,11 @@ const UserManagement = () => {
                               <motion.tr variants={rowVariants} key={user.id} className="hover:bg-slate-50 transition-colors group">
                                   <td className="px-6 py-5 align-top">
                                       <div className="flex items-center gap-3">
-                                          <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-black shrink-0 border border-indigo-100 shadow-inner">{user.name.charAt(0)}</div>
+                                          <UserAvatar name={user.name} picture={user.profile_picture} className="w-10 h-10 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-sm" />
                                           <div>
                                               <p className="font-bold text-slate-900 group-hover:text-indigo-700 transition-colors">{user.name}</p>
                                               <p className="text-xs font-medium text-slate-500 mt-0.5 font-mono">{user.username}</p>
+                                              {user.email && <p className="text-xs font-medium text-slate-400 mt-0.5">{user.email}</p>}
                                           </div>
                                       </div>
                                   </td>
@@ -512,7 +532,7 @@ const UserManagement = () => {
       {/* GENERATED CREDENTIALS MODAL (Shown only on successful creation) */}
       <AnimatePresence>
         {generatedCredentials && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4" {...bindPopup(() => setGeneratedCredentials(null))}>
                 <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-emerald-100">
                     <div className="bg-emerald-50 p-6 sm:p-8 flex flex-col items-center text-center border-b border-emerald-100 relative">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500 rounded-full blur-3xl opacity-20 mix-blend-multiply"></div>
@@ -525,11 +545,21 @@ const UserManagement = () => {
 
                     <div className="p-6 sm:p-8 space-y-5 bg-white">
                         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">System Username / Login ID</label>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Username</label>
                             <div className="flex items-center justify-between">
                                 <span className="font-mono text-lg font-black text-indigo-700 select-all">{generatedCredentials.username}</span>
                                 <button onClick={() => copyToClipboard(generatedCredentials.username, 'username')} className="p-2 bg-white border border-slate-200 hover:border-indigo-300 hover:text-indigo-600 rounded-lg shadow-sm transition-all">
                                     {copiedField === 'username' ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4 text-slate-500" />}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Email</label>
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="font-mono text-base font-black text-indigo-700 select-all truncate">{generatedCredentials.email}</span>
+                                <button onClick={() => copyToClipboard(generatedCredentials.email, 'email')} className="p-2 bg-white border border-slate-200 hover:border-indigo-300 hover:text-indigo-600 rounded-lg shadow-sm transition-all">
+                                    {copiedField === 'email' ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4 text-slate-500" />}
                                 </button>
                             </div>
                         </div>
@@ -567,7 +597,8 @@ const UserManagement = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] flex items-center justify-center p-4 overflow-y-auto"
+            {...bindPopup(() => setIsModalOpen(false))}
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
@@ -638,6 +669,12 @@ const UserManagement = () => {
                             <option value="">-- Select gender --</option>
                             {GENDERS.map((gender) => <option key={gender} value={gender}>{gender}</option>)}
                         </select>
+                    </div>
+
+                    <div className="sm:col-span-12">
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Email Address *</label>
+                        <input required type="email" name="email" value={formData.email} onChange={handleInputChange} placeholder="name@filamer.edu.ph" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all placeholder:text-slate-400" />
+                        <p className="mt-2 text-[11px] font-medium text-slate-500">This person can sign in with either the generated username or this email.</p>
                     </div>
 
                     <div className="sm:col-span-6">
@@ -847,7 +884,7 @@ const UserManagement = () => {
                         <div>
                             <p className="text-xs font-black text-blue-800 uppercase tracking-widest mb-1">Secure Authentication Generation</p>
                             <p className="text-[11px] font-medium text-blue-700 leading-relaxed">
-                                To ensure maximum security, a complex username and encrypted password will be automatically generated. You will be provided with the credentials to securely share with the user once you click save.
+                                A username and password are generated when you save. The person can sign in with that username or the email address above.
                             </p>
                         </div>
                     </div>

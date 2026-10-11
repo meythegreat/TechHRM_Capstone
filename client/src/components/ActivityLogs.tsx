@@ -2,6 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
+import UserAvatar from './UserAvatar';
+import { REALTIME_EVENT } from '../utils/realtime';
+import { bindPopup } from '../utils/popupDismiss';
 import { 
     ShieldAlert, 
     Terminal, 
@@ -35,6 +38,10 @@ interface LogRecord {
     admin_id: number;
     admin_name: string;
     account_deleted?: boolean;
+    admin?: {
+        name?: string;
+        profile_picture?: string | null;
+    } | null;
     action: string;
     description: string;
     ip_address: string;
@@ -92,6 +99,13 @@ const ActivityLogs = () => {
 
     useEffect(() => {
         fetchLogs(currentPage, category, name);
+        const refresh = () => fetchLogs(currentPage, category, name, true);
+        const interval = setInterval(refresh, 5000);
+        window.addEventListener(REALTIME_EVENT, refresh);
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener(REALTIME_EVENT, refresh);
+        };
     }, [currentPage, category, name]);
 
     const openBreakdown = (log: LogRecord) => {
@@ -118,8 +132,8 @@ const ActivityLogs = () => {
         setCurrentPage(1);
     };
 
-    const fetchLogs = async (page: number, selectedCategory: ActionCategory, selectedName: string) => {
-        setIsLoading(true);
+    const fetchLogs = async (page: number, selectedCategory: ActionCategory, selectedName: string, silent = false) => {
+        if (!silent) setIsLoading(true);
         try {
             const response = await axios.get('/api/logs', {
                 params: {
@@ -134,7 +148,7 @@ const ActivityLogs = () => {
         } catch (error) {
             console.error('Error fetching logs:', error);
         } finally {
-            setIsLoading(false);
+            if (!silent) setIsLoading(false);
         }
     };
 
@@ -319,9 +333,11 @@ const ActivityLogs = () => {
                                         </td>
                                         <td className="px-6 py-5 align-top">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-black text-sm shrink-0 border border-indigo-100 shadow-inner">
-                                                    {log.admin_name.charAt(0)}
-                                                </div>
+                                                <UserAvatar
+                                                    name={log.admin?.name || log.admin_name}
+                                                    picture={log.admin?.profile_picture}
+                                                    className="w-10 h-10 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-sm"
+                                                />
                                                 <div>
                                                     <span className="text-sm font-bold text-slate-900 group-hover:text-indigo-700 transition-colors block">
                                                         {log.admin_name}
@@ -403,8 +419,8 @@ const ActivityLogs = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" 
-                        onClick={() => setSelectedLog(null)}
+                        className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
+                        {...bindPopup(() => setSelectedLog(null))}
                     >
                         <motion.div
                             initial={{ scale: 0.95, opacity: 0, y: 20 }}

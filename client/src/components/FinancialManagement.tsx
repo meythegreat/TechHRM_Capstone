@@ -11,6 +11,9 @@ import {
     Trash2
 } from 'lucide-react';
 import { financialService } from '../services/financialService';
+import { REALTIME_EVENT } from '../utils/realtime';
+import { bindPopup } from '../utils/popupDismiss';
+import UserAvatar from './UserAvatar';
 
 interface FinancialRecordItem {
   id: number;
@@ -23,6 +26,7 @@ interface FinancialRecordItem {
   status: 'Draft' | 'Approved' | 'Locked' | 'Forwarded to Finance';
   student?: {
     name: string;
+    profile_picture?: string | null;
   };
 }
 
@@ -58,6 +62,13 @@ export const FinancialManagement: React.FC = () => {
 
   useEffect(() => {
     fetchRecords();
+    const refresh = () => fetchRecords(true);
+    const interval = setInterval(refresh, 5000);
+    window.addEventListener(REALTIME_EVENT, refresh);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener(REALTIME_EVENT, refresh);
+    };
   }, []);
 
   const handleCompute = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -269,9 +280,11 @@ export const FinancialManagement: React.FC = () => {
                                   {index === 0 && (
                                   <td className="px-6 py-5 align-top border-t border-slate-100" rowSpan={coverages.length}>
                                       <div className="flex items-center gap-3">
-                                          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-black shrink-0 border border-blue-100 shadow-inner">
-                                              {(r.student?.name || '?').charAt(0)}
-                                          </div>
+                                          <UserAvatar
+                                              name={r.student?.name}
+                                              picture={r.student?.profile_picture}
+                                              className="w-10 h-10 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-sm"
+                                          />
                                           <p className="font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
                                               {r.student?.name || 'Unknown Student'}
                                           </p>
@@ -348,7 +361,8 @@ export const FinancialManagement: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] flex items-center justify-center p-4 overflow-y-auto"
+            {...bindPopup(() => setShowCompute(false))}
           >
             <motion.div 
               initial={{ scale: 0.95, opacity: 0, y: 20 }}

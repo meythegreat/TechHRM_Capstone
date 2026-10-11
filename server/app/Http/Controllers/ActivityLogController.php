@@ -19,12 +19,12 @@ class ActivityLogController extends Controller
 
         if ($request->user()->role === 'Super Admin') {
             $query->with(['admin' => function ($relation) {
-                $relation->withTrashed()->select('id', 'name', 'role', 'deleted_at');
+                $relation->withTrashed()->select('id', 'name', 'role', 'profile_picture', 'deleted_at');
             }]);
         } else {
             $query->where(function ($builder) {
                 $builder->whereNull('admin_id')->orWhereHas('admin');
-            })->with('admin:id,name,role');
+            })->with('admin:id,name,role,profile_picture');
         }
 
         $logs = $query->paginate(15);

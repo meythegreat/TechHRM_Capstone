@@ -3,6 +3,7 @@ import axios from 'axios';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import Toast from './Toast';
 import { openSecureFile } from '../utils/secureFile';
+import { bindPopup } from '../utils/popupDismiss';
 import { 
     FileText, 
     CheckCircle2, 
@@ -16,6 +17,8 @@ import {
     User
 } from 'lucide-react';
 import AuditPager, { pageSlice } from './AuditPager';
+import UserAvatar from './UserAvatar';
+import { REALTIME_EVENT } from '../utils/realtime';
 
 interface Requirement {
     id: number;
@@ -26,6 +29,7 @@ interface Requirement {
     created_at: string;
     user?: {
         name: string;
+        profile_picture?: string | null;
         profile?: {
             student_id_number: string;
             assigned_office: string;
@@ -47,17 +51,24 @@ const RequirementManagement = () => {
 
     useEffect(() => {
         fetchRequirements();
+        const refresh = () => fetchRequirements(true);
+        const interval = setInterval(refresh, 5000);
+        window.addEventListener(REALTIME_EVENT, refresh);
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener(REALTIME_EVENT, refresh);
+        };
     }, []);
 
-    const fetchRequirements = async () => {
-        setIsLoading(true);
+    const fetchRequirements = async (silent = false) => {
+        if (!silent) setIsLoading(true);
         try {
             const res = await axios.get('/api/requirements');
             setRequirements(res.data);
         } catch (error) {
             console.error("Failed to fetch requirements", error);
         } finally {
-            setIsLoading(false);
+            if (!silent) setIsLoading(false);
         }
     };
 
@@ -192,9 +203,11 @@ const RequirementManagement = () => {
                                         {/* Student Details Column */}
                                         <td className="px-6 py-5 align-top">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-black shrink-0 border border-blue-100 shadow-inner">
-                                                    {(req.user?.name || '?').charAt(0)}
-                                                </div>
+                                                <UserAvatar
+                                                    name={req.user?.name}
+                                                    picture={req.user?.profile_picture}
+                                                    className="w-10 h-10 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-sm"
+                                                />
                                                 <div>
                                                     <p className="font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
                                                         {req.user?.name || 'Unknown User'}
@@ -285,7 +298,8 @@ const RequirementManagement = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] flex items-center justify-center p-4"
+                        {...bindPopup(() => setIsRejectModalOpen(false))}
                     >
                         <motion.div 
                             initial={{ scale: 0.95, opacity: 0, y: 20 }}

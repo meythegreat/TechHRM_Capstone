@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Application extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'user_id',
@@ -27,6 +28,7 @@ class Application extends Model
         'reason_for_applying',
         'status',
         'source',
+        'tracking_code',
         'interview_date',
         'interview_remarks',
         'assigned_department',
@@ -48,5 +50,10 @@ class Application extends Model
     public function documents()
     {
         return $this->hasMany(ApplicationDocument::class);
+    }
+
+    public function statusEvents()
+    {
+        return $this->hasMany(ApplicationStatusEvent::class)->orderBy('occurred_at')->orderBy('id');
     }
 }

@@ -27,7 +27,7 @@ interface TimesheetPrintViewProps {
     penaltyHours?: number;
     startDate: string;
     endDate: string;
-    holidays?: { date: string; name?: string }[];
+    holidays?: { date: string; end_date?: string | null; name?: string }[];
 }
 
 interface DaySlots {
@@ -109,6 +109,23 @@ const applyTime = (slots: DaySlots, date: Date, kind: 'in' | 'out') => {
     }
 };
 
+const holidayDateKeys = (startValue: string, endValue?: string | null) => {
+    const startKey = String(startValue).slice(0, 10);
+    const endKey = String(endValue || startValue).slice(0, 10);
+    const cursor = new Date(`${startKey}T00:00:00`);
+    const last = new Date(`${endKey}T00:00:00`);
+    if (Number.isNaN(cursor.getTime()) || Number.isNaN(last.getTime()) || last < cursor) return [startKey];
+
+    const keys: string[] = [];
+    while (cursor <= last && keys.length < 31) {
+        const month = String(cursor.getMonth() + 1).padStart(2, '0');
+        const day = String(cursor.getDate()).padStart(2, '0');
+        keys.push(`${cursor.getFullYear()}-${month}-${day}`);
+        cursor.setDate(cursor.getDate() + 1);
+    }
+    return keys;
+};
+
 const TimesheetPrintView: React.FC<TimesheetPrintViewProps> = ({
     fullName,
     studentProfile,
@@ -122,7 +139,7 @@ const TimesheetPrintView: React.FC<TimesheetPrintViewProps> = ({
     const year = monthBase.getFullYear();
     const month = monthBase.getMonth();
     const monthLabel = monthBase.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    const holidayDates = new Set(holidays.map((holiday) => String(holiday.date).slice(0, 10)));
+    const holidayDates = new Set(holidays.flatMap((holiday) => holidayDateKeys(holiday.date, holiday.end_date)));
 
     const byDay: Record<number, DaySlots> = {};
     history.forEach((record) => {
@@ -289,7 +306,8 @@ const TimesheetPrintView: React.FC<TimesheetPrintViewProps> = ({
                         const weekday = date.getDay();
                         const remarks: string[] = [];
                         if (dayExists && holidayDates.has(dateKey)) remarks.push('Holiday');
-                        if (dayExists && (weekday === 0 || weekday === 6)) remarks.push('Weekend');
+                        if (dayExists && weekday === 6) remarks.push('Saturday');
+                        if (dayExists && weekday === 0) remarks.push('Sunday');
                         (slots?.remarks ?? []).forEach((remark) => {
                             if (remark && !remarks.includes(remark)) remarks.push(remark);
                         });

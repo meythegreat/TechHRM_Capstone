@@ -60,6 +60,7 @@ class AdminController extends Controller
                 'students' => $group->map(fn (User $user) => [
                     'id' => $user->id,
                     'name' => $user->name,
+                    'profile_picture' => $user->profile_picture,
                     'student_id_number' => $user->profile?->student_id_number,
                     'course' => $user->profile?->course,
                     'year_level' => $user->profile?->year_level,

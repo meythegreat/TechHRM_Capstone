@@ -6,6 +6,7 @@ export const STUDENT_PATHS = new Set([
   'schedule',
   'requirements',
   'disciplinary',
+  'application',
   'settings',
 ]);
 

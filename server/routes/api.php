@@ -24,6 +24,7 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
 Route::post('/mobile/login', [\App\Http\Controllers\AuthController::class, 'mobileLogin']);
 Route::post('/apply', [\App\Http\Controllers\ApplicationController::class, 'publicApply']);
+Route::post('/apply/status', [\App\Http\Controllers\ApplicationController::class, 'publicStatus'])->middleware('throttle:8,1');
 
 
 // =========================================================
@@ -67,7 +68,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // =====================================================
 
     Route::get('/notifications', [NotificationController::class, 'index']);
-
+    Route::patch('/notifications/read-all', [NotificationController::class, 'markAllRead']);
+    Route::delete('/notifications', [NotificationController::class, 'clearAll']);
     Route::patch('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
     Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
 
@@ -210,6 +212,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/analytics/export-attendance', [\App\Http\Controllers\AnalyticsController::class, 'exportAttendance']);
 
         Route::post('/holidays', [HolidayController::class, 'store']);
+        Route::put('/holidays/{holiday}', [HolidayController::class, 'update']);
         Route::delete('/holidays/{holiday}', [HolidayController::class, 'destroy']);
     });
 

@@ -4,7 +4,9 @@ import { motion } from 'framer-motion';
 import Toast from './Toast';
 import { UserCircle, ShieldCheck, Camera, Eye, EyeOff } from 'lucide-react';
 import SecureImage from './SecureImage';
+import AvatarCropDialog from './AvatarCropDialog';
 import { normalizeFilePath } from '../utils/secureFile';
+import { emitRealtimeRefresh } from '../utils/realtime';
 
 interface StaffProfileSettingsProps {
     onProfileUpdated?: (name: string, avatarPath: string | null) => void;
@@ -17,6 +19,7 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
     const [phoneNumber, setPhoneNumber] = useState('');
     const [assignedOffice, setAssignedOffice] = useState(localStorage.getItem('assigned_office') || '');
     const [avatarPath, setAvatarPath] = useState<string | null>(() => normalizeFilePath(localStorage.getItem('profile_picture')));
+    const [cropSource, setCropSource] = useState<string | null>(null);
 
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
@@ -40,6 +43,9 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
                     const path = normalizeFilePath(user.profile_picture);
                     setAvatarPath(path);
                     if (path) localStorage.setItem('profile_picture', path);
+                } else {
+                    setAvatarPath(null);
+                    localStorage.removeItem('profile_picture');
                 }
             })
             .catch(() => {
@@ -51,10 +57,27 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
         setMessage({ text, type });
     };
 
-    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+    const closeCrop = () => {
+        setCropSource((current) => {
+            if (current) URL.revokeObjectURL(current);
+            return null;
+        });
+    };
 
+    const handleImageSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            showFeedback('Choose a JPG or PNG image.', 'error');
+            return;
+        }
+        if (cropSource) URL.revokeObjectURL(cropSource);
+        setCropSource(URL.createObjectURL(file));
+    };
+
+    const uploadCroppedAvatar = async (file: File) => {
+        closeCrop();
         const formData = new FormData();
         formData.append('avatar', file);
         setIsUploading(true);
@@ -67,12 +90,12 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
             setAvatarPath(path);
             if (path) localStorage.setItem('profile_picture', path);
             onProfileUpdated?.(name, path);
+            emitRealtimeRefresh();
             showFeedback('Profile picture updated successfully.', 'success');
         } catch {
             showFeedback('Failed to upload image. Ensure it is under 2MB.', 'error');
         } finally {
             setIsUploading(false);
-            e.target.value = '';
         }
     };
 
@@ -102,6 +125,7 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
 
             localStorage.setItem('user_name', updatedUser.name);
             onProfileUpdated?.(updatedUser.name, avatarPath);
+            emitRealtimeRefresh();
 
             setCurrentPassword('');
             setNewPassword('');
@@ -160,15 +184,13 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
                                     <span className="text-slate-400 font-black text-5xl">{firstName.charAt(0)}</span>
                                 )}
                             </div>
-                            <label htmlFor="staffAvatarUpload" className="absolute inset-0 bg-slate-900/60 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 cursor-pointer backdrop-blur-sm">
-                                <Camera className="w-8 h-8 text-white mb-1" />
-                                <span className="text-white text-xs font-bold uppercase tracking-wider">
-                                    {isUploading ? 'Uploading...' : 'Update Photo'}
-                                </span>
+                            <label htmlFor="staffAvatarUpload" className="absolute bottom-1 right-1 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg cursor-pointer">
+                                <Camera className="w-5 h-5" />
+                                <span className="sr-only">{isUploading ? 'Uploading photo' : 'Change photo'}</span>
                             </label>
-                            <input type="file" id="staffAvatarUpload" accept="image/*" onChange={handleImageUpload} className="hidden" disabled={isUploading} />
+                            <input type="file" id="staffAvatarUpload" accept="image/*" onChange={handleImageSelected} className="hidden" disabled={isUploading} />
                         </div>
-                        <p className="text-xs text-slate-500 font-medium mt-4 text-center">Allowed formats: JPG, PNG. Max size: 2MB.</p>
+                        <p className="text-xs text-slate-500 font-medium mt-4 text-center">Tap the camera button, then crop the photo into a circle. JPG or PNG, up to 2MB.</p>
                     </div>
 
                     <div className="flex-1 w-full space-y-6">
@@ -264,6 +286,9 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
                     </button>
                 </div>
             </form>
+            {cropSource && (
+                <AvatarCropDialog imageUrl={cropSource} onCancel={closeCrop} onConfirm={uploadCroppedAvatar} />
+            )}
         </div>
     );
 };
