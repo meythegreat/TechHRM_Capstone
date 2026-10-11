@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import {
@@ -25,13 +25,17 @@ import {
     FileText,
     Search,
     Eye,
+    EyeOff,
     Mail,
     Phone,
     Copy,
     XCircle,
     Trash2,
+    Undo2,
 } from 'lucide-react';
 import { openSecureFile } from '../utils/secureFile';
+import { bindPopup } from '../utils/popupDismiss';
+import ApplicationStatusTracker from './ApplicationStatusTracker';
 import { REALTIME_EVENT } from '../utils/realtime';
 
 const PIPELINE_STAGES = ['Pending', 'Interview', 'Training', 'For Result', 'Approved'];
@@ -94,15 +98,26 @@ const placementIsComplete = (profile) => Boolean(
 
 const canRemove = (status) => status !== 'Approved';
 
+const approvedAt = (app) => {
+    const events = app.status_events || app.events || [];
+    const approved = [...events].reverse().find((event) => event.status === 'Approved');
+    const raw = approved?.occurred_at || app.updated_at || app.created_at;
+    const time = raw ? new Date(raw).getTime() : NaN;
+    return Number.isFinite(time) ? time : null;
+};
+
 const getNextStage = (status) => {
     const index = PIPELINE_STAGES.indexOf(status);
     if (index === -1 || index >= PIPELINE_STAGES.length - 1) return null;
     return PIPELINE_STAGES[index + 1];
 };
 
+const UNDO_HIDE_MS = 5000;
+
 const ApplicationManager = () => {
     const isAudit = localStorage.getItem('user_role') === 'Super Admin';
     const [applications, setApplications] = useState([]);
+    const [archivedApplications, setArchivedApplications] = useState([]);
     const [modalView, setModalView] = useState('');
     const [selectedApp, setSelectedApp] = useState(null);
     const [suggestions, setSuggestions] = useState([]);
@@ -113,8 +128,134 @@ const ApplicationManager = () => {
     const [error, setError] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [hideOlderApproved, setHideOlderApproved] = useState(false);
+    const [approvedWindow, setApprovedWindow] = useState(7);
     const [issuedCredentials, setIssuedCredentials] = useState(null);
     const [copiedField, setCopiedField] = useState(null);
+    const [declineReason, setDeclineReason] = useState('');
+    const [pendingStage, setPendingStage] = useState('');
+    const [undoAction, setUndoAction] = useState(null);
+    const stageOverlays = useRef(new Map());
+    const stageQueues = useRef(new Map());
+    const commitToken = useRef(0);
+    const closePopup = () => {
+        setModalView('');
+        setIssuedCredentials(null);
+        setPendingStage('');
+    };
+
+    const applyStageOverlays = (rows) => rows.map((row) => {
+        const overlay = stageOverlays.current.get(row.id);
+        return overlay ? { ...row, ...overlay } : row;
+    });
+
+    const syncOverlay = (appId) => {
+        const queue = (stageQueues.current.get(appId) || []).filter((job) => !job.cancelled && !job.done);
+        if (queue.length === 0) {
+            stageOverlays.current.delete(appId);
+            return null;
+        }
+        const latest = queue[queue.length - 1];
+        stageOverlays.current.set(appId, latest.overlay);
+        return latest;
+    };
+
+    useEffect(() => () => {
+        stageQueues.current.forEach((queue) => {
+            queue.forEach((job) => {
+                job.cancelled = true;
+                if (job.timer) clearTimeout(job.timer);
+            });
+        });
+        stageQueues.current.clear();
+    }, []);
+
+    const flushStageJob = async (job) => {
+        if (job.cancelled || job.done) return;
+        const queue = stageQueues.current.get(job.appId) || [];
+        const earlier = queue.find((item) => item !== job && !item.cancelled && !item.done && item.readyAt <= job.readyAt);
+        if (earlier) {
+            job.timer = setTimeout(() => { void flushStageJob(job); }, 250);
+            return;
+        }
+
+        job.started = true;
+        setUndoAction((current) => (current?.token === job.token ? null : current));
+        try {
+            await job.run();
+            job.done = true;
+            syncOverlay(job.appId);
+            fetchApplications(true);
+        } catch (err) {
+            job.done = true;
+            job.cancelled = true;
+            syncOverlay(job.appId);
+            setError(err.response?.data?.message || 'Failed to confirm this stage.');
+            fetchApplications(true);
+        } finally {
+            const remaining = (stageQueues.current.get(job.appId) || []).filter((item) => item !== job);
+            if (remaining.length) stageQueues.current.set(job.appId, remaining);
+            else stageQueues.current.delete(job.appId);
+        }
+    };
+
+    const scheduleStageCommit = (app, overlay, confirmedStage, run) => {
+        const token = commitToken.current + 1;
+        commitToken.current = token;
+        const job = {
+            token,
+            appId: app.id,
+            confirmedStage,
+            overlay,
+            previous: {
+                status: app.status,
+                interview_date: app.interview_date,
+                interview_remarks: app.interview_remarks,
+            },
+            readyAt: Date.now() + UNDO_HIDE_MS,
+            cancelled: false,
+            done: false,
+            started: false,
+            timer: null,
+            run,
+        };
+        const queue = stageQueues.current.get(app.id) || [];
+        queue.push(job);
+        stageQueues.current.set(app.id, queue);
+        stageOverlays.current.set(app.id, overlay);
+        setApplications((prev) => prev.map((item) => (item.id === app.id ? { ...item, ...overlay } : item)));
+        setSelectedApp((current) => (current?.id === app.id ? { ...current, ...overlay } : current));
+        setUndoAction({
+            token,
+            appId: app.id,
+            name: `${app.first_name} ${app.last_name}`.trim(),
+            confirmedStage,
+        });
+        job.timer = setTimeout(() => { void flushStageJob(job); }, UNDO_HIDE_MS);
+    };
+
+    const closeUndo = () => {
+        setUndoAction(null);
+    };
+
+    const undoStage = () => {
+        if (!undoAction) return;
+        const queue = stageQueues.current.get(undoAction.appId) || [];
+        const job = queue.find((item) => item.token === undoAction.token);
+        if (!job || job.started || job.cancelled) return;
+        job.cancelled = true;
+        if (job.timer) clearTimeout(job.timer);
+        const remaining = queue.filter((item) => item !== job);
+        if (remaining.length) stageQueues.current.set(job.appId, remaining);
+        else stageQueues.current.delete(job.appId);
+        const latest = syncOverlay(job.appId);
+        const restored = latest ? latest.overlay : job.previous;
+        setApplications((prev) => prev.map((item) => (item.id === job.appId ? { ...item, ...restored } : item)));
+        setSelectedApp((current) => (current?.id === job.appId ? { ...current, ...restored } : current));
+        setUndoAction(latest && !latest.started
+            ? { token: latest.token, appId: latest.appId, name: undoAction.name, confirmedStage: latest.confirmedStage }
+            : null);
+    };
 
     useEffect(() => {
         fetchApplications();
@@ -146,7 +287,10 @@ const ApplicationManager = () => {
             const res = await getAllApplications();
             const payload = res.data;
             const rows = Array.isArray(payload) ? payload : (payload?.data || []);
-            setApplications(isAudit ? rows.filter((app) => app.source === 'website') : rows);
+            const archived = Array.isArray(payload?.archive) ? payload.archive : [];
+            const visible = (list) => (isAudit ? list.filter((app) => app.source === 'website') : list);
+            setApplications(applyStageOverlays(visible(rows)));
+            setArchivedApplications(visible(archived));
         } catch (err) {
             setError('Failed to fetch applications');
         } finally {
@@ -172,19 +316,25 @@ const ApplicationManager = () => {
             return;
         }
 
+        setSelectedApp(app);
+        setPendingStage(next);
+        setModalView('confirm');
+    };
+
+    const submitStageConfirmation = () => {
+        if (!selectedApp || !pendingStage) return;
+        const app = selectedApp;
+        const next = pendingStage;
         setModalView('');
-        setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: next } : a));
-        try {
-            await updateApplicationStatus(app.id, { status: next });
-            fetchApplications();
-        } catch (err) {
-            fetchApplications(); // Revert on failure
-        }
+        setPendingStage('');
+        setError(null);
+        scheduleStageCommit(app, { status: next }, next, () => updateApplicationStatus(app.id, { status: next }));
     };
 
     const handleDecline = (app) => {
         if (!canRemove(app.status)) return;
         setSelectedApp(app);
+        setDeclineReason('');
         setModalView('decline');
     };
 
@@ -197,10 +347,20 @@ const ApplicationManager = () => {
     const submitRemove = async () => {
         if (!selectedApp) return;
         try {
-            await deleteApplication(selectedApp.id);
+            if (modalView === 'decline') {
+                const reason = declineReason.trim();
+                if (!reason) {
+                    setError('Enter the reason for declining this applicant.');
+                    return;
+                }
+                await updateApplicationStatus(selectedApp.id, { status: 'Rejected', rejection_reason: reason });
+            } else {
+                await deleteApplication(selectedApp.id);
+            }
             setApplications((prev) => prev.filter((a) => a.id !== selectedApp.id));
             setModalView('');
             setError(null);
+            fetchApplications(true);
         } catch (err) {
             setError(err.response?.data?.message || Object.values(err.response?.data?.errors || {}).flat()[0] || 'Failed to remove this applicant.');
         }
@@ -212,21 +372,20 @@ const ApplicationManager = () => {
             return;
         }
 
-        try {
-            await updateApplicationSchedule(selectedApp.id, {
-                interview_date: interviewData.interview_date,
-                interview_remarks: interviewData.interview_remarks || null,
-            });
-            setApplications((prev) => prev.map((a) => a.id === selectedApp.id
-                ? { ...a, status: 'Interview', interview_date: interviewData.interview_date, interview_remarks: interviewData.interview_remarks }
-                : a));
-            setInterviewData({ interview_date: '', interview_remarks: '' });
-            setModalView('');
-            setError(null);
-            fetchApplications();
-        } catch (err) {
-            setError(err.response?.data?.message || Object.values(err.response?.data?.errors || {}).flat()[0] || 'Failed to schedule the interview.');
-        }
+        const app = selectedApp;
+        const schedule = {
+            interview_date: interviewData.interview_date,
+            interview_remarks: interviewData.interview_remarks || null,
+        };
+        setInterviewData({ interview_date: '', interview_remarks: '' });
+        setModalView('');
+        setError(null);
+        scheduleStageCommit(
+            app,
+            { status: 'Interview', interview_date: schedule.interview_date, interview_remarks: schedule.interview_remarks },
+            'Interview',
+            () => updateApplicationSchedule(app.id, schedule),
+        );
     };
 
     const loadSuggestions = async (appId) => {
@@ -297,18 +456,29 @@ const ApplicationManager = () => {
     ].filter(Boolean)));
 
     const activeCount = applications.filter(a => a.status !== 'Approved' && a.status !== 'Rejected').length;
-    const filteredApplications = applications.filter((app) => {
+    const matchesSearch = (app) => {
         const haystack = [
             app.first_name,
             app.last_name,
             app.email,
             app.course,
-            app.preferred_department,
             app.contact_number,
             app.status,
+            app.deleted_at ? 'Deleted' : '',
         ].join(' ').toLowerCase();
         return haystack.includes(searchQuery.trim().toLowerCase());
-    });
+    };
+    const recentlyApproved = (app) => {
+        if (app.status !== 'Approved') return true;
+        const at = approvedAt(app);
+        if (at == null) return true;
+        return at >= Date.now() - approvedWindow * 24 * 60 * 60 * 1000;
+    };
+    const searching = searchQuery.trim() !== '';
+    const filteredApplications = applications.filter((app) => matchesSearch(app) && (searching || !hideOlderApproved || recentlyApproved(app)));
+    const filteredArchive = archivedApplications.filter(matchesSearch);
+    const approvedTotal = applications.filter((app) => app.status === 'Approved').length;
+    const isArchivedRecord = (app) => Boolean(app?.deleted_at) || app?.status === 'Rejected';
 
     const openApplicant = (app) => {
         setSelectedApp(app);
@@ -331,7 +501,7 @@ const ApplicationManager = () => {
                 onClick={() => handleStatusUpdate(app)}
                 className={styles}
             >
-                Move to {next}
+                Confirm {next}
                 <ChevronRight className="w-3.5 h-3.5" />
             </button>
         );
@@ -437,17 +607,47 @@ const ApplicationManager = () => {
                 <div className="p-5 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                         <h2 className="text-lg font-black text-slate-900">All applicants</h2>
-                        <p className="text-sm text-slate-500 font-medium">{activeCount} still in review</p>
+                        <p className="text-sm text-slate-500 font-medium">
+                            {activeCount} still in review
+                            {hideOlderApproved ? ` · approved list shows the last ${approvedWindow} days` : ''}
+                        </p>
                     </div>
-                    <div className="relative w-full sm:w-80">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input
-                            type="text"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Search name, email, or department..."
-                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
-                        />
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setHideOlderApproved((current) => !current)}
+                                className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border transition-colors ${hideOlderApproved ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                            >
+                                {hideOlderApproved ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                                {hideOlderApproved ? 'Show all approved' : 'Hide older approved'}
+                            </button>
+                            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+                                {[7, 14].map((days) => (
+                                    <button
+                                        key={days}
+                                        type="button"
+                                        onClick={() => {
+                                            setApprovedWindow(days);
+                                            setHideOlderApproved(true);
+                                        }}
+                                        className={`px-2.5 py-1.5 text-[11px] font-black rounded-lg ${hideOlderApproved && approvedWindow === days ? 'bg-white text-emerald-800 shadow-sm' : 'text-slate-500'}`}
+                                    >
+                                        {days} days
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="relative w-full sm:w-80">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="Search name or email..."
+                                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
+                            />
+                        </div>
                     </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -455,7 +655,6 @@ const ApplicationManager = () => {
                         <thead>
                             <tr className="bg-slate-50 border-b border-slate-100">
                                 <th className="px-5 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider">Applicant</th>
-                                <th className="px-5 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider">Preferred Dept</th>
                                 <th className="px-5 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider">Documents</th>
                                 <th className="px-5 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider">Status</th>
                                 <th className="px-5 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider text-right">Action</th>
@@ -464,16 +663,15 @@ const ApplicationManager = () => {
                         <tbody className="divide-y divide-slate-100">
                             {filteredApplications.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="px-5 py-12 text-center text-slate-400 font-bold">No applicants found.</td>
+                                    <td colSpan={4} className="px-5 py-12 text-center text-slate-400 font-bold">No applicants found.</td>
                                 </tr>
                             ) : (
                                 filteredApplications.map((app) => (
                                     <tr key={app.id} className="hover:bg-slate-50">
                                         <td className="px-5 py-4">
                                             <p className="font-bold text-slate-900">{app.first_name} {app.last_name}</p>
-                                            <p className="text-xs font-medium text-slate-500">{app.email || 'No email'} · {app.course || 'No course'}</p>
+                                            <p className="text-xs font-medium text-slate-500">{app.email || 'No email'}</p>
                                         </td>
-                                        <td className="px-5 py-4 text-sm font-semibold text-slate-700">{app.preferred_department || '—'}</td>
                                         <td className="px-5 py-4 text-sm font-semibold text-indigo-700">{(app.documents || []).length}</td>
                                         <td className="px-5 py-4">
                                             <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-600">{app.status}</span>
@@ -500,10 +698,66 @@ const ApplicationManager = () => {
                 </div>
             </div>
 
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-5 sm:p-6 border-b border-slate-100">
+                    <h2 className="text-lg font-black text-slate-900">Rejected and deleted</h2>
+                    <p className="text-sm text-slate-500 font-medium">Kept for audit. These applicants are no longer in the active pipeline.</p>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr className="bg-slate-50 border-b border-slate-100">
+                                <th className="px-5 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider">Applicant</th>
+                                <th className="px-5 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider">Outcome</th>
+                                <th className="px-5 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider">When</th>
+                                <th className="px-5 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {filteredArchive.length === 0 ? (
+                                <tr>
+                                    <td colSpan={4} className="px-5 py-12 text-center text-slate-400 font-bold">No rejected or deleted applicants.</td>
+                                </tr>
+                            ) : (
+                                filteredArchive.map((app) => {
+                                    const deleted = Boolean(app.deleted_at);
+                                    const when = app.deleted_at || app.updated_at || app.created_at;
+                                    return (
+                                        <tr key={`archive-${app.id}`} className="hover:bg-slate-50">
+                                            <td className="px-5 py-4">
+                                                <p className="font-bold text-slate-900">{app.first_name} {app.last_name}</p>
+                                                <p className="text-xs font-medium text-slate-500">{app.email || 'No email'}</p>
+                                            </td>
+                                            <td className="px-5 py-4">
+                                                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${deleted ? 'bg-slate-100 text-slate-600' : 'bg-red-50 text-red-700'}`}>
+                                                    {deleted ? 'Deleted' : 'Rejected'}
+                                                </span>
+                                            </td>
+                                            <td className="px-5 py-4 text-sm font-semibold text-slate-700">
+                                                {when ? new Date(when).toLocaleString() : '—'}
+                                            </td>
+                                            <td className="px-5 py-4 text-right">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => openApplicant(app)}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-xl"
+                                                >
+                                                    <Eye className="w-3.5 h-3.5" /> View
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             {/* KANBAN BOARD */}
             <div className="flex overflow-x-auto gap-5 pb-8 custom-scrollbar items-start">
                 {STAGE_ORDER.map(stage => {
-                    const columnApps = applications.filter(app => app.status === stage);
+                    const columnApps = applications.filter((app) => app.status === stage && (stage !== 'Approved' || !hideOlderApproved || recentlyApproved(app)));
                     const config = COLUMN_CONFIG[stage] || COLUMN_CONFIG['Pending'];
                     const Icon = config.icon;
 
@@ -511,14 +765,41 @@ const ApplicationManager = () => {
                         <div key={stage} className={`flex flex-col rounded-3xl border ${config.border} ${config.bg} shadow-sm min-w-[300px] w-[300px] shrink-0`}>
                             
                             {/* Column Header */}
-                            <div className="p-4 border-b border-slate-200/50 flex items-center justify-between bg-white/70 rounded-t-3xl shrink-0">
-                                <h3 className={`font-extrabold text-sm flex items-center gap-2 ${config.color}`}>
-                                    <Icon className="w-4 h-4" />
-                                    {stage}
-                                </h3>
-                                <span className={`text-xs font-black px-2.5 py-1 rounded-full ${config.badge}`}>
-                                    {columnApps.length}
-                                </span>
+                            <div className="p-4 border-b border-slate-200/50 bg-white/70 rounded-t-3xl shrink-0 space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                    <h3 className={`font-extrabold text-sm flex items-center gap-2 ${config.color}`}>
+                                        <Icon className="w-4 h-4" />
+                                        {stage}
+                                    </h3>
+                                    <span className={`text-xs font-black px-2.5 py-1 rounded-full ${config.badge}`}>
+                                        {stage === 'Approved' && hideOlderApproved ? `${columnApps.length}/${approvedTotal}` : columnApps.length}
+                                    </span>
+                                </div>
+                                {stage === 'Approved' && (
+                                    <div className="flex items-center gap-1.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => setHideOlderApproved((current) => !current)}
+                                            className={`inline-flex items-center gap-1 px-2 py-1 text-[10px] font-black uppercase tracking-wide rounded-lg border ${hideOlderApproved ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200'}`}
+                                        >
+                                            {hideOlderApproved ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                                            {hideOlderApproved ? 'Show all' : 'Hide older'}
+                                        </button>
+                                        {[7, 14].map((days) => (
+                                            <button
+                                                key={days}
+                                                type="button"
+                                                onClick={() => {
+                                                    setApprovedWindow(days);
+                                                    setHideOlderApproved(true);
+                                                }}
+                                                className={`px-2 py-1 text-[10px] font-black rounded-lg border ${hideOlderApproved && approvedWindow === days ? 'bg-white text-emerald-800 border-emerald-200' : 'bg-white/70 text-slate-500 border-slate-200'}`}
+                                            >
+                                                {days}d
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
 
                             {/* Column Body (Cards) */}
@@ -533,7 +814,7 @@ const ApplicationManager = () => {
                                             <div className="w-12 h-12 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center mb-2">
                                                 <UserPlus className="w-5 h-5 text-slate-300" />
                                             </div>
-                                            <p className="text-sm font-bold">Empty</p>
+                                            <p className="text-sm font-bold">{stage === 'Approved' && hideOlderApproved && approvedTotal > 0 ? `None in the last ${approvedWindow} days` : 'Empty'}</p>
                                         </motion.div>
                                     ) : (
                                         columnApps.map(app => (
@@ -550,7 +831,7 @@ const ApplicationManager = () => {
                                                     {app.first_name} {app.last_name}
                                                 </h4>
                                                 <p className="text-xs font-medium text-slate-500 mb-2 truncate">
-                                                    {app.course} • Yr {app.year_level}
+                                                    {app.year_level ? `Yr ${app.year_level}` : 'Year not set'}
                                                 </p>
                                                 <p className="text-[11px] font-semibold text-indigo-700 mb-3">
                                                     {(app.documents || []).length} document{(app.documents || []).length === 1 ? '' : 's'} submitted
@@ -587,6 +868,51 @@ const ApplicationManager = () => {
                 })}
             </div>
 
+            <AnimatePresence>
+                {modalView === 'confirm' && selectedApp && pendingStage && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] flex items-center justify-center p-4"
+                        {...bindPopup(closePopup)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                            className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+                        >
+                            <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                                <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                                    <CheckCircle2 className="w-5 h-5 text-blue-600" /> Confirm {pendingStage}
+                                </h3>
+                                <button onClick={closePopup} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-full transition-colors">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <div className="p-6 sm:p-8 space-y-5">
+                                <p className="text-sm font-medium text-slate-600">
+                                    Confirm <span className="font-black text-slate-900">{selectedApp.first_name} {selectedApp.last_name}</span> for the {pendingStage} stage? The stage email sends after 5 seconds. Undo from the lower left before then if this was accidental.
+                                </p>
+                                <div className="flex justify-end gap-3 pt-2">
+                                    <button type="button" onClick={closePopup} className="px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-xl">
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={submitStageConfirmation}
+                                        className="px-6 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-lg shadow-blue-600/25 flex items-center gap-2"
+                                    >
+                                        <CheckCircle2 className="w-4 h-4" /> Confirm {pendingStage}
+                                    </button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* INTERVIEW MODAL */}
             <AnimatePresence>
                 {modalView === 'interview' && selectedApp && (
@@ -594,7 +920,8 @@ const ApplicationManager = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] flex items-center justify-center p-4"
+                        {...bindPopup(closePopup)}
                     >
                         <motion.div 
                             initial={{ scale: 0.95, opacity: 0, y: 20 }}
@@ -637,6 +964,7 @@ const ApplicationManager = () => {
                                     />
                                 </div>
 
+                                <p className="text-xs font-medium text-slate-500">The interview email sends 5 seconds after you confirm. Undo stays at the lower left until then.</p>
                                 <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
                                     <button onClick={() => setModalView('')} className="px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors">
                                         Cancel
@@ -661,7 +989,8 @@ const ApplicationManager = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] flex items-center justify-center p-4"
+                        {...bindPopup(closePopup)}
                     >
                         <motion.div
                             initial={{ scale: 0.95, opacity: 0, y: 20 }}
@@ -680,8 +1009,23 @@ const ApplicationManager = () => {
                             </div>
                             <div className="p-6 sm:p-8 space-y-5">
                                 <p className="text-sm font-medium text-slate-600">
-                                    {modalView === 'delete' ? 'Delete' : 'Decline'} <span className="font-black text-slate-900">{selectedApp.first_name} {selectedApp.last_name}</span>? Their signup, documents, and unused student account will be removed permanently.
+                                    {modalView === 'delete'
+                                        ? <>Delete <span className="font-black text-slate-900">{selectedApp.first_name} {selectedApp.last_name}</span>? They leave the active list and stay on the rejected and deleted list for audit. Their tracking code will stop working.</>
+                                        : <>Decline <span className="font-black text-slate-900">{selectedApp.first_name} {selectedApp.last_name}</span>? They will receive a rejection email, and their tracking page will show this reason.</>}
                                 </p>
+                                {modalView === 'decline' && (
+                                    <label className="block">
+                                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Reason for declining</span>
+                                        <textarea
+                                            value={declineReason}
+                                            onChange={(event) => setDeclineReason(event.target.value)}
+                                            rows={4}
+                                            required
+                                            placeholder="Explain why this application is not approved"
+                                            className="mt-2 w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 outline-none focus:ring-2 focus:ring-red-500"
+                                        />
+                                    </label>
+                                )}
                                 <div className="flex justify-end gap-3 pt-2">
                                     <button type="button" onClick={() => setModalView('')} className="px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-xl">
                                         Cancel
@@ -689,7 +1033,8 @@ const ApplicationManager = () => {
                                     <button
                                         type="button"
                                         onClick={submitRemove}
-                                        className="px-6 py-2.5 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-lg shadow-red-600/25 flex items-center gap-2"
+                                        disabled={modalView === 'decline' && !declineReason.trim()}
+                                        className="px-6 py-2.5 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-lg shadow-red-600/25 flex items-center gap-2 disabled:opacity-50"
                                     >
                                         {modalView === 'delete' ? <Trash2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
                                         {modalView === 'delete' ? 'Confirm Delete' : 'Confirm Decline'}
@@ -708,7 +1053,8 @@ const ApplicationManager = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] flex items-center justify-center p-4"
+                        {...bindPopup(closePopup)}
                     >
                         <motion.div 
                             initial={{ scale: 0.95, opacity: 0, y: 20 }}
@@ -876,7 +1222,7 @@ const ApplicationManager = () => {
                                     disabled={!placementIsComplete(placementData)}
                                     className="px-6 py-2.5 text-sm font-bold text-white bg-emerald-500 hover:bg-emerald-600 rounded-xl shadow-lg shadow-emerald-500/25 disabled:opacity-50 transition-all flex items-center gap-2"
                                 >
-                                    <Briefcase className="w-4 h-4" /> Issue Account
+                                    <Briefcase className="w-4 h-4" /> Confirm and issue account
                                 </button>
                             </div>
                         </motion.div>
@@ -890,7 +1236,8 @@ const ApplicationManager = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] flex items-center justify-center p-4"
+                        {...bindPopup(closePopup)}
                     >
                         <motion.div 
                             initial={{ scale: 0.95, opacity: 0, y: 20 }}
@@ -909,8 +1256,9 @@ const ApplicationManager = () => {
                             <div className="p-6 sm:p-8 space-y-6 overflow-y-auto">
                                 <div>
                                     <h4 className="text-2xl font-black text-slate-900">{selectedApp.first_name} {selectedApp.middle_name} {selectedApp.last_name}</h4>
-                                    <p className="text-sm font-bold text-blue-700 mt-1">{selectedApp.status}</p>
+                                    <p className="text-sm font-bold text-blue-700 mt-1">{selectedApp.deleted_at ? 'Deleted' : selectedApp.status}</p>
                                 </div>
+                                <ApplicationStatusTracker application={selectedApp} variant="embedded" showDocuments={false} />
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="flex items-start gap-2">
                                         <Mail className="w-4 h-4 text-slate-400 mt-0.5" />
@@ -927,16 +1275,8 @@ const ApplicationManager = () => {
                                         </div>
                                     </div>
                                     <div>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase">Course / Year</p>
-                                        <p className="text-sm font-bold text-slate-800">{selectedApp.course || '—'} · {selectedApp.year_level || '—'}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase">Student ID</p>
-                                        <p className="text-sm font-bold text-slate-800">{selectedApp.student_id_number || '—'}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase">Preferred Department</p>
-                                        <p className="text-sm font-bold text-slate-800">{selectedApp.preferred_department || '—'}</p>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase">Year</p>
+                                        <p className="text-sm font-bold text-slate-800">{selectedApp.year_level || '—'}</p>
                                     </div>
                                     <div>
                                         <p className="text-[10px] font-bold text-slate-400 uppercase">Age</p>
@@ -950,14 +1290,6 @@ const ApplicationManager = () => {
                                         <p className="text-[10px] font-bold text-slate-400 uppercase">Address</p>
                                         <p className="text-sm font-bold text-slate-800">{selectedApp.address || '—'}</p>
                                     </div>
-                                </div>
-                                <div>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Available Days</p>
-                                    <p className="text-sm font-bold text-slate-800">{(selectedApp.available_schedules || []).join(', ') || '—'}</p>
-                                </div>
-                                <div>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Reason for Applying</p>
-                                    <p className="text-sm font-medium text-slate-700 leading-relaxed">{selectedApp.reason_for_applying || '—'}</p>
                                 </div>
                                 <div>
                                     <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Submitted Documents</p>
@@ -981,7 +1313,7 @@ const ApplicationManager = () => {
                                     )}
                                 </div>
                             </div>
-                            {getNextStage(selectedApp.status) || canRemove(selectedApp.status) ? (
+                            {!isArchivedRecord(selectedApp) && (getNextStage(selectedApp.status) || canRemove(selectedApp.status)) ? (
                                 <div className="p-6 border-t border-slate-100 bg-slate-50 flex flex-wrap justify-end gap-3 shrink-0">
                                     {!isAudit && deleteButton(selectedApp, 'primary')}
                                     {!isAudit && declineButton(selectedApp, 'primary')}
@@ -999,7 +1331,8 @@ const ApplicationManager = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] flex items-center justify-center p-4"
+                        {...bindPopup(closePopup)}
                     >
                         <motion.div
                             initial={{ scale: 0.95, opacity: 0, y: 20 }}
@@ -1011,15 +1344,24 @@ const ApplicationManager = () => {
                                     <CheckCircle2 className="w-7 h-7" />
                                 </div>
                                 <h3 className="text-xl font-black text-slate-900">Applicant Approved</h3>
-                                <p className="text-sm font-medium text-emerald-800 mt-2">{issuedCredentials.name} can now log in with these credentials.</p>
+                                <p className="text-sm font-medium text-emerald-800 mt-2">{issuedCredentials.name} can sign in with the username or the email below.</p>
                             </div>
                             <div className="p-6 sm:p-8 space-y-4">
                                 <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Username / Email</label>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Username</label>
                                     <div className="flex items-center justify-between gap-3">
                                         <span className="font-mono text-base font-black text-indigo-700 select-all truncate">{issuedCredentials.username}</span>
                                         <button type="button" onClick={() => copyCredential(issuedCredentials.username, 'username')} className="p-2 bg-white border border-slate-200 rounded-lg">
                                             {copiedField === 'username' ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4 text-slate-500" />}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Email</label>
+                                    <div className="flex items-center justify-between gap-3">
+                                        <span className="font-mono text-base font-black text-indigo-700 select-all truncate">{issuedCredentials.email}</span>
+                                        <button type="button" onClick={() => copyCredential(issuedCredentials.email, 'email')} className="p-2 bg-white border border-slate-200 rounded-lg">
+                                            {copiedField === 'email' ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4 text-slate-500" />}
                                         </button>
                                     </div>
                                 </div>
@@ -1040,6 +1382,43 @@ const ApplicationManager = () => {
                                 </button>
                             </div>
                         </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {undoAction && (
+                    <motion.div
+                        key={undoAction.token}
+                        initial={{ opacity: 0, y: 16 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 16 }}
+                        className="fixed bottom-5 left-4 lg:left-24 z-[70] max-w-[calc(100%-2rem)]"
+                    >
+                        <div className="relative overflow-hidden flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={undoStage}
+                                className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-slate-900 text-white shadow-2xl shadow-slate-900/30 hover:bg-slate-800 transition-colors"
+                            >
+                                <Undo2 className="w-4 h-4" />
+                                <span className="text-sm font-black">Undo {undoAction.confirmedStage}</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={closeUndo}
+                                aria-label="Close undo"
+                                className="w-11 h-11 shrink-0 rounded-2xl bg-white border border-slate-200 text-slate-500 shadow-lg hover:text-slate-900 hover:border-slate-300 transition-colors flex items-center justify-center"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                            <motion.div
+                                className="absolute bottom-0 left-0 h-1 bg-indigo-400"
+                                initial={{ width: '100%' }}
+                                animate={{ width: '0%' }}
+                                transition={{ duration: UNDO_HIDE_MS / 1000, ease: 'linear' }}
+                            />
+                        </div>
                     </motion.div>
                 )}
             </AnimatePresence>
