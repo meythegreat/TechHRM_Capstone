@@ -59,6 +59,10 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>TechHRM uses the camera to scan attendance QR codes and to set a profile photo.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>TechHRM uses your photos for profile pictures and requirement documents.</string>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

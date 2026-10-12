@@ -162,7 +162,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
                     className="corner-popup fixed top-24 right-4 z-[70] w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-blue-100 bg-white p-4 shadow-2xl"
                 >
                     <div className="flex items-start justify-between gap-3">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">New notification</p>
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-600">New notification</p>
                         <button
                             type="button"
                             aria-label="Dismiss notification"
@@ -214,7 +214,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
                         <div className="bg-gray-50/80 backdrop-blur-sm px-4 py-3 border-b border-gray-100 flex justify-between items-center gap-3">
                             <h3 className="text-sm font-bold text-gray-900">Notifications</h3>
                             <div className="flex items-center gap-2">
-                                {unreadCount > 0 && <span className="text-[10px] font-extrabold text-blue-700 bg-blue-100 px-2 py-1 rounded-full uppercase tracking-wider">{unreadCount} New</span>}
+                                {unreadCount > 0 && <span className="text-[10px] font-semibold text-blue-700 bg-blue-100 px-2 py-1 rounded-full uppercase tracking-wider">{unreadCount} New</span>}
                                 <button
                                     type="button"
                                     aria-label="Close notifications"

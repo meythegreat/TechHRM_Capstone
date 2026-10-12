@@ -156,7 +156,7 @@ const Login = ({ onLoginSuccess, onNavigateToApply, onNavigateToTrack }: LoginPr
                         className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/10 backdrop-blur-md mb-8 shadow-2xl"
                     >
                         <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                        <span className="text-[11px] font-black text-slate-200 uppercase tracking-widest">Secure Enterprise Portal</span>
+                        <span className="text-[11px] font-semibold text-slate-200 uppercase tracking-widest">Secure Enterprise Portal</span>
                     </motion.div>
 
                     <motion.div 
@@ -171,7 +171,7 @@ const Login = ({ onLoginSuccess, onNavigateToApply, onNavigateToTrack }: LoginPr
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.3 }}
-                        className="text-5xl font-black text-white tracking-tight mb-4 drop-shadow-lg"
+                        className="text-5xl font-semibold text-white tracking-tight mb-4 drop-shadow-lg"
                     >
                         TechHRM
                     </motion.h1>
@@ -206,12 +206,12 @@ const Login = ({ onLoginSuccess, onNavigateToApply, onNavigateToTrack }: LoginPr
                     {/* Mobile Branding */}
                     <motion.div variants={itemVariants} className="flex flex-col items-center mb-10 lg:hidden text-center">
                         <img src="/logo.jpg" alt="TechHRM Logo" className="w-20 h-20 rounded-2xl shadow-xl mb-4" />
-                        <h1 className="text-3xl font-black text-slate-900 tracking-tight">TechHRM</h1>
+                        <h1 className="text-3xl font-semibold text-slate-900 tracking-tight">TechHRM</h1>
                         <p className="text-sm font-bold text-indigo-600 uppercase tracking-widest mt-2">FCU Work-Study Portal</p>
                     </motion.div>
 
                     <motion.div variants={itemVariants}>
-                        <h2 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+                        <h2 className="text-3xl sm:text-4xl font-semibold text-slate-900 tracking-tight flex items-center gap-3">
                             Welcome back <Sparkles className="w-6 h-6 text-indigo-500 hidden sm:block" />
                         </h2>
                         <p className="mt-2 text-base text-slate-500 font-medium">
@@ -363,7 +363,7 @@ const Login = ({ onLoginSuccess, onNavigateToApply, onNavigateToTrack }: LoginPr
                                             <Mail className="h-6 w-6" />
                                         </div>
                                         <div>
-                                            <h3 id="forgot-password-title" className="text-xl font-black text-slate-900 tracking-tight">Account Recovery</h3>
+                                            <h3 id="forgot-password-title" className="text-xl font-semibold text-slate-900 tracking-tight">Account Recovery</h3>
                                             <p className="text-sm font-medium text-slate-500 mt-0.5">We'll email you a temporary password.</p>
                                         </div>
                                     </div>
@@ -383,13 +383,13 @@ const Login = ({ onLoginSuccess, onNavigateToApply, onNavigateToTrack }: LoginPr
                                         </p>
                                         {forgotAccount && forgotAccount !== forgotMaskedEmail && (
                                             <>
-                                                <p className="mt-4 text-xs font-black uppercase tracking-widest text-emerald-600">Requested Account</p>
+                                                <p className="mt-4 text-xs font-semibold uppercase tracking-widest text-emerald-600">Requested Account</p>
                                                 <p className="mt-1 text-base font-bold text-emerald-900">{forgotAccount}</p>
                                             </>
                                         )}
                                         {forgotMaskedEmail && (
                                             <div className="mt-4">
-                                                <p className="text-xs font-black uppercase tracking-widest text-emerald-600 mb-1">Delivered To</p>
+                                                <p className="text-xs font-semibold uppercase tracking-widest text-emerald-600 mb-1">Delivered To</p>
                                                 <p className="rounded-xl px-4 py-3 text-center font-mono text-sm font-bold tracking-wider bg-white text-slate-900 shadow-sm border border-emerald-100">
                                                     {forgotMaskedEmail}
                                                 </p>
@@ -475,8 +475,8 @@ const Login = ({ onLoginSuccess, onNavigateToApply, onNavigateToTrack }: LoginPr
                                 <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mb-6 shadow-sm border border-emerald-100">
                                     <CheckCircle2 className="h-10 w-10 text-emerald-500" />
                                 </div>
-                                <p className="text-3xl font-black text-slate-900 tracking-tight">{successMsg}</p>
-                                <p className="mt-3 text-base font-bold text-indigo-600 uppercase tracking-widest animate-pulse">Establishing Secure Connection...</p>
+                                <p className="text-3xl font-semibold text-slate-900 tracking-tight">{successMsg}</p>
+                                <p className="mt-3 text-base font-bold text-indigo-600 uppercase tracking-widest animate-pulse">Logging you in...</p>
                             </motion.div>
                         </motion.div>
                     )}

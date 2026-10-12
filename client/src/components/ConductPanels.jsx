@@ -104,8 +104,8 @@ export const ConductPanels = ({ section, students, records, isCoordinator }) => 
     if (section === 'performance') {
         return (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-                <form onSubmit={saveReview} className="lg:col-span-1 bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200 space-y-5">
-                    <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                <form onSubmit={saveReview} className="lg:col-span-1 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] space-y-5">
+                    <h3 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
                         <GraduationCap className="w-5 h-5 text-red-600" /> Record Performance
                     </h3>
                     <p className="text-xs font-medium text-slate-500">
@@ -129,7 +129,7 @@ export const ConductPanels = ({ section, students, records, isCoordinator }) => 
                             <label key={value} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer ${performanceForm.rating === value ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-slate-50'}`}>
                                 <input type="radio" name="rating" className="mt-1" checked={performanceForm.rating === value} onChange={() => setPerformanceForm({ ...performanceForm, rating: value })} />
                                 <span>
-                                    <span className="block text-sm font-black text-slate-900">{rating.label}</span>
+                                    <span className="block text-sm font-semibold text-slate-900">{rating.label}</span>
                                     <span className="block text-xs font-bold text-slate-500">{rating.outcome_label}</span>
                                 </span>
                             </label>
@@ -160,17 +160,17 @@ export const ConductPanels = ({ section, students, records, isCoordinator }) => 
                 </form>
                 <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-5">
                     {reviews.length === 0 && (
-                        <div className="md:col-span-2 bg-white rounded-3xl p-12 text-center border border-slate-200 text-slate-500 font-medium">No performance reviews yet.</div>
+                        <div className="md:col-span-2 bg-white rounded-2xl border border-slate-200/80 p-12 text-center text-slate-500 font-medium">No performance reviews yet.</div>
                     )}
                     {reviews.map((review) => {
                         const rating = catalog.ratings?.[review.rating];
                         const counts = offenseCount[review.student_id] || { minor: 0, major: 0 };
                         return (
-                            <article key={review.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                            <article key={review.id} className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
                                 <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{review.school_year}</p>
-                                <h4 className="font-black text-slate-900 text-lg mt-1">{review.student?.name || 'Student'}</h4>
+                                <h4 className="font-semibold text-slate-900 text-lg mt-1">{review.student?.name || 'Student'}</h4>
                                 <p className="text-sm font-bold text-slate-700 mt-2">{rating?.label || review.rating}</p>
-                                <p className="text-sm font-black text-red-700">{rating?.outcome_label || review.outcome}</p>
+                                <p className="text-sm font-semibold text-red-700">{rating?.outcome_label || review.outcome}</p>
                                 {review.target_department && <p className="text-xs font-medium text-slate-500 mt-2">Reassign to {review.target_department}</p>}
                                 <p className="text-xs font-bold text-slate-400 mt-3">{counts.minor} minor · {counts.major} major offense{counts.major === 1 ? '' : 's'}</p>
                                 {review.notes && <p className="text-sm text-slate-600 mt-3">{review.notes}</p>}
@@ -185,8 +185,8 @@ export const ConductPanels = ({ section, students, records, isCoordinator }) => 
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-            <form onSubmit={saveYearEndAward} className="lg:col-span-1 bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200 space-y-5">
-                <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+            <form onSubmit={saveYearEndAward} className="lg:col-span-1 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] space-y-5">
+                <h3 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
                     <Award className="w-5 h-5 text-amber-500" /> Year-end Award
                 </h3>
                 <p className="text-xs font-medium text-slate-500">
@@ -226,12 +226,12 @@ export const ConductPanels = ({ section, students, records, isCoordinator }) => 
             </form>
             <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-5">
                 {awards.length === 0 && (
-                    <div className="md:col-span-2 bg-white rounded-3xl p-12 text-center border border-slate-200 text-slate-500 font-medium">No year-end awards recorded yet.</div>
+                    <div className="md:col-span-2 bg-white rounded-2xl border border-slate-200/80 p-12 text-center text-slate-500 font-medium">No year-end awards recorded yet.</div>
                 )}
                 {awards.map((award) => (
-                    <article key={award.id} className="bg-white p-6 rounded-3xl border border-amber-100 shadow-sm">
+                    <article key={award.id} className="bg-white rounded-2xl border border-amber-100 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
                         <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600">{award.school_year}</p>
-                        <h4 className="font-black text-slate-900 text-lg mt-1">{award.title}</h4>
+                        <h4 className="font-semibold text-slate-900 text-lg mt-1">{award.title}</h4>
                         <p className="text-sm font-bold text-slate-700 mt-2">{award.student?.name || 'Student'}</p>
                         {award.citation && <p className="text-sm text-slate-600 mt-3">{award.citation}</p>}
                         <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-4">Recorded by {award.awarder?.name || 'Coordinator'}</p>

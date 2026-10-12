@@ -72,9 +72,9 @@ class PageErrorBoundary extends Component<{ children: ReactNode }, { error: Erro
   render() {
     if (this.state.error) {
       return (
-        <div className="m-6 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+        <div className="m-6 rounded-2xl border border-slate-200/80 bg-white p-8 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
           <p className="text-xs font-bold uppercase tracking-widest text-slate-500">This page could not be shown</p>
-          <h2 className="mt-2 text-2xl font-black text-slate-900">Something on this screen failed to load.</h2>
+          <h2 className="mt-2 text-2xl font-semibold text-slate-900">Something on this screen failed to load.</h2>
           <p className="mt-2 max-w-xl text-sm font-medium text-slate-600">
             Your session is still active. Open another section from the sidebar, or try this page again.
           </p>
@@ -318,7 +318,7 @@ function App() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={reduceMotion ? { opacity: 1 } : { opacity: 0, y: -6 }}
                 transition={{ duration: reduceMotion ? 0 : 0.22, ease: pageEase }}
-                className="text-xl font-black text-slate-800 capitalize tracking-tight hidden sm:block"
+                className="hidden text-base font-semibold capitalize tracking-tight text-slate-900 sm:block"
               >
                 {currentPath === 'financial' ? 'Hours Rendered' : currentPath.replace('-', ' ')}
               </motion.h2>
@@ -329,10 +329,10 @@ function App() {
             <NotificationBell onNavigate={(path) => navigate(`/${path}`)} />
             
             <div className="text-right hidden sm:block">
-              <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest flex items-center justify-end gap-1">
+              <p className="flex items-center justify-end gap-1 text-[11px] font-medium uppercase tracking-wide text-slate-400">
                 <ShieldCheck className="w-3 h-3" /> {userRole}
               </p>
-              <p className="text-sm font-extrabold text-slate-900">{adminName}</p>
+              <p className="text-sm font-semibold text-slate-900">{adminName}</p>
             </div>
 
             <button

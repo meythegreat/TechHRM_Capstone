@@ -28,5 +28,14 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>TechHRM uses the camera to scan attendance QR codes and to set a profile photo.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>TechHRM uses your photos for profile pictures and requirement documents.</string>
 </dict>
 </plist>

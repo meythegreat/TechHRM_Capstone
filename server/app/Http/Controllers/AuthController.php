@@ -192,12 +192,8 @@ class AuthController extends Controller
             ], 401);
         }
 
-        // 2. STRICT ROLE CHECK: Only Students and Supervisors allowed on Mobile!
-        if (!in_array($user->role, ['Student', 'Supervisor'])) {
-            return response()->json([
-                'message' => 'Access Denied: Mobile app is strictly for Students and Supervisors. Admins must use the Web Portal.'
-            ], 403);
-        }
+        // The mobile app mirrors the web portal, so every role can sign in.
+        // Pending applicants are still blocked below.
 
         $pendingApplicantResponse = $this->pendingApplicantResponse($user);
         if ($pendingApplicantResponse) {

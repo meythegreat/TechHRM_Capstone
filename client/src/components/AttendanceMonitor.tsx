@@ -574,20 +574,18 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
             <motion.div 
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative"
+                className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
             >
-                <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
-                <div className="absolute bottom-0 left-10 -mb-16 -ml-16 w-64 h-64 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
 
                 <div className="relative z-10">
                     <div className="flex items-center gap-2 mb-2">
                         <ShieldCheck className="w-5 h-5 text-blue-400" />
-                        <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Timesheet Management</span>
+                        <span className="text-sm font-medium text-slate-500">Timesheet Management</span>
                     </div>
-                    <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                    <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
                         Attendance Monitor
                     </h1>
-                    <p className="mt-2 text-slate-400 font-medium max-w-md">
+                    <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                         {canApprove
                             ? 'See the working students in your department, enter time in and time out on their DTR, and accept or reject hours.'
                             : canApproveWspoStudents
@@ -596,22 +594,22 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                     </p>
                 </div>
 
-                <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-5 py-4 rounded-2xl flex flex-col items-stretch w-full md:w-[22rem]">
+                <div className="flex w-full flex-col items-stretch rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] md:w-[22rem]">
                     <div className="flex items-center justify-between gap-3 mb-2">
                         <label htmlFor="attendance-date-filter" className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                             Active Date Filter
                         </label>
                         {pendingOnDate ? (
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-400/40 text-[10px] font-bold uppercase tracking-wider">
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
                                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
                                 {pendingOnDate.count} pending
                             </span>
                         ) : pendingTotal > 0 ? (
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-700/80 text-slate-300 border border-slate-600 text-[10px] font-bold uppercase tracking-wider">
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-600">
                                 {pendingTotal} pending elsewhere
                             </span>
                         ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-400/30 text-[10px] font-bold uppercase tracking-wider">
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
                                 No pending
                             </span>
                         )}
@@ -621,13 +619,13 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                             type="button"
                             aria-label="Previous day"
                             onClick={() => goToDate(shiftIsoDate(filterDate, -1))}
-                            className="shrink-0 w-10 h-10 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-200 hover:bg-slate-700 hover:text-white transition-colors flex items-center justify-center"
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
                         >
                             <ChevronLeft className="w-4 h-4" />
                         </button>
                         <div className="relative group flex-1 min-w-0">
                             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                <Calendar className={`h-4 w-4 transition-colors ${pendingOnDate ? 'text-amber-400' : 'text-blue-400 group-hover:text-blue-300'}`} />
+                                <Calendar className={`h-4 w-4 transition-colors ${pendingOnDate ? 'text-amber-600' : 'text-blue-400 group-hover:text-blue-300'}`} />
                             </div>
                             <input
                                 id="attendance-date-filter"
@@ -638,7 +636,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                     if (!e.target.value) return;
                                     goToDate(e.target.value);
                                 }}
-                                className={`block w-full pl-10 pr-3 py-2.5 bg-slate-800/80 border rounded-xl text-sm font-bold text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all cursor-pointer hover:bg-slate-800 ${pendingOnDate ? 'border-amber-400/70' : 'border-slate-700'}`}
+                                className={`block w-full cursor-pointer rounded-xl border bg-slate-50 py-2.5 pl-10 pr-3 text-sm font-semibold text-slate-900 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-blue-500 ${pendingOnDate ? 'border-amber-300' : 'border-slate-200'}`}
                             />
                         </div>
                         <button
@@ -646,7 +644,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                             aria-label="Next day"
                             disabled={filterDate >= today}
                             onClick={() => goToDate(shiftIsoDate(filterDate, 1))}
-                            className="shrink-0 w-10 h-10 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-200 hover:bg-slate-700 hover:text-white transition-colors flex items-center justify-center disabled:opacity-40 disabled:hover:bg-slate-800/80 disabled:hover:text-slate-200"
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40"
                         >
                             <ChevronRight className="w-4 h-4" />
                         </button>
@@ -659,7 +657,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                             onChange={(e) => {
                                 if (e.target.value) goToDate(e.target.value);
                             }}
-                            className="min-w-0 flex-1 px-3 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-xs font-bold text-white outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             <option value="">
                                 {pendingDates.length === 0 ? 'No dates with pending approvals' : 'Jump to pending date'}
@@ -674,7 +672,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                             type="button"
                             disabled={!jumpPendingDate}
                             onClick={() => jumpPendingDate && goToDate(jumpPendingDate)}
-                            className="shrink-0 px-3 py-2 rounded-xl bg-amber-500/15 border border-amber-400/40 text-amber-200 text-xs font-bold uppercase tracking-wider hover:bg-amber-500/25 transition-colors disabled:opacity-40 disabled:hover:bg-amber-500/15"
+                            className="shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold uppercase tracking-wider text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-40"
                         >
                             Next
                         </button>
@@ -698,7 +696,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
             />
 
             {/* MAIN ATTENDANCE TABLE */}
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative">
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden relative">
                 
                 {isLoading && (
                     <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-10 flex items-center justify-center">
@@ -713,10 +711,10 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-slate-50/80 border-b border-slate-200">
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Student Worker</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Shift Details</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Task Description</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider text-right">Approval Status</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Student Worker</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Shift Details</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Task Description</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Approval Status</th>
                             </tr>
                         </thead>
                         
@@ -830,7 +828,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                         <td className="px-6 py-5 align-top text-right">
                                             <div className="flex flex-col items-end gap-2">
                                                 {/* Total Hours Badge */}
-                                                <div className="text-sm font-black text-slate-900 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200 font-mono shadow-sm">
+                                                <div className="text-sm font-semibold text-slate-900 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200 font-mono shadow-sm">
                                                     {formatHours(record.rendered_hours)} <span className="text-xs text-slate-500 font-bold font-sans">hrs</span>
                                                 </div>
 
@@ -883,13 +881,13 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
             </div>
 
             {canManageHolidays && (
-                <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden mt-10">
+                <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden mt-10">
                     <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center gap-3">
                         <div className="p-3 bg-amber-50 text-amber-600 rounded-xl border border-amber-100">
                             <CalendarPlus className="w-6 h-6" />
                         </div>
                         <div>
-                            <h3 className="text-xl font-black text-slate-900 tracking-tight">DTR Holidays</h3>
+                            <h3 className="text-xl font-semibold text-slate-900 tracking-tight">DTR Holidays</h3>
                             <p className="text-xs font-medium text-slate-500 mt-0.5">
                                 Add one date, or a range of dates. Every day in the range is marked Holiday on student DTRs. Saturdays and Sundays are marked Saturday or Sunday automatically.
                             </p>
@@ -984,7 +982,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                 {holidays.map((holiday) => (
                                     <li key={holiday.id} className={`flex items-center justify-between gap-3 py-3 ${editingHolidayId === holiday.id ? 'bg-amber-50/70 -mx-3 px-3 rounded-xl' : ''}`}>
                                         <div>
-                                            <p className="text-sm font-black text-slate-900">{holiday.name}</p>
+                                            <p className="text-sm font-semibold text-slate-900">{holiday.name}</p>
                                             <p className="text-xs font-medium text-slate-500">
                                                 {formatHolidayWhen(holiday)}
                                                 {' · '}Remark: Holiday
@@ -1018,7 +1016,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
 
             {/* STUDENT DTR PANEL */}
             {canViewStudentDtr && (
-                <div id="student-dtr-panel" className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden mt-10">
+                <div id="student-dtr-panel" className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden mt-10">
                     
                     {/* Panel Header & Controls */}
                     <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
@@ -1027,7 +1025,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                 <CalendarRange className="w-6 h-6" />
                             </div>
                             <div>
-                                <h3 className="text-xl font-black text-slate-900 tracking-tight">Student Daily Time Record</h3>
+                                <h3 className="text-xl font-semibold text-slate-900 tracking-tight">Student Daily Time Record</h3>
                                 <p className="text-xs font-medium text-slate-500 mt-0.5">
                                     {canApprove
                                         ? 'Select a student to view their DTR, enter manual overrides, or generate official printouts.'
@@ -1110,7 +1108,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                 className="w-12 h-12 rounded-full bg-slate-100 border-2 border-slate-200 text-slate-600 text-base"
                             />
                             <div>
-                                <h4 className="text-base font-black text-slate-900 flex items-center gap-2">
+                                <h4 className="text-base font-semibold text-slate-900 flex items-center gap-2">
                                     {dtrStudentName || 'Select a student'}
                                     {shownAccountDeleted && (
                                         <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-red-50 text-red-700 border border-red-200">
@@ -1152,7 +1150,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                     {/* Manual DTR Override Form */}
                     {canEditDtr && (
                         <div className="px-6 py-5 border-b border-indigo-100 bg-indigo-50/30">
-                            <h4 className="text-xs font-black text-indigo-700 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                            <h4 className="text-xs font-semibold text-indigo-700 uppercase tracking-widest mb-3 flex items-center gap-1.5">
                                 <PenLine className="w-4 h-4" /> Manual Timesheet Override
                             </h4>
                             <form
@@ -1283,7 +1281,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                                     {['approved', 'accepted'].includes(String(log.status).toLowerCase()) ? 'Accepted' : String(log.status).toLowerCase() === 'rejected' ? 'Rejected' : (log.time_out ? 'Pending' : 'Timed in')}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 text-right font-black font-mono text-slate-900 text-base">
+                                            <td className="px-6 py-4 text-right font-semibold font-mono text-slate-900 text-base">
                                                 {hoursFor(log).toFixed(2)}
                                             </td>
                                             {canEditDtr && (
@@ -1304,8 +1302,8 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                             </tbody>
                             <tfoot>
                                 <tr className="bg-slate-100 border-t border-slate-200">
-                                    <td colSpan={5} className="px-6 py-4 text-right font-black uppercase tracking-widest text-xs text-slate-600">Total Validated Hours</td>
-                                    <td className="px-6 py-4 text-right font-black font-mono text-indigo-700 text-lg bg-indigo-50/50">
+                                    <td colSpan={5} className="px-6 py-4 text-right font-semibold uppercase tracking-widest text-xs text-slate-600">Total Validated Hours</td>
+                                    <td className="px-6 py-4 text-right font-semibold font-mono text-indigo-700 text-lg bg-indigo-50/50">
                                         {dtrTotalHours.toFixed(2)}
                                     </td>
                                     {canEditDtr && <td className="bg-indigo-50/50" />}
@@ -1337,7 +1335,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                     >
                         <div className="px-6 py-5 border-b border-slate-100 bg-slate-50 flex items-center justify-between gap-4 shrink-0 sticky top-0 z-10">
                             <div>
-                                <h3 className="text-xl font-black text-slate-900 flex items-center gap-2 tracking-tight">
+                                <h3 className="text-xl font-semibold text-slate-900 flex items-center gap-2 tracking-tight">
                                     <FileBox className="w-5 h-5 text-indigo-600" /> Official DTR Preview
                                 </h3>
                                 <p className="text-xs font-bold text-slate-500 mt-1">

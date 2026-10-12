@@ -274,34 +274,31 @@ const DisciplinaryManager = () => {
             <motion.div 
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative"
+                className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
             >
-                {/* Glowing Orbs (Red & Amber for Disciplinary Context) */}
-                <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-red-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
-                <div className="absolute bottom-0 left-10 -mb-16 -ml-16 w-64 h-64 bg-amber-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10"></div>
 
                 <div className="relative z-10">
                     <div className="flex items-center gap-2 mb-2">
-                        <ShieldAlert className="w-5 h-5 text-red-400" />
-                        <span className="text-xs font-bold text-red-400 uppercase tracking-widest">Conduct & Compliance</span>
+                        <ShieldAlert className="w-5 h-5 text-rose-600" />
+                        <span className="text-xs font-bold text-rose-600 uppercase tracking-widest">Conduct & Compliance</span>
                     </div>
-                    <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                    <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
                         Infraction Manager
                     </h1>
-                    <p className="mt-2 text-slate-400 font-medium max-w-md">
+                    <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                         {isAudit
                             ? 'Read-only list of recorded infractions. Filter by student, department, or offense type.'
                             : 'Record minor and major offenses, performance outcomes, and year-end awards. Only department supervisors and the WSPO coordinator use this record.'}
                     </p>
                 </div>
 
-                <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${activeCasesCount > 0 ? 'bg-red-500/20 text-red-400 shadow-[0_0_15px_rgba(248,113,113,0.3)]' : 'bg-emerald-500/20 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)]'}`}>
+                <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex items-center gap-4">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${activeCasesCount > 0 ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
                         {activeCasesCount > 0 ? <AlertTriangle className="w-5 h-5 animate-pulse" /> : <ShieldCheck className="w-5 h-5" />}
                     </div>
                     <div className="flex flex-col text-left">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Cases</span>
-                        <span className={`text-sm font-extrabold ${activeCasesCount > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                        <span className={`text-sm font-semibold ${activeCasesCount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                             {activeCasesCount > 0 ? `${activeCasesCount} Unresolved Case(s)` : 'All Cases Resolved'}
                         </span>
                     </div>
@@ -345,9 +342,9 @@ const DisciplinaryManager = () => {
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.1 }}
-                    className="lg:col-span-1 bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200 sticky top-6"
+                    className="lg:col-span-1 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sticky top-6"
                 >
-                    <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2 tracking-tight">
+                    <h3 className="text-xl font-semibold text-slate-900 mb-6 flex items-center gap-2 tracking-tight">
                         <Gavel className="w-5 h-5 text-red-600" /> {isCoordinator ? 'Issue Infraction' : 'Report Infraction'}
                     </h3>
                     
@@ -530,8 +527,8 @@ const DisciplinaryManager = () => {
                 {/* RIGHT COLUMN: CASE GRID */}
                 <div className={isAudit ? 'lg:col-span-3' : 'lg:col-span-2'}>
                     {visibleRecords.length === 0 ? (
-                        <div className="bg-white rounded-3xl p-16 text-center border border-slate-200 flex flex-col items-center shadow-sm">
-                            <ShieldCheck className="w-16 h-16 text-emerald-400 mb-4 opacity-50" />
+                        <div className="bg-white flex flex-col items-center rounded-2xl border border-slate-200/80 p-16 text-center shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+                            <ShieldCheck className="w-16 h-16 text-emerald-600 mb-4 opacity-50" />
                             <h3 className="text-xl font-bold text-slate-700">No Disciplinary Records</h3>
                             <p className="text-slate-500 mt-2">All students currently have clean records.</p>
                         </div>
@@ -548,7 +545,7 @@ const DisciplinaryManager = () => {
                                         layout
                                         variants={itemVariants}
                                         key={record.id} 
-                                        className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 hover:shadow-md hover:border-slate-300 transition-all group relative overflow-hidden flex flex-col"
+                                        className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:shadow-md hover:border-slate-300 transition-all group relative overflow-hidden flex flex-col"
                                     >
                                         <div className="flex justify-between items-start mb-4">
                                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border ${
@@ -563,29 +560,29 @@ const DisciplinaryManager = () => {
                                             
                                             <div className="flex flex-col items-end gap-1">
                                                 {record.penalty && record.penalty !== 'Pending' && (
-                                                    <span className="text-[11px] font-black text-slate-700 bg-slate-100 px-2.5 py-1 rounded-md">
+                                                    <span className="text-[11px] font-semibold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-md">
                                                         {record.penalty === 'DTR Deduction' ? 'DTR deduction' : record.penalty}
                                                     </span>
                                                 )}
                                                 {record.penalty === 'Suspension' && record.suspension_length && (
-                                                    <span className="text-[11px] font-black text-red-700 bg-red-100 px-2.5 py-1 rounded-md">
+                                                    <span className="text-[11px] font-semibold text-red-700 bg-red-100 px-2.5 py-1 rounded-md">
                                                         {record.suspension_length}
                                                     </span>
                                                 )}
                                                 {record.penalty === 'DTR Deduction' && Number(record.penalty_hours) > 0 && (
-                                                    <span className="text-[11px] font-black text-red-700 bg-red-100 px-2.5 py-1 rounded-md">
+                                                    <span className="text-[11px] font-semibold text-red-700 bg-red-100 px-2.5 py-1 rounded-md">
                                                         -{record.penalty_hours} hrs
                                                     </span>
                                                 )}
                                                 {Number(record.deduction_amount || 0) > 0 && (
-                                                    <span className="text-[11px] font-black text-red-700 bg-red-100 px-2.5 py-1 rounded-md">
+                                                    <span className="text-[11px] font-semibold text-red-700 bg-red-100 px-2.5 py-1 rounded-md">
                                                         -₱{Number(record.deduction_amount).toFixed(2)}
                                                     </span>
                                                 )}
                                             </div>
                                         </div>
 
-                                        <h4 className="font-black text-slate-900 text-lg leading-tight mb-2 group-hover:text-red-700 transition-colors">
+                                        <h4 className="font-semibold text-slate-900 text-lg leading-tight mb-2 group-hover:text-red-700 transition-colors">
                                             {record.violation_type || 'Standard Violation'}
                                         </h4>
                                         {record.offense_level && (
@@ -685,7 +682,7 @@ const DisciplinaryManager = () => {
                             className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
                         >
                             <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                                <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                                <h3 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
                                     <Scale className="w-5 h-5 text-emerald-600" /> Resolve Case
                                 </h3>
                                 <button onClick={() => setResolveModal(null)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-full transition-colors">
@@ -756,7 +753,7 @@ const DisciplinaryManager = () => {
                             className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] flex flex-col"
                         >
                             <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                                <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                                <h3 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
                                     <Gavel className="w-5 h-5 text-red-600" /> Decide Penalty
                                 </h3>
                                 <button onClick={() => setDecideModal(null)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-full transition-colors">

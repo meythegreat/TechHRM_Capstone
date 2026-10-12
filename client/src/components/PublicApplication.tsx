@@ -199,7 +199,7 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <img src="/logo.jpg" alt="TechHRM Logo" className="w-10 h-10 rounded-xl border border-slate-100 shadow-sm" />
-                        <span className="font-black bg-gradient-to-br from-slate-900 to-slate-700 bg-clip-text text-transparent text-xl tracking-tight hidden sm:block">TechHRM</span>
+                        <span className="font-semibold bg-gradient-to-br from-slate-900 to-slate-700 bg-clip-text text-transparent text-xl tracking-tight hidden sm:block">TechHRM</span>
                     </div>
                     <div className="flex items-center gap-4">
                         <ThemeToggle />
@@ -222,23 +222,17 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
                         <motion.div 
                             initial={{ opacity: 0, y: -20 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-slate-900 p-8 sm:p-10 rounded-3xl shadow-xl overflow-hidden relative"
                         >
-                            <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
-                            <div className="absolute bottom-0 left-10 -mb-16 -ml-16 w-64 h-64 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
-
-                            <div className="relative z-10">
-                                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 border border-white/10 backdrop-blur-md mb-4 shadow-sm">
-                                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                                    <span className="text-[10px] font-black text-slate-200 uppercase tracking-widest">Official Enrollment Gateway</span>
-                                </div>
-                                <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-                                    Work-Study Application
-                                </h1>
-                                <p className="mt-3 text-slate-300 font-medium max-w-xl leading-relaxed text-sm sm:text-base">
-                                    Join the Filamer Christian University Work-Study Program. Please complete the form below accurately to initiate your evaluation and placement process.
-                                </p>
+                            <div className="mb-3 inline-flex items-center gap-2 text-sm font-medium text-slate-500">
+                                <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                                Official enrollment
                             </div>
+                            <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+                                Work-Study Application
+                            </h1>
+                            <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-500">
+                                Join the Filamer Christian University Work-Study Program. Please complete the form below accurately to initiate your evaluation and placement process.
+                            </p>
                         </motion.div>
                     )}
 
@@ -256,7 +250,7 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
                                     <div className="w-24 h-24 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mb-6 shadow-sm border-4 border-white relative z-10">
                                         <CheckCircle2 className="w-12 h-12" />
                                     </div>
-                                    <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-4">Application Submitted!</h2>
+                                    <h2 className="text-3xl font-semibold text-slate-900 tracking-tight mb-4">Application Submitted!</h2>
                                     <p className="text-slate-600 font-medium leading-relaxed max-w-md">
                                         Your application is now under review. Please keep your tracking code secure. You can check your placement status at any time from the homepage.
                                     </p>
@@ -264,8 +258,8 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
                                     {receipt?.tracking_code && (
                                         <div className="mt-8 w-full max-w-sm rounded-2xl border border-indigo-100 bg-indigo-50/50 p-6 relative overflow-hidden group">
                                             <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500 rounded-full blur-3xl opacity-10"></div>
-                                            <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500 mb-2 relative z-10">Official Tracking Reference</p>
-                                            <p className="font-mono text-3xl font-black text-indigo-700 tracking-wider relative z-10 select-all">{receipt.tracking_code}</p>
+                                            <p className="text-[10px] font-semibold uppercase tracking-widest text-indigo-500 mb-2 relative z-10">Official Tracking Reference</p>
+                                            <p className="font-mono text-3xl font-semibold text-indigo-700 tracking-wider relative z-10 select-all">{receipt.tracking_code}</p>
                                             <p className="mt-3 text-xs font-bold text-slate-500 relative z-10 flex items-center justify-center gap-1">
                                                 <Mail className="w-3.5 h-3.5" /> Registered to: {formData.email}
                                             </p>
@@ -305,12 +299,12 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
                                 />
 
                                 {/* SECTION 1: Personal Information */}
-                                <motion.section variants={sectionVariants} className="bg-white p-6 sm:p-10 rounded-3xl shadow-sm border border-slate-200">
+                                <motion.section variants={sectionVariants} className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-10">
                                     <div className="flex items-center gap-3 mb-8 border-b border-slate-100 pb-4">
                                         <div className="p-2.5 bg-indigo-50 rounded-xl">
                                             <User className="w-5 h-5 text-indigo-600" />
                                         </div>
-                                        <h2 className="text-xl font-black text-slate-900 tracking-tight">Personal Information</h2>
+                                        <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Personal Information</h2>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-6">
                                         <FloatingInput id="first_name" label="First Name" value={formData.first_name} onChange={(e: any) => setFormData({ ...formData, first_name: e.target.value })} />
@@ -341,12 +335,12 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
                                 </motion.section>
 
                                 {/* SECTION 2: Academic Details */}
-                                <motion.section variants={sectionVariants} className="bg-white p-6 sm:p-10 rounded-3xl shadow-sm border border-slate-200">
+                                <motion.section variants={sectionVariants} className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-10">
                                     <div className="flex items-center gap-3 mb-8 border-b border-slate-100 pb-4">
                                         <div className="p-2.5 bg-indigo-50 rounded-xl">
                                             <BookOpen className="w-5 h-5 text-indigo-600" />
                                         </div>
-                                        <h2 className="text-xl font-black text-slate-900 tracking-tight">Academic Details</h2>
+                                        <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Academic Details</h2>
                                     </div>
                                     <div className="max-w-sm">
                                         <FloatingSelect 
@@ -361,12 +355,12 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
                                 </motion.section>
 
                                 {/* SECTION 3: Supporting Documents */}
-                                <motion.section variants={sectionVariants} className="bg-white p-6 sm:p-10 rounded-3xl shadow-sm border border-slate-200">
+                                <motion.section variants={sectionVariants} className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-10">
                                     <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-4">
                                         <div className="p-2.5 bg-indigo-50 rounded-xl">
                                             <FileText className="w-5 h-5 text-indigo-600" />
                                         </div>
-                                        <h2 className="text-xl font-black text-slate-900 tracking-tight">Supporting Documents</h2>
+                                        <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Supporting Documents</h2>
                                     </div>
                                     
                                     <div className="bg-indigo-50/50 border border-indigo-100 p-4 rounded-2xl mb-6">
@@ -422,7 +416,7 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
                                     <button
                                         type="submit"
                                         disabled={status.loading || documents.length < 3}
-                                        className="w-full py-4.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-black rounded-2xl shadow-xl shadow-indigo-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 text-lg group hover:-translate-y-0.5"
+                                        className="w-full py-4.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-semibold rounded-2xl shadow-xl shadow-indigo-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 text-lg group hover:-translate-y-0.5"
                                     >
                                         {status.loading ? (
                                             <>
@@ -460,7 +454,7 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
                             aria-labelledby="leave-signup-title"
                         >
                             <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50">
-                                <h3 id="leave-signup-title" className="text-xl font-black text-slate-900">Leave this signup?</h3>
+                                <h3 id="leave-signup-title" className="text-xl font-semibold text-slate-900">Leave this signup?</h3>
                             </div>
                             <div className="p-6 sm:p-8 space-y-6">
                                 <p className="text-sm font-medium text-slate-600 leading-relaxed">

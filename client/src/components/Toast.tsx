@@ -36,7 +36,7 @@ export default function Toast({ message, type = 'success', onClose, duration = 4
                 ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
                 : <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />}
             <div className="min-w-0 flex-1">
-                <p className={`text-[10px] font-black uppercase tracking-widest ${success ? 'text-emerald-600' : 'text-red-600'}`}>
+                <p className={`text-[10px] font-semibold uppercase tracking-widest ${success ? 'text-emerald-600' : 'text-red-600'}`}>
                     {success ? 'Success' : 'Notice'}
                 </p>
                 <p className={`mt-1 text-sm font-bold leading-relaxed ${success ? 'text-emerald-800' : 'text-red-800'}`}>

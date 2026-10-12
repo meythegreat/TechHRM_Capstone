@@ -73,6 +73,28 @@ const AdminDashboard = () => {
     const [isLoading, setIsLoading] = useState(true);
 
     const [pendingApplications, setPendingApplications] = useState(0);
+    const [activeOpen, setActiveOpen] = useState(false);
+    const [activeStudents, setActiveStudents] = useState<{
+        id: number;
+        time_in: string;
+        device?: string | null;
+        user?: { name?: string; profile_picture?: string | null; profile?: { assigned_office?: string | null } | null } | null;
+    }[]>([]);
+    const [onlineStaff, setOnlineStaff] = useState<{
+        id: number;
+        name: string;
+        role: string;
+        profile_picture?: string | null;
+        office?: string | null;
+        device?: string | null;
+    }[]>([]);
+    const [signedIn, setSignedIn] = useState<{
+        id: number;
+        name: string;
+        profile_picture?: string | null;
+        office?: string | null;
+        device?: string | null;
+    }[]>([]);
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -124,10 +146,22 @@ const AdminDashboard = () => {
                 })
                 .catch(() => setPendingApplications(0));
         };
+        const fetchActiveNow = async () => {
+            try {
+                const response = await axios.get('/api/admin/active-now');
+                const payload = response.data ?? {};
+                setActiveStudents(Array.isArray(payload.students) ? payload.students : []);
+                setOnlineStaff(Array.isArray(payload.staff) ? payload.staff : []);
+                setSignedIn(Array.isArray(payload.signed_in) ? payload.signed_in : []);
+            } catch (err) {
+                console.error('Failed to load active now list', err);
+            }
+        };
         const refresh = () => {
             fetchStats();
             fetchAssignmentNotices();
             fetchPendingApplications();
+            fetchActiveNow();
         };
         refresh();
         const interval = setInterval(refresh, 5000);
@@ -184,21 +218,18 @@ const AdminDashboard = () => {
             <motion.div 
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative"
+                className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
             >
-                {/* Subtle blue/purple glow for admin context */}
-                <div className="absolute top-0 left-0 -mt-16 -ml-16 w-64 h-64 bg-blue-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
-                <div className="absolute bottom-0 right-10 -mb-16 -mr-16 w-64 h-64 bg-purple-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
 
                 <div className="relative z-10">
                     <div className="flex items-center gap-2 mb-2">
                         <LayoutDashboard className="w-5 h-5 text-blue-400" />
-                        <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Management Hub</span>
+                        <span className="text-sm font-medium text-slate-500">Management Hub</span>
                     </div>
-                    <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                    <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
                         Workspace Overview
                     </h1>
-                    <p className="mt-2 text-slate-400 font-medium max-w-md">
+                    <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                         {isWspo
                             ? 'Welcome back. Review new Work-Study sign-ups, then place approved students in their departments.'
                             : "Welcome back, " + userName.split(' ')[0] + ". Monitor your department's student workers, review pending timesheets, and manage daily operations."}
@@ -206,13 +237,13 @@ const AdminDashboard = () => {
                 </div>
 
                 {/* Dynamic Status Box */}
-                <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.3)]">
+                <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
                         <ShieldCheck className="w-5 h-5" />
                     </div>
                     <div className="flex flex-col">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Access Level: {userRole}</span>
-                        <span className="text-sm font-extrabold text-blue-400 truncate max-w-[150px]">
+                        <span className="text-sm font-semibold text-slate-900 truncate max-w-[150px]">
                             {assignedOffice}
                         </span>
                     </div>
@@ -225,7 +256,7 @@ const AdminDashboard = () => {
                     onClick={() => navigate('/pipeline')}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="w-full text-left bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-blue-200 hover:border-blue-400 transition-colors flex items-center justify-between gap-4"
+                    className="w-full text-left bg-white p-6 sm:p-8 rounded-2xl border border-blue-200 shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-blue-400 transition-colors flex items-center justify-between gap-4"
                 >
                     <div className="flex items-center gap-4">
                         <div className="p-3.5 bg-blue-50 text-blue-600 rounded-2xl">
@@ -233,7 +264,7 @@ const AdminDashboard = () => {
                         </div>
                         <div>
                             <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">WSPO Coordinator</p>
-                            <h3 className="text-2xl font-black text-slate-900">Review applicant sign-ups</h3>
+                            <h3 className="text-2xl font-semibold text-slate-900">Review applicant sign-ups</h3>
                             <p className="text-sm text-slate-500 font-medium mt-1">{pendingApplications} application{pendingApplications === 1 ? '' : 's'} waiting in the pipeline.</p>
                         </div>
                     </div>
@@ -246,14 +277,38 @@ const AdminDashboard = () => {
                 variants={containerVariants}
                 initial="hidden"
                 animate="show"
-                className="grid grid-cols-1 md:grid-cols-3 gap-6"
+                className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6"
             >
+                <motion.button
+                        type="button"
+                        onClick={() => setActiveOpen(true)}
+                        variants={itemVariants}
+                        className="text-left bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] relative overflow-hidden group hover:border-emerald-300 transition-colors"
+                    >
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Active Now</p>
+                                <h3 className="text-4xl font-semibold text-slate-900 flex items-center gap-3">
+                                    {activeStudents.length + signedIn.length + onlineStaff.length}
+                                    {(activeStudents.length + signedIn.length + onlineStaff.length) > 0 ? <span className="w-3 h-3 bg-emerald-500 rounded-full animate-ping"></span> : null}
+                                </h3>
+                            </div>
+                            <div className="p-3.5 bg-emerald-50 text-emerald-600 rounded-2xl group-hover:scale-110 transition-transform">
+                                <Activity className="w-6 h-6" />
+                            </div>
+                        </div>
+                        <p className="text-sm text-emerald-600 mt-4 font-medium">
+                            {isWspo
+                                ? 'Clocked in, logged in without a clock-in, and staff online.'
+                                : 'Your students clocked in or logged in, plus staff online.'}
+                        </p>
+                    </motion.button>
                 {/* Active Students Card */}
-                <motion.div variants={itemVariants} className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-blue-300 transition-colors">
+                <motion.div variants={itemVariants} className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] relative overflow-hidden group hover:border-blue-300 transition-colors">
                     <div className="flex justify-between items-start">
                         <div>
                             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Active Personnel</p>
-                            <h3 className="text-4xl font-black text-slate-900">{stats.activeStudents}</h3>
+                            <h3 className="text-4xl font-semibold text-slate-900">{stats.activeStudents}</h3>
                         </div>
                         <div className="p-3.5 bg-blue-50 text-blue-600 rounded-2xl group-hover:scale-110 transition-transform">
                             <Users className="w-6 h-6" />
@@ -265,11 +320,11 @@ const AdminDashboard = () => {
                 </motion.div>
 
                 {/* Pending Approvals Card */}
-                <motion.div variants={itemVariants} className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-amber-300 transition-colors">
+                <motion.div variants={itemVariants} className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] relative overflow-hidden group hover:border-amber-300 transition-colors">
                     <div className="flex justify-between items-start">
                         <div>
                             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Pending Approvals</p>
-                            <h3 className="text-4xl font-black text-slate-900">{stats.pendingApprovals}</h3>
+                            <h3 className="text-4xl font-semibold text-slate-900">{stats.pendingApprovals}</h3>
                         </div>
                         <div className="p-3.5 bg-amber-50 text-amber-600 rounded-2xl group-hover:scale-110 transition-transform">
                             <ClipboardCheck className="w-6 h-6" />
@@ -281,11 +336,11 @@ const AdminDashboard = () => {
                 </motion.div>
 
                 {/* Hours Logged Card */}
-                <motion.div variants={itemVariants} className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-emerald-300 transition-colors">
+                <motion.div variants={itemVariants} className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] relative overflow-hidden group hover:border-emerald-300 transition-colors">
                     <div className="flex justify-between items-start">
                         <div>
                             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Hours Logged (Week)</p>
-                            <h3 className="text-4xl font-black text-slate-900">
+                            <h3 className="text-4xl font-semibold text-slate-900">
                                 {stats.totalHoursThisWeek} <span className="text-lg font-bold text-slate-400">hrs</span>
                             </h3>
                         </div>
@@ -300,10 +355,10 @@ const AdminDashboard = () => {
             <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden"
+                    className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden"
                 >
                     <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50/50">
-                        <h3 className="text-xl font-black text-slate-900 flex items-center gap-2 tracking-tight">
+                        <h3 className="text-xl font-semibold text-slate-900 flex items-center gap-2 tracking-tight">
                             <Users className="w-5 h-5 text-blue-600" />
                             {isWspo ? 'WSPO Working Students' : 'Assigned Working Students'}
                         </h3>
@@ -350,7 +405,7 @@ const AdminDashboard = () => {
                                     <div className="min-w-0 flex items-center gap-3">
                                         <UserAvatar name={student.name} picture={student.profile_picture} className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-sm" />
                                         <div className="min-w-0">
-                                        <p className="font-black text-slate-900 truncate">{student.name}</p>
+                                        <p className="font-semibold text-slate-900 truncate">{student.name}</p>
                                         {(yearLabel || homeCollege) && (
                                             <div className="mt-1 flex flex-wrap items-center gap-1.5">
                                                 {yearLabel && (
@@ -392,10 +447,10 @@ const AdminDashboard = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4 }}
-                className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden"
+                className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden"
             >
                 <div className="p-6 sm:p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                    <h3 className="text-xl font-black text-slate-900 flex items-center gap-2 tracking-tight">
+                    <h3 className="text-xl font-semibold text-slate-900 flex items-center gap-2 tracking-tight">
                         <Activity className="w-5 h-5 text-blue-600" />
                         Recent Student Activity
                     </h3>
@@ -435,7 +490,7 @@ const AdminDashboard = () => {
                                         {isLogout ? <LogOut className="w-5 h-5" /> : isLogin ? <LogIn className="w-5 h-5" /> : <Activity className="w-5 h-5" />}
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-black text-slate-900 truncate">{item.student_name}</p>
+                                        <p className="text-sm font-semibold text-slate-900 truncate">{item.student_name}</p>
                                         <p className="text-xs font-medium text-slate-500 mt-0.5 truncate">
                                             {item.description || item.action}
                                             {item.office ? ` · ${item.office}` : ''}
@@ -462,13 +517,112 @@ const AdminDashboard = () => {
                 )}
             </motion.div>
 
+            {activeOpen && (
+                <div className="fixed inset-0 z-[80] bg-slate-900/50 flex items-center justify-center p-4" {...bindPopup(() => setActiveOpen(false))}>
+                    <div className="bg-white rounded-3xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col" onClick={(event) => event.stopPropagation()}>
+                        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                            <h3 className="text-xl font-semibold text-slate-900">Active now</h3>
+                            <button type="button" onClick={() => setActiveOpen(false)} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="overflow-y-auto p-6 space-y-5">
+                            {activeStudents.length === 0 && signedIn.length === 0 && onlineStaff.length === 0 ? (
+                                <p className="text-sm font-medium text-slate-500">Nobody is active right now.</p>
+                            ) : (
+                                <>
+                                    <div>
+                                        <p className="text-xs font-semibold uppercase tracking-widest text-emerald-700 mb-2">Students clocked in · {activeStudents.length}</p>
+                                        {activeStudents.length === 0 ? (
+                                            <p className="text-sm font-medium text-slate-500">No students are clocked in right now.</p>
+                                        ) : (
+                                            <ul className="divide-y divide-slate-100 border border-slate-100 rounded-2xl">
+                                                {activeStudents.map((record) => (
+                                                    <li key={record.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                                                        <div className="flex items-center gap-3">
+                                                            <UserAvatar name={record.user?.name} picture={record.user?.profile_picture} className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs" />
+                                                            <div>
+                                                                <p className="font-bold text-slate-900 text-sm">{record.user?.name || 'Unknown'}</p>
+                                                                <p className="text-xs text-slate-500">{record.user?.profile?.assigned_office || 'Unassigned'}</p>
+                                                            </div>
+                                                        </div>
+                                                        <span className="flex items-center gap-1.5 shrink-0">
+                                                            {record.device ? <span className="text-xs font-bold text-slate-600 bg-slate-50 border border-slate-200 px-2 py-1 rounded-md">{record.device}</span> : null}
+                                                            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-md">
+                                                                In {new Date(record.time_in).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                                                            </span>
+                                                        </span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-semibold uppercase tracking-widest text-amber-700 mb-2">Logged in, not clocked in · {signedIn.length}</p>
+                                        {signedIn.length === 0 ? (
+                                            <p className="text-sm font-medium text-slate-500">No one is logged in without a clock-in.</p>
+                                        ) : (
+                                            <ul className="divide-y divide-slate-100 border border-slate-100 rounded-2xl">
+                                                {signedIn.map((person) => (
+                                                    <li key={person.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                                                        <div className="flex items-center gap-3">
+                                                            <UserAvatar name={person.name} picture={person.profile_picture} className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs" />
+                                                            <div>
+                                                                <p className="font-bold text-slate-900 text-sm">{person.name}</p>
+                                                                <p className="text-xs text-slate-500">{person.office || 'Unassigned'}</p>
+                                                            </div>
+                                                        </div>
+                                                        <span className="flex items-center gap-1.5 shrink-0">
+                                                            {person.device ? <span className="text-xs font-bold text-slate-600 bg-slate-50 border border-slate-200 px-2 py-1 rounded-md">{person.device}</span> : null}
+                                                            <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-md">
+                                                                Logged in
+                                                            </span>
+                                                        </span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-semibold uppercase tracking-widest text-blue-700 mb-2">Supervisors and coordinators online · {onlineStaff.length}</p>
+                                        {onlineStaff.length === 0 ? (
+                                            <p className="text-sm font-medium text-slate-500">No supervisors or coordinators are online right now.</p>
+                                        ) : (
+                                            <ul className="divide-y divide-slate-100 border border-slate-100 rounded-2xl">
+                                                {onlineStaff.map((person) => (
+                                                    <li key={person.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                                                        <div className="flex items-center gap-3">
+                                                            <UserAvatar name={person.name} picture={person.profile_picture} className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs" />
+                                                            <div>
+                                                                <p className="font-bold text-slate-900 text-sm">{person.name}</p>
+                                                                <p className="text-xs text-slate-500">{person.office || 'Unassigned'}</p>
+                                                            </div>
+                                                        </div>
+                                                        <span className="flex items-center gap-1.5 shrink-0">
+                                                            {person.device ? <span className="text-xs font-bold text-slate-600 bg-slate-50 border border-slate-200 px-2 py-1 rounded-md">{person.device}</span> : null}
+                                                            <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1 rounded-md">
+                                                                {person.role} · Online
+                                                            </span>
+                                                        </span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {selectedStudent && (
                 <div className="fixed inset-0 z-[80] bg-slate-900/50 flex items-center justify-center p-4" {...bindPopup(() => setSelectedStudent(null))}>
                     <div className="bg-white rounded-3xl shadow-xl w-full max-w-lg overflow-hidden" onClick={(event) => event.stopPropagation()}>
                         <div className="p-6 border-b border-slate-100 flex items-start justify-between gap-4">
                             <div>
                                 <p className="text-[10px] font-bold uppercase tracking-widest text-blue-600">Working student</p>
-                                <h3 className="text-2xl font-black text-slate-900 mt-1">{selectedStudent.name}</h3>
+                                <h3 className="text-2xl font-semibold text-slate-900 mt-1">{selectedStudent.name}</h3>
                                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                                     {formatYearLevel(selectedStudent.year_level) && (
                                         <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">

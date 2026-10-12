@@ -139,7 +139,7 @@ const AdminAnalyticsDashboard = () => {
     if (error) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
-                <ShieldAlert className="w-16 h-16 text-red-400 mb-4 opacity-50" />
+                <ShieldAlert className="w-16 h-16 text-rose-600 mb-4 opacity-50" />
                 <p className="text-xl font-bold text-slate-700">{error}</p>
                 <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors">
                     Retry Connection
@@ -155,32 +155,29 @@ const AdminAnalyticsDashboard = () => {
             <motion.div 
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative"
+                className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
             >
-                {/* Glowing Orbs */}
-                <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-blue-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
-                <div className="absolute bottom-0 left-10 -mb-16 -ml-16 w-64 h-64 bg-purple-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
 
                 <div className="relative z-10">
                     <div className="flex items-center gap-2 mb-2">
                         <PieChart className="w-5 h-5 text-blue-400" />
-                        <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Reporting & Intelligence</span>
+                        <span className="text-sm font-medium text-slate-500">Reporting & Intelligence</span>
                     </div>
-                    <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                    <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
                         System Analytics
                     </h1>
-                    <p className="mt-2 text-slate-400 font-medium max-w-md">
+                    <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                         Comprehensive data visualization and reporting for Work-Study Program operations.
                     </p>
                 </div>
 
-                <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.3)]">
+                <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
                         <Database className="w-5 h-5" />
                     </div>
                     <div className="flex flex-col text-left">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Data Engine</span>
-                        <span className="text-sm font-extrabold text-emerald-400">
+                        <span className="text-sm font-semibold text-emerald-600">
                             Live Synchronization
                         </span>
                     </div>
@@ -194,11 +191,11 @@ const AdminAnalyticsDashboard = () => {
                 animate="show"
                 className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5"
             >
-                <motion.div variants={itemVariants} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-blue-300 transition-colors">
+                <motion.div variants={itemVariants} className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] relative overflow-hidden group hover:border-blue-300 transition-colors">
                     <div className="flex justify-between items-start">
                         <div>
                             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Total Workers</p>
-                            <h3 className="text-3xl font-black text-slate-900">{stats.summary.total_students}</h3>
+                            <h3 className="text-3xl font-semibold text-slate-900">{stats.summary.total_students}</h3>
                         </div>
                         <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl group-hover:scale-110 transition-transform">
                             <Users className="w-6 h-6" />
@@ -206,11 +203,11 @@ const AdminAnalyticsDashboard = () => {
                     </div>
                 </motion.div>
 
-                <motion.div variants={itemVariants} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-emerald-300 transition-colors">
+                <motion.div variants={itemVariants} className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] relative overflow-hidden group hover:border-emerald-300 transition-colors">
                     <div className="flex justify-between items-start">
                         <div>
                             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Total Hours</p>
-                            <h3 className="text-3xl font-black text-slate-900">
+                            <h3 className="text-3xl font-semibold text-slate-900">
                                 {stats.summary.total_hours_rendered} <span className="text-sm text-slate-400">hrs</span>
                             </h3>
                         </div>
@@ -220,11 +217,11 @@ const AdminAnalyticsDashboard = () => {
                     </div>
                 </motion.div>
 
-                <motion.div variants={itemVariants} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-red-300 transition-colors">
+                <motion.div variants={itemVariants} className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] relative overflow-hidden group hover:border-red-300 transition-colors">
                     <div className="flex justify-between items-start">
                         <div>
                             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Active Anomalies</p>
-                            <h3 className="text-3xl font-black text-slate-900">{stats.summary.active_anomalies}</h3>
+                            <h3 className="text-3xl font-semibold text-slate-900">{stats.summary.active_anomalies}</h3>
                         </div>
                         <div className="p-3 bg-red-50 text-red-600 rounded-2xl group-hover:scale-110 transition-transform">
                             <ShieldAlert className="w-6 h-6" />
@@ -232,11 +229,11 @@ const AdminAnalyticsDashboard = () => {
                     </div>
                 </motion.div>
 
-                <motion.div variants={itemVariants} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-amber-300 transition-colors">
+                <motion.div variants={itemVariants} className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] relative overflow-hidden group hover:border-amber-300 transition-colors">
                     <div className="flex justify-between items-start">
                         <div>
                             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Active Penalties</p>
-                            <h3 className="text-3xl font-black text-slate-900">{stats.summary.active_penalties}</h3>
+                            <h3 className="text-3xl font-semibold text-slate-900">{stats.summary.active_penalties}</h3>
                         </div>
                         <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl group-hover:scale-110 transition-transform">
                             <AlertTriangle className="w-6 h-6" />
@@ -250,11 +247,11 @@ const AdminAnalyticsDashboard = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4 }}
-                className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200 flex flex-col"
+                className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex flex-col"
             >
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4 border-b border-slate-100 pb-6">
                     <div>
-                        <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                        <h3 className="text-xl font-semibold text-slate-900 tracking-tight flex items-center gap-2">
                             <Activity className="w-5 h-5 text-blue-600" /> Department Workload Analysis
                         </h3>
                         <p className="text-sm text-slate-500 font-medium mt-1">Total hours rendered per assigned office.</p>

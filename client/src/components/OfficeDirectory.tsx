@@ -160,34 +160,31 @@ const OfficeDirectory = () => {
             <motion.div 
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative"
+                className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
             >
-                {/* Glowing Orbs */}
-                <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
-                <div className="absolute bottom-0 left-10 -mb-16 -ml-16 w-64 h-64 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10"></div>
 
                 <div className="relative z-10">
                     <div className="flex items-center gap-2 mb-2">
                         <Building2 className="w-5 h-5 text-indigo-400" />
-                        <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">University Infrastructure</span>
+                        <span className="text-sm font-medium text-slate-500">University Infrastructure</span>
                     </div>
-                    <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                    <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
                         Office Directory
                     </h1>
-                    <p className="mt-2 text-slate-400 font-medium max-w-md">
+                    <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                         {canEdit 
                             ? 'Manage the official list of university offices and departments used for student placement.'
                             : 'View the official list of university offices used for student placement. Only Super Admins can modify this directory.'}
                     </p>
                 </div>
 
-                <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-4">
+                <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex items-center gap-4">
                     <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.3)]">
                         <MapPin className="w-5 h-5" />
                     </div>
                     <div className="flex flex-col text-left">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Locations</span>
-                        <span className="text-sm font-extrabold text-indigo-400">
+                        <span className="text-sm font-semibold text-indigo-400">
                             {offices.length} Registered Office{offices.length === 1 ? '' : 's'}
                         </span>
                     </div>
@@ -248,7 +245,7 @@ const OfficeDirectory = () => {
             />
 
             {/* MAIN DATA TABLE */}
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative min-h-[400px]">
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden relative min-h-[400px]">
                 
                 {isLoading && (
                     <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-10 flex items-center justify-center">
@@ -263,10 +260,10 @@ const OfficeDirectory = () => {
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-slate-50/80 border-b border-slate-200">
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Office / Department Name</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider w-32">Students</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider w-32">Supervisors</th>
-                                {canEdit && <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider text-right w-40">Actions</th>}
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Office / Department Name</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">Students</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">Supervisors</th>
+                                {canEdit && <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right w-40">Actions</th>}
                             </tr>
                         </thead>
                         <motion.tbody 
@@ -301,7 +298,7 @@ const OfficeDirectory = () => {
                                                     />
                                                 ) : (
                                                     <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-black shrink-0 border border-indigo-100 shadow-inner">
+                                                        <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-semibold shrink-0 border border-indigo-100 shadow-inner">
                                                             {office.name.charAt(0)}
                                                         </div>
                                                         <p className="font-bold text-slate-900 group-hover:text-indigo-700 transition-colors">
@@ -312,14 +309,14 @@ const OfficeDirectory = () => {
                                             </td>
 
                                             <td className="px-6 py-5 align-middle">
-                                                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg text-xs font-black border border-slate-200 shadow-sm">
+                                                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-sm">
                                                     <Users className="w-3.5 h-3.5 text-slate-500" />
                                                     {office.student_count}
                                                 </div>
                                             </td>
 
                                             <td className="px-6 py-5 align-middle">
-                                                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg text-xs font-black border border-slate-200 shadow-sm">
+                                                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-sm">
                                                     <UserCheck className="w-3.5 h-3.5 text-slate-500" />
                                                     {office.supervisor_count}
                                                 </div>
@@ -385,7 +382,7 @@ const OfficeDirectory = () => {
                         <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                             <div>
                                 <p className="text-xs font-bold uppercase tracking-widest text-indigo-600">Office breakdown</p>
-                                <h3 className="text-xl font-black text-slate-900">{breakdown.office}</h3>
+                                <h3 className="text-xl font-semibold text-slate-900">{breakdown.office}</h3>
                             </div>
                             <button type="button" onClick={() => setBreakdown(null)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full">
                                 <X className="w-5 h-5" />
@@ -399,7 +396,7 @@ const OfficeDirectory = () => {
                             ) : (
                                 <>
                                     <section>
-                                        <h4 className="text-sm font-black text-slate-900 mb-2 flex items-center gap-2"><UserCheck className="w-4 h-4 text-indigo-600" /> Assigned supervisors</h4>
+                                        <h4 className="text-sm font-semibold text-slate-900 mb-2 flex items-center gap-2"><UserCheck className="w-4 h-4 text-indigo-600" /> Assigned supervisors</h4>
                                         {breakdown.supervisors.length === 0 ? <p className="text-sm text-slate-500">No supervisor assigned.</p> : (
                                             <ul className="divide-y divide-slate-100 border border-slate-100 rounded-2xl">
                                                 {breakdown.supervisors.map((person) => <li key={person.id} className="px-4 py-3 text-sm font-bold text-slate-800">{person.name}</li>)}
@@ -407,7 +404,7 @@ const OfficeDirectory = () => {
                                         )}
                                     </section>
                                     <section>
-                                        <h4 className="text-sm font-black text-slate-900 mb-2 flex items-center gap-2"><Users className="w-4 h-4 text-indigo-600" /> Assigned students</h4>
+                                        <h4 className="text-sm font-semibold text-slate-900 mb-2 flex items-center gap-2"><Users className="w-4 h-4 text-indigo-600" /> Assigned students</h4>
                                         {breakdown.students.length === 0 ? <p className="text-sm text-slate-500">No students assigned.</p> : (
                                             <ul className="divide-y divide-slate-100 border border-slate-100 rounded-2xl">
                                                 {breakdown.students.map((student) => (
@@ -420,7 +417,7 @@ const OfficeDirectory = () => {
                                         )}
                                     </section>
                                     <section>
-                                        <h4 className="text-sm font-black text-slate-900 mb-2">Requests</h4>
+                                        <h4 className="text-sm font-semibold text-slate-900 mb-2">Requests</h4>
                                         {breakdown.requests.length === 0 ? <p className="text-sm text-slate-500">No staffing requests for this office.</p> : (
                                             <ul className="divide-y divide-slate-100 border border-slate-100 rounded-2xl">
                                                 {breakdown.requests.map((request) => (

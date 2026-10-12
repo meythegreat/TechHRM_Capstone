@@ -79,7 +79,7 @@ const ApplicationStatusLookup = ({ onBackToLogin, onNavigateToApply }: Applicati
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <img src="/logo.jpg" alt="TechHRM Logo" className="w-10 h-10 rounded-xl border border-slate-100 shadow-sm" />
-                        <span className="font-black bg-gradient-to-br from-slate-900 to-slate-700 bg-clip-text text-transparent text-xl tracking-tight hidden sm:block">TechHRM</span>
+                        <span className="font-semibold bg-gradient-to-br from-slate-900 to-slate-700 bg-clip-text text-transparent text-xl tracking-tight hidden sm:block">TechHRM</span>
                     </div>
                     <div className="flex items-center gap-4">
                         <ThemeToggle />
@@ -102,32 +102,24 @@ const ApplicationStatusLookup = ({ onBackToLogin, onNavigateToApply }: Applicati
                 >
                     
                     {/* SECURE GATEWAY HEADER */}
-                    <motion.div 
-                        variants={sectionVariants}
-                        className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-slate-900 p-8 sm:p-10 rounded-3xl shadow-xl overflow-hidden relative"
-                    >
-                        <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
-                        <div className="absolute bottom-0 left-10 -mb-16 -ml-16 w-64 h-64 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
-
-                        <div className="relative z-10">
-                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 border border-white/10 backdrop-blur-md mb-4 shadow-sm">
-                                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                                <span className="text-[10px] font-black text-slate-200 uppercase tracking-widest">Secure Tracking Portal</span>
-                            </div>
-                            <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-                                Track Your Application
-                            </h1>
-                            <p className="mt-3 text-slate-300 font-medium max-w-xl leading-relaxed text-sm sm:text-base">
-                                Use your registered email and tracking code to monitor your application's real-time progress through the WSPO placement pipeline.
-                            </p>
+                    <motion.div variants={sectionVariants}>
+                        <div className="mb-3 inline-flex items-center gap-2 text-sm font-medium text-slate-500">
+                            <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                            Application tracking
                         </div>
+                        <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+                            Track your application
+                        </h1>
+                        <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-500">
+                            Use your registered email and tracking code to monitor your application's real-time progress through the WSPO placement pipeline.
+                        </p>
                     </motion.div>
 
                     {/* SEARCH FORM */}
                     <motion.form 
                         variants={sectionVariants}
                         onSubmit={handleSubmit} 
-                        className="bg-white p-6 sm:p-10 rounded-3xl shadow-sm border border-slate-200 space-y-6"
+                        className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-10 space-y-6"
                     >
                         <Toast message={error || null} type="error" onClose={() => setError('')} />
                         
@@ -154,7 +146,7 @@ const ApplicationStatusLookup = ({ onBackToLogin, onNavigateToApply }: Applicati
                             <button
                                 type="submit"
                                 disabled={loading || !email || !trackingCode}
-                                className="w-full sm:w-auto flex-1 py-4 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-black rounded-2xl shadow-xl shadow-indigo-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 text-lg group hover:-translate-y-0.5"
+                                className="w-full sm:w-auto flex-1 py-4 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-semibold rounded-2xl shadow-xl shadow-indigo-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 text-lg group hover:-translate-y-0.5"
                             >
                                 {loading ? (
                                     <>

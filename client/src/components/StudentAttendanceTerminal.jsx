@@ -309,35 +309,32 @@ const StudentAttendanceTerminal = () => {
             <motion.div 
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative"
+                className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
             >
-                {/* Background Decoration */}
-                <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
-                <div className="absolute bottom-0 right-32 -mb-16 -mr-16 w-64 h-64 bg-emerald-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
 
                 <div className="relative z-10">
                     <div className="flex items-center gap-2 mb-2">
                         <ShieldCheck className="w-5 h-5 text-blue-400" />
-                        <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Secure Terminal</span>
+                        <span className="text-sm font-medium text-slate-500">Secure Terminal</span>
                     </div>
-                    <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                    <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
                         Attendance Entry
                     </h1>
-                    <p className="mt-2 text-slate-400 font-medium max-w-md">
+                    <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                         Use your department supervisor&apos;s passcode or QR code to clock in and clock out.
                     </p>
-                    <p className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 bg-white/10 border border-white/10 rounded-lg text-sm font-bold text-blue-200">
-                        Your department: <span className="text-white">{assignedDepartment}</span>
+                    <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">
+                        Your department: <span className="font-semibold text-slate-900">{assignedDepartment}</span>
                     </p>
                 </div>
 
-                <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex flex-col items-center sm:items-end text-right">
+                <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex flex-col items-center sm:items-end text-right">
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Current System Time</span>
-                    <div className="text-3xl font-black text-white font-mono tracking-tight flex items-center gap-2">
+                    <div className="text-3xl font-semibold tabular-nums text-slate-900 font-mono tracking-tight flex items-center gap-2">
                         <Clock className="w-6 h-6 text-blue-400" />
                         {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                     </div>
-                    <span className="text-sm font-medium text-slate-300 mt-1">
+                    <span className="text-sm text-slate-500 mt-1">
                         {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                     </span>
                 </div>
@@ -368,13 +365,13 @@ const StudentAttendanceTerminal = () => {
                                 initial={{ opacity: 0, x: -20 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: -20, transition: { duration: 0.2 } }}
-                                className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200 relative overflow-hidden"
+                                className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-8 relative overflow-hidden"
                             >
                                 <div className="flex items-center gap-3 mb-6">
                                     <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
                                         <LogIn className="w-5 h-5" />
                                     </div>
-                                    <h2 className="text-xl font-extrabold text-slate-900">Start Shift</h2>
+                                    <h2 className="text-xl font-semibold text-slate-900">Start Shift</h2>
                                 </div>
 
                                 <form onSubmit={handleClockIn} className="space-y-5">
@@ -489,22 +486,21 @@ const StudentAttendanceTerminal = () => {
                                 key="active-shift"
                                 initial={{ opacity: 0, scale: 0.95 }}
                                 animate={{ opacity: 1, scale: 1 }}
-                                className="bg-emerald-50 rounded-3xl p-6 sm:p-8 shadow-sm border border-emerald-200 relative overflow-hidden"
+                                className="bg-emerald-50 rounded-2xl border border-emerald-200 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-8 relative overflow-hidden"
                             >
-                                <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-400 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
 
                                 <div className="flex flex-col items-center text-center relative z-10">
                                     <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 mb-4 shadow-inner">
                                         <Timer className="w-8 h-8 animate-pulse" />
                                     </div>
-                                    <h2 className="text-2xl font-black text-emerald-900">Shift Active</h2>
+                                    <h2 className="text-2xl font-semibold text-emerald-900">Shift Active</h2>
                                     <p className="text-sm font-bold text-emerald-700 mt-1 uppercase tracking-wider">
                                         {activeShift.work_type || 'Regular Duty'}
                                     </p>
                                     
                                     <div className="mt-6 w-full p-4 bg-white/60 backdrop-blur-sm rounded-2xl border border-emerald-100">
                                         <p className="text-xs font-bold text-emerald-600 uppercase mb-1">Time In</p>
-                                        <p className="text-xl font-black text-emerald-900 font-mono">
+                                        <p className="text-xl font-semibold text-emerald-900 font-mono">
                                             {activeShift.time_in ? new Date(activeShift.time_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
                                         </p>
                                     </div>
@@ -556,7 +552,7 @@ const StudentAttendanceTerminal = () => {
                                                     whileTap={{ scale: 0.98 }}
                                                     type="submit"
                                                     disabled={isLoading || !tokenInput}
-                                                    className="w-full py-4 bg-linear-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-black rounded-xl shadow-lg shadow-red-500/25 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    className="w-full py-4 bg-linear-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold rounded-xl shadow-lg shadow-red-500/25 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                                 >
                                                     {isLoading ? (
                                                         <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
@@ -611,7 +607,7 @@ const StudentAttendanceTerminal = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                             <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Total Rendered</p>
-                            <h3 className="text-3xl font-black text-blue-600">
+                            <h3 className="text-3xl font-semibold text-blue-600">
                                 {formatHours(summary.total_rendered)} <span className="text-sm font-bold text-slate-400 uppercase tracking-normal">hrs</span>
                             </h3>
                             <div className="w-full bg-slate-100 rounded-full h-1.5 mt-4 overflow-hidden">
@@ -626,7 +622,7 @@ const StudentAttendanceTerminal = () => {
                         
                         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                             <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Remaining Hours</p>
-                            <h3 className="text-3xl font-black text-slate-900">
+                            <h3 className="text-3xl font-semibold text-slate-900">
                                 {formatHours(summary.remaining_hours)} <span className="text-sm font-bold text-slate-400 uppercase tracking-normal">hrs</span>
                             </h3>
                             <p className="text-xs font-bold text-emerald-600 mt-3 flex items-center gap-1">
@@ -636,10 +632,10 @@ const StudentAttendanceTerminal = () => {
                     </div>
 
                     {/* Recent History List */}
-                    <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
                         <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center gap-3">
                             <History className="w-5 h-5 text-slate-400" />
-                            <h3 className="text-lg font-extrabold text-slate-900">Recent Logs</h3>
+                            <h3 className="text-lg font-semibold text-slate-900">Recent Logs</h3>
                         </div>
                         
                         <div className="p-0">
@@ -678,7 +674,7 @@ const StudentAttendanceTerminal = () => {
                                             </div>
                                             
                                             <div className="flex flex-col items-start sm:items-end w-full sm:w-auto pl-6 sm:pl-0">
-                                                <span className="text-lg font-black text-slate-900">
+                                                <span className="text-lg font-semibold text-slate-900">
                                                     {formatHours(log.computed_hours || log.rendered_hours)} <span className="text-xs text-slate-500 font-bold">hrs</span>
                                                 </span>
                                                 {(log.check_in_method === 'qr' || log.verification_code_used) && (
@@ -701,12 +697,12 @@ const StudentAttendanceTerminal = () => {
                 </motion.div>
             </motion.div>
 
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
                 <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
                         <CalendarRange className="w-5 h-5 text-slate-400" />
                         <div>
-                            <h3 className="text-lg font-extrabold text-slate-900">Daily Time Record</h3>
+                            <h3 className="text-lg font-semibold text-slate-900">Daily Time Record</h3>
                             <p className="text-xs font-medium text-slate-500">Official WSPO DTR for the selected month. View your own record only.</p>
                         </div>
                     </div>
@@ -772,7 +768,7 @@ const StudentAttendanceTerminal = () => {
                                                 {['approved', 'accepted'].includes(String(log.status).toLowerCase()) ? 'Accepted' : String(log.status).toLowerCase() === 'rejected' ? 'Rejected' : (log.time_out ? 'Pending' : 'Timed in')}
                                             </span>
                                         </td>
-                                        <td className="px-4 py-3 text-right font-black font-mono text-slate-900">
+                                        <td className="px-4 py-3 text-right font-semibold font-mono text-slate-900">
                                             {hoursFor(log).toFixed(2)}
                                         </td>
                                     </tr>
@@ -781,8 +777,8 @@ const StudentAttendanceTerminal = () => {
                         </tbody>
                         <tfoot>
                             <tr className="bg-slate-50 border-t border-slate-200">
-                                <td colSpan={5} className="px-4 py-3 text-right font-black uppercase tracking-wider text-xs text-slate-600">Total Hours</td>
-                                <td className="px-4 py-3 text-right font-black font-mono text-slate-900">{dtrTotalHours.toFixed(2)}</td>
+                                <td colSpan={5} className="px-4 py-3 text-right font-semibold uppercase tracking-wider text-xs text-slate-600">Total Hours</td>
+                                <td className="px-4 py-3 text-right font-semibold font-mono text-slate-900">{dtrTotalHours.toFixed(2)}</td>
                             </tr>
                         </tfoot>
                     </table>
@@ -809,7 +805,7 @@ const StudentAttendanceTerminal = () => {
                         >
                             <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-3 shrink-0">
                                 <div>
-                                    <p className="text-sm font-black text-slate-900">Official WSPO DTR</p>
+                                    <p className="text-sm font-semibold text-slate-900">Official WSPO DTR</p>
                                     <p className="text-xs font-medium text-slate-500">{fullName} · {studentProfile.student_id_number}</p>
                                 </div>
                                 <button

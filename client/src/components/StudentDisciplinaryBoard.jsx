@@ -87,33 +87,30 @@ const StudentDisciplinaryBoard = () => {
             <motion.div 
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative"
+                className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
             >
-                {/* Subtle red/amber glow for disciplinary context */}
-                <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-red-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
-                <div className="absolute bottom-0 left-10 -mb-16 -ml-16 w-64 h-64 bg-amber-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10"></div>
 
                 <div className="relative z-10">
                     <div className="flex items-center gap-2 mb-2">
-                        <ShieldAlert className="w-5 h-5 text-red-400" />
-                        <span className="text-xs font-bold text-red-400 uppercase tracking-widest">Conduct Overview</span>
+                        <ShieldAlert className="w-5 h-5 text-rose-600" />
+                        <span className="text-xs font-bold text-rose-600 uppercase tracking-widest">Conduct Overview</span>
                     </div>
-                    <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                    <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
                         Disciplinary Board
                     </h1>
-                    <p className="mt-2 text-slate-400 font-medium max-w-md">
+                    <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                         Review your official conduct records. Submit a formal appeal to the WSPO coordinator if a penalty was issued in error.
                     </p>
                 </div>
 
                 {/* Dynamic Status Box */}
-                <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${hasCleanRecord ? 'bg-emerald-500/20 text-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.3)]' : 'bg-red-500/20 text-red-400 shadow-[0_0_15px_rgba(248,113,113,0.3)]'}`}>
+                <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex items-center gap-4">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${hasCleanRecord ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
                         {hasCleanRecord ? <CheckCircle2 className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
                     </div>
                     <div className="flex flex-col">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Standing</span>
-                        <span className={`text-sm font-extrabold ${hasCleanRecord ? 'text-emerald-400' : 'text-red-400'}`}>
+                        <span className={`text-sm font-semibold ${hasCleanRecord ? 'text-emerald-600' : 'text-rose-600'}`}>
                             {hasCleanRecord ? 'Clear Record' : 'Infractions Found'}
                         </span>
                     </div>
@@ -126,16 +123,13 @@ const StudentDisciplinaryBoard = () => {
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: 0.1 }}
-                    className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-3xl p-8 sm:p-12 shadow-lg shadow-emerald-600/20 text-center relative overflow-hidden flex flex-col items-center"
+                    className="flex flex-col items-center rounded-2xl border border-slate-200/80 bg-white px-8 py-14 text-center shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
                 >
-                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-10 rounded-full blur-3xl"></div>
-                    
-                    <div className="relative z-10 w-24 h-24 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mb-6 shadow-inner border border-white/30">
-                        <ShieldCheck className="w-12 h-12 text-white" />
+                    <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                        <ShieldCheck className="h-7 w-7" />
                     </div>
-                    <h3 className="relative z-10 text-3xl font-black text-white tracking-tight mb-2">Exemplary Record</h3>
-                    <p className="relative z-10 text-emerald-100 font-medium max-w-md text-lg">
+                    <h3 className="text-2xl font-semibold tracking-tight text-slate-900">Exemplary record</h3>
+                    <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-500">
                         You have no violations or penalties on your account. Thank you for your continued dedication to the Work-Study Program!
                     </p>
                 </motion.div>
@@ -151,7 +145,7 @@ const StudentDisciplinaryBoard = () => {
                         <motion.div 
                             variants={itemVariants} 
                             key={record.id}
-                            className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 hover:shadow-md hover:border-slate-300 transition-all group flex flex-col md:flex-row gap-6 items-start md:items-center relative overflow-hidden"
+                            className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:shadow-md hover:border-slate-300 transition-all group flex flex-col md:flex-row gap-6 items-start md:items-center relative overflow-hidden"
                         >
                             {/* Left Side: Icon & Details */}
                             <div className="flex-1 flex gap-5 w-full">
@@ -160,7 +154,7 @@ const StudentDisciplinaryBoard = () => {
                                 </div>
                                 <div className="flex-1">
                                     <div className="flex flex-wrap items-center gap-2 mb-1">
-                                        <h4 className="text-lg font-black text-slate-900">{record.violation_type || 'Standard Policy Violation'}</h4>
+                                        <h4 className="text-lg font-semibold text-slate-900">{record.violation_type || 'Standard Policy Violation'}</h4>
                                         {record.offense_level && (
                                             <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold border uppercase tracking-wider ${record.offense_level === 'major' ? 'bg-red-50 text-red-700 border-red-100' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
                                                 {record.offense_level}
@@ -265,7 +259,7 @@ const StudentDisciplinaryBoard = () => {
                         >
                             <div className="p-6 sm:p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                                 <div>
-                                    <h3 className="text-xl font-black text-slate-900 flex items-center gap-2 tracking-tight">
+                                    <h3 className="text-xl font-semibold text-slate-900 flex items-center gap-2 tracking-tight">
                                         <Scale className="w-6 h-6 text-slate-700" />
                                         Submit Formal Appeal
                                     </h3>

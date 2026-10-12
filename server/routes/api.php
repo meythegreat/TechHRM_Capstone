@@ -60,6 +60,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/user', [UserController::class, 'updateSelf']);
     Route::post('/user/change-password', [UserController::class, 'changeTemporaryPassword']);
     Route::post('/user/avatar', [UserController::class, 'uploadAvatar']);
+    Route::delete('/user/avatar', [UserController::class, 'removeAvatar']);
 
     Route::get('/secure-file', [SecureFileController::class, 'show']);
 
@@ -155,6 +156,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/personnel', [UserController::class, 'personnel']);
         Route::get('/department-supervisors', [UserController::class, 'departmentSupervisors']);
         Route::get('/admin/stats', [DashboardController::class, 'getStats']);
+        Route::get('/admin/active-now', [AdminController::class, 'activeNow']);
 
         Route::get('/tasks', [\App\Http\Controllers\TaskController::class, 'index']);
 
@@ -234,7 +236,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/admin/dashboard-stats', [AdminController::class, 'getStats']);
         Route::get('/admin/enrolled-roster', [AdminController::class, 'enrolledRoster']);
-        Route::get('/admin/active-now', [AdminController::class, 'activeNow']);
         Route::post('/offices', [OfficeController::class, 'store']);
         Route::put('/offices/{office}', [OfficeController::class, 'update']);
         Route::delete('/offices/{office}', [OfficeController::class, 'destroy']);

@@ -187,32 +187,29 @@ const ActivityLogs = () => {
             <motion.div 
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative"
+                className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
             >
-                {/* Glowing Orbs */}
-                <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
-                <div className="absolute bottom-0 left-10 -mb-16 -ml-16 w-64 h-64 bg-emerald-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10"></div>
 
                 <div className="relative z-10">
                     <div className="flex items-center gap-2 mb-2">
                         <Terminal className="w-5 h-5 text-indigo-400" />
-                        <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">System Security</span>
+                        <span className="text-sm font-medium text-slate-500">System Security</span>
                     </div>
-                    <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                    <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
                         System Audit Trail
                     </h1>
-                    <p className="mt-2 text-slate-400 font-medium max-w-md leading-relaxed">
+                    <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                         Real-time immutable monitoring of all administrative and system-level activities.
                     </p>
                 </div>
 
-                <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.3)] shrink-0">
+                <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
                         <ShieldAlert className="w-5 h-5 animate-pulse" />
                     </div>
                     <div className="flex flex-col text-left">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tracking Status</span>
-                        <span className="text-sm font-extrabold text-emerald-400">
+                        <span className="text-sm font-semibold text-emerald-600">
                             Active Monitoring
                         </span>
                     </div>
@@ -224,7 +221,7 @@ const ActivityLogs = () => {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
-                className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-slate-200 flex flex-col gap-4"
+                className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex flex-col gap-4"
             >
                 {/* Search Bar (text-base prevents iOS Zoom) */}
                 <div className="relative w-full md:max-w-md">
@@ -282,7 +279,7 @@ const ActivityLogs = () => {
             </motion.div>
 
             {/* MAIN TABLE */}
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative min-h-[400px]">
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden relative min-h-[400px]">
                 
                 {/* Loading Overlay */}
                 {isLoading && (
@@ -298,11 +295,11 @@ const ActivityLogs = () => {
                     <table className="w-full text-left border-collapse min-w-[800px]">
                         <thead>
                             <tr className="bg-slate-50/80 border-b border-slate-200">
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-400 uppercase tracking-wider w-24">Log ID</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Administrator</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Action Type</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider w-1/3">Description</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider text-right">Technical Details</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider w-24">Log ID</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Administrator</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Action Type</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider w-1/3">Description</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Technical Details</th>
                             </tr>
                         </thead>
                         <motion.tbody 
@@ -434,16 +431,15 @@ const ActivityLogs = () => {
                         >
                             {/* Modal Header */}
                             <div className="px-6 sm:px-8 py-6 border-b border-slate-200 bg-slate-900 text-white flex items-start justify-between gap-4 shrink-0 relative overflow-hidden">
-                                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500 rounded-full blur-3xl opacity-20"></div>
                                 <div className="relative z-10">
                                     <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-300 font-mono mb-1">
                                         Log Entry #{String(selectedLog.id).padStart(5, '0')}
                                     </p>
-                                    <h2 id="trail-breakdown-title" className="text-2xl font-black tracking-tight flex items-center gap-2">
+                                    <h2 id="trail-breakdown-title" className="text-2xl font-semibold tracking-tight flex items-center gap-2">
                                         <ShieldAlert className="w-6 h-6 text-indigo-400" />
                                         Activity Breakdown
                                     </h2>
-                                    <p className="mt-1.5 text-sm font-medium text-slate-300 flex items-center gap-1.5">
+                                    <p className="mt-1.5 text-sm text-slate-500 flex items-center gap-1.5">
                                         <User className="w-4 h-4" /> {selectedLog.admin_name} <span className="text-slate-500 mx-1">•</span> {selectedLog.action}
                                     </p>
                                 </div>
@@ -464,7 +460,7 @@ const ActivityLogs = () => {
                                 </div>
 
                                 <div className="space-y-4">
-                                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2 border-b border-slate-200 pb-2">
+                                    <h4 className="text-xs font-semibold uppercase tracking-widest text-slate-400 flex items-center gap-2 border-b border-slate-200 pb-2">
                                         <ListTree className="w-4 h-4 text-indigo-400" /> Sequential Steps
                                     </h4>
                                     <ol className="space-y-4">
@@ -473,11 +469,11 @@ const ActivityLogs = () => {
                                         ) : (
                                             (selectedLog.breakdown?.steps ?? []).map((step, index) => (
                                                 <li key={`${step.title}-${index}`} className="flex gap-4">
-                                                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-black text-indigo-700 border border-indigo-200 shadow-sm">
+                                                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-semibold text-indigo-700 border border-indigo-200 shadow-sm">
                                                         {index + 1}
                                                     </span>
                                                     <div className="bg-white border border-slate-200 p-4 rounded-2xl w-full shadow-sm">
-                                                        <p className="text-xs font-black uppercase tracking-wider text-slate-500 mb-1">{step.title}</p>
+                                                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">{step.title}</p>
                                                         <p className="text-sm font-medium text-slate-800 leading-relaxed">{step.detail}</p>
                                                     </div>
                                                 </li>
@@ -488,7 +484,7 @@ const ActivityLogs = () => {
 
                                 {(selectedLog.breakdown?.documents.length ?? 0) > 0 && (
                                     <div className="space-y-4">
-                                        <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2 border-b border-slate-200 pb-2">
+                                        <h4 className="text-xs font-semibold uppercase tracking-widest text-slate-400 flex items-center gap-2 border-b border-slate-200 pb-2">
                                             <FileText className="w-4 h-4 text-indigo-400" /> Associated Documents
                                         </h4>
                                         <div className="grid grid-cols-1 gap-3">

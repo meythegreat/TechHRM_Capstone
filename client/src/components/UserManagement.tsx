@@ -393,23 +393,21 @@ const UserManagement = () => {
     <div className="max-w-7xl mx-auto space-y-6 font-sans p-4 sm:p-8">
 
       {/* HEADER */}
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative">
-          <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
-          <div className="absolute bottom-0 left-10 -mb-16 -ml-16 w-64 h-64 bg-emerald-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10"></div>
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
 
           <div className="relative z-10">
               <div className="flex items-center gap-2 mb-2">
                   <ShieldCheck className="w-5 h-5 text-indigo-400" />
-                  <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">Identity & Access</span>
+                  <span className="text-sm font-medium text-slate-500">Identity & Access</span>
               </div>
-              <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">User Management</h1>
-              <p className="mt-2 text-slate-400 font-medium max-w-md">Control system access, assign roles, and manage department allocations for all personnel and students.</p>
+              <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">User Management</h1>
+              <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">Control system access, assign roles, and manage department allocations for all personnel and students.</p>
           </div>
 
-          <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-4">
+          <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex items-center gap-4">
               <div className="flex flex-col text-right">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Quick Action</span>
-                  <span className="text-sm font-medium text-slate-300">Provision account</span>
+                  <span className="text-sm text-slate-500">Provision account</span>
               </div>
               <button onClick={openAddModal} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm rounded-xl transition-colors shadow-lg shadow-indigo-900/50 flex items-center gap-2">
                   <UserPlus className="w-4 h-4" /> Add User
@@ -435,7 +433,7 @@ const UserManagement = () => {
       />
 
       {/* MAIN TABLE */}
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative min-h-[400px]">
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden relative min-h-[400px]">
           {isLoading && (
               <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-10 flex items-center justify-center">
                   <div className="flex flex-col items-center gap-3">
@@ -448,10 +446,10 @@ const UserManagement = () => {
               <table className="w-full text-left border-collapse">
                   <thead>
                       <tr className="bg-slate-50/80 border-b border-slate-200">
-                          <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Account Details</th>
-                          <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Role & Access</th>
-                          <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Department Details</th>
-                          <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                          <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Account Details</th>
+                          <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Role & Access</th>
+                          <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Department Details</th>
+                          <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Actions</th>
                       </tr>
                   </thead>
                   <motion.tbody variants={containerVariants} initial="hidden" animate={!isLoading ? "show" : "hidden"} className="divide-y divide-slate-100">
@@ -535,11 +533,10 @@ const UserManagement = () => {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4" {...bindPopup(() => setGeneratedCredentials(null))}>
                 <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-emerald-100">
                     <div className="bg-emerald-50 p-6 sm:p-8 flex flex-col items-center text-center border-b border-emerald-100 relative">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500 rounded-full blur-3xl opacity-20 mix-blend-multiply"></div>
                         <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center border-4 border-white shadow-sm mb-4 relative z-10">
                             <CheckCircle2 className="w-8 h-8" />
                         </div>
-                        <h3 className="text-xl font-black text-slate-900 relative z-10">Account Created!</h3>
+                        <h3 className="text-xl font-semibold text-slate-900 relative z-10">Account Created!</h3>
                         <p className="text-sm font-medium text-emerald-800 mt-2 relative z-10">{generatedCredentials.name} has been successfully provisioned.</p>
                     </div>
 
@@ -547,7 +544,7 @@ const UserManagement = () => {
                         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
                             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Username</label>
                             <div className="flex items-center justify-between">
-                                <span className="font-mono text-lg font-black text-indigo-700 select-all">{generatedCredentials.username}</span>
+                                <span className="font-mono text-lg font-semibold text-indigo-700 select-all">{generatedCredentials.username}</span>
                                 <button onClick={() => copyToClipboard(generatedCredentials.username, 'username')} className="p-2 bg-white border border-slate-200 hover:border-indigo-300 hover:text-indigo-600 rounded-lg shadow-sm transition-all">
                                     {copiedField === 'username' ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4 text-slate-500" />}
                                 </button>
@@ -557,7 +554,7 @@ const UserManagement = () => {
                         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
                             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Email</label>
                             <div className="flex items-center justify-between gap-3">
-                                <span className="font-mono text-base font-black text-indigo-700 select-all truncate">{generatedCredentials.email}</span>
+                                <span className="font-mono text-base font-semibold text-indigo-700 select-all truncate">{generatedCredentials.email}</span>
                                 <button onClick={() => copyToClipboard(generatedCredentials.email, 'email')} className="p-2 bg-white border border-slate-200 hover:border-indigo-300 hover:text-indigo-600 rounded-lg shadow-sm transition-all">
                                     {copiedField === 'email' ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4 text-slate-500" />}
                                 </button>
@@ -567,7 +564,7 @@ const UserManagement = () => {
                         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
                             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Auto-Generated Password</label>
                             <div className="flex items-center justify-between">
-                                <span className="font-mono text-lg font-black text-slate-900 select-all">{generatedCredentials.password}</span>
+                                <span className="font-mono text-lg font-semibold text-slate-900 select-all">{generatedCredentials.password}</span>
                                 <button onClick={() => copyToClipboard(generatedCredentials.password, 'password')} className="p-2 bg-white border border-slate-200 hover:border-indigo-300 hover:text-indigo-600 rounded-lg shadow-sm transition-all">
                                     {copiedField === 'password' ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4 text-slate-500" />}
                                 </button>
@@ -607,7 +604,7 @@ const UserManagement = () => {
               className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden my-auto"
             >
               <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center sticky top-0 z-10">
-                <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                <h3 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
                   <UserPlus className="w-5 h-5 text-indigo-600" />
                   {editingUserId ? "Edit Identity Profile" : "Provision New Identity"}
                 </h3>
@@ -620,7 +617,7 @@ const UserManagement = () => {
 
                 {/* GLOBAL ROLE SELECTION */}
                 <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl">
-                    <label className="block text-xs font-black text-indigo-700 uppercase tracking-widest mb-3 flex items-center gap-1.5"><ShieldCheck className="w-4 h-4"/> Security Authorization Level</label>
+                    <label className="block text-xs font-semibold text-indigo-700 uppercase tracking-widest mb-3 flex items-center gap-1.5"><ShieldCheck className="w-4 h-4"/> Security Authorization Level</label>
                     <select name="role" value={isWspoStaff ? "Student" : formData.role} onChange={handleInputChange} disabled={isWspoStaff} className="w-full p-3.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 transition-all appearance-none cursor-pointer shadow-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600">
                         <option value="Student">Student Worker</option>
                         {!isWspoStaff && (
@@ -638,7 +635,7 @@ const UserManagement = () => {
 
                 {/* Section 1: Personal Profile */}
                 <div>
-                  <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
+                  <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
                     <Users className="w-4 h-4 text-indigo-500" /> Personal Profile
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-12 gap-5">
@@ -692,7 +689,7 @@ const UserManagement = () => {
                 {/* Section 2: University Details */}
                 {formData.role !== 'Super Admin' && (
                   <div>
-                    <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
+                    <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
                       <Building2 className="w-4 h-4 text-indigo-500" /> University Details
                     </h4>
 
@@ -803,7 +800,7 @@ const UserManagement = () => {
                 {/* Section 3: Security Credentials (ONLY SHOWN IN EDIT MODE for Admins) */}
                 {editingUserId ? (
                     <div>
-                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
+                        <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
                             <KeyRound className="w-4 h-4 text-indigo-500" /> Account Security & Reset
                         </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -843,7 +840,7 @@ const UserManagement = () => {
                                             <div className="mt-3 bg-slate-50 border border-slate-100 p-4 rounded-xl">
                                                 <div className="flex justify-between items-center mb-2">
                                                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Password Strength</span>
-                                                    <span className={`text-[10px] font-black uppercase tracking-wider ${strengthColors[passwordScore].replace('bg-', 'text-')}`}>
+                                                    <span className={`text-[10px] font-semibold uppercase tracking-wider ${strengthColors[passwordScore].replace('bg-', 'text-')}`}>
                                                         {strengthLabels[passwordScore]}
                                                     </span>
                                                 </div>
@@ -882,7 +879,7 @@ const UserManagement = () => {
                     <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex gap-3">
                         <Lock className="w-5 h-5 text-blue-600 shrink-0" />
                         <div>
-                            <p className="text-xs font-black text-blue-800 uppercase tracking-widest mb-1">Secure Authentication Generation</p>
+                            <p className="text-xs font-semibold text-blue-800 uppercase tracking-widest mb-1">Secure Authentication Generation</p>
                             <p className="text-[11px] font-medium text-blue-700 leading-relaxed">
                                 A username and password are generated when you save. The person can sign in with that username or the email address above.
                             </p>

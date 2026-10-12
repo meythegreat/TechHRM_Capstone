@@ -121,34 +121,31 @@ const RequirementManagement = () => {
             <motion.div 
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative"
+                className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
             >
-                {/* Glowing Orbs */}
-                <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
-                <div className="absolute bottom-0 left-10 -mb-16 -ml-16 w-64 h-64 bg-emerald-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10"></div>
 
                 <div className="relative z-10">
                     <div className="flex items-center gap-2 mb-2">
                         <ShieldCheck className="w-5 h-5 text-blue-400" />
-                        <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Compliance Management</span>
+                        <span className="text-sm font-medium text-slate-500">Compliance Management</span>
                     </div>
-                    <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                    <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
                         Document Verification
                     </h1>
-                    <p className="mt-2 text-slate-400 font-medium max-w-md">
+                    <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                         {isAudit
                             ? 'Students whose documents passed review, newest first. Open a file to view the submission.'
                             : 'Review uploaded student requirements. Verify valid documents or reject them with feedback for correction.'}
                     </p>
                 </div>
 
-                <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${pendingCount > 0 ? 'bg-amber-500/20 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.3)]' : 'bg-emerald-500/20 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)]'}`}>
+                <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex items-center gap-4">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${pendingCount > 0 ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
                         {pendingCount > 0 ? <FileSearch className="w-5 h-5 animate-pulse" /> : <CheckCircle2 className="w-5 h-5" />}
                     </div>
                     <div className="flex flex-col text-left">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Verification Queue</span>
-                        <span className={`text-sm font-extrabold ${pendingCount > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                        <span className={`text-sm font-semibold ${pendingCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
                             {pendingCount > 0 ? `${pendingCount} Pending Review(s)` : 'All Caught Up!'}
                         </span>
                     </div>
@@ -162,7 +159,7 @@ const RequirementManagement = () => {
             />
 
             {/* MAIN TABLE */}
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative">
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden relative">
                 
                 {isLoading && (
                     <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-10 flex items-center justify-center">
@@ -176,10 +173,10 @@ const RequirementManagement = () => {
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-slate-50/80 border-b border-slate-200">
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Student Details</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Document Info</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Status</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider text-right">Verification Action</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Student Details</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Document Info</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Verification Action</th>
                             </tr>
                         </thead>
                         <motion.tbody 
@@ -308,7 +305,7 @@ const RequirementManagement = () => {
                             className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
                         >
                             <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                                <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                                <h3 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
                                     <AlertCircle className="w-5 h-5 text-red-600" /> Reject Document
                                 </h3>
                                 <button onClick={() => setIsRejectModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-full transition-colors">

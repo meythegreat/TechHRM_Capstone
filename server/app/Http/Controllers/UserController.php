@@ -732,4 +732,20 @@ class UserController extends Controller
 
         return response()->json(['message' => 'No image uploaded'], 400);
     }
+
+    public function removeAvatar(Request $request)
+    {
+        $user = $request->user();
+
+        if ($user->profile_picture) {
+            Storage::disk('local')->delete($user->profile_picture);
+            $user->profile_picture = null;
+            $user->save();
+        }
+
+        return response()->json([
+            'message' => 'Profile picture removed.',
+            'profile_picture' => null,
+        ]);
+    }
 }

@@ -16,7 +16,6 @@ import {
     XCircle, 
     AlertCircle, 
     UserCircle, 
-    Camera, 
     Check,
     Briefcase,
     ShieldCheck,
@@ -28,6 +27,7 @@ import Sidebar from './Sidebar';
 import NotificationBell from './NotificationBell';
 import SecureImage from './SecureImage';
 import AvatarCropDialog from './AvatarCropDialog';
+import AvatarPhotoMenu from './AvatarPhotoMenu';
 import { normalizeFilePath, openSecureFile } from '../utils/secureFile';
 import { firstPathSegment, resolveStudentPath } from '../config/routes';
 import { REALTIME_EVENT, emitRealtimeRefresh } from '../utils/realtime';
@@ -304,6 +304,21 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
         }
     };
 
+    const removeAvatar = async () => {
+        setIsLoading(true);
+        try {
+            await axios.delete('/api/user/avatar');
+            setAvatarPath(null);
+            localStorage.removeItem('profile_picture');
+            emitRealtimeRefresh();
+            setMessage({ text: 'Profile picture removed.', type: 'success' });
+        } catch {
+            setMessage({ text: 'Failed to remove profile picture.', type: 'error' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const handleChangePassword = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newPassword) {
@@ -390,7 +405,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={reduceMotion ? { opacity: 1 } : { opacity: 0, y: -6 }}
                                 transition={{ duration: reduceMotion ? 0 : 0.22, ease: pageEase }}
-                                className="text-xl font-black text-slate-800 tracking-tight hidden sm:block"
+                                className="hidden text-base font-semibold tracking-tight text-slate-900 sm:block"
                             >
                                 {studentNavItems.find((item) => item.id === currentPath)?.label ?? currentPath.replace('-', ' ')}
                             </motion.h2>
@@ -400,8 +415,8 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                     <div className="flex items-center gap-4">
                         <NotificationBell onNavigate={(path) => navigate(`/${path}`)} />
                         <div className="text-right hidden sm:block">
-                            <p className="text-xs font-bold text-blue-600 uppercase tracking-widest">{assignedOffice}</p>
-                            <p className="text-sm font-extrabold text-slate-900">{fullName}</p>
+                            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{assignedOffice}</p>
+                            <p className="text-sm font-semibold text-slate-900">{fullName}</p>
                         </div>
                         <div className="w-10 h-10 bg-slate-100 border-2 border-slate-200 rounded-full flex items-center justify-center text-slate-600 font-bold shadow-sm overflow-hidden group">
                             {avatarPath ? <SecureImage filePath={avatarPath} altText="Nav Avatar" className="w-full h-full object-cover group-hover:scale-110 transition-transform" /> : firstName.charAt(0)}
@@ -434,53 +449,46 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                 <motion.div 
                                     initial={{ opacity: 0, y: -20 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative"
+                                    className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
                                 >
-                                    <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
-                                    <div className="absolute bottom-0 left-10 -mb-16 -ml-16 w-64 h-64 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
 
                                     <div className="relative z-10">
                                         <div className="flex items-center gap-2 mb-2">
                                             <Wallet className="w-5 h-5 text-blue-400" />
-                                            <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Duty Summary</span>
+                                            <span className="text-sm font-medium text-slate-500">Duty Summary</span>
                                         </div>
-                                        <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                                        <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
                                             Hours Rendered
                                         </h1>
-                                        <p className="mt-2 text-slate-400 font-medium max-w-md">
+                                        <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                                             Review the hours rendered from your approved attendance logs, and the equivalent amount for Finance.
                                         </p>
                                     </div>
 
-                                    <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex flex-col items-center sm:items-end text-right">
+                                    <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex flex-col items-center sm:items-end text-right">
                                         <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Rendered Hours</span>
-                                        <div className="text-3xl font-black text-white font-mono tracking-tight flex items-center gap-2">
+                                        <div className="text-3xl font-semibold tabular-nums text-slate-900 font-mono tracking-tight flex items-center gap-2">
                                             <Clock className="w-6 h-6 text-blue-400" />
                                             {totalRenderedHours.toFixed(2)} <span className="text-sm font-bold text-slate-500">hrs</span>
                                         </div>
                                     </div>
                                 </motion.div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                    <motion.div variants={cardVariants} className="bg-gradient-to-br from-blue-600 to-blue-800 p-6 rounded-3xl shadow-lg shadow-blue-900/20 text-white relative overflow-hidden group">
-                                        <div className="absolute right-0 top-0 w-32 h-32 bg-white opacity-10 rounded-full blur-2xl group-hover:scale-110 transition-transform duration-500"></div>
-                                        <Clock className="w-8 h-8 text-blue-200 mb-4" />
-                                        <p className="text-sm font-bold text-blue-200 uppercase tracking-wider mb-1">Total Hours Rendered</p>
-                                        <p className="text-4xl font-black">{totalRenderedHours.toFixed(2)}</p>
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                                    <motion.div variants={cardVariants} className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+                                        <Clock className="mb-4 h-5 w-5 text-blue-600" />
+                                        <p className="text-sm font-medium text-slate-500">Total hours rendered</p>
+                                        <p className="mt-1 text-4xl font-semibold tabular-nums tracking-tight text-slate-900">{totalRenderedHours.toFixed(2)}</p>
                                     </motion.div>
-                                    
-                                    <motion.div variants={cardVariants} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden group">
-                                        <div className="absolute right-0 top-0 w-32 h-32 bg-purple-500 opacity-5 rounded-full blur-2xl group-hover:scale-110 transition-transform duration-500"></div>
-                                        <TrendingUp className="w-8 h-8 text-purple-500 mb-4" />
-                                        <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Hourly Rate</p>
-                                        <p className="text-4xl font-black text-slate-900">₱{hourlyRate.toFixed(2)}</p>
+                                    <motion.div variants={cardVariants} className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+                                        <TrendingUp className="mb-4 h-5 w-5 text-slate-400" />
+                                        <p className="text-sm font-medium text-slate-500">Hourly rate</p>
+                                        <p className="mt-1 text-4xl font-semibold tabular-nums tracking-tight text-slate-900">₱{hourlyRate.toFixed(2)}</p>
                                     </motion.div>
-
-                                    <motion.div variants={cardVariants} className="bg-gradient-to-br from-emerald-500 to-emerald-600 p-6 rounded-3xl shadow-lg shadow-emerald-900/20 text-white relative overflow-hidden group">
-                                        <div className="absolute right-0 top-0 w-32 h-32 bg-white opacity-10 rounded-full blur-2xl group-hover:scale-110 transition-transform duration-500"></div>
-                                        <Wallet className="w-8 h-8 text-emerald-200 mb-4" />
-                                        <p className="text-sm font-bold text-emerald-100 uppercase tracking-wider mb-1">Estimated Earnings</p>
-                                        <p className="text-4xl font-black">₱{estimatedAmount.toFixed(2)}</p>
+                                    <motion.div variants={cardVariants} className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+                                        <Wallet className="mb-4 h-5 w-5 text-emerald-600" />
+                                        <p className="text-sm font-medium text-slate-500">Estimated earnings</p>
+                                        <p className="mt-1 text-4xl font-semibold tabular-nums tracking-tight text-slate-900">₱{estimatedAmount.toFixed(2)}</p>
                                     </motion.div>
                                 </div>
 
@@ -495,27 +503,26 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                 <motion.div 
                                     initial={{ opacity: 0, y: -20 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative"
+                                    className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
                                 >
-                                    <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
 
                                     <div className="relative z-10">
                                         <div className="flex items-center gap-2 mb-2">
                                             <CalendarRange className="w-5 h-5 text-blue-400" />
-                                            <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Duty Roster</span>
+                                            <span className="text-sm font-medium text-slate-500">Duty Roster</span>
                                         </div>
-                                        <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                                        <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
                                             My Schedule
                                         </h1>
-                                        <p className="mt-2 text-slate-400 font-medium max-w-md">
+                                        <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                                             Your official assigned duty shifts. Formal edits require WSPO review and approval.
                                         </p>
                                     </div>
 
-                                    <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex flex-col sm:flex-row items-center gap-4">
+                                    <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex flex-col sm:flex-row items-center gap-4">
                                         <div className="flex flex-col text-center sm:text-right">
                                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Need a change?</span>
-                                            <span className="text-sm font-medium text-slate-300">Submit a formal request.</span>
+                                            <span className="text-sm text-slate-500">Submit a formal request.</span>
                                         </div>
                                         <button onClick={() => setIsEditModalOpen(true)} disabled={schedule.length === 0} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl transition-colors shadow-lg shadow-blue-900/50 disabled:opacity-50">
                                             Request Edit
@@ -523,7 +530,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                     </div>
                                 </motion.div>
 
-                                <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200">
+                                <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-8">
                                     {schedule.length === 0 ? (
                                         <div className="py-16 flex flex-col items-center justify-center text-center text-slate-400">
                                             <CalendarRange className="w-16 h-16 mb-4 opacity-20" />
@@ -536,10 +543,10 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                                 <motion.div variants={cardVariants} key={shift.id} className={`flex flex-col sm:flex-row sm:items-center justify-between p-5 rounded-2xl border transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 ${shift.edit_request_status === 'pending' ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200 hover:border-blue-300'}`}>
                                                     <div className="flex items-center gap-5 mb-4 sm:mb-0">
                                                         <div className="w-16 h-16 rounded-xl bg-blue-50 flex flex-col items-center justify-center text-blue-700 border border-blue-100 shadow-inner">
-                                                            <span className="text-sm font-black uppercase tracking-wider">{shift.day.substring(0, 3)}</span>
+                                                            <span className="text-sm font-semibold uppercase tracking-wider">{shift.day.substring(0, 3)}</span>
                                                         </div>
                                                         <div>
-                                                            <div className="font-black text-slate-900 text-xl tracking-tight">{shift.time}</div>
+                                                            <div className="font-semibold text-slate-900 text-xl tracking-tight">{shift.time}</div>
                                                             <div className="text-xs font-bold text-blue-600 uppercase tracking-widest mt-0.5">{shift.duty_type}</div>
                                                         </div>
                                                     </div>
@@ -571,30 +578,29 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                 <motion.div 
                                     initial={{ opacity: 0, y: -20 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative"
+                                    className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
                                 >
-                                    <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-emerald-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
 
                                     <div className="relative z-10">
                                         <div className="flex items-center gap-2 mb-2">
                                             <ShieldCheck className="w-5 h-5 text-blue-400" />
-                                            <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Document Center</span>
+                                            <span className="text-sm font-medium text-slate-500">Document Center</span>
                                         </div>
-                                        <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                                        <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
                                             Requirements
                                         </h1>
-                                        <p className="mt-2 text-slate-400 font-medium max-w-md">
+                                        <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                                             Upload your student records securely and track their approval status in real-time.
                                         </p>
                                     </div>
 
-                                    <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-4">
-                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${requirementsAllVerified ? 'bg-emerald-500/20 text-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.3)]' : 'bg-amber-500/20 text-amber-400'}`}>
+                                    <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex items-center gap-4">
+                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${requirementsAllVerified ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-500/20 text-amber-600'}`}>
                                             {requirementsAllVerified ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
                                         </div>
                                         <div className="flex flex-col">
                                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Compliance Status</span>
-                                            <span className={`text-sm font-extrabold ${requirementsAllVerified ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                            <span className={`text-sm font-semibold ${requirementsAllVerified ? 'text-emerald-600' : 'text-amber-600'}`}>
                                                 {requirementsAllVerified ? 'Fully Compliant' : 'Requirements Pending'}
                                             </span>
                                         </div>
@@ -602,8 +608,8 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                 </motion.div>
 
                                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-                                    <motion.div variants={cardVariants} className="xl:col-span-1 bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200 h-fit">
-                                        <h3 className="text-xl font-black text-slate-900 mb-6 tracking-tight">Submit Document</h3>
+                                    <motion.div variants={cardVariants} className="xl:col-span-1 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] h-fit">
+                                        <h3 className="text-xl font-semibold text-slate-900 mb-6 tracking-tight">Submit Document</h3>
                                         <form onSubmit={handleUploadRequirement} className="space-y-5">
                                             <div>
                                                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Document Type</label>
@@ -648,9 +654,9 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                         </form>
                                     </motion.div>
 
-                                    <motion.div variants={cardVariants} className="xl:col-span-2 bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                                    <motion.div variants={cardVariants} className="xl:col-span-2 bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
                                         <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50/50">
-                                            <h3 className="text-xl font-black text-slate-900 tracking-tight">My Uploaded Requirements</h3>
+                                            <h3 className="text-xl font-semibold text-slate-900 tracking-tight">My Uploaded Requirements</h3>
                                         </div>
                                         <div className="p-0">
                                             {requirements.length === 0 ? (
@@ -707,49 +713,50 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                 <motion.div 
                                     initial={{ opacity: 0, y: -20 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative"
+                                    className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
                                 >
-                                    <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-slate-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
 
                                     <div className="relative z-10">
                                         <div className="flex items-center gap-2 mb-2">
                                             <UserCircle className="w-5 h-5 text-blue-400" />
-                                            <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Account Management</span>
+                                            <span className="text-sm font-medium text-slate-500">Account Management</span>
                                         </div>
-                                        <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                                        <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
                                             Profile Settings
                                         </h1>
-                                        <p className="mt-2 text-slate-400 font-medium max-w-md">
+                                        <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                                             Manage your personal details, assigned office, and system preferences.
                                         </p>
                                     </div>
 
-                                    <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-4">
+                                    <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex items-center gap-4">
                                         <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 shadow-inner relative overflow-hidden group">
                                             <div className="absolute top-0 right-0 w-16 h-16 bg-blue-400 rounded-full blur-xl mix-blend-multiply opacity-30 animate-pulse group-hover:scale-110 transition-transform"></div>
                                             <ShieldCheck className="w-5 h-5 relative z-10" />
                                         </div>
                                         <div className="flex flex-col">
                                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Account Security</span>
-                                            <span className="text-sm font-extrabold text-blue-400">Protected Account</span>
+                                            <span className="text-sm font-semibold text-slate-900">Protected Account</span>
                                         </div>
                                     </div>
                                 </motion.div>
 
-                                <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200">
+                                <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
                                     <div className="flex flex-col md:flex-row gap-10 items-start">
                                         <motion.div variants={cardVariants} className="flex flex-col items-center md:w-1/3 w-full">
                                             <div className="relative group cursor-pointer">
                                                 <div className="w-40 h-40 bg-slate-100 rounded-full border-4 border-white shadow-xl flex items-center justify-center overflow-hidden">
-                                                    {avatarPath ? <SecureImage filePath={avatarPath} altText="Profile" className="w-full h-full object-cover" /> : <span className="text-slate-400 font-black text-5xl">{firstName.charAt(0)}</span>}
+                                                    {avatarPath ? <SecureImage filePath={avatarPath} altText="Profile" className="w-full h-full object-cover" /> : <span className="text-slate-400 font-semibold text-5xl">{firstName.charAt(0)}</span>}
                                                 </div>
-                                                <label htmlFor="avatarUpload" className="absolute bottom-1 right-1 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg cursor-pointer">
-                                                    <Camera className="w-5 h-5" />
-                                                    <span className="sr-only">Change photo</span>
-                                                </label>
-                                                <input type="file" id="avatarUpload" accept="image/*" onChange={handleImageSelected} className="hidden" />
+                                                <AvatarPhotoMenu
+                                                    inputId="avatarUpload"
+                                                    hasPicture={Boolean(avatarPath)}
+                                                    disabled={isLoading}
+                                                    onFileSelected={handleImageSelected}
+                                                    onRemove={removeAvatar}
+                                                />
                                             </div>
-                                            <p className="text-xs text-slate-500 font-medium mt-4 text-center">Tap the camera button, then crop the photo into a circle. JPG or PNG, up to 2MB.</p>
+                                            <p className="text-xs text-slate-500 font-medium mt-4 text-center">Tap the camera button to change or remove your photo. JPG or PNG, up to 2MB.</p>
                                         </motion.div>
                                         
                                         <motion.div variants={cardVariants} className="flex-1 w-full space-y-6">
@@ -778,9 +785,9 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                     </div>
                                 </div>
 
-                                <form onSubmit={handleChangePassword} className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200 space-y-5">
+                                <form onSubmit={handleChangePassword} className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] space-y-5">
                                     <div>
-                                        <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">Change Password</h2>
+                                        <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-widest">Change Password</h2>
                                         <p className="text-sm text-slate-500 mt-1">Use your current password to set a new one.</p>
                                     </div>
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
@@ -855,7 +862,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                     {...bindPopup(() => setIsEditModalOpen(false))}
                 >
                     <motion.div initial={{ opacity: 0, scale: 0.95, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 8 }} className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8">
-                        <h3 className="text-xl font-black text-slate-900 mb-6 tracking-tight">Request Schedule Edit</h3>
+                        <h3 className="text-xl font-semibold text-slate-900 mb-6 tracking-tight">Request Schedule Edit</h3>
                         <form onSubmit={handleRequestEdit} className="space-y-5">
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Select Shift</label>

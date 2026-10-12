@@ -17,7 +17,7 @@ export default function UserAvatar({
     const initial = (firstName.charAt(0) || '?').toUpperCase();
 
     return (
-        <div className={`flex items-center justify-center font-black shrink-0 overflow-hidden shadow-sm ${className}`}>
+        <div className={`flex items-center justify-center font-semibold shrink-0 overflow-hidden shadow-sm ${className}`}>
             {path ? (
                 <SecureImage filePath={path} altText={firstName || 'Profile'} className="w-full h-full object-cover" />
             ) : (

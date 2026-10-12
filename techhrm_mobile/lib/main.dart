@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'core/theme_controller.dart';
+import 'core/widgets/common.dart';
 import 'features/auth/auth_provider.dart';
 import 'features/auth/login_screen.dart';
-import 'features/dashboard/student_dashboard.dart';
-import 'features/dashboard/supervisor_dashboard.dart';
+import 'features/shell/home_shell.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => ThemeController()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
       ],
       child: const TechHRMApp(),
@@ -21,35 +24,40 @@ class TechHRMApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.watch<ThemeController>();
     return MaterialApp(
-      title: 'TechHRM Mobile',
+      title: 'TechHRM',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1E3A8A)), // FCU Blue
-        useMaterial3: true,
-      ),
+      theme: techTheme(),
+      darkTheme: techDarkTheme(),
+      themeMode: theme.isDark ? ThemeMode.dark : ThemeMode.light,
       home: const AuthGate(),
     );
   }
 }
 
-// AuthGate decides which screen to show based on login status
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-
-    if (auth.isAuthenticated) {
-      if (auth.userRole == 'Student') {
-        return const StudentDashboard();
-      } else if (auth.userRole == 'Supervisor') {
-        return const SupervisorDashboard(); // <-- UPDATED!
-      }
+    if (!auth.ready) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Opening your session', style: TextStyle(color: kMuted, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      );
     }
-    
-    // If not authenticated, show the shiny new Login Screen!
-    return const LoginScreen();
+    if (!auth.isAuthenticated) return const LoginScreen();
+    if (auth.mustChangePassword) return const ForcePasswordScreen();
+    return const HomeShell();
   }
 }

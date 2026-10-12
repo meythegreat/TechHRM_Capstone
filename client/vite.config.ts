@@ -1,8 +1,38 @@
+import type { ClientRequest, IncomingMessage } from 'node:http'
+import { createRequire } from 'node:module'
 import os from 'node:os'
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig, type Plugin, type ProxyOptions } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { generate } from 'selfsigned'
+
+const require = createRequire(import.meta.url)
+const QRCode = require('qrcode') as {
+  toString: (
+    text: string,
+    opts: { type: 'terminal'; small: true },
+  ) => Promise<string>
+}
+
+function clientAddress(req: IncomingMessage): string {
+  const raw = req.socket.remoteAddress ?? ''
+  return raw.startsWith('::ffff:') ? raw.slice('::ffff:'.length) : raw
+}
+
+function apiProxy(): ProxyOptions {
+  return {
+    target: 'http://127.0.0.1:8000',
+    changeOrigin: true,
+    configure(proxy) {
+      proxy.on('proxyReq', (proxyReq: ClientRequest, req: IncomingMessage) => {
+        const ip = clientAddress(req)
+        if (ip) {
+          proxyReq.setHeader('X-Forwarded-For', ip)
+        }
+      })
+    },
+  }
+}
 
 function lanIPv4() {
   const rows: { iface: string; address: string }[] = []
@@ -22,11 +52,13 @@ function lanPhonePlugin(): Plugin {
     name: 'lan-phone-urls',
     configureServer(server) {
       let last = ''
-      const logUrls = (reason?: string) => {
+      let seq = 0
+      const logUrls = async (reason?: string) => {
         const rows = lanIPv4()
         const next = rows.map((row) => `${row.iface}:${row.address}`).sort().join(',')
         if (next === last) return
         last = next
+        const id = ++seq
         const logger = server.config.logger
         if (reason) {
           logger.info(`\n  Network changed (${reason}). New phone URLs:`)
@@ -39,15 +71,25 @@ function lanPhonePlugin(): Plugin {
         }
         const port = server.config.server.port ?? 5173
         for (const row of rows) {
-          logger.info(`    https://${row.address}:${port}  (${row.iface})`)
+          if (id !== seq) return
+          const url = `https://${row.address}:${port}`
+          logger.info(`    ${url}  (${row.iface})`)
+          logger.info('    Scan to open:')
+          const qr = await QRCode.toString(url, { type: 'terminal', small: true })
+          if (id !== seq) return
+          process.stdout.write(qr.endsWith('\n') ? qr : `${qr}\n`)
         }
       }
 
-      const listen = () => logUrls()
+      const listen = () => {
+        void logUrls()
+      }
       if (server.httpServer?.listening) listen()
       else server.httpServer?.once('listening', listen)
 
-      const timer = setInterval(() => logUrls('Wi-Fi / Ethernet'), 8000)
+      const timer = setInterval(() => {
+        void logUrls('Wi-Fi / Ethernet')
+      }, 8000)
       timer.unref()
       const stop = () => clearInterval(timer)
       server.httpServer?.once('close', stop)
@@ -96,8 +138,8 @@ export default defineConfig(async () => ({
     // Do not pin hmr.host. The browser uses the hostname it loaded
     // (localhost, Wi-Fi IP, or Ethernet IP).
     proxy: {
-      '/api': { target: 'http://127.0.0.1:8000', changeOrigin: true },
-      '/sanctum': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+      '/api': apiProxy(),
+      '/sanctum': apiProxy(),
     },
   },
 }))

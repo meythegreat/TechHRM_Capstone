@@ -120,7 +120,7 @@ const ApplicationStatusTracker = ({ application: provided = null, variant = 'pag
     if (!application) {
         return (
             <div className="p-8 text-center bg-red-50 rounded-3xl border border-red-100">
-                <p className="text-base font-black text-red-600">{loadError || 'No application found.'}</p>
+                <p className="text-base font-semibold text-red-600">{loadError || 'No application found.'}</p>
             </div>
         );
     }
@@ -155,9 +155,9 @@ const ApplicationStatusTracker = ({ application: provided = null, variant = 'pag
                 <div className="relative z-10">
                     <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-indigo-50 border border-indigo-100 mb-3">
                         <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse"></div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-indigo-700">Live Status Tracker</p>
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-indigo-700">Live Status Tracker</p>
                     </div>
-                    <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Application Progress</h2>
+                    <h2 className="text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight">Application Progress</h2>
                     <p className="text-sm font-medium text-slate-500 mt-2 max-w-lg leading-relaxed">
                         {application.applicant_name
                             ? `${application.applicant_name}, monitor your path from initial sign-up through final placement.`
@@ -175,7 +175,7 @@ const ApplicationStatusTracker = ({ application: provided = null, variant = 'pag
                     <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-2xl"></div>
                     <XCircle className="w-6 h-6 text-red-600 shrink-0 relative z-10" />
                     <div className="relative z-10">
-                        <p className="text-base font-black text-red-800 tracking-tight">Application Not Approved</p>
+                        <p className="text-base font-semibold text-red-800 tracking-tight">Application Not Approved</p>
                         <p className="text-sm font-medium text-red-700/80 mt-1">
                             After careful review, this application could not be advanced further.
                         </p>
@@ -211,7 +211,7 @@ const ApplicationStatusTracker = ({ application: provided = null, variant = 'pag
                                     isCurrent ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-600/30 ring-4 ring-indigo-50' :
                                     'bg-slate-50 border-slate-200 text-slate-300'
                                 }`}>
-                                    {isComplete ? <CheckCircle2 className="w-5 h-5" /> : isCurrent ? <span className="text-sm font-black">{index + 1}</span> : <Circle className="w-4 h-4" />}
+                                    {isComplete ? <CheckCircle2 className="w-5 h-5" /> : isCurrent ? <span className="text-sm font-semibold">{index + 1}</span> : <Circle className="w-4 h-4" />}
                                 </div>
                                 {!isLast && (
                                     <div className={`w-0.5 flex-1 min-h-[2.5rem] my-1 transition-colors duration-300 ${isComplete ? 'bg-emerald-400' : 'bg-slate-100'}`} />
@@ -220,9 +220,9 @@ const ApplicationStatusTracker = ({ application: provided = null, variant = 'pag
                             
                             <div className={`pb-8 min-w-0 flex-1 ${isLast ? 'pb-0' : ''}`}>
                                 <div className="flex flex-wrap items-center gap-3">
-                                    <p className={`text-base font-black tracking-tight ${reached ? 'text-slate-900' : 'text-slate-400'}`}>{stage.label}</p>
+                                    <p className={`text-base font-semibold tracking-tight ${reached ? 'text-slate-900' : 'text-slate-400'}`}>{stage.label}</p>
                                     {isCurrent && (
-                                        <span className="px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-widest border border-indigo-100">
+                                        <span className="px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-700 text-[10px] font-semibold uppercase tracking-widest border border-indigo-100">
                                             Current Phase
                                         </span>
                                     )}
@@ -239,22 +239,22 @@ const ApplicationStatusTracker = ({ application: provided = null, variant = 'pag
                                 
                                 {stage.key === 'Interview' && interviewWhen && reached && (
                                     <div className="mt-3 bg-amber-50 border border-amber-100 p-3.5 rounded-xl shadow-sm">
-                                        <p className="text-xs font-black uppercase tracking-widest text-amber-700 mb-1">Scheduled Interview</p>
+                                        <p className="text-xs font-semibold uppercase tracking-widest text-amber-700 mb-1">Scheduled Interview</p>
                                         <p className="text-sm font-bold text-amber-900">{interviewWhen}</p>
                                     </div>
                                 )}
                                 
                                 {stage.key === 'Interview' && application.interview_remarks && reached && (
                                     <div className="mt-2 bg-slate-50 border border-slate-100 p-3.5 rounded-xl">
-                                        <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Evaluator Remarks</p>
+                                        <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1">Evaluator Remarks</p>
                                         <p className="text-sm font-medium text-slate-700 italic">"{application.interview_remarks}"</p>
                                     </div>
                                 )}
                                 
                                 {stage.key === 'Assigned' && application.assigned_department && (
                                     <div className="mt-3 bg-emerald-50 border border-emerald-100 p-4 rounded-xl shadow-sm">
-                                        <p className="text-xs font-black uppercase tracking-widest text-emerald-600 mb-1.5">Final Placement Details</p>
-                                        <p className="inline-flex items-center gap-2 text-sm font-black text-emerald-900">
+                                        <p className="text-xs font-semibold uppercase tracking-widest text-emerald-600 mb-1.5">Final Placement Details</p>
+                                        <p className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-900">
                                             <MapPin className="w-4 h-4 text-emerald-600" />
                                             {application.assigned_department}
                                         </p>
@@ -282,7 +282,7 @@ const ApplicationStatusTracker = ({ application: provided = null, variant = 'pag
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6 mt-4 border-t border-slate-100 relative z-10">
                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Current Stage</p>
-                        <p className={`font-black text-sm mt-1.5 ${rejected ? 'text-red-600' : 'text-indigo-700'}`}>
+                        <p className={`font-semibold text-sm mt-1.5 ${rejected ? 'text-red-600' : 'text-indigo-700'}`}>
                             {rejected ? 'Not Approved' : (TRACKER_STAGES.find((stage) => stage.key === application.current_stage)?.label || application.status)}
                         </p>
                     </div>
@@ -295,7 +295,7 @@ const ApplicationStatusTracker = ({ application: provided = null, variant = 'pag
                     {application.tracking_code && (
                         <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tracking Code</p>
-                            <p className="font-mono font-black text-slate-900 text-sm mt-1.5 uppercase tracking-wider">{application.tracking_code}</p>
+                            <p className="font-mono font-semibold text-slate-900 text-sm mt-1.5 uppercase tracking-wider">{application.tracking_code}</p>
                         </div>
                     )}
                 </div>

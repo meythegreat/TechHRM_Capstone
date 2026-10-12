@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { motion } from 'framer-motion';
 import Toast from './Toast';
-import { UserCircle, ShieldCheck, Camera, Eye, EyeOff } from 'lucide-react';
+import { UserCircle, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import SecureImage from './SecureImage';
 import AvatarCropDialog from './AvatarCropDialog';
+import AvatarPhotoMenu from './AvatarPhotoMenu';
 import { normalizeFilePath } from '../utils/secureFile';
 import { emitRealtimeRefresh } from '../utils/realtime';
 
@@ -99,6 +100,22 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
         }
     };
 
+    const removeAvatar = async () => {
+        setIsUploading(true);
+        try {
+            await axios.delete('/api/user/avatar');
+            setAvatarPath(null);
+            localStorage.removeItem('profile_picture');
+            onProfileUpdated?.(name, null);
+            emitRealtimeRefresh();
+            showFeedback('Profile picture removed.', 'success');
+        } catch {
+            showFeedback('Failed to remove profile picture.', 'error');
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -145,24 +162,23 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
             <motion.div
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative"
+                className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
             >
-                <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-blue-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20" />
-                <div className="relative z-10">
+                <div>
                     <div className="flex items-center gap-2 mb-2">
                         <UserCircle className="w-5 h-5 text-blue-400" />
-                        <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Account Management</span>
+                        <span className="text-sm font-medium text-slate-500">Account Management</span>
                     </div>
-                    <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">Profile Settings</h1>
-                    <p className="mt-2 text-slate-400 font-medium max-w-md">
+                    <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Profile Settings</h1>
+                    <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                         Update your account details, contact information, and password.
                     </p>
                 </div>
-                <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-4">
+                <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex items-center gap-4">
                     <ShieldCheck className="w-5 h-5 text-blue-400" />
                     <div className="flex flex-col">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Access Level</span>
-                        <span className="text-sm font-extrabold text-blue-400">{userRole}</span>
+                        <span className="text-sm font-semibold text-slate-900">{userRole}</span>
                     </div>
                 </div>
             </motion.div>
@@ -173,7 +189,7 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
                 onClose={() => setMessage(null)}
             />
 
-            <form onSubmit={handleSave} className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200 space-y-8">
+            <form onSubmit={handleSave} className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] space-y-8">
                 <div className="flex flex-col md:flex-row gap-10 items-start">
                     <div className="flex flex-col items-center md:w-1/3 w-full">
                         <div className="relative group cursor-pointer">
@@ -181,16 +197,18 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
                                 {avatarPath ? (
                                     <SecureImage filePath={avatarPath} altText="Profile" className="w-full h-full object-cover" />
                                 ) : (
-                                    <span className="text-slate-400 font-black text-5xl">{firstName.charAt(0)}</span>
+                                    <span className="text-slate-400 font-semibold text-5xl">{firstName.charAt(0)}</span>
                                 )}
                             </div>
-                            <label htmlFor="staffAvatarUpload" className="absolute bottom-1 right-1 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg cursor-pointer">
-                                <Camera className="w-5 h-5" />
-                                <span className="sr-only">{isUploading ? 'Uploading photo' : 'Change photo'}</span>
-                            </label>
-                            <input type="file" id="staffAvatarUpload" accept="image/*" onChange={handleImageSelected} className="hidden" disabled={isUploading} />
+                            <AvatarPhotoMenu
+                                inputId="staffAvatarUpload"
+                                hasPicture={Boolean(avatarPath)}
+                                disabled={isUploading}
+                                onFileSelected={handleImageSelected}
+                                onRemove={removeAvatar}
+                            />
                         </div>
-                        <p className="text-xs text-slate-500 font-medium mt-4 text-center">Tap the camera button, then crop the photo into a circle. JPG or PNG, up to 2MB.</p>
+                        <p className="text-xs text-slate-500 font-medium mt-4 text-center">Tap the camera button to change or remove your photo. JPG or PNG, up to 2MB.</p>
                     </div>
 
                     <div className="flex-1 w-full space-y-6">
@@ -234,7 +252,7 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
                 </div>
 
                 <div className="border-t border-slate-100 pt-8 space-y-5">
-                    <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">Change Password</h2>
+                    <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-widest">Change Password</h2>
                     <p className="text-sm text-slate-500">Leave blank if you do not want to change your password.</p>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">

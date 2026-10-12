@@ -59,7 +59,7 @@ export default function ForcePasswordChange({ onChanged }: ForcePasswordChangePr
                         <KeyRound className="h-5 w-5" />
                     </div>
                     <div>
-                        <h2 id="change-password-title" className="text-lg font-black text-slate-900">Choose a new password</h2>
+                        <h2 id="change-password-title" className="text-lg font-semibold text-slate-900">Choose a new password</h2>
                         <p className="text-sm font-medium text-slate-500">The temporary password only lasts until you replace it.</p>
                     </div>
                 </div>

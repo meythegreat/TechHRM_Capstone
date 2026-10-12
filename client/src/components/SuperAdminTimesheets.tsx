@@ -86,14 +86,14 @@ const SuperAdminTimesheets = () => {
             <motion.div
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl"
+                className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
             >
                 <div className="flex items-center gap-2 mb-2">
                     <ShieldCheck className="w-5 h-5 text-blue-400" />
-                    <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Read only</span>
+                    <span className="text-sm font-medium text-slate-500">Read only</span>
                 </div>
-                <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">Recent Attendances</h1>
-                <p className="mt-2 text-slate-400 font-medium max-w-xl">
+                <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Recent Attendances</h1>
+                <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-500">
                     Attendance records from every office. Filters and search are for audit review only.
                 </p>
             </motion.div>
@@ -129,7 +129,7 @@ const SuperAdminTimesheets = () => {
                 </label>
             </div>
 
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative min-h-[320px]">
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden relative min-h-[320px]">
                 {isLoading && (
                     <div className="absolute inset-0 bg-white/70 z-10 flex items-center justify-center">
                         <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
@@ -139,12 +139,12 @@ const SuperAdminTimesheets = () => {
                     <table className="w-full text-left">
                         <thead>
                             <tr className="bg-slate-50 border-b border-slate-200">
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Student</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Department</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Time in</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Time out</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Hours</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Status</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Student</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Department</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Time in</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Time out</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Hours</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -169,7 +169,7 @@ const SuperAdminTimesheets = () => {
                                     <td className="px-6 py-4 text-sm font-semibold text-slate-700">{record.user?.profile?.assigned_office || 'Unassigned'}</td>
                                     <td className="px-6 py-4 text-sm font-medium text-slate-700">{formatWhen(record.time_in)}</td>
                                     <td className="px-6 py-4 text-sm font-medium text-slate-700">{record.time_out ? formatWhen(record.time_out) : 'Still in'}</td>
-                                    <td className="px-6 py-4 text-sm font-black text-slate-900">{record.rendered_hours ?? '—'}</td>
+                                    <td className="px-6 py-4 text-sm font-semibold text-slate-900">{record.rendered_hours ?? '—'}</td>
                                     <td className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-600">{record.status || '—'}</td>
                                 </tr>
                             ))}

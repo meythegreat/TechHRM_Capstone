@@ -413,31 +413,28 @@ const ScheduleManagement = () => {
             <motion.div 
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative"
+                className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
             >
-                {/* Glowing Orbs */}
-                <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
-                <div className="absolute bottom-0 left-10 -mb-16 -ml-16 w-64 h-64 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
 
                 <div className="relative z-10">
                     <div className="flex items-center gap-2 mb-2">
                         <CalendarDays className="w-5 h-5 text-blue-400" />
-                        <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Timetable Management</span>
+                        <span className="text-sm font-medium text-slate-500">Timetable Management</span>
                     </div>
-                    <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                    <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
                         Schedule Master
                     </h1>
-                    <p className="mt-2 text-slate-400 font-medium max-w-md">
+                    <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                         {isAudit
                             ? 'Read-only list of department requests and assigned schedules across offices.'
                             : 'Assign and manage weekly shifts for student workers. Request additional personnel or review requested schedule modifications.'}
                     </p>
                 </div>
 
-                {!isAudit && <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-4">
+                {!isAudit && <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex items-center gap-4">
                     <div className="flex flex-col text-right">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Quick Action</span>
-                        <span className="text-sm font-medium text-slate-300">Deploy new worker</span>
+                        <span className="text-sm text-slate-500">Deploy new worker</span>
                     </div>
                     <button 
                         onClick={() => setIsModalOpen(true)}
@@ -491,7 +488,7 @@ const ScheduleManagement = () => {
                     className="bg-indigo-50/40 border border-indigo-100 rounded-3xl p-6 sm:p-8 shadow-sm flex flex-col gap-5"
                 >
                     <div>
-                        <h2 className="text-lg font-black text-indigo-900 flex items-center gap-2 tracking-tight">
+                        <h2 className="text-lg font-semibold text-indigo-900 flex items-center gap-2 tracking-tight">
                             <Users className="w-5 h-5" /> Request Working Students
                         </h2>
                         <p className="text-sm font-medium text-slate-500 mt-1">Submit an official request to WSPO to deploy new student workers to your department.</p>
@@ -566,7 +563,7 @@ const ScheduleManagement = () => {
             {/* STAFFING REQUESTS LIST (WSPO & Admin View) */}
             {(isAudit ? filteredRequests.length > 0 || staffingRequests.length > 0 : staffingRequests.length > 0) && (
                 <div className="space-y-4">
-                    <h2 className="text-lg font-black text-slate-900 flex items-center gap-2 border-b border-slate-200 pb-2">
+                    <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2 border-b border-slate-200 pb-2">
                         <Briefcase className="w-5 h-5 text-indigo-600" />
                         {currentUserRole === 'Supervisor' ? 'Your Active Staffing Requests' : isAudit ? 'Department Requests' : 'Pending Department Requests'}
                     </h2>
@@ -580,7 +577,7 @@ const ScheduleManagement = () => {
                                     <div>
                                         <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                                             <div>
-                                                <h3 className="text-base font-black text-slate-900 tracking-tight">{request.department}</h3>
+                                                <h3 className="text-base font-semibold text-slate-900 tracking-tight">{request.department}</h3>
                                                 <p className="text-sm font-bold text-indigo-700 mt-0.5">{request.quantity} {request.duty_type} Worker{request.quantity !== 1 ? 's' : ''}</p>
                                                 <p className="text-xs font-medium text-slate-500 mt-1">Requested by: <span className="font-bold text-slate-700">{request.requester?.name}</span></p>
                                                 
@@ -679,7 +676,7 @@ const ScheduleManagement = () => {
             )}
 
             {/* MAIN SCHEDULES TABLE */}
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative min-h-[400px]">
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden relative min-h-[400px]">
                 
                 {isLoading && (
                     <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-10 flex items-center justify-center">
@@ -694,10 +691,10 @@ const ScheduleManagement = () => {
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-slate-50/80 border-b border-slate-200">
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Student Worker</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Shift Timing</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Duty Details</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Student Worker</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Shift Timing</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Duty Details</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Actions</th>
                             </tr>
                         </thead>
                         <motion.tbody 
@@ -762,7 +759,7 @@ const ScheduleManagement = () => {
                                                 {schedule.edit_request_status === 'pending' && (
                                                     <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-left max-w-[280px] shadow-sm relative overflow-hidden">
                                                         <div className="absolute top-0 right-0 w-16 h-16 bg-amber-500/10 rounded-full blur-xl"></div>
-                                                        <p className="text-xs font-black text-amber-800 mb-1.5 flex items-center gap-1.5 tracking-tight relative z-10">
+                                                        <p className="text-xs font-semibold text-amber-800 mb-1.5 flex items-center gap-1.5 tracking-tight relative z-10">
                                                             <AlertCircle className="w-4 h-4" /> Shift Edit Requested
                                                         </p>
                                                         <p className="text-[11px] text-amber-700 font-medium mb-3 italic leading-relaxed relative z-10 bg-white/50 p-2 rounded-lg border border-amber-100">
@@ -845,7 +842,7 @@ const ScheduleManagement = () => {
                             className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden my-auto"
                         >
                             <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center sticky top-0 z-10">
-                                <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                                <h3 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
                                     <Plus className="w-5 h-5 text-blue-600" /> Assign New Shift
                                 </h3>
                                 <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-full transition-colors">

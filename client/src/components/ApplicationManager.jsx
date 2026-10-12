@@ -563,34 +563,31 @@ const ApplicationManager = () => {
             <motion.div 
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-slate-900 p-6 sm:p-8 rounded-3xl shadow-xl overflow-hidden relative"
+                className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
             >
-                {/* Glowing Orbs */}
-                <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
-                <div className="absolute bottom-0 left-10 -mb-16 -ml-16 w-64 h-64 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
 
                 <div className="relative z-10">
                     <div className="flex items-center gap-2 mb-2">
                         <Users className="w-5 h-5 text-blue-400" />
-                        <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Recruitment & Placement</span>
+                        <span className="text-sm font-medium text-slate-500">Recruitment & Placement</span>
                     </div>
-                    <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                    <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
                         Applicant Sign-ups
                     </h1>
-                    <p className="mt-2 text-slate-400 font-medium max-w-md">
+                    <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                         {isAudit
                             ? 'Website applications only. View documents and the stage breakdown. This account cannot move, decline, or place applicants.'
                             : 'Review every student who applied to the Work-Study Program, open their documents, and move them through placement.'}
                     </p>
                 </div>
 
-                <div className="relative z-10 bg-black/40 backdrop-blur-md border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.3)]">
+                <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
                         <UserPlus className="w-5 h-5" />
                     </div>
                     <div className="flex flex-col text-left">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Sign-ups</span>
-                        <span className="text-sm font-extrabold text-blue-400">
+                        <span className="text-sm font-semibold text-slate-900">
                             {applications.length} Applicant(s)
                         </span>
                     </div>
@@ -603,10 +600,10 @@ const ApplicationManager = () => {
                 </div>
             )}
 
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
                 <div className="p-5 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                        <h2 className="text-lg font-black text-slate-900">All applicants</h2>
+                        <h2 className="text-lg font-semibold text-slate-900">All applicants</h2>
                         <p className="text-sm text-slate-500 font-medium">
                             {activeCount} still in review
                             {hideOlderApproved ? ` · approved list shows the last ${approvedWindow} days` : ''}
@@ -631,7 +628,7 @@ const ApplicationManager = () => {
                                             setApprovedWindow(days);
                                             setHideOlderApproved(true);
                                         }}
-                                        className={`px-2.5 py-1.5 text-[11px] font-black rounded-lg ${hideOlderApproved && approvedWindow === days ? 'bg-white text-emerald-800 shadow-sm' : 'text-slate-500'}`}
+                                        className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-lg ${hideOlderApproved && approvedWindow === days ? 'bg-white text-emerald-800 shadow-sm' : 'text-slate-500'}`}
                                     >
                                         {days} days
                                     </button>
@@ -654,10 +651,10 @@ const ApplicationManager = () => {
                     <table className="w-full text-left">
                         <thead>
                             <tr className="bg-slate-50 border-b border-slate-100">
-                                <th className="px-5 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider">Applicant</th>
-                                <th className="px-5 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider">Documents</th>
-                                <th className="px-5 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider">Status</th>
-                                <th className="px-5 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider text-right">Action</th>
+                                <th className="px-5 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Applicant</th>
+                                <th className="px-5 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Documents</th>
+                                <th className="px-5 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                                <th className="px-5 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider text-right">Action</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -674,7 +671,7 @@ const ApplicationManager = () => {
                                         </td>
                                         <td className="px-5 py-4 text-sm font-semibold text-indigo-700">{(app.documents || []).length}</td>
                                         <td className="px-5 py-4">
-                                            <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-600">{app.status}</span>
+                                            <span className="px-2.5 py-1 rounded-lg text-[10px] font-semibold uppercase tracking-wider bg-slate-100 text-slate-600">{app.status}</span>
                                         </td>
                                         <td className="px-5 py-4 text-right">
                                             <div className="inline-flex flex-wrap items-center justify-end gap-2">
@@ -698,19 +695,19 @@ const ApplicationManager = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
                 <div className="p-5 sm:p-6 border-b border-slate-100">
-                    <h2 className="text-lg font-black text-slate-900">Rejected and deleted</h2>
+                    <h2 className="text-lg font-semibold text-slate-900">Rejected and deleted</h2>
                     <p className="text-sm text-slate-500 font-medium">Kept for audit. These applicants are no longer in the active pipeline.</p>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
                         <thead>
                             <tr className="bg-slate-50 border-b border-slate-100">
-                                <th className="px-5 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider">Applicant</th>
-                                <th className="px-5 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider">Outcome</th>
-                                <th className="px-5 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider">When</th>
-                                <th className="px-5 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider text-right">Action</th>
+                                <th className="px-5 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Applicant</th>
+                                <th className="px-5 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Outcome</th>
+                                <th className="px-5 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">When</th>
+                                <th className="px-5 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider text-right">Action</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -729,7 +726,7 @@ const ApplicationManager = () => {
                                                 <p className="text-xs font-medium text-slate-500">{app.email || 'No email'}</p>
                                             </td>
                                             <td className="px-5 py-4">
-                                                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${deleted ? 'bg-slate-100 text-slate-600' : 'bg-red-50 text-red-700'}`}>
+                                                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold uppercase tracking-wider ${deleted ? 'bg-slate-100 text-slate-600' : 'bg-red-50 text-red-700'}`}>
                                                     {deleted ? 'Deleted' : 'Rejected'}
                                                 </span>
                                             </td>
@@ -767,11 +764,11 @@ const ApplicationManager = () => {
                             {/* Column Header */}
                             <div className="p-4 border-b border-slate-200/50 bg-white/70 rounded-t-3xl shrink-0 space-y-2">
                                 <div className="flex items-center justify-between gap-2">
-                                    <h3 className={`font-extrabold text-sm flex items-center gap-2 ${config.color}`}>
+                                    <h3 className={`font-semibold text-sm flex items-center gap-2 ${config.color}`}>
                                         <Icon className="w-4 h-4" />
                                         {stage}
                                     </h3>
-                                    <span className={`text-xs font-black px-2.5 py-1 rounded-full ${config.badge}`}>
+                                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${config.badge}`}>
                                         {stage === 'Approved' && hideOlderApproved ? `${columnApps.length}/${approvedTotal}` : columnApps.length}
                                     </span>
                                 </div>
@@ -780,7 +777,7 @@ const ApplicationManager = () => {
                                         <button
                                             type="button"
                                             onClick={() => setHideOlderApproved((current) => !current)}
-                                            className={`inline-flex items-center gap-1 px-2 py-1 text-[10px] font-black uppercase tracking-wide rounded-lg border ${hideOlderApproved ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200'}`}
+                                            className={`inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide rounded-lg border ${hideOlderApproved ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200'}`}
                                         >
                                             {hideOlderApproved ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
                                             {hideOlderApproved ? 'Show all' : 'Hide older'}
@@ -793,7 +790,7 @@ const ApplicationManager = () => {
                                                     setApprovedWindow(days);
                                                     setHideOlderApproved(true);
                                                 }}
-                                                className={`px-2 py-1 text-[10px] font-black rounded-lg border ${hideOlderApproved && approvedWindow === days ? 'bg-white text-emerald-800 border-emerald-200' : 'bg-white/70 text-slate-500 border-slate-200'}`}
+                                                className={`px-2 py-1 text-[10px] font-semibold rounded-lg border ${hideOlderApproved && approvedWindow === days ? 'bg-white text-emerald-800 border-emerald-200' : 'bg-white/70 text-slate-500 border-slate-200'}`}
                                             >
                                                 {days}d
                                             </button>
@@ -884,7 +881,7 @@ const ApplicationManager = () => {
                             className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
                         >
                             <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                                <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                                <h3 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
                                     <CheckCircle2 className="w-5 h-5 text-blue-600" /> Confirm {pendingStage}
                                 </h3>
                                 <button onClick={closePopup} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-full transition-colors">
@@ -893,7 +890,7 @@ const ApplicationManager = () => {
                             </div>
                             <div className="p-6 sm:p-8 space-y-5">
                                 <p className="text-sm font-medium text-slate-600">
-                                    Confirm <span className="font-black text-slate-900">{selectedApp.first_name} {selectedApp.last_name}</span> for the {pendingStage} stage? The stage email sends after 5 seconds. Undo from the lower left before then if this was accidental.
+                                    Confirm <span className="font-semibold text-slate-900">{selectedApp.first_name} {selectedApp.last_name}</span> for the {pendingStage} stage? The stage email sends after 5 seconds. Undo from the lower left before then if this was accidental.
                                 </p>
                                 <div className="flex justify-end gap-3 pt-2">
                                     <button type="button" onClick={closePopup} className="px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-xl">
@@ -930,7 +927,7 @@ const ApplicationManager = () => {
                             className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
                         >
                             <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                                <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                                <h3 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
                                     <Calendar className="w-5 h-5 text-blue-600" /> Schedule Interview
                                 </h3>
                                 <button onClick={() => setModalView('')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-full transition-colors">
@@ -940,7 +937,7 @@ const ApplicationManager = () => {
 
                             <div className="p-6 sm:p-8 space-y-5">
                                 <p className="text-sm font-medium text-slate-600">
-                                    Set the interview schedule for <span className="font-black text-slate-900">{selectedApp.first_name} {selectedApp.last_name}</span>.
+                                    Set the interview schedule for <span className="font-semibold text-slate-900">{selectedApp.first_name} {selectedApp.last_name}</span>.
                                 </p>
                                 
                                 <div>
@@ -999,7 +996,7 @@ const ApplicationManager = () => {
                             className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
                         >
                             <div className="p-6 sm:p-8 border-b border-red-100 bg-red-50 flex justify-between items-center">
-                                <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                                <h3 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
                                     {modalView === 'delete' ? <Trash2 className="w-5 h-5 text-red-600" /> : <XCircle className="w-5 h-5 text-red-600" />}
                                     {modalView === 'delete' ? 'Delete Applicant' : 'Decline Applicant'}
                                 </h3>
@@ -1010,8 +1007,8 @@ const ApplicationManager = () => {
                             <div className="p-6 sm:p-8 space-y-5">
                                 <p className="text-sm font-medium text-slate-600">
                                     {modalView === 'delete'
-                                        ? <>Delete <span className="font-black text-slate-900">{selectedApp.first_name} {selectedApp.last_name}</span>? They leave the active list and stay on the rejected and deleted list for audit. Their tracking code will stop working.</>
-                                        : <>Decline <span className="font-black text-slate-900">{selectedApp.first_name} {selectedApp.last_name}</span>? They will receive a rejection email, and their tracking page will show this reason.</>}
+                                        ? <>Delete <span className="font-semibold text-slate-900">{selectedApp.first_name} {selectedApp.last_name}</span>? They leave the active list and stay on the rejected and deleted list for audit. Their tracking code will stop working.</>
+                                        : <>Decline <span className="font-semibold text-slate-900">{selectedApp.first_name} {selectedApp.last_name}</span>? They will receive a rejection email, and their tracking page will show this reason.</>}
                                 </p>
                                 {modalView === 'decline' && (
                                     <label className="block">
@@ -1063,7 +1060,7 @@ const ApplicationManager = () => {
                             className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]"
                         >
                             <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
-                                <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                                <h3 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
                                     <Target className="w-5 h-5 text-emerald-600" /> Finalize Placement
                                 </h3>
                                 <button onClick={() => setModalView('')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-full transition-colors">
@@ -1074,7 +1071,7 @@ const ApplicationManager = () => {
                             <div className="p-6 sm:p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
                                 <div>
                                     <p className="text-sm font-medium text-slate-600">
-                                        Finish <span className="font-black text-slate-900">{accountDisplayName(placementData) || 'this applicant'}</span>&apos;s personal profile and university details first. The login is issued only after those fields are complete.
+                                        Finish <span className="font-semibold text-slate-900">{accountDisplayName(placementData) || 'this applicant'}</span>&apos;s personal profile and university details first. The login is issued only after those fields are complete.
                                     </p>
                                     <p className="mt-2 text-xs font-semibold text-indigo-700">Account name: {accountDisplayName(placementData) || '—'}</p>
                                 </div>
@@ -1092,7 +1089,7 @@ const ApplicationManager = () => {
                                                 >
                                                     <div className="flex justify-between items-center mb-1">
                                                         <span className="font-bold text-slate-900">{s.department}</span>
-                                                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-black rounded uppercase tracking-wider">{s.match_score}% Match</span>
+                                                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-semibold rounded uppercase tracking-wider">{s.match_score}% Match</span>
                                                     </div>
                                                     <span className="text-xs text-slate-500 font-medium">{s.reason}</span>
                                                 </button>
@@ -1102,7 +1099,7 @@ const ApplicationManager = () => {
                                 )}
 
                                 <div className="space-y-4">
-                                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-900">Personal Profile</h4>
+                                    <h4 className="text-xs font-semibold uppercase tracking-widest text-slate-900">Personal Profile</h4>
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
                                             First Name
@@ -1145,7 +1142,7 @@ const ApplicationManager = () => {
                                 </div>
 
                                 <div className="space-y-4">
-                                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-900">University Details</h4>
+                                    <h4 className="text-xs font-semibold uppercase tracking-widest text-slate-900">University Details</h4>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
                                             Student ID Number
@@ -1169,7 +1166,7 @@ const ApplicationManager = () => {
                                 </div>
 
                                 <div className="space-y-4">
-                                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-900">Assignment</h4>
+                                    <h4 className="text-xs font-semibold uppercase tracking-widest text-slate-900">Assignment</h4>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
                                             Final Department
@@ -1246,7 +1243,7 @@ const ApplicationManager = () => {
                             className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]"
                         >
                             <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
-                                <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                                <h3 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
                                     <Users className="w-5 h-5 text-blue-600" /> Applicant Profile
                                 </h3>
                                 <button onClick={() => setModalView('')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-full transition-colors">
@@ -1255,7 +1252,7 @@ const ApplicationManager = () => {
                             </div>
                             <div className="p-6 sm:p-8 space-y-6 overflow-y-auto">
                                 <div>
-                                    <h4 className="text-2xl font-black text-slate-900">{selectedApp.first_name} {selectedApp.middle_name} {selectedApp.last_name}</h4>
+                                    <h4 className="text-2xl font-semibold text-slate-900">{selectedApp.first_name} {selectedApp.middle_name} {selectedApp.last_name}</h4>
                                     <p className="text-sm font-bold text-blue-700 mt-1">{selectedApp.deleted_at ? 'Deleted' : selectedApp.status}</p>
                                 </div>
                                 <ApplicationStatusTracker application={selectedApp} variant="embedded" showDocuments={false} />
@@ -1343,14 +1340,14 @@ const ApplicationManager = () => {
                                 <div className="w-14 h-14 mx-auto mb-3 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
                                     <CheckCircle2 className="w-7 h-7" />
                                 </div>
-                                <h3 className="text-xl font-black text-slate-900">Applicant Approved</h3>
+                                <h3 className="text-xl font-semibold text-slate-900">Applicant Approved</h3>
                                 <p className="text-sm font-medium text-emerald-800 mt-2">{issuedCredentials.name} can sign in with the username or the email below.</p>
                             </div>
                             <div className="p-6 sm:p-8 space-y-4">
                                 <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
                                     <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Username</label>
                                     <div className="flex items-center justify-between gap-3">
-                                        <span className="font-mono text-base font-black text-indigo-700 select-all truncate">{issuedCredentials.username}</span>
+                                        <span className="font-mono text-base font-semibold text-indigo-700 select-all truncate">{issuedCredentials.username}</span>
                                         <button type="button" onClick={() => copyCredential(issuedCredentials.username, 'username')} className="p-2 bg-white border border-slate-200 rounded-lg">
                                             {copiedField === 'username' ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4 text-slate-500" />}
                                         </button>
@@ -1359,7 +1356,7 @@ const ApplicationManager = () => {
                                 <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
                                     <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Email</label>
                                     <div className="flex items-center justify-between gap-3">
-                                        <span className="font-mono text-base font-black text-indigo-700 select-all truncate">{issuedCredentials.email}</span>
+                                        <span className="font-mono text-base font-semibold text-indigo-700 select-all truncate">{issuedCredentials.email}</span>
                                         <button type="button" onClick={() => copyCredential(issuedCredentials.email, 'email')} className="p-2 bg-white border border-slate-200 rounded-lg">
                                             {copiedField === 'email' ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4 text-slate-500" />}
                                         </button>
@@ -1368,7 +1365,7 @@ const ApplicationManager = () => {
                                 <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
                                     <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Temporary Password</label>
                                     <div className="flex items-center justify-between gap-3">
-                                        <span className="font-mono text-base font-black text-slate-900 select-all">{issuedCredentials.password}</span>
+                                        <span className="font-mono text-base font-semibold text-slate-900 select-all">{issuedCredentials.password}</span>
                                         <button type="button" onClick={() => copyCredential(issuedCredentials.password, 'password')} className="p-2 bg-white border border-slate-200 rounded-lg">
                                             {copiedField === 'password' ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4 text-slate-500" />}
                                         </button>
@@ -1402,7 +1399,7 @@ const ApplicationManager = () => {
                                 className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-slate-900 text-white shadow-2xl shadow-slate-900/30 hover:bg-slate-800 transition-colors"
                             >
                                 <Undo2 className="w-4 h-4" />
-                                <span className="text-sm font-black">Undo {undoAction.confirmedStage}</span>
+                                <span className="text-sm font-semibold">Undo {undoAction.confirmedStage}</span>
                             </button>
                             <button
                                 type="button"

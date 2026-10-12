@@ -53,13 +53,13 @@ export const StudentCompensationView: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-linear-to-br from-blue-600 to-indigo-700 p-6 rounded-2xl text-white shadow-lg shadow-blue-200">
-          <div className="flex items-center justify-between text-blue-100 text-xs font-semibold uppercase">
-            <span>Estimated Equivalent ({data?.current_cycle.cycle_name})</span>
-            <FileText className="w-5 h-5 text-blue-200" />
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+          <div className="flex items-center justify-between text-sm font-medium text-slate-500">
+            <span>Estimated equivalent ({data?.current_cycle.cycle_name})</span>
+            <FileText className="h-5 w-5 text-slate-400" />
           </div>
-          <p className="text-3xl font-extrabold mt-3">₱{data?.current_cycle.estimated_gross.toFixed(2)}</p>
-          <div className="mt-2 text-xs text-blue-200 flex items-center gap-1.5">
+          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">₱{data?.current_cycle.estimated_gross.toFixed(2)}</p>
+          <div className="mt-2 flex items-center gap-1.5 text-xs text-slate-500">
             <Clock className="w-3.5 h-3.5" />
             <span>
               {data?.current_cycle.hours_rendered} hours logged @ ₱{data?.current_cycle.hourly_rate}/hr equivalent

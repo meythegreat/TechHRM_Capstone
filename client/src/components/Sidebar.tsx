@@ -57,7 +57,7 @@ const Sidebar: FC<SidebarProps> = ({ isSidebarOpen, setIsSidebarOpen, activeTab,
                 }}
                 className={`relative w-full flex items-center p-3 rounded-2xl transition-all duration-300 group outline-none overflow-hidden ${
                     isActive
-                    ? 'text-indigo-700'
+                    ? 'text-blue-700'
                     : 'text-slate-500 hover:text-slate-900'
                 }`}
                 title={!isSidebarOpen ? item.label : ''}
@@ -65,11 +65,11 @@ const Sidebar: FC<SidebarProps> = ({ isSidebarOpen, setIsSidebarOpen, activeTab,
                 {isActive ? (
                     <motion.div
                         layoutId="sidebar-active-indicator"
-                        className="absolute inset-0 bg-gradient-to-r from-indigo-50/80 to-blue-50/40 border border-indigo-100/50 rounded-2xl"
+                        className="absolute inset-0 bg-gradient-to-r from-blue-50/80 to-blue-50/40 border border-blue-100/50 rounded-2xl"
                         initial={false}
                         transition={{ type: "spring", stiffness: 350, damping: 30 }}
                     >
-                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-indigo-600 rounded-r-full shadow-[2px_0_8px_rgba(79,70,229,0.4)]" />
+                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-blue-600 rounded-r-full shadow-[2px_0_8px_rgba(37,99,235,0.35)]" />
                     </motion.div>
                 ) : (
                     <div className="absolute inset-0 bg-slate-50/80 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -78,11 +78,11 @@ const Sidebar: FC<SidebarProps> = ({ isSidebarOpen, setIsSidebarOpen, activeTab,
                 <div className="relative z-10 flex items-center w-full">
                     <div className={`flex items-center justify-center w-8 h-8 rounded-xl shrink-0 transition-all duration-300 ${
                         isActive
-                        ? 'bg-white shadow-sm border border-indigo-100 scale-100'
+                        ? 'bg-white shadow-sm border border-blue-100 scale-100'
                         : 'scale-95 group-hover:scale-100 group-hover:bg-white group-hover:shadow-sm group-hover:border group-hover:border-slate-200'
                     }`}>
                         <svg
-                            className={`w-4 h-4 transition-colors duration-300 ${isActive ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600'}`}
+                            className={`w-4 h-4 transition-colors duration-300 ${isActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600'}`}
                             fill="none"
                             viewBox="0 0 24 24"
                             stroke="currentColor"
@@ -125,7 +125,7 @@ const Sidebar: FC<SidebarProps> = ({ isSidebarOpen, setIsSidebarOpen, activeTab,
                 {/* BRANDING / LOGO AREA */}
                 <div className="h-20 flex items-center justify-center border-b border-slate-100/80 shrink-0 px-4 relative overflow-hidden">
                     {/* Subtle ambient glow behind logo */}
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 bg-indigo-500/10 rounded-full blur-xl"></div>
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 bg-blue-500/10 rounded-full blur-xl"></div>
                     
                     <div className="flex items-center justify-center gap-3 overflow-hidden whitespace-nowrap w-full relative z-10">
                         <img 
@@ -133,7 +133,7 @@ const Sidebar: FC<SidebarProps> = ({ isSidebarOpen, setIsSidebarOpen, activeTab,
                             alt="TechHRM" 
                             className="w-10 h-10 rounded-xl shadow-md shrink-0 border border-white" 
                         />
-                        <span className={`font-black bg-gradient-to-br from-slate-900 to-slate-700 bg-clip-text text-transparent text-xl tracking-tight transition-all duration-300 ${
+                        <span className={`font-semibold bg-gradient-to-br from-slate-900 to-slate-700 bg-clip-text text-transparent text-xl tracking-tight transition-all duration-300 ${
                             isSidebarOpen ? 'opacity-100 w-auto' : 'opacity-0 w-0 lg:hidden'
                         }`}>
                             TechHRM

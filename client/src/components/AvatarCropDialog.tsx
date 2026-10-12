@@ -171,7 +171,7 @@ export default function AvatarCropDialog({ imageUrl, onCancel, onConfirm }: Avat
         <div className="fixed inset-0 z-[90] bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-3 sm:p-4" {...bindPopup(onCancel)}>
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[calc(100dvh-1.5rem)] overflow-y-auto border border-slate-200">
                 <div className="px-5 sm:px-6 pt-6 pb-2">
-                    <h3 className="text-xl font-black text-slate-900">Crop profile picture</h3>
+                    <h3 className="text-xl font-semibold text-slate-900">Crop profile picture</h3>
                     <p className="text-sm font-medium text-slate-500 mt-1">Drag the photo to move it inside the circle. Pinch or use the slider to zoom.</p>
                 </div>
                 <div className="px-5 sm:px-6 py-5 flex flex-col items-center gap-5">
