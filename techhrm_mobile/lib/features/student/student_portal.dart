@@ -63,7 +63,6 @@ class StudentAttendanceScreen extends StatefulWidget {
 
 class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
   final _code = TextEditingController();
-  String _type = 'Regular';
 
   @override
   void dispose() {
@@ -82,7 +81,6 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
       if (open == null) {
         await api.post('/attendance/secure-clock-in', {
           'token_code': raw,
-          'attendance_type': _type,
           'method': method,
         });
       } else {
@@ -103,9 +101,13 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
       builder: (context, data, reload) {
         final summary = asMap(data);
         final history = asMaps(summary['history']);
+        final dtr = history.where((row) {
+          final label = '${row['attendance_type'] ?? ''} ${row['work_type'] ?? ''}'.toLowerCase();
+          return row['rendered_hour_event_id'] == null && !label.contains('meeting');
+        });
         Map<String, dynamic>? open;
         for (final row in history) {
-          if (row['time_out'] == null) {
+          if (row['time_out'] == null && row['rendered_hour_event_id'] == null) {
             open = row;
             break;
           }
@@ -141,13 +143,6 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
                     child: Column(
                       children: [
-                        DropdownButtonFormField<String>(
-                          initialValue: _type,
-                          decoration: const InputDecoration(labelText: 'Duty type'),
-                          items: const ['Regular', 'Cleaning', 'Meeting'].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
-                          onChanged: open == null ? (value) => setState(() => _type = value ?? _type) : null,
-                        ),
-                        const SizedBox(height: 10),
                         TextField(controller: _code, textCapitalization: TextCapitalization.characters, decoration: const InputDecoration(labelText: 'Passcode or QR payload')),
                         const SizedBox(height: 12),
                         Row(children: [
@@ -174,8 +169,8 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
             ),
             const SizedBox(height: 16),
             const SectionTitle('Daily time record'),
-            if (history.isEmpty) const EmptyNote('No attendance yet.'),
-            for (final row in history)
+            if (dtr.isEmpty) const EmptyNote('No attendance yet.'),
+            for (final row in dtr)
               RecordCard(
                 title: whenOf(row['time_in']),
                 subtitle: 'Out: ${whenOf(row['time_out'])} · ${textOf(row['attendance_type'] ?? row['work_type'])}',
@@ -198,7 +193,7 @@ class QrScanScreen extends StatelessWidget {
       body: MobileScanner(
         onDetect: (capture) {
           final raw = capture.barcodes.isEmpty ? '' : (capture.barcodes.first.rawValue ?? '');
-          if (raw.startsWith('THRM1|') && raw.length > 10) {
+          if ((raw.startsWith('THRM1|') || raw.startsWith('THRM1A|')) && raw.length > 10) {
             Navigator.pop(context, raw);
           }
         },
@@ -207,37 +202,64 @@ class QrScanScreen extends StatelessWidget {
   }
 }
 
-class StudentHoursScreen extends StatelessWidget {
+class StudentHoursScreen extends StatefulWidget {
   const StudentHoursScreen({super.key});
+
+  @override
+  State<StudentHoursScreen> createState() => _StudentHoursScreenState();
+}
+
+class _StudentHoursScreenState extends State<StudentHoursScreen> {
+  DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
+
+  String _date(DateTime value) =>
+      '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
     final api = context.read<AuthProvider>().api;
+    final start = DateTime(_month.year, _month.month, 1);
+    final end = DateTime(_month.year, _month.month + 1, 0);
+    final monthLabel = '${_month.year}-${_month.month.toString().padLeft(2, '0')}';
     return FetchView(
-      loader: () => api.get('/financial/my-compensation'),
+      key: ValueKey(monthLabel),
+      loader: () => api.get('/financial/my-hours', {
+        'period_start': _date(start),
+        'period_end': _date(end),
+      }),
       builder: (context, data, reload) {
         final payload = asMap(data);
-        final current = asMap(payload['current_cycle']);
-        final history = asMaps(payload['history']);
+        final student = asMap(payload['student']);
+        final activities = asMaps(payload['activities']);
+        final grand = numOf(student['grand_total']);
+        final meeting = numOf(student['general_cleaning']) + numOf(student['devotional']) + numOf(student['meeting_assembly']);
         return PageBody(
           onRefresh: reload,
           children: [
-            const SectionTitle('Hours rendered'),
+            const SectionTitle('Period breakdown'),
+            Row(
+              children: [
+                IconButton(onPressed: () => setState(() => _month = DateTime(_month.year, _month.month - 1)), icon: const Icon(Icons.chevron_left)),
+                Expanded(child: Text(monthLabel, textAlign: TextAlign.center)),
+                IconButton(onPressed: () => setState(() => _month = DateTime(_month.year, _month.month + 1)), icon: const Icon(Icons.chevron_right)),
+              ],
+            ),
             Row(children: [
-              StatCard(label: 'This cycle', value: numOf(current['hours_rendered']).toStringAsFixed(2), icon: Icons.schedule),
+              StatCard(label: 'Grand total', value: grand.toStringAsFixed(2), icon: Icons.schedule),
               const SizedBox(width: 10),
-              StatCard(label: 'Estimated', value: '₱${numOf(current['estimated_gross']).toStringAsFixed(2)}', icon: Icons.payments, color: Colors.green.shade700),
+              StatCard(label: 'At ₱28/hr', value: '₱${(grand * 28).toStringAsFixed(2)}', icon: Icons.payments, color: Colors.green.shade700),
             ]),
             const SizedBox(height: 8),
-            Text('${textOf(current['cycle_name'])} · rate ₱${numOf(current['hourly_rate']).toStringAsFixed(2)} · ${current['approved_shifts_count'] ?? 0} approved shifts'),
-            Text('Lifetime equivalent: ₱${numOf(payload['lifetime_equivalent_value']).toStringAsFixed(2)}'),
+            Text('DTR ${numOf(student['dtr_hours']).toStringAsFixed(2)} · Duty deduction ${numOf(student['duty_deduction']).toStringAsFixed(2)}'),
+            Text('Special ${numOf(student['special_request']).toStringAsFixed(2)} · Daily cleaning ${numOf(student['daily_cleaning']).toStringAsFixed(2)} · General meeting ${meeting.toStringAsFixed(2)}'),
             const SizedBox(height: 12),
-            if (history.isEmpty) const EmptyNote('No assessed periods yet.'),
-            for (final row in history)
+            const SectionTitle('Activity hours'),
+            if (activities.isEmpty) const EmptyNote('No activity hours in this month.'),
+            for (final row in activities)
               RecordCard(
-                title: '${whenOf(row['period_start'])} – ${whenOf(row['period_end'])}',
-                subtitle: '${numOf(row['total_hours_rendered']).toStringAsFixed(2)} hrs · ₱${numOf(row['equivalent_total_amount']).toStringAsFixed(2)}',
-                trailing: textOf(row['status']),
+                title: textOf(row['title']),
+                subtitle: '${textOf(row['kind_label'])} · ${whenOf(row['event_date'])} · ${textOf(row['status'])}',
+                trailing: '${numOf(row['hours_delta']).toStringAsFixed(2)} hrs',
               ),
           ],
         );
@@ -255,12 +277,14 @@ class StudentScheduleScreen extends StatelessWidget {
     return FetchView(
       loader: () => api.get('/schedule/my-schedule'),
       builder: (context, data, reload) {
-        final shifts = asMaps(data);
+        final rows = asMaps(data);
+        final shifts = rows.where((shift) => textOf(shift['kind'], 'work') != 'class').toList();
+        final classes = rows.where((shift) => textOf(shift['kind'], 'work') == 'class').toList();
         return PageBody(
           onRefresh: reload,
           children: [
-            const SectionTitle('My schedule'),
-            const Text('Official duty shifts. A change request goes to WSPO for review.'),
+            const SectionTitle('Work schedule'),
+            const Text('Official duty shifts. A change request goes to WSPO for review. Clock-in follows this schedule.'),
             const SizedBox(height: 8),
             if (shifts.isEmpty) const EmptyNote('No shifts assigned yet.'),
             for (final shift in shifts)
@@ -282,6 +306,21 @@ class StudentScheduleScreen extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+            const SizedBox(height: 16),
+            const SectionTitle('Class schedule'),
+            const Text('Class hours recorded beside your work schedule. They do not change clock-in.'),
+            const SizedBox(height: 8),
+            if (classes.isEmpty) const EmptyNote('No class schedule yet.'),
+            for (final shift in classes)
+              RecordCard(
+                title: '${textOf(shift['day'])} · ${textOf(shift['time'])}',
+                subtitle: [
+                  textOf(shift['subject'], textOf(shift['duty_type'])),
+                  textOf(shift['room'], ''),
+                  textOf(shift['instructor'], textOf(shift['supervisor'], '')),
+                ].where((part) => part.isNotEmpty).join(' · '),
+                trailing: 'Class',
               ),
           ],
         );

@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import QRCode from 'qrcode';
 import { fetchAnomalyLogs, fetchLivePasscode, fetchLiveQr } from '../services/advancedAttendanceService';
+import { financialService } from '../services/financialService';
+import { ActivityQrCard } from './hours/ActivityQrCard';
 import { 
     KeyRound, 
     QrCode,
@@ -19,7 +21,9 @@ import {
 } from 'lucide-react';
 
 const SupervisorAttendanceHub = () => {
-    const [selectedType, setSelectedType] = useState('Daily Clock');
+    const [selectedType] = useState('Daily Clock');
+    const [activityEvents, setActivityEvents] = useState([]);
+    const [activityEventId, setActivityEventId] = useState('');
     const [descInput, setDescInput] = useState('');
     const [activeToken, setActiveToken] = useState(null);
     const [passcodeSeconds, setPasscodeSeconds] = useState(0);
@@ -38,6 +42,7 @@ const SupervisorAttendanceHub = () => {
     const descRef = useRef('');
     const userRole = localStorage.getItem('user_role') || '';
     const storedOffice = localStorage.getItem('assigned_office') || 'Unassigned';
+    const canIssueActivity = userRole === 'WSPO Staff' && ['WSPO Coordinator', 'WSPO Secretary', 'WSPO President', 'WSPO', 'Unassigned', ''].includes(storedOffice);
     const supervisorDepartment = userRole === 'WSPO Staff' && ['WSPO Coordinator', 'WSPO', 'Unassigned', ''].includes(storedOffice)
         ? 'WSPO'
         : storedOffice;
@@ -47,6 +52,19 @@ const SupervisorAttendanceHub = () => {
     useEffect(() => {
         loadAnomalies();
     }, []);
+
+    useEffect(() => {
+        if (!canIssueActivity) return undefined;
+        const today = new Date().toISOString().slice(0, 10);
+        financialService.getHourEvents(today, today)
+            .then((res) => {
+                const rows = (res.events || []).filter((event) => event.uses_attendance);
+                setActivityEvents(rows);
+                setActivityEventId((current) => current || (rows[0] ? String(rows[0].id) : ''));
+            })
+            .catch(() => setActivityEvents([]));
+        return undefined;
+    }, [canIssueActivity]);
 
     useEffect(() => {
         descRef.current = descInput;
@@ -244,7 +262,7 @@ const SupervisorAttendanceHub = () => {
                         Attendance Hub
                     </h1>
                     <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
-                        Issue a passcode students can type, or show a QR code. Both refresh with a new code every 30 seconds.
+                        Daily clock-in can use a passcode or a QR code. Cleaning, devotional, and assembly attendance use a QR code issued by the WSPO coordinator, secretary, or president.
                     </p>
                     <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">
                         Token scope: <span className="font-semibold text-slate-900">{supervisorDepartment}</span> students only
@@ -306,15 +324,9 @@ const SupervisorAttendanceHub = () => {
                         <div className="space-y-5">
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Shift Type</label>
-                                <select 
-                                    value={selectedType}
-                                    onChange={(e) => setSelectedType(e.target.value)}
-                                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all appearance-none cursor-pointer"
-                                >
-                                    <option>Daily Clock</option>
-                                    <option>Meeting</option>
-                                    <option>Cleaning</option>
-                                </select>
+                                <div className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700">
+                                    Daily Clock
+                                </div>
                             </div>
 
                             <div>
@@ -335,15 +347,9 @@ const SupervisorAttendanceHub = () => {
                         <div className="space-y-5">
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Shift Type</label>
-                                <select
-                                    value={selectedType}
-                                    onChange={(e) => setSelectedType(e.target.value)}
-                                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all appearance-none cursor-pointer"
-                                >
-                                    <option>Daily Clock</option>
-                                    <option>Meeting</option>
-                                    <option>Cleaning</option>
-                                </select>
+                                <div className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700">
+                                    Daily Clock
+                                </div>
                             </div>
                             <div
                                 className="flex flex-col items-center rounded-2xl border border-slate-200 bg-slate-50 p-5 select-none"
@@ -418,8 +424,43 @@ const SupervisorAttendanceHub = () => {
                     </AnimatePresence>
                 </motion.div>
 
+                {canIssueActivity && (
+                    <section className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] p-6 sm:p-8 space-y-4">
+                        <div>
+                            <h2 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
+                                <QrCode className="w-5 h-5 text-blue-600" />
+                                Activity QR
+                            </h2>
+                            <p className="mt-1 text-sm text-slate-500">
+                                Daily cleaning, general cleaning, devotional, and assembly. Create the activity in Hours Rendered, then show its QR here.
+                            </p>
+                        </div>
+                        {activityEvents.length === 0 ? (
+                            <p className="text-sm text-slate-500">No activity attendance is scheduled for today.</p>
+                        ) : (
+                            <div className="space-y-4">
+                                <label className="block text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    Today&apos;s activity
+                                    <select
+                                        value={activityEventId}
+                                        onChange={(event) => setActivityEventId(event.target.value)}
+                                        className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800"
+                                    >
+                                        {activityEvents.map((event) => (
+                                            <option key={event.id} value={event.id}>
+                                                {event.title} · {event.hours} hrs
+                                            </option>
+                                        ))}
+                                    </select>
+                                </label>
+                                {activityEventId && <ActivityQrCard eventId={Number(activityEventId)} />}
+                            </div>
+                        )}
+                    </section>
+                )}
+
                 {/* RIGHT COLUMN: ANOMALY RADAR */}
-                <div className="lg:col-span-2">
+                <div className={canIssueActivity ? 'lg:col-span-3' : 'lg:col-span-2'}>
                     <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden flex flex-col min-h-[500px]">
                         <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                             <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2 tracking-tight">
@@ -488,6 +529,7 @@ const SupervisorAttendanceHub = () => {
                     </div>
                 </div>
             </div>
+
             {qrExpanded && createPortal(
                 <div
                     className="fixed inset-0 z-[80] bg-slate-950/80 flex items-center justify-center p-4 select-none"
@@ -519,6 +561,7 @@ const SupervisorAttendanceHub = () => {
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
+                        <p className="mb-5 text-center text-2xl font-semibold text-slate-900">Scan this QR code for attendance.</p>
                         <div className="relative rounded-2xl bg-white">
                             <canvas
                                 ref={qrExpandedCanvasRef}

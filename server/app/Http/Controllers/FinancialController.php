@@ -7,6 +7,7 @@ use App\Support\SuperAdminAudit;
 use App\Models\DisciplinaryRecord;
 use App\Models\FinancialRecord;
 use App\Models\User;
+use App\Support\RenderedHours;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -44,6 +45,7 @@ class FinancialController extends Controller
 
         DB::transaction(function () use ($request, $start, $end, $rate, &$assessed, &$skipped) {
             $students = User::where('role', 'Student')->get();
+            $activityDeltas = RenderedHours::deltasBetween($start, $end);
 
             foreach ($students as $student) {
                 $record = FinancialRecord::firstOrNew([
@@ -58,25 +60,28 @@ class FinancialController extends Controller
                 }
 
                 // Days already saved on an earlier coverage stay there, so overlapping periods do not bill the same duty twice.
-                $hours = $this->verifiedHours($student->id, $start, $end, $record->exists ? $record->id : null, true);
-                if ($hours <= 0) {
+                $dtrHours = $this->verifiedHours($student->id, $start, $end, $record->exists ? $record->id : null, true);
+                $activity = RenderedHours::activityTotal($activityDeltas[$student->id] ?? []);
+                $penalty = $this->penaltyAmount($student->id, $request->period_start, $request->period_end, $rate, $dtrHours);
+                $hours = round($dtrHours - $penalty['hours'] + $activity, 2);
+                if ($dtrHours <= 0 && abs($activity) < 0.001 && $penalty['hours'] <= 0) {
                     if ($record->exists) {
                         $record->delete();
                     }
                     continue;
                 }
 
-                $penalty = $this->penaltyAmount($student->id, $request->period_start, $request->period_end, $rate, $hours);
-
-                $record->total_hours_rendered = round($hours, 2);
+                $record->total_hours_rendered = $hours;
                 $record->hourly_rate = $rate;
                 $record->allowances = (float) ($record->allowances ?? 0);
-                $record->penalty_deductions = $penalty['amount'];
+                $record->penalty_deductions = $penalty['fixed'];
                 $record->status = $record->status ?: 'Draft';
                 $record->adjustment_breakdown = array_merge($record->adjustment_breakdown ?? [], [[
                     'type' => 'compute',
-                    'gross_hours' => round($hours, 2),
-                    'penalty_hours' => $penalty['hours'],
+                    'dtr_hours' => round($dtrHours, 2),
+                    'activity_hours' => $activity,
+                    'duty_hours' => $penalty['hours'],
+                    'gross_hours' => $hours,
                     'fixed_deductions' => $penalty['fixed'],
                     'at' => now()->toIso8601String(),
                 ]]);
@@ -89,7 +94,7 @@ class FinancialController extends Controller
         return response()->json([
             'message' => $assessed > 0
                 ? 'Hours rendered recorded for this period.'
-                : 'No verified duty hours were found in that period.',
+                : 'No duty hours or activity hours were found in that period.',
             'assessed' => $assessed,
             'skipped_locked' => $skipped,
         ]);
@@ -255,22 +260,24 @@ class FinancialController extends Controller
 
             $start = Carbon::parse($record->period_start)->startOfDay();
             $end = Carbon::parse($record->period_end)->endOfDay();
-            $hours = round($this->verifiedHours($record->user_id, $start, $end, $record->id, true), 2);
+            $dtrHours = round($this->verifiedHours($record->user_id, $start, $end, $record->id, true), 2);
+            $activity = RenderedHours::activityTotal(RenderedHours::deltasBetween($start, $end)[$record->user_id] ?? []);
             $penalty = $this->penaltyAmount(
                 $record->user_id,
                 $start->toDateString(),
                 $end->toDateString(),
                 (float) $record->hourly_rate,
-                $hours
+                $dtrHours
             );
+            $hours = round($dtrHours - $penalty['hours'] + $activity, 2);
 
             if (abs((float) $record->total_hours_rendered - $hours) < 0.001
-                && abs((float) $record->penalty_deductions - $penalty['amount']) < 0.001) {
+                && abs((float) $record->penalty_deductions - $penalty['fixed']) < 0.001) {
                 continue;
             }
 
             $record->total_hours_rendered = $hours;
-            $record->penalty_deductions = $penalty['amount'];
+            $record->penalty_deductions = $penalty['fixed'];
             $record->recalculate();
             $record->save();
         }

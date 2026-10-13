@@ -3,10 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Attendance;
+use App\Support\WorkSchedule;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use App\Models\Schedule;
 
 class AttendanceController extends Controller
 {
@@ -31,46 +31,11 @@ class AttendanceController extends Controller
             ], 403);
         }
 
-        // --- 2. SMART SCHEDULE CHECK ---
         $now = Carbon::now();
-        $currentDay = $now->format('l'); // Gets 'Monday', 'Tuesday', etc.
-
-        // Fetch all shifts assigned to this student for TODAY
-        $todaysShifts = Schedule::where('user_id', $user->id)
-            ->where('day', $currentDay)
-            ->get();
-
-        $hasValidShift = false;
-        $gracePeriodMinutes = 30; // Allow students to clock in 30 minutes early
-
-        foreach ($todaysShifts as $shift) {
-            $times = explode(' - ', $shift->time);
-
-            if (count($times) === 2) {
-                // Parse the shift times assuming they are for today
-                $shiftStart = Carbon::parse($times[0]);
-                $shiftEnd = Carbon::parse($times[1]);
-
-                // Handle overnight shifts (e.g., 10:00 PM to 2:00 AM)
-                if ($shiftEnd->lt($shiftStart)) {
-                    $shiftEnd->addDay();
-                }
-
-                // Check if right NOW is between (Start Time - 30 mins) and (End Time)
-                if ($now->between($shiftStart->copy()->subMinutes($gracePeriodMinutes), $shiftEnd)) {
-                    $hasValidShift = true;
-                    break;
-                }
-            }
+        $scheduleDenial = WorkSchedule::denialMessage($user->id, $now, 'in');
+        if ($scheduleDenial) {
+            return response()->json(['message' => $scheduleDenial], 403);
         }
-
-        // If the loop finishes and no valid shift was found, reject them!
-        if (!$hasValidShift) {
-            return response()->json([
-                'message' => "Access Denied: You do not have an active shift scheduled right now."
-            ], 403);
-        }
-        // --- END SMART CHECK ---
 
         // 3. IF THEY PASS THE CHECK, SAVE THE ATTENDANCE
         $attendance = \App\Models\Attendance::create([
@@ -137,7 +102,9 @@ class AttendanceController extends Controller
             $query->whereDate('time_in', '<=', $request->end);
         }
 
-        $history = $query->orderBy('time_in', 'desc')->get();
+        $history = $query->orderBy('time_in', 'desc')->get()
+            ->filter(fn ($record) => $record->isNormalClockIn())
+            ->values();
 
         return response()->json([
             'history' => $history,
@@ -167,7 +134,8 @@ class AttendanceController extends Controller
             return response()->json(['message' => 'You can only view DTRs for working students in your department.'], 403);
         }
 
-        $query = \App\Models\Attendance::where('user_id', $student->id);
+        $query = \App\Models\Attendance::where('user_id', $student->id)
+            ->whereNull('rendered_hour_event_id');
 
         if ($request->filled('start')) {
             $query->whereDate('time_in', '>=', $request->start);
@@ -187,7 +155,9 @@ class AttendanceController extends Controller
                 'department_supervisors' => $supervisors,
                 'account_deleted' => $student->trashed(),
             ],
-            'history' => $query->orderBy('time_in', 'desc')->get(),
+            'history' => $query->orderBy('time_in', 'desc')->get()
+                ->filter(fn ($record) => $record->isNormalClockIn())
+                ->values(),
             'duty_deduction_hours' => \App\Models\DisciplinaryRecord::dutyDeductionHours(
                 $student->id,
                 $request->filled('start') ? $request->start : null,
@@ -448,6 +418,12 @@ class AttendanceController extends Controller
         ]);
 
         $attendance = \App\Models\Attendance::with('user.profile')->findOrFail($id);
+        if ($attendance->rendered_hour_event_id) {
+            return response()->json([
+                'message' => 'Activity attendance is corrected by the WSPO coordinator, secretary, or president from Hours Rendered.',
+            ], 403);
+        }
+
         $accounts = app(\App\Http\Controllers\UserController::class);
         if (!$attendance->user || !$accounts->supervisorCanAccessStudent($supervisor, $attendance->user)) {
             return response()->json(['message' => $this->dtrAccessMessage($supervisor)], 403);

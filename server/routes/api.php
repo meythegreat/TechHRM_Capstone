@@ -34,14 +34,11 @@ Route::post('/apply/status', [\App\Http\Controllers\ApplicationController::class
 Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/financial/my-compensation', [FinancialController::class, 'myCompensation']);
+    Route::get('/financial/my-hours', [\App\Http\Controllers\RenderedHourController::class, 'mine']);
 
     // --- STAGE 1: WSPO APPLICATION MODULE (Student) ---
     Route::post('/applications', [\App\Http\Controllers\ApplicationController::class, 'store']);
     Route::get('/applications/my-status', [\App\Http\Controllers\ApplicationController::class, 'myApplication']);
-
-    // --- STAGE 2: Daily Operations (Student) ---
-    Route::get('/tasks/my-tasks', [\App\Http\Controllers\TaskController::class, 'myTasks']);
-    Route::put('/tasks/{id}/status', [\App\Http\Controllers\TaskController::class, 'updateStatus']);
 
     // --- STAGE 5: Discipline & Compliance (Student) ---
     Route::get('/disciplinary/my-records', [\App\Http\Controllers\DisciplinaryController::class, 'myRecords']);
@@ -130,6 +127,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/attendance/generate-token', [\App\Http\Controllers\AdvancedAttendanceController::class, 'generateToken']);
         Route::get('/attendance/passcode', [\App\Http\Controllers\AdvancedAttendanceController::class, 'currentPasscode']);
         Route::get('/attendance/qr-code', [\App\Http\Controllers\AdvancedAttendanceController::class, 'currentQr']);
+        Route::get('/attendance/activity-qr', [\App\Http\Controllers\AdvancedAttendanceController::class, 'activityQr']);
         Route::get('/attendance/anomalies', [\App\Http\Controllers\AdvancedAttendanceController::class, 'getAnomalyLogs']);
         Route::patch('/attendance/{id}/approve', [AttendanceController::class, 'approve']);
 
@@ -152,13 +150,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/users', [UserController::class, 'index']);
 
-        // Department personnel is used by both the schedule and task screens.
         Route::get('/personnel', [UserController::class, 'personnel']);
         Route::get('/department-supervisors', [UserController::class, 'departmentSupervisors']);
         Route::get('/admin/stats', [DashboardController::class, 'getStats']);
         Route::get('/admin/active-now', [AdminController::class, 'activeNow']);
-
-        Route::get('/tasks', [\App\Http\Controllers\TaskController::class, 'index']);
 
         // =================================================
         // STAGE 5: Discipline & Compliance (Supervisor)
@@ -190,20 +185,30 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/offices', [OfficeController::class, 'index']);
         Route::get('/offices/{office}/breakdown', [OfficeController::class, 'breakdown']);
 
-        // Only WSPO coordinates student-to-department placement and final task verification.
+        // Only WSPO coordinates student-to-department placement.
         Route::get('/applications', [\App\Http\Controllers\ApplicationController::class, 'index']);
         Route::delete('/applications/{id}', [\App\Http\Controllers\ApplicationController::class, 'destroy']);
         Route::put('/applications/{id}/status', [\App\Http\Controllers\ApplicationController::class, 'updateStatus']);
         Route::put('/applications/{id}/schedule', [\App\Http\Controllers\ApplicationController::class, 'scheduleInterview']);
         Route::put('/applications/{id}/placement', [\App\Http\Controllers\ApplicationController::class, 'assignPlacement']);
         Route::get('/applications/{id}/match', [\App\Http\Controllers\ApplicationController::class, 'getMatchingSuggestions']);
+        Route::get('/applications/{id}/forms', [\App\Http\Controllers\ApplicationController::class, 'officialForms']);
         Route::put('/students/{id}/department', [UserController::class, 'assignDepartment']);
         Route::get('/staffing-candidates', [\App\Http\Controllers\StaffingRequestController::class, 'candidates']);
         Route::patch('/staffing-requests/{staffingRequest}', [\App\Http\Controllers\StaffingRequestController::class, 'updateStatus']);
-        Route::put('/tasks/{id}/verify', [\App\Http\Controllers\TaskController::class, 'verifyTask']);
 
         // Stage 1: work-hour assessment records with disciplinary penalty deductions
         Route::get('/financial/records', [FinancialController::class, 'index']);
+        Route::get('/financial/hour-events/students', [\App\Http\Controllers\RenderedHourController::class, 'students']);
+        Route::get('/financial/hour-events', [\App\Http\Controllers\RenderedHourController::class, 'index']);
+        Route::get('/financial/hours-report', [\App\Http\Controllers\RenderedHourController::class, 'report']);
+        Route::post('/financial/hour-events', [\App\Http\Controllers\RenderedHourController::class, 'store']);
+        Route::put('/financial/hour-events/{event}', [\App\Http\Controllers\RenderedHourController::class, 'update']);
+        Route::delete('/financial/hour-events/{event}', [\App\Http\Controllers\RenderedHourController::class, 'destroy']);
+        Route::post('/financial/hour-events/{event}/marks', [\App\Http\Controllers\RenderedHourController::class, 'mark']);
+        Route::post('/financial/hour-events/{event}/scan', [\App\Http\Controllers\RenderedHourController::class, 'scan']);
+        Route::post('/financial/hour-events/{event}/mark-absent', [\App\Http\Controllers\RenderedHourController::class, 'markRemainingAbsent']);
+        Route::patch('/financial/hour-events/{event}/time', [\App\Http\Controllers\RenderedHourController::class, 'correctTime']);
         Route::post('/financial/compute-period', [FinancialController::class, 'computePeriod']);
         Route::put('/financial/records/{id}/adjustments', [FinancialController::class, 'updateAdjustments']);
         Route::delete('/financial/records/{id}', [FinancialController::class, 'destroy']);
@@ -220,8 +225,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware(['role:Supervisor'])->group(function () {
         Route::post('/staffing-requests', [\App\Http\Controllers\StaffingRequestController::class, 'store']);
-        Route::post('/tasks', [\App\Http\Controllers\TaskController::class, 'store']);
-        Route::put('/tasks/{id}/notes', [\App\Http\Controllers\TaskController::class, 'addSupervisorNote']);
     });
 
     // =====================================================

@@ -321,33 +321,46 @@ class SchedulesScreen extends StatelessWidget {
         final shifts = asMaps(payload['schedules']);
         final requests = asMaps(payload['staffing']);
         final people = asMaps(payload['people']);
+        final office = (auth.userDepartment ?? '').trim().toLowerCase();
+        final canManageSchedules = auth.userRole == 'WSPO Staff' &&
+            ['', 'wspo', 'unassigned', 'wspo coordinator', 'wspo secretary', 'no department assigned'].contains(office);
         return PageBody(
           onRefresh: reload,
           children: [
             const SectionTitle('Schedules'),
-            FilledButton(onPressed: () => _assign(context, people, reload), child: const Text('Assign shift')),
+            Text(canManageSchedules
+                ? 'Assign work shifts and class schedules for the same student. Clock-in follows the work schedule.'
+                : 'Only the WSPO coordinator or secretary can assign work and class schedules.'),
+            if (canManageSchedules)
+              Wrap(spacing: 8, children: [
+                FilledButton(onPressed: () => _assign(context, people, reload), child: const Text('Assign shift')),
+                OutlinedButton(onPressed: () => _addClass(context, people, reload), child: const Text('Add class')),
+              ]),
             if (auth.userRole == 'Supervisor')
               OutlinedButton(onPressed: () => _requestStaff(context, reload), child: const Text('Request a working student')),
             if (shifts.isEmpty) const EmptyNote('No shifts yet.'),
             for (final shift in shifts)
               RecordCard(
                 title: '${personName(shift)} · ${textOf(shift['day'])}',
-                subtitle: '${textOf(shift['time'])} · ${textOf(shift['department'])} · ${textOf(shift['duty_type'])}',
+                subtitle: textOf(shift['kind'], 'work') == 'class'
+                    ? '${textOf(shift['time'])} · Class · ${textOf(shift['subject'], textOf(shift['duty_type']))}'
+                    : '${textOf(shift['time'])} · ${textOf(shift['department'])} · ${textOf(shift['duty_type'])}',
                 trailing: textOf(shift['edit_request_status'], ''),
                 children: [
                   if (textOf(shift['edit_request_note'], '').isNotEmpty) Text(shift['edit_request_note'].toString()),
-                  Row(children: [
-                    if (textOf(shift['edit_request_status']) == 'pending')
-                      TextButton(onPressed: () => runAction(context, () => api.patch('/schedules/${shift['id']}/resolve-request'), success: 'Request cleared.', reload: reload), child: const Text('Clear request')),
-                    TextButton(
-                      onPressed: () async {
-                        if (!await confirm(context, 'Delete this shift?')) return;
-                        if (!context.mounted) return;
-                        await runAction(context, () => api.delete('/schedules/${shift['id']}'), success: 'Shift deleted.', reload: reload);
-                      },
-                      child: const Text('Delete'),
-                    ),
-                  ]),
+                  if (canManageSchedules)
+                    Row(children: [
+                      if (textOf(shift['edit_request_status']) == 'pending')
+                        TextButton(onPressed: () => runAction(context, () => api.patch('/schedules/${shift['id']}/resolve-request'), success: 'Request cleared.', reload: reload), child: const Text('Clear request')),
+                      TextButton(
+                        onPressed: () async {
+                          if (!await confirm(context, 'Delete this shift?')) return;
+                          if (!context.mounted) return;
+                          await runAction(context, () => api.delete('/schedules/${shift['id']}'), success: 'Shift deleted.', reload: reload);
+                        },
+                        child: const Text('Delete'),
+                      ),
+                    ]),
                 ],
               ),
             const SectionTitle('Staffing requests'),
@@ -377,54 +390,140 @@ class SchedulesScreen extends StatelessWidget {
       return;
     }
     var studentId = people.first['id'].toString();
-    var day = 'Monday';
+    final days = <String>{'Monday'};
     var duty = 'Clerical';
     final time = TextEditingController(text: '8:00 AM - 12:00 PM');
-    final department = TextEditingController(text: context.read<AuthProvider>().userDepartment ?? '');
+    const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     final saved = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Assign shift'),
-        content: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            DropdownButtonFormField<String>(
-              initialValue: studentId,
-              items: people.map((person) => DropdownMenuItem(value: person['id'].toString(), child: Text(textOf(person['name'])))).toList(),
-              onChanged: (value) => studentId = value ?? studentId,
-            ),
-            DropdownButtonFormField<String>(
-              initialValue: day,
-              items: const ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
-              onChanged: (value) => day = value ?? day,
-            ),
-            DropdownButtonFormField<String>(
-              initialValue: duty,
-              items: const ['Clerical', 'Janitorial', 'Request'].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
-              onChanged: (value) => duty = value ?? duty,
-            ),
-            TextField(controller: time, decoration: const InputDecoration(labelText: 'Time, e.g. 8:00 AM - 12:00 PM')),
-            TextField(controller: department, decoration: const InputDecoration(labelText: 'Office')),
-          ]),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: const Text('Assign shift'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              DropdownButtonFormField<String>(
+                initialValue: studentId,
+                items: people.map((person) => DropdownMenuItem(value: person['id'].toString(), child: Text(textOf(person['name'])))).toList(),
+                onChanged: (value) => studentId = value ?? studentId,
+              ),
+              const SizedBox(height: 8),
+              Wrap(spacing: 6, children: [
+                for (final item in weekdays)
+                  FilterChip(
+                    label: Text(item),
+                    selected: days.contains(item),
+                    onSelected: (selected) => setLocal(() {
+                      if (selected) {
+                        days.add(item);
+                      } else {
+                        days.remove(item);
+                      }
+                    }),
+                  ),
+              ]),
+              DropdownButtonFormField<String>(
+                initialValue: duty,
+                items: const ['Clerical', 'Janitorial', 'Request'].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
+                onChanged: (value) => duty = value ?? duty,
+              ),
+              TextField(controller: time, decoration: const InputDecoration(labelText: 'Time, e.g. 8:00 AM - 12:00 PM')),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(context, days.isNotEmpty), child: const Text('Save')),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save')),
-        ],
       ),
     );
     if (saved == true && context.mounted) {
-      final auth = context.read<AuthProvider>();
-      await runAction(context, () => auth.api.post('/schedules', {
-        'user_id': int.parse(studentId),
-        'day': day,
-        'time': time.text.trim(),
-        'duty_type': duty,
-        'department': department.text.trim(),
-        'supervisor': auth.userName ?? 'Supervisor',
-      }), success: 'Shift assigned.', reload: reload);
+      if (days.isEmpty) {
+        toast(context, 'Select at least one day.', error: true);
+      } else {
+        final auth = context.read<AuthProvider>();
+        await runAction(context, () => auth.api.post('/schedules', {
+          'user_id': int.parse(studentId),
+          'days': days.toList(),
+          'time': time.text.trim(),
+          'duty_type': duty,
+        }), success: 'Shift assigned.', reload: reload);
+      }
     }
     time.dispose();
-    department.dispose();
+  }
+
+  Future<void> _addClass(BuildContext context, List<Map<String, dynamic>> people, Future<void> Function() reload) async {
+    if (people.isEmpty) {
+      toast(context, 'No students are available to schedule.', error: true);
+      return;
+    }
+    var studentId = people.first['id'].toString();
+    final days = <String>{'Monday'};
+    final subject = TextEditingController();
+    final room = TextEditingController();
+    final instructor = TextEditingController();
+    final time = TextEditingController(text: '8:00 AM - 10:00 AM');
+    const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: const Text('Add class schedule'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              DropdownButtonFormField<String>(
+                initialValue: studentId,
+                items: people.map((person) => DropdownMenuItem(value: person['id'].toString(), child: Text(textOf(person['name'])))).toList(),
+                onChanged: (value) => studentId = value ?? studentId,
+              ),
+              const SizedBox(height: 8),
+              Wrap(spacing: 6, children: [
+                for (final item in weekdays)
+                  FilterChip(
+                    label: Text(item),
+                    selected: days.contains(item),
+                    onSelected: (selected) => setLocal(() {
+                      if (selected) {
+                        days.add(item);
+                      } else {
+                        days.remove(item);
+                      }
+                    }),
+                  ),
+              ]),
+              TextField(controller: subject, decoration: const InputDecoration(labelText: 'Subject')),
+              TextField(controller: room, decoration: const InputDecoration(labelText: 'Room')),
+              TextField(controller: instructor, decoration: const InputDecoration(labelText: 'Instructor')),
+              TextField(controller: time, decoration: const InputDecoration(labelText: 'Time, e.g. 8:00 AM - 10:00 AM')),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(context, days.isNotEmpty && subject.text.trim().isNotEmpty), child: const Text('Save')),
+          ],
+        ),
+      ),
+    );
+    if (saved == true && context.mounted) {
+      if (days.isEmpty || subject.text.trim().isEmpty) {
+        toast(context, 'Select a day and enter the subject.', error: true);
+      } else {
+        final auth = context.read<AuthProvider>();
+        await runAction(context, () => auth.api.post('/schedules', {
+          'user_id': int.parse(studentId),
+          'days': days.toList(),
+          'time': time.text.trim(),
+          'kind': 'class',
+          'subject': subject.text.trim(),
+          'room': room.text.trim(),
+          'instructor': instructor.text.trim(),
+        }), success: 'Class schedule saved.', reload: reload);
+      }
+    }
+    subject.dispose();
+    room.dispose();
+    instructor.dispose();
+    time.dispose();
   }
 
   Future<void> _requestStaff(BuildContext context, Future<void> Function() reload) async {

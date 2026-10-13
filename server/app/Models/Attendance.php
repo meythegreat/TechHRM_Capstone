@@ -25,6 +25,8 @@ class Attendance extends Model
         'status',
         'is_anomaly',
         'anomaly_reason',
+        'rendered_hour_event_id',
+        'activity_hours',
     ];
 
     protected $casts = [
@@ -32,6 +34,7 @@ class Attendance extends Model
         'time_out' => 'datetime',
         'is_anomaly' => 'boolean',
         'computed_hours' => 'decimal:2',
+        'activity_hours' => 'float',
     ];
 
     protected $appends = ['account_deleted'];
@@ -40,6 +43,18 @@ class Attendance extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    /** Official DTR rows are ordinary shift clock-ins. Meeting scans stay off the timesheet. */
+    public function isNormalClockIn(): bool
+    {
+        if ($this->rendered_hour_event_id) {
+            return false;
+        }
+
+        $label = strtolower(trim((string) $this->attendance_type.' '.$this->work_type));
+
+        return !str_contains($label, 'meeting');
     }
 
     /**

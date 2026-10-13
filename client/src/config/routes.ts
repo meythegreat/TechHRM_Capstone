@@ -15,7 +15,6 @@ export const STAFF_BASE_PATHS = new Set([
   'dashboard',
   'attendance',
   'schedules',
-  'tasks',
   'attendance-hub',
   'compliance',
   'settings',

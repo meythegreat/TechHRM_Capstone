@@ -16,78 +16,44 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class ApplicationController extends Controller
 {
+    private const REQUIRED_DOCUMENT_KEYS = [
+        'application_letter',
+        'report_card',
+        'birth_certificate',
+        'id_picture',
+        'indigency',
+    ];
+
+    private const OPTIONAL_DOCUMENT_KEYS = [
+        'medical_certificate',
+    ];
+
     // PUBLIC: Register a new applicant and submit their WSPO application.
     public function publicApply(Request $request)
     {
-        $validated = $request->validate([
-            'first_name' => 'required|string|max:255',
-            'middle_name' => 'nullable|string|max:255',
-            'last_name' => 'required|string|max:255',
-            'email' => ['required', 'string', 'email', 'max:255'],
-            'age' => 'required|integer|min:16',
-            'gender' => 'required|string|in:Male,Female,Prefer not to say',
-            'address' => 'required|string',
-            'contact_number' => 'required|string',
-            'year_level' => 'required|string',
-            'course' => 'nullable|string',
-            'student_id_number' => 'nullable|string|max:50',
-            'preferred_department' => 'nullable|string',
-            'available_schedules' => 'nullable|array',
-            'reason_for_applying' => 'nullable|string',
-            'documents' => 'required|array|min:3|max:5',
-            'documents.*' => 'file|mimes:pdf,jpg,jpeg,png|max:4096',
-        ]);
+        $validated = $this->validateOfficialApplication($request);
+        $details = $validated['form_details'];
 
-        $this->assertStudentIdentityAvailable(
-            $validated['email'],
-            $validated['student_id_number'] ?? null
-        );
+        $this->assertStudentIdentityAvailable($validated['email'], null);
 
-        $application = DB::transaction(function () use ($request, $validated) {
-            $application = Application::create([
-                'user_id' => null,
-                'first_name' => $validated['first_name'],
-                'middle_name' => $validated['middle_name'] ?? null,
-                'last_name' => $validated['last_name'],
-                'age' => $validated['age'],
-                'gender' => $validated['gender'],
-                'address' => $validated['address'],
-                'contact_number' => $validated['contact_number'],
-                'year_level' => $validated['year_level'],
-                'course' => $validated['course'] ?? null,
-                'student_id_number' => $validated['student_id_number'] ?? null,
-                'email' => $validated['email'],
-                'preferred_department' => $validated['preferred_department'] ?? null,
-                'available_schedules' => $validated['available_schedules'] ?? null,
-                'reason_for_applying' => $validated['reason_for_applying'] ?? null,
-                'status' => 'Pending',
-                'source' => 'website',
-                'tracking_code' => $this->makeTrackingCode(),
-            ]);
-
+        $application = DB::transaction(function () use ($request, $validated, $details) {
+            $application = Application::create($this->officialApplicationAttributes($validated, $details, 'website', null));
             $this->storeApplicationDocuments($request, $application);
-            $this->recordStatus($application, 'Pending', 'Application submitted');
+            $this->recordStatus($application, 'Pending', 'Personal information sheet and parents consent submitted');
 
             return $application;
         });
 
-        $applicantName = $this->applicantName($application);
-        $this->recordApplicationSubmission(null, $application, $applicantName);
-        app(StaffNotifier::class)->notify(
-            'New Signup',
-            "{$applicantName} submitted a working-student application."
-        );
-        $this->notifyN8nApplicationStatus($application, 'Pending', [
-            'event' => 'application_submitted',
-            'submitted_at' => $application->created_at,
-        ]);
+        $this->deliverOfficialForms($application, null);
 
         return response()->json([
-            'message' => 'Application submitted. A username and password are issued only after placement is finalized. You will be able to sign in with that username or this email.',
+            'message' => 'Application submitted. Both forms were sent to the WSPO coordinator. A username and password are issued only after placement is finalized.',
             'tracking_code' => $application->tracking_code,
             'tracker' => $this->presentTracker($application),
         ], 201);
@@ -100,37 +66,46 @@ class ApplicationController extends Controller
             return response()->json(['message' => 'You have already submitted an application.'], 422);
         }
 
-        $validated = $request->validate([
-            'preferred_department' => 'required|string',
-            'available_schedules' => 'required|array',
-            'reason_for_applying' => 'required|string',
-            'documents' => 'required|array|min:3|max:5',
-            'documents.*' => 'file|mimes:pdf,jpg,jpeg,png|max:4096',
-        ]);
+        $validated = $this->validateOfficialApplication($request);
+        $details = $validated['form_details'];
+        $this->assertStudentIdentityAvailable($validated['email'], null, $request->user()->id);
 
-        $application = Application::create([
-            'user_id' => $request->user()->id,
-            'preferred_department' => $validated['preferred_department'],
-            'available_schedules' => $validated['available_schedules'],
-            'reason_for_applying' => $validated['reason_for_applying'],
-            'status' => 'Pending',
-            'source' => 'portal',
-            'tracking_code' => $this->makeTrackingCode(),
-        ]);
+        $application = DB::transaction(function () use ($request, $validated, $details) {
+            $application = Application::create(
+                $this->officialApplicationAttributes($validated, $details, 'portal', $request->user()->id)
+            );
+            $this->storeApplicationDocuments($request, $application);
+            $this->recordStatus($application, 'Pending', 'Personal information sheet and parents consent submitted');
 
-        $this->storeApplicationDocuments($request, $application);
-        $this->recordStatus($application, 'Pending', 'Application submitted');
-        $this->recordApplicationSubmission($request->user(), $application);
-        app(StaffNotifier::class)->notify(
-            'New Signup',
-            "{$request->user()->name} submitted a working-student application."
-        );
-        $this->notifyN8nApplicationStatus($application, 'Pending', [
-            'event' => 'application_submitted',
+            return $application;
+        });
+
+        $this->deliverOfficialForms($application, $request->user());
+
+        return response()->json([
+            'message' => 'Application submitted. Both forms were sent to the WSPO coordinator.',
+            'tracking_code' => $application->tracking_code,
+            'data' => $application->load('documents'),
+        ], 201);
+    }
+
+    // COORDINATOR: Official personal information sheet and parents consent.
+    public function officialForms($id)
+    {
+        $application = Application::withTrashed()->findOrFail($id);
+        $application->makeVisible('form_details');
+
+        return response()->json([
+            'id' => $application->id,
+            'first_name' => $application->first_name,
+            'middle_name' => $application->middle_name,
+            'last_name' => $application->last_name,
+            'age' => $application->age,
+            'email' => $application->email,
+            'tracking_code' => $application->tracking_code,
             'submitted_at' => $application->created_at,
+            'form_details' => $application->form_details,
         ]);
-
-        return response()->json(['message' => 'Application submitted successfully!', 'data' => $application->load('documents')], 201);
     }
 
     // 2. STUDENT: Check own application status
@@ -623,16 +598,240 @@ class ApplicationController extends Controller
 
     private function storeApplicationDocuments(Request $request, Application $application): void
     {
-        foreach ($request->file('documents', []) as $file) {
+        $keys = $request->input('document_keys', []);
+        foreach ($request->file('documents', []) as $index => $file) {
             $path = $file->store('application-documents', 'local');
 
             $application->documents()->create([
+                'document_key' => $keys[$index] ?? null,
                 'original_name' => $file->getClientOriginalName(),
                 'file_path' => $path,
                 'mime_type' => $file->getClientMimeType(),
                 'file_size' => $file->getSize(),
             ]);
         }
+    }
+
+    private function validateOfficialApplication(Request $request): array
+    {
+        $validated = $request->validate([
+            'first_name' => 'required|string|max:255',
+            'middle_name' => 'nullable|string|max:255',
+            'last_name' => 'required|string|max:255',
+            'email' => ['required', 'string', 'email', 'max:255'],
+            'age' => 'required|integer|min:16',
+            'gender' => 'required|string|in:Male,Female',
+            'address' => 'required|string|max:500',
+            'contact_number' => 'required|string|max:50',
+            'year_level' => 'required|string|max:50',
+            'course' => 'required|string|max:255',
+            'form_details' => 'required|string',
+            'documents' => 'required|array|min:5|max:6',
+            'documents.*' => 'file|mimes:pdf,jpg,jpeg,png|max:4096',
+            'document_keys' => 'required|array|min:5|max:6',
+            'document_keys.*' => 'string|in:'.implode(',', array_merge(self::REQUIRED_DOCUMENT_KEYS, self::OPTIONAL_DOCUMENT_KEYS)),
+        ]);
+
+        $keys = $validated['document_keys'];
+        $missing = array_diff(self::REQUIRED_DOCUMENT_KEYS, $keys);
+        if ($missing !== [] || count($keys) !== count(array_unique($keys))) {
+            throw ValidationException::withMessages([
+                'documents' => 'Attach the application letter, report card or grades, birth certificate, 2 x 2 picture, and certificate of indigency.',
+            ]);
+        }
+
+        $picture = $request->file('documents')[array_search('id_picture', $keys, true)] ?? null;
+        if (!$picture || !str_starts_with((string) $picture->getMimeType(), 'image/')) {
+            throw ValidationException::withMessages([
+                'documents' => 'The 2 x 2 I.D. picture must be a JPG or PNG image.',
+            ]);
+        }
+
+        $details = json_decode($validated['form_details'], true);
+        if (!is_array($details)) {
+            throw ValidationException::withMessages([
+                'form_details' => 'Complete the official information sheet.',
+            ]);
+        }
+
+        $detailsValidator = Validator::make($details, [
+            'religion' => 'required|string|max:100',
+            'civil_status' => 'required|in:Single,Married,Widowed,Separated',
+            'tel_number' => 'nullable|string|max:50',
+            'date_of_birth' => 'required|date|before:today',
+            'place_of_birth' => 'required|string|max:255',
+            'height' => 'required|string|max:50',
+            'weight' => 'required|string|max:50',
+            'sex' => 'required|in:Male,Female',
+            'parent_name' => 'required|string|max:255',
+            'parent_status' => 'required|in:Living,Deceased',
+            'parent_tel' => 'required|string|max:50',
+            'parent_occupation' => 'required|in:Farmer,Fisherman,Retired,Private Employee,Unemployed,Others',
+            'parent_occupation_other' => 'nullable|string|max:100',
+            'parent_income' => 'required|string|max:100',
+            'guardian_name' => 'nullable|string|max:255',
+            'guardian_tel' => 'nullable|string|max:50',
+            'guardian_occupation' => 'nullable|string|max:100',
+            'guardian_occupation_other' => 'nullable|string|max:100',
+            'guardian_income' => 'nullable|string|max:100',
+            'sibling_employed_at_fcu' => 'required|in:Yes,No',
+            'employed_sibling_count' => 'nullable|integer|min:1|max:12',
+            'employed_siblings' => 'nullable|array|max:12',
+            'employed_siblings.*.name' => 'nullable|string|max:255',
+            'has_non_working_siblings' => 'required|in:Yes,No',
+            'siblings' => 'nullable|array|max:6',
+            'siblings.*.name' => 'nullable|string|max:255',
+            'siblings.*.age' => 'nullable|string|max:10',
+            'siblings.*.school_or_work' => 'nullable|string|max:255',
+            'technical_qualification' => 'required|string|max:1000',
+            'work_experience' => 'required|string|max:1000',
+            'school_last_attended' => 'required|string|max:255',
+            'school_address' => 'required|string|max:255',
+            'degree_program' => 'required|string|max:255',
+            'year_level' => 'required|string|max:50',
+            'has_scholarship' => 'required|in:Yes,No',
+            'scholarship_details' => 'nullable|string|max:255',
+            'is_4ps' => 'required|in:Yes,No',
+            'medical_conditions' => 'required|array|min:1',
+            'medical_conditions.*' => 'string|in:None,Visual Impairment,Allergies,Hypertension,Asthma,Mental Health Condition,Others',
+            'medical_other' => 'nullable|string|max:255',
+            'will_pass_good_moral' => 'required|in:Yes,No',
+            'medical_certificate_attached' => 'required|boolean',
+            'folder_acknowledged' => 'accepted',
+            'will_sign_printed_copy' => 'accepted',
+            'consent_child_name' => 'required|string|max:255',
+            'photo' => 'required|string|max:1500000',
+            'email' => 'required|email|max:255',
+            'home_address' => 'required|string|max:500',
+            'cell_number' => 'required|string|max:50',
+        ]);
+        $detailsValidator->validate();
+        $details = $detailsValidator->validated();
+
+        if ($details['parent_occupation'] === 'Others' && trim((string) ($details['parent_occupation_other'] ?? '')) === '') {
+            throw ValidationException::withMessages(['form_details' => 'Specify the parent occupation.']);
+        }
+        if ($details['has_scholarship'] === 'Yes' && trim((string) ($details['scholarship_details'] ?? '')) === '') {
+            throw ValidationException::withMessages(['form_details' => 'Specify the scholarship.']);
+        }
+        if (in_array('Others', $details['medical_conditions'], true) && trim((string) ($details['medical_other'] ?? '')) === '') {
+            throw ValidationException::withMessages(['form_details' => 'Specify the medical condition.']);
+        }
+        if (in_array('None', $details['medical_conditions'], true) && count($details['medical_conditions']) > 1) {
+            throw ValidationException::withMessages(['form_details' => 'Choose None only when there is no medical condition.']);
+        }
+        $employedNames = collect();
+        if ($details['sibling_employed_at_fcu'] === 'Yes') {
+            $count = (int) ($details['employed_sibling_count'] ?? 0);
+            $employedNames = collect($details['employed_siblings'] ?? [])
+                ->map(fn ($row) => trim((string) ($row['name'] ?? '')))
+                ->filter()
+                ->values();
+            $unique = $employedNames->map(fn ($name) => mb_strtolower($name))->unique();
+            if ($count < 1 || $employedNames->count() !== $count || $unique->count() !== $count) {
+                throw ValidationException::withMessages([
+                    'form_details' => 'If a brother or sister is a work student, state how many and name each one.',
+                ]);
+            }
+        } else {
+            $details['employed_sibling_count'] = null;
+            $details['employed_siblings'] = [];
+        }
+
+        if ($details['has_non_working_siblings'] === 'Yes') {
+            $listed = collect($details['siblings'] ?? [])->filter(function ($sibling) {
+                return trim((string) ($sibling['name'] ?? '')) !== ''
+                    && trim((string) ($sibling['age'] ?? '')) !== ''
+                    && trim((string) ($sibling['school_or_work'] ?? '')) !== '';
+            })->values();
+            if ($listed->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'form_details' => 'List each brother or sister who is not a work student at FCU.',
+                ]);
+            }
+            $overlaps = $listed->contains(function ($sibling) use ($employedNames) {
+                return $employedNames->contains(fn ($name) => mb_strtolower($name) === mb_strtolower(trim((string) $sibling['name'])));
+            });
+            if ($overlaps) {
+                throw ValidationException::withMessages([
+                    'form_details' => 'Question 4 is only for brothers and sisters who are not work students at the university.',
+                ]);
+            }
+            $details['siblings'] = $listed->all();
+        } else {
+            $details['siblings'] = [];
+        }
+        if ($details['parent_status'] === 'Deceased') {
+            foreach (['guardian_name', 'guardian_tel', 'guardian_occupation', 'guardian_income'] as $field) {
+                if (trim((string) ($details[$field] ?? '')) === '') {
+                    throw ValidationException::withMessages(['form_details' => 'Complete the guardian section when the parents are deceased.']);
+                }
+            }
+        }
+        if (!str_starts_with((string) ($details['photo'] ?? ''), 'data:image/')) {
+            throw ValidationException::withMessages(['form_details' => 'The 2 x 2 photo must be an image.']);
+        }
+
+        $details['medical_certificate_attached'] = in_array('medical_certificate', $keys, true);
+        $validated['form_details'] = $details;
+
+        return $validated;
+    }
+
+    private function officialApplicationAttributes(array $validated, array $details, string $source, ?int $userId): array
+    {
+        return [
+            'user_id' => $userId,
+            'first_name' => $validated['first_name'],
+            'middle_name' => $validated['middle_name'] ?? null,
+            'last_name' => $validated['last_name'],
+            'age' => $validated['age'],
+            'gender' => $validated['gender'],
+            'address' => $validated['address'],
+            'contact_number' => $validated['contact_number'],
+            'year_level' => $validated['year_level'],
+            'course' => $validated['course'],
+            'email' => $validated['email'],
+            'form_details' => $details,
+            'status' => 'Pending',
+            'source' => $source,
+            'tracking_code' => $this->makeTrackingCode(),
+        ];
+    }
+
+    private function deliverOfficialForms(Application $application, $user): void
+    {
+        $applicantName = $this->applicantName($application);
+        $this->recordApplicationSubmission($user, $application, $applicantName);
+        app(StaffNotifier::class)->notify(
+            'Official application forms',
+            "{$applicantName} filed the Personal Information Sheet (FCU-EOMS-WP-012) and the Parents Consent ({$application->tracking_code}). Both forms are saved on the application and can be printed on long coupon."
+        );
+        $this->notifyN8nApplicationStatus($application, 'Pending', [
+            'event' => 'application_submitted',
+            'submitted_at' => $application->created_at,
+            'digital_forms' => $this->digitalFormSummary($application),
+        ]);
+    }
+
+    private function digitalFormSummary(Application $application): array
+    {
+        $details = $application->form_details ?? [];
+        $fields = $details;
+        foreach (['photo', 'applicant_signature', 'father_signature', 'mother_signature', 'guardian_signature', 'consent_signature'] as $image) {
+            unset($fields[$image]);
+        }
+
+        return [
+            'personal_information_sheet' => 'FCU-EOMS-WP-012',
+            'parents_consent' => 'Parents Consent',
+            'paper' => 'long coupon 8.5 x 13 in',
+            'tracking_code' => $application->tracking_code,
+            'applicant_name' => $this->applicantName($application),
+            'email' => $application->email,
+            'signatures' => 'Leave blank. Sign by hand on the printed long-coupon copy.',
+            'fields' => $fields,
+        ];
     }
 
     private function assertStudentIdentityAvailable(

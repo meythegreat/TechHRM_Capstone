@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Clock, 
     KeyRound, 
-    Briefcase, 
     History, 
     CheckCircle2, 
     LogIn, 
@@ -53,7 +52,6 @@ const StudentAttendanceTerminal = () => {
     
     const [tokenInput, setTokenInput] = useState('');
     const [checkInMethod, setCheckInMethod] = useState('passcode');
-    const [dutyType, setDutyType] = useState('Regular');
     const scanBusy = useRef(false);
     const actionRef = useRef(null);
     const scannerRef = useRef(null);
@@ -72,6 +70,7 @@ const StudentAttendanceTerminal = () => {
     const [dtrHolidays, setDtrHolidays] = useState([]);
     const [dtrPenaltyHours, setDtrPenaltyHours] = useState(0);
     const [dtrPreviewOpen, setDtrPreviewOpen] = useState(false);
+    const [workSchedules, setWorkSchedules] = useState([]);
     const [fullName, setFullName] = useState(localStorage.getItem('user_name') || 'Student');
     const [studentProfile, setStudentProfile] = useState({
         student_id_number: '',
@@ -86,6 +85,49 @@ const StudentAttendanceTerminal = () => {
     const [currentTime, setCurrentTime] = useState(new Date());
 
     const formatHours = (value) => Number(value || 0).toFixed(2);
+    const formatShiftTime = (value) => {
+        const parsed = new Date(`2000-01-01T${String(value || '').trim()}`);
+        if (Number.isNaN(parsed.getTime())) {
+            const fallback = new Date(`2000-01-01 ${String(value || '').trim()}`);
+            return Number.isNaN(fallback.getTime()) ? String(value || '').trim() : fallback.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        }
+        return parsed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    };
+    const todayShifts = workSchedules.filter((shift) => shift.kind !== 'class' && shift.day === currentTime.toLocaleDateString('en-US', { weekday: 'long' }));
+    const todayShiftLabel = todayShifts.map((shift) => {
+        const [start, end] = String(shift.time || '').split(/\s*-\s*/);
+        return `${formatShiftTime(start)} – ${formatShiftTime(end)}`;
+    }).join(', ');
+
+    const logLabel = (log) => {
+        const raw = String(log.work_type || log.attendance_type || 'Regular').trim();
+        if (!raw || raw === 'Regular') return 'Regular duty';
+        return raw;
+    };
+
+    const isMeetingLog = (log) => /meeting/i.test(`${log.work_type || ''} ${log.attendance_type || ''}`);
+
+    const logHours = (log) => (
+        log.rendered_hour_event_id
+            ? Number(log.activity_hours || 0)
+            : Number(log.computed_hours || log.rendered_hours || 0)
+    );
+
+    const recentLogs = () => {
+        const history = Array.isArray(summary.history) ? summary.history : [];
+        const byNewest = [...history].sort((a, b) => new Date(b.time_in || 0) - new Date(a.time_in || 0));
+        const regular = byNewest.filter((log) => !isMeetingLog(log)).slice(0, 5);
+        const meetings = byNewest.filter(isMeetingLog).slice(0, 5);
+        const seen = new Set();
+        return [...regular, ...meetings]
+            .filter((log) => {
+                const key = String(log.id);
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            })
+            .sort((a, b) => new Date(b.time_in || 0) - new Date(a.time_in || 0));
+    };
 
     useEffect(() => {
         // Update clock every second
@@ -96,6 +138,9 @@ const StudentAttendanceTerminal = () => {
     useEffect(() => {
         loadSummary();
         loadProfile();
+        axios.get('/api/my-schedule')
+            .then((response) => setWorkSchedules(Array.isArray(response.data) ? response.data : []))
+            .catch(() => setWorkSchedules([]));
         
         // BULLETPROOF LOCAL STORAGE CHECK
         try {
@@ -117,7 +162,7 @@ const StudentAttendanceTerminal = () => {
         try {
             const res = await fetchWorkHourSummary();
             setSummary(res.data);
-            const openShift = res.data.history?.find((log) => !log.time_out);
+            const openShift = res.data.history?.find((log) => !log.time_out && !log.rendered_hour_event_id);
             if (openShift) {
                 setActiveShift(openShift);
                 localStorage.setItem('active_shift_segment', JSON.stringify(openShift));
@@ -136,9 +181,11 @@ const StudentAttendanceTerminal = () => {
         setIsLoading(true);
 
         try {
-            await submitSecureClockIn(code, dutyType, method);
+            const res = await submitSecureClockIn(code, method);
             playAccessAcceptedSound();
-            setSuccessMsg(method === 'qr' ? 'QR check-in accepted. Your shift has started.' : 'Shift started successfully! Work hard and stay safe.');
+            setSuccessMsg(res.data?.activity
+                ? res.data.message
+                : (method === 'qr' ? 'QR check-in accepted. Your shift has started.' : 'Shift started successfully! Work hard and stay safe.'));
             setTokenInput('');
             await loadSummary();
             await loadDtr();
@@ -223,10 +270,15 @@ const StudentAttendanceTerminal = () => {
                 (decoded) => {
                     if (scanBusy.current) return;
                     const raw = String(decoded || '').trim();
-                    if (!raw.startsWith('THRM1|')) return;
-                    const code = raw.slice(6).trim();
+                    const activity = raw.startsWith('THRM1A|');
+                    if (!activity && !raw.startsWith('THRM1|')) return;
+                    const code = raw.slice(activity ? 7 : 6).trim();
                     if (code.length < 16) return;
                     scanBusy.current = true;
+                    if (activity) {
+                        clockInWith(code, 'qr');
+                        return;
+                    }
                     actionRef.current?.(code, 'qr');
                 },
                 () => {}
@@ -271,7 +323,8 @@ const StudentAttendanceTerminal = () => {
                 params: { start: dtrStart, end: dtrEnd },
             });
             const payload = response.data;
-            setDtrHistory(Array.isArray(payload) ? payload : (payload.history ?? []));
+            const rows = Array.isArray(payload) ? payload : (payload.history ?? []);
+            setDtrHistory(rows.filter((log) => !log.rendered_hour_event_id && !/meeting/i.test(`${log.work_type || ''} ${log.attendance_type || ''}`)));
             setDtrPenaltyHours(Number(payload?.duty_deduction_hours || 0));
         } catch (err) {
             console.error('Failed to load DTR', err);
@@ -374,25 +427,13 @@ const StudentAttendanceTerminal = () => {
                                     <h2 className="text-xl font-semibold text-slate-900">Start Shift</h2>
                                 </div>
 
-                                <form onSubmit={handleClockIn} className="space-y-5">
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Duty Type</label>
-                                        <div className="relative">
-                                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                                <Briefcase className="h-5 w-5 text-slate-400" />
-                                            </div>
-                                            <select
-                                                value={dutyType}
-                                                onChange={(e) => setDutyType(e.target.value)}
-                                                className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all cursor-pointer appearance-none"
-                                            >
-                                                <option value="Regular">Regular Duty</option>
-                                                <option value="Cleaning">Cleaning Duty</option>
-                                                <option value="Meeting">Meeting</option>
-                                            </select>
-                                        </div>
-                                    </div>
+                                <p className="mb-5 text-sm font-medium text-slate-600">
+                                    {todayShiftLabel
+                                        ? `Today’s work schedule: ${todayShiftLabel}. You can clock in from 30 minutes before it starts until it ends.`
+                                        : 'No work schedule is assigned for today. Clock-in follows the shift set by the WSPO coordinator or secretary.'}
+                                </p>
 
+                                <form onSubmit={handleClockIn} className="space-y-5">
                                     <div>
                                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Check-in method</label>
                                         <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
@@ -469,7 +510,7 @@ const StudentAttendanceTerminal = () => {
                                             <div id="student-qr-reader" className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 min-h-[240px]" />
                                             <p className="text-xs font-medium text-slate-500 text-center flex items-center justify-center gap-1.5">
                                                 <QrCode className="w-3.5 h-3.5" />
-                                                Point the camera at the QR on your supervisor&apos;s screen. It changes every 30 seconds.
+                                                Point the camera at the QR. Daily clock-in starts a shift. Cleaning, devotional, and assembly QR codes add hours rendered when you are on time.
                                             </p>
                                             {isLoading && (
                                                 <div className="flex justify-center">
@@ -647,7 +688,7 @@ const StudentAttendanceTerminal = () => {
                                 </div>
                             ) : (
                                 <div className="divide-y divide-slate-100">
-                                    {summary.history.slice(0, 5).map((log) => (
+                                    {recentLogs().map((log) => (
                                         <div key={log.id} className="p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-slate-50 transition-colors">
                                             <div className="flex items-start gap-4">
                                                 <div className={`mt-1 w-2.5 h-2.5 rounded-full shrink-0 ${log.time_out ? 'bg-slate-300' : 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]'}`}></div>
@@ -655,6 +696,7 @@ const StudentAttendanceTerminal = () => {
                                                     <p className="font-bold text-slate-900 text-base mb-1">
                                                         {log.time_in ? new Date(log.time_in).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Unknown Date'}
                                                     </p>
+                                                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">{logLabel(log)}</p>
                                                     <div className="text-sm font-medium text-slate-600 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
                                                         <span className="flex items-center gap-1">
                                                             <LogIn className="w-3.5 h-3.5 text-blue-500" /> 
@@ -675,7 +717,7 @@ const StudentAttendanceTerminal = () => {
                                             
                                             <div className="flex flex-col items-start sm:items-end w-full sm:w-auto pl-6 sm:pl-0">
                                                 <span className="text-lg font-semibold text-slate-900">
-                                                    {formatHours(log.computed_hours || log.rendered_hours)} <span className="text-xs text-slate-500 font-bold">hrs</span>
+                                                    {formatHours(logHours(log))} <span className="text-xs text-slate-500 font-bold">hrs</span>
                                                 </span>
                                                 {(log.check_in_method === 'qr' || log.verification_code_used) && (
                                                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">

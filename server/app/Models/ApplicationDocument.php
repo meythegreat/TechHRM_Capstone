@@ -8,6 +8,7 @@ class ApplicationDocument extends Model
 {
     protected $fillable = [
         'application_id',
+        'document_key',
         'original_name',
         'file_path',
         'mime_type',

@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Schedule;
+use App\Models\User;
 use App\Support\SuperAdminAudit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 class ScheduleController extends Controller
@@ -34,6 +36,10 @@ class ScheduleController extends Controller
             $query->where('department', $myDepartment);
         }
 
+        if (in_array($request->query('kind'), ['work', 'class'], true)) {
+            $query->where('kind', $request->query('kind'));
+        }
+
         if ($request->boolean('audit') && $user->role === 'Super Admin') {
             return response()->json($query->latest()->get());
         }
@@ -48,65 +54,98 @@ class ScheduleController extends Controller
         SuperAdminAudit::denyMutation($request);
         $validated = $request->validate([
             'user_id' => 'required|exists:users,id',
-            'day' => 'required|string',
+            'days' => 'required|array|min:1',
+            'days.*' => 'required|string|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
             'time' => 'required|string',
-            'duty_type' => 'required|string',
-            'department' => 'required|string',
-            'supervisor' => 'required|string',
+            'kind' => 'nullable|in:work,class',
+            'duty_type' => 'required_unless:kind,class|nullable|string|max:120',
+            'subject' => 'required_if:kind,class|nullable|string|max:160',
+            'room' => 'nullable|string|max:120',
+            'instructor' => 'nullable|string|max:120',
         ]);
 
-        $student = \App\Models\User::with('profile')->where('role', 'Student')->findOrFail($validated['user_id']);
-        if ($request->user()->role === 'Supervisor') {
-            $department = $request->user()->profile?->assigned_office;
-            abort_unless($department && $student->profile?->assigned_office === $department, 403, 'You can only schedule students enrolled in your department.');
-            $validated['department'] = $department;
-            $validated['supervisor'] = $request->user()->name;
+        $kind = $validated['kind'] ?? 'work';
+        $student = User::with('profile')->where('role', 'Student')->findOrFail($validated['user_id']);
+        abort_unless(
+            app(UserController::class)->canManageWorkSchedules($request->user()),
+            403,
+            $kind === 'class'
+                ? 'Only the WSPO coordinator or secretary can add a class schedule.'
+                : 'Only the WSPO coordinator or secretary can assign a work schedule.'
+        );
+
+        $department = trim((string) ($student->profile?->assigned_office ?? ''));
+        if ($kind === 'work' && $department === '') {
+            return response()->json([
+                'message' => 'This student has no assigned office yet.',
+            ], 422);
+        }
+        if ($department === '') {
+            $department = 'Unassigned';
         }
 
-        // --- SMART OVERLAP CHECK ---
-        // 1. Get the Start and End time of the NEW shift
-        $newTimes = explode(' - ', $validated['time']);
+        $days = array_values(array_unique($validated['days']));
+        $newTimes = preg_split('/\s*-\s*/', $validated['time']) ?: [];
+        if (count($newTimes) !== 2) {
+            return response()->json(['message' => 'Enter a start and end time.'], 422);
+        }
         $newStart = Carbon::parse($newTimes[0]);
         $newEnd = Carbon::parse($newTimes[1]);
-
-        // Handle overnight shifts just in case
-        if ($newEnd->lt($newStart)) {
+        if ($newEnd->lte($newStart)) {
             $newEnd->addDay();
         }
 
-        // 2. Fetch all shifts for this student on this specific day
-        $existingShifts = Schedule::where('user_id', $validated['user_id'])
-            ->where('day', $validated['day'])
+        $existingShifts = Schedule::where('user_id', $student->id)
+            ->whereIn('day', $days)
             ->get();
 
-        // 3. Loop through them and check for intersecting times
         foreach ($existingShifts as $shift) {
-            $existingTimes = explode(' - ', $shift->time);
+            $existingTimes = preg_split('/\s*-\s*/', (string) $shift->time) ?: [];
+            if (count($existingTimes) !== 2) {
+                continue;
+            }
+            $existingStart = Carbon::parse($existingTimes[0]);
+            $existingEnd = Carbon::parse($existingTimes[1]);
+            if ($existingEnd->lte($existingStart)) {
+                $existingEnd->addDay();
+            }
+            if ($newStart->lt($existingEnd) && $newEnd->gt($existingStart)) {
+                $existingKind = ($shift->kind ?? 'work') === 'class' ? 'class' : 'work shift';
+                $detail = $shift->kind === 'class' && $shift->subject ? " ({$shift->subject})" : '';
 
-            if (count($existingTimes) === 2) {
-                $existingStart = Carbon::parse($existingTimes[0]);
-                $existingEnd = Carbon::parse($existingTimes[1]);
-
-                if ($existingEnd->lt($existingStart)) {
-                    $existingEnd->addDay();
-                }
-
-                // Mathematical overlap formula: (Start A < End B) AND (End A > Start B)
-                if ($newStart->lt($existingEnd) && $newEnd->gt($existingStart)) {
-                    return response()->json([
-                        'message' => "Conflict! This student is already scheduled on {$shift->day} from {$shift->time} in the {$shift->department}."
-                    ], 422);
-                }
+                return response()->json([
+                    'message' => "Conflict! This student already has a {$existingKind}{$detail} on {$shift->day} from {$shift->time}.",
+                ], 422);
             }
         }
-        // --- END SMART CHECK ---
 
-        // If no overlap is found, save the shift!
-        $schedule = Schedule::create($validated);
+        $subject = trim((string) ($validated['subject'] ?? ''));
+        $room = trim((string) ($validated['room'] ?? ''));
+        $instructor = trim((string) ($validated['instructor'] ?? ''));
+
+        $schedules = DB::transaction(function () use ($student, $days, $validated, $department, $kind, $subject, $room, $instructor) {
+            return collect($days)->map(fn (string $day) => Schedule::create([
+                'user_id' => $student->id,
+                'kind' => $kind,
+                'day' => $day,
+                'time' => $validated['time'],
+                'duty_type' => $kind === 'class' ? ($subject !== '' ? $subject : 'Class') : $validated['duty_type'],
+                'subject' => $kind === 'class' ? $subject : null,
+                'room' => $kind === 'class' && $room !== '' ? $room : null,
+                'instructor' => $kind === 'class' && $instructor !== '' ? $instructor : null,
+                'department' => $department,
+                'supervisor' => $kind === 'class' ? $instructor : '',
+            ]))->values();
+        });
+
+        $saved = count($days);
+        $message = $kind === 'class'
+            ? ($saved === 1 ? 'Class schedule saved.' : $saved.' class days saved.')
+            : ($saved === 1 ? 'Schedule assigned successfully!' : $saved.' work days assigned successfully!');
 
         return response()->json([
-            'message' => 'Schedule assigned successfully!',
-            'schedule' => $schedule
+            'message' => $message,
+            'schedules' => $schedules,
         ]);
     }
 
@@ -114,6 +153,11 @@ class ScheduleController extends Controller
     public function destroy(Request $request, int $id)
     {
         SuperAdminAudit::denyMutation($request);
+        abort_unless(
+            app(UserController::class)->canManageWorkSchedules($request->user()),
+            403,
+            'Only the WSPO coordinator or secretary can remove a work schedule.'
+        );
         $schedule = Schedule::findOrFail($id);
         $schedule->delete();
 
@@ -133,6 +177,12 @@ class ScheduleController extends Controller
         $schedule = Schedule::where('id', $id)
             ->where('user_id', $request->user()->id)
             ->firstOrFail();
+
+        if ($schedule->kind === 'class') {
+            return response()->json([
+                'message' => 'Class schedules are updated by the WSPO coordinator or secretary.',
+            ], 422);
+        }
 
         $schedule->update([
             'edit_request_note' => $validated['note'],
@@ -161,6 +211,11 @@ class ScheduleController extends Controller
     public function resolveRequest(Request $request, $id)
     {
         SuperAdminAudit::denyMutation($request);
+        abort_unless(
+            app(UserController::class)->canManageWorkSchedules($request->user()),
+            403,
+            'Only the WSPO coordinator or secretary can resolve a schedule request.'
+        );
         $schedule = Schedule::findOrFail($id);
         $schedule->update([
             'edit_request_status' => 'none',

@@ -206,6 +206,51 @@ class UserController extends Controller
             || strcasecmp($position, 'WSPO') === 0;
     }
 
+    /**
+     * Activity QR codes and time corrections are limited to the three WSPO positions.
+     * A blank position is the original coordinator account.
+     */
+    public function canIssueActivityAttendance(User $user): bool
+    {
+        if ($user->role !== 'WSPO Staff') {
+            return false;
+        }
+
+        $position = trim((string) ($user->profile?->assigned_office ?? ''));
+        if ($position === '' || strcasecmp($position, 'WSPO') === 0) {
+            return true;
+        }
+
+        foreach (['WSPO Coordinator', 'WSPO Secretary', 'WSPO President'] as $allowed) {
+            if (strcasecmp($position, $allowed) === 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Work schedules are assigned only by the WSPO coordinator or secretary. */
+    public function canManageWorkSchedules(User $user): bool
+    {
+        if ($user->role !== 'WSPO Staff') {
+            return false;
+        }
+
+        $position = trim((string) ($user->profile?->assigned_office ?? ''));
+        if ($position === '' || strcasecmp($position, 'WSPO') === 0 || strcasecmp($position, 'Unassigned') === 0) {
+            return true;
+        }
+
+        foreach (['WSPO Coordinator', 'WSPO Secretary'] as $allowed) {
+            if (strcasecmp($position, $allowed) === 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /** Office name used when this person issues an attendance code. */
     public function attendanceOffice(User $user): string
     {

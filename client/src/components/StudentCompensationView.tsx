@@ -1,32 +1,70 @@
-import React, { useState, useEffect } from 'react';
-import { FileText, Clock, CheckCircle2, TrendingUp } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { financialService } from '../services/financialService';
 import { REALTIME_EVENT } from '../utils/realtime';
+import {
+  DEFAULT_HOURLY_RATE,
+  hoursText,
+  pesoText,
+  type HourStudentRow,
+} from './hours/HoursRenderedTables';
 
-export const StudentCompensationView: React.FC = () => {
-  const [data, setData] = useState<{
-    history: any[];
-    current_cycle: {
-      cycle_name: string;
-      hours_rendered: number;
-      hourly_rate: number;
-      estimated_gross: number;
-      approved_shifts_count: number;
-    };
-    lifetime_equivalent_value: number;
-  } | null>(null);
+interface StudentActivity {
+  id: number;
+  title: string;
+  kind_label: string;
+  event_date: string;
+  status?: string | null;
+  hours_delta: number;
+}
+
+const statusLabel: Record<string, string> = {
+  on_time: 'On time',
+  late: 'Late',
+  absent: 'Absent',
+  applied: 'Applied',
+};
+
+const meetingHours = (student: HourStudentRow) =>
+  Math.round((student.general_cleaning + student.devotional + student.meeting_assembly) * 100) / 100;
+
+const formatDay = (value: string) => {
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+export function StudentCompensationView() {
+  const now = new Date();
+  const [month, setMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+  const [student, setStudent] = useState<HourStudentRow | null>(null);
+  const [activities, setActivities] = useState<StudentActivity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+
+  const period = useMemo(() => {
+    const [year, mon] = month.split('-').map(Number);
+    const last = new Date(year, mon, 0).getDate();
+    return {
+      start: `${month}-01`,
+      end: `${month}-${String(last).padStart(2, '0')}`,
+    };
+  }, [month]);
 
   useEffect(() => {
     let active = true;
     const load = (silent = false) => {
       if (!silent) setLoading(true);
       financialService
-        .getStudentCompensation()
+        .getMyHours(period.start, period.end)
         .then((res) => {
-          if (active) setData(res);
+          if (!active) return;
+          setStudent(res.student || null);
+          setActivities(res.activities || []);
+          setFailed(false);
         })
-        .catch((err) => console.error('Failed to load hours rendered:', err))
+        .catch(() => {
+          if (!active) return;
+          setFailed(true);
+        })
         .finally(() => {
           if (active && !silent) setLoading(false);
         });
@@ -40,115 +78,89 @@ export const StudentCompensationView: React.FC = () => {
       clearInterval(interval);
       window.removeEventListener(REALTIME_EVENT, refresh);
     };
-  }, []);
+  }, [period.start, period.end]);
 
-  if (loading) {
-    return <div className="p-8 text-center text-gray-400">Loading hours rendered...</div>;
+  if (loading && !student) {
+    return <div className="p-8 text-center text-slate-400">Loading hours rendered...</div>;
   }
 
-  if (!data) {
-    return <div className="p-8 text-center text-gray-500">Hours rendered could not be loaded.</div>;
+  if (failed || !student) {
+    return <div className="p-8 text-center text-slate-500">Hours rendered could not be loaded.</div>;
   }
+
+  const generalMeeting = meetingHours(student);
+  const cells = [
+    { label: 'DTR', value: student.dtr_hours },
+    { label: 'Duty deduction', value: student.duty_deduction === 0 ? 0 : -student.duty_deduction },
+    { label: 'Special', value: student.special_request },
+    { label: 'Daily cleaning', value: student.daily_cleaning },
+    { label: 'General meeting', value: generalMeeting },
+  ];
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-          <div className="flex items-center justify-between text-sm font-medium text-slate-500">
-            <span>Estimated equivalent ({data?.current_cycle.cycle_name})</span>
-            <FileText className="h-5 w-5 text-slate-400" />
-          </div>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">₱{data?.current_cycle.estimated_gross.toFixed(2)}</p>
-          <div className="mt-2 flex items-center gap-1.5 text-xs text-slate-500">
-            <Clock className="w-3.5 h-3.5" />
-            <span>
-              {data?.current_cycle.hours_rendered} hours logged @ ₱{data?.current_cycle.hourly_rate}/hr equivalent
-            </span>
-          </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-900">Period breakdown</h2>
+          <p className="text-sm text-slate-500 mt-1">Grand total = DTR hours − duty deductions + activity hours.</p>
         </div>
-
-        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-          <div className="flex items-center justify-between text-gray-500 text-xs font-semibold uppercase">
-            <span>Total Equivalent</span>
-            <TrendingUp className="w-5 h-5 text-emerald-500" />
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mt-3">
-            ₱{data?.lifetime_equivalent_value.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-          </p>
-          <p className="text-xs text-emerald-600 mt-2 font-medium">Verified and forwarded to Finance</p>
-        </div>
-
-        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-          <div className="flex items-center justify-between text-gray-500 text-xs font-semibold uppercase">
-            <span>Approved Duty Shifts</span>
-            <CheckCircle2 className="w-5 h-5 text-purple-500" />
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mt-3">{data?.current_cycle.approved_shifts_count}</p>
-          <p className="text-xs text-gray-400 mt-2">Verified shifts for this cycle</p>
-        </div>
+        <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+          Month
+          <input
+            type="month"
+            value={month}
+            onChange={(event) => setMonth(event.target.value)}
+            className="mt-1 block px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800"
+          />
+        </label>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-          <div>
-            <h3 className="font-bold text-gray-900">Period Summary</h3>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Summary of verified rendered hours, allowances, and penalty deductions.
-            </p>
-          </div>
+      <div className="bg-slate-900 text-white rounded-2xl px-6 py-5 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Grand total hours</p>
+          <p className="text-4xl font-semibold mt-1">{hoursText(student.grand_total)}</p>
+          <p className="text-sm text-emerald-300 mt-1">{pesoText(student.grand_total, DEFAULT_HOURLY_RATE)} at ₱{hoursText(DEFAULT_HOURLY_RATE)}/hr</p>
         </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-gray-50 text-gray-500 text-xs uppercase font-semibold border-b border-gray-100">
-              <tr>
-                <th className="py-3 px-4">Period</th>
-                <th className="py-3 px-4">Hours Rendered</th>
-                <th className="py-3 px-4">Estimated Gross</th>
-                <th className="py-3 px-4">Allowances</th>
-                <th className="py-3 px-4">Penalty Deductions</th>
-                <th className="py-3 px-4">Equivalent Amount</th>
-                <th className="py-3 px-4">Report Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 text-gray-700">
-              {data?.history.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-6 text-gray-400">
-                    No finalized hours rendered yet.
-                  </td>
-                </tr>
-              ) : (
-                data?.history.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50 transition">
-                    <td className="py-3.5 px-4 text-xs font-medium text-gray-900">
-                      {item.period_start} to {item.period_end}
-                    </td>
-                    <td className="py-3.5 px-4 font-semibold">{item.total_hours_rendered}h</td>
-                    <td className="py-3.5 px-4 font-medium">₱{item.estimated_gross_amount.toFixed(2)}</td>
-                    <td className="py-3.5 px-4 text-emerald-600 font-medium">+₱{item.allowances.toFixed(2)}</td>
-                    <td className="py-3.5 px-4 text-rose-600 font-medium">-₱{item.penalty_deductions.toFixed(2)}</td>
-                    <td className="py-3.5 px-4 font-bold text-gray-900">₱{item.equivalent_total_amount.toFixed(2)}</td>
-                    <td className="py-3.5 px-4">
-                      <span
-                        className={`px-2.5 py-1 text-xs font-medium rounded-full ${
-                          item.status === 'Forwarded to Finance'
-                            ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                            : item.status === 'Approved'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : 'bg-gray-100 text-gray-700'
-                        }`}
-                      >
-                        {item.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <p className="text-sm text-slate-300">{student.year_level ? `Year ${student.year_level}` : 'Year not set'}</p>
       </div>
+
+      <section className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
+          {cells.map((cell) => {
+            const tone = cell.value < 0 ? 'text-rose-600' : cell.value > 0 ? 'text-emerald-700' : 'text-slate-400';
+            return (
+              <div key={cell.label} className="px-5 py-4">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{cell.label}</p>
+                <p className={`mt-1 text-2xl font-semibold tabular-nums ${tone}`}>{hoursText(cell.value)}</p>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100">
+          <h3 className="text-lg font-semibold text-slate-900">Activity hours</h3>
+          <p className="text-sm text-slate-500 mt-1">On time adds the activity hours. Late adds nothing. Absent deducts the same hours.</p>
+        </div>
+        {activities.length === 0 ? (
+          <p className="px-6 py-8 text-sm text-slate-500">No activity hours in this month.</p>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {activities.map((activity) => (
+              <li key={activity.id} className="px-6 py-4 flex items-center justify-between gap-4">
+                <div>
+                  <p className="font-semibold text-slate-900">{activity.title}</p>
+                  <p className="text-sm text-slate-500">{activity.kind_label} · {formatDay(activity.event_date)} · {statusLabel[activity.status || ''] || activity.status || 'Recorded'}</p>
+                </div>
+                <p className={`text-sm font-semibold tabular-nums ${activity.hours_delta < 0 ? 'text-rose-600' : activity.hours_delta > 0 ? 'text-emerald-700' : 'text-slate-400'}`}>
+                  {hoursText(activity.hours_delta)} hrs
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
-};
+}

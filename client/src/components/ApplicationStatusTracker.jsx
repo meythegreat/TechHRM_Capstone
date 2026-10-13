@@ -75,6 +75,7 @@ const eventFor = (application, status) => (
     (application.events || []).find((event) => event.status === status) || null
 );
 
+/** @param {{ application?: object | null, variant?: string, showDocuments?: boolean }} props */
 const ApplicationStatusTracker = ({ application: provided = null, variant = 'page', showDocuments = true }) => {
     const [application, setApplication] = useState(() => normalizeTracker(provided));
     const [isLoading, setIsLoading] = useState(!provided);

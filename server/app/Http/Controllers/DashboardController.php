@@ -8,7 +8,6 @@ use App\Models\Attendance;
 use App\Models\ActivityLog;
 use App\Models\DisciplinaryRecord;
 use App\Models\Schedule;
-use App\Models\Task;
 use Carbon\Carbon;
 
 class DashboardController extends Controller
@@ -171,8 +170,8 @@ class DashboardController extends Controller
 
     /**
      * Logged-in working student's dashboard.
-     * Hours come from completed attendance. Performance blends attendance quality,
-     * task completion, and open disciplinary records.
+     * Hours come from completed attendance. Performance blends attendance quality
+     * and open disciplinary records.
      */
     public function studentOverview(Request $request)
     {
@@ -194,8 +193,7 @@ class DashboardController extends Controller
         $creditedHours = max(0, $totalRendered - $penaltyHours);
 
         $completedShifts = $records->filter(fn (Attendance $record) => $record->time_out !== null);
-        $tasks = Task::where('student_id', $user->id)->get();
-        $hasActivity = $completedShifts->isNotEmpty() || $tasks->isNotEmpty() || $openViolations->isNotEmpty();
+        $hasActivity = $completedShifts->isNotEmpty() || $openViolations->isNotEmpty();
 
         $components = [];
 
@@ -204,14 +202,6 @@ class DashboardController extends Controller
             $components[] = [
                 'score' => ($cleanShifts / $completedShifts->count()) * 100,
                 'weight' => 50,
-            ];
-        }
-
-        if ($tasks->isNotEmpty()) {
-            $finished = $tasks->whereIn('status', ['Completed', 'Verified'])->count();
-            $components[] = [
-                'score' => ($finished / $tasks->count()) * 100,
-                'weight' => 30,
             ];
         }
 
@@ -236,6 +226,7 @@ class DashboardController extends Controller
         $todayIndex = Carbon::now()->dayOfWeek;
 
         $upcomingSchedules = Schedule::where('user_id', $user->id)
+            ->where('kind', 'work')
             ->get()
             ->map(function (Schedule $shift) use ($dayOrder, $todayIndex) {
                 $parts = array_map('trim', explode(' - ', (string) $shift->time, 2));

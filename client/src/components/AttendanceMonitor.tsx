@@ -69,6 +69,8 @@ interface AttendanceRecord {
     task_description: string | null;
     status: string; 
     check_in_method?: 'passcode' | 'qr' | null;
+    rendered_hour_event_id?: number | null;
+    activity_hours?: number | string | null;
     user: {
         id?: number;
         name: string;
@@ -829,7 +831,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                             <div className="flex flex-col items-end gap-2">
                                                 {/* Total Hours Badge */}
                                                 <div className="text-sm font-semibold text-slate-900 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200 font-mono shadow-sm">
-                                                    {formatHours(record.rendered_hours)} <span className="text-xs text-slate-500 font-bold font-sans">hrs</span>
+                                                    {formatHours(record.rendered_hour_event_id ? record.activity_hours : record.rendered_hours)} <span className="text-xs text-slate-500 font-bold font-sans">{record.rendered_hour_event_id ? 'activity hrs' : 'hrs'}</span>
                                                 </div>
 
                                                 {/* Action Button / Status */}

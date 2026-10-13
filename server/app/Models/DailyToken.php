@@ -12,6 +12,7 @@ class DailyToken extends Model
         'type',
         'channel',
         'description',
+        'event_id',
         'generated_by',
         'expires_at',
     ];

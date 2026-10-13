@@ -32,8 +32,10 @@ import {
     XCircle,
     Trash2,
     Undo2,
+    Printer,
 } from 'lucide-react';
 import { openSecureFile } from '../utils/secureFile';
+import OfficialWspForms, { printOfficialForms } from './wsp/OfficialWspForms';
 import { bindPopup } from '../utils/popupDismiss';
 import ApplicationStatusTracker from './ApplicationStatusTracker';
 import { REALTIME_EVENT } from '../utils/realtime';
@@ -114,6 +116,16 @@ const getNextStage = (status) => {
 
 const UNDO_HIDE_MS = 5000;
 
+const DOCUMENT_LABELS = {
+    application_letter: 'Application letter',
+    good_moral: 'Certificate of Good Moral Character',
+    report_card: 'Report card or grades',
+    birth_certificate: 'Birth certificate',
+    medical_certificate: 'Medical certificate',
+    id_picture: '2 x 2 I.D. picture',
+    indigency: 'Certificate of Indigency',
+};
+
 const ApplicationManager = () => {
     const isAudit = localStorage.getItem('user_role') === 'Super Admin';
     const [applications, setApplications] = useState([]);
@@ -135,6 +147,8 @@ const ApplicationManager = () => {
     const [declineReason, setDeclineReason] = useState('');
     const [pendingStage, setPendingStage] = useState('');
     const [undoAction, setUndoAction] = useState(null);
+    const [officialForms, setOfficialForms] = useState(null);
+    const [formsNote, setFormsNote] = useState('');
     const stageOverlays = useRef(new Map());
     const stageQueues = useRef(new Map());
     const commitToken = useRef(0);
@@ -1289,6 +1303,29 @@ const ApplicationManager = () => {
                                     </div>
                                 </div>
                                 <div>
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            setFormsNote('');
+                                            try {
+                                                const response = await axios.get(`/api/applications/${selectedApp.id}/forms`);
+                                                if (!response.data?.form_details) {
+                                                    setOfficialForms(null);
+                                                    setFormsNote('This application has no official information sheet on file.');
+                                                    return;
+                                                }
+                                                setOfficialForms(response.data);
+                                            } catch {
+                                                setFormsNote('The official forms could not be opened.');
+                                            }
+                                        }}
+                                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold"
+                                    >
+                                        <Printer className="w-4 h-4" /> Open official forms
+                                    </button>
+                                    {formsNote && <p className="mt-2 text-sm font-semibold text-amber-700">{formsNote}</p>}
+                                </div>
+                                <div>
                                     <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Submitted Documents</p>
                                     {(selectedApp.documents || []).length === 0 ? (
                                         <p className="text-sm font-bold text-slate-400">No documents were attached.</p>
@@ -1301,7 +1338,7 @@ const ApplicationManager = () => {
                                                         onClick={() => openSecureFile(doc.file_path)}
                                                         className="w-full text-left px-4 py-3 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
                                                     >
-                                                        <p className="text-sm font-bold text-slate-800 truncate">{doc.original_name}</p>
+                                                        <p className="text-sm font-bold text-slate-800 truncate">{DOCUMENT_LABELS[doc.document_key] || doc.original_name}</p>
                                                         <p className="text-[11px] font-medium text-blue-600 mt-1">Open file</p>
                                                     </button>
                                                 </li>
@@ -1414,6 +1451,40 @@ const ApplicationManager = () => {
                                 initial={{ width: '100%' }}
                                 animate={{ width: '0%' }}
                                 transition={{ duration: UNDO_HIDE_MS / 1000, ease: 'linear' }}
+                            />
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {officialForms && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-slate-900/60 z-[90] overflow-y-auto p-4"
+                    >
+                        <div className="max-w-4xl mx-auto">
+                            <div className="no-print mb-4 flex flex-wrap justify-end gap-2">
+                                <button type="button" onClick={printOfficialForms} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold">
+                                    <Printer className="w-4 h-4" /> Print long coupon
+                                </button>
+                                <button type="button" onClick={() => setOfficialForms(null)} className="px-4 py-2.5 rounded-xl bg-white text-sm font-bold text-slate-800">
+                                    Close
+                                </button>
+                            </div>
+                            <OfficialWspForms
+                                identity={{
+                                    first_name: officialForms.first_name || '',
+                                    middle_name: officialForms.middle_name || '',
+                                    last_name: officialForms.last_name || '',
+                                    age: officialForms.age ? String(officialForms.age) : '',
+                                    email: officialForms.email || '',
+                                    tracking_code: officialForms.tracking_code || '',
+                                    submitted_at: officialForms.submitted_at || '',
+                                }}
+                                details={officialForms.form_details}
                             />
                         </div>
                     </motion.div>

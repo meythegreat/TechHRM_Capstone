@@ -23,7 +23,8 @@ import {
     Briefcase,
     ShieldCheck,
     Send,
-    Search
+    Search,
+    GraduationCap
 } from 'lucide-react';
 import AuditPager, { pageSlice } from './AuditPager';
 import ComboFilter from './ComboFilter';
@@ -70,9 +71,13 @@ interface UserData {
 interface Schedule {
     id: number;
     user_id: number;
+    kind?: 'work' | 'class' | string;
     day: string;
     time: string;
     duty_type: string;
+    subject?: string | null;
+    room?: string | null;
+    instructor?: string | null;
     department: string;
     supervisor: string;
     edit_request_status?: string;
@@ -98,25 +103,38 @@ const ScheduleManagement = () => {
     // Global Toast State
     const [toastMsg, setToastMsg] = useState<{text: string, type: 'success' | 'error'} | null>(null);
     const currentUserRole = localStorage.getItem('user_role') || '';
+    const assignedOffice = (localStorage.getItem('assigned_office') || '').trim().toLowerCase();
+    const canManageSchedules = currentUserRole === 'WSPO Staff' && ['', 'wspo', 'unassigned', 'wspo coordinator', 'wspo secretary'].includes(assignedOffice);
     const isAudit = currentUserRole === 'Super Admin';
     const [auditFilters, setAuditFilters] = useState({ date: '', hour: '', minute: '', meridiem: '', department: '', name: '' });
     const [departments, setDepartments] = useState<string[]>([]);
     const [requestPage, setRequestPage] = useState(1);
     const [schedulePage, setSchedulePage] = useState(1);
+    const [listKind, setListKind] = useState<'all' | 'work' | 'class'>('all');
+    const [entryKind, setEntryKind] = useState<'work' | 'class'>('work');
     const [staffingRequests, setStaffingRequests] = useState<any[]>([]);
     const [staffingCandidates, setStaffingCandidates] = useState<UserData[]>([]);
     const [assignmentSelections, setAssignmentSelections] = useState<Record<number, number[]>>({});
     const [staffingForm, setStaffingForm] = useState({ duty_type: 'Clerical', duty_request: '', quantity: 1, requested_genders: ['Male'] });
 
-    const [formData, setFormData] = useState({
+    const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const emptyForm = {
         user_id: '',
-        day: 'Monday',
-        startTime: '', 
-        endTime: '',   
+        days: ['Monday'] as string[],
+        startTime: '',
+        endTime: '',
         duty_type: 'Clerical Work',
-        department: '',
-        supervisor: ''
-    });
+        subject: '',
+        room: '',
+        instructor: '',
+    };
+    const [formData, setFormData] = useState(emptyForm);
+
+    const openScheduleModal = (kind: 'work' | 'class') => {
+        setEntryKind(kind);
+        setFormData(emptyForm);
+        setIsModalOpen(true);
+    };
 
     useEffect(() => {
         fetchStudents();
@@ -139,12 +157,12 @@ const ScheduleManagement = () => {
     useEffect(() => {
         if (isAudit) return;
         fetchSchedules(currentPage);
-    }, [currentPage]);
+    }, [currentPage, listKind]);
 
     useEffect(() => {
         if (!isAudit) return;
         fetchSchedules(1);
-    }, []);
+    }, [listKind]);
 
     const showToast = (text: string, type: 'success' | 'error') => {
         setToastMsg({ text, type });
@@ -283,7 +301,8 @@ const ScheduleManagement = () => {
     const fetchSchedules = async (page: number, silent = false) => {
         if (!silent) setIsLoading(true);
         try {
-            const response = await axios.get(isAudit ? '/api/schedules?audit=1' : `/api/schedules?page=${page}`);
+            const kindQuery = listKind === 'all' ? '' : `&kind=${listKind}`;
+            const response = await axios.get(isAudit ? `/api/schedules?audit=1${kindQuery}` : `/api/schedules?page=${page}${kindQuery}`);
             if (isAudit) {
                 setSchedules(Array.isArray(response.data) ? response.data : []);
                 setTotalPages(1);
@@ -312,31 +331,50 @@ const ScheduleManagement = () => {
             clearInterval(interval);
             window.removeEventListener(REALTIME_EVENT, refresh);
         };
-    }, [currentPage]);
+    }, [currentPage, listKind]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
 
-        const payload = {
-            user_id: formData.user_id,
-            day: formData.day,
-            time: `${formData.startTime} - ${formData.endTime}`,
-            duty_type: formData.duty_type,
-            department: formData.department,
-            supervisor: formData.supervisor
-        };
+        if (formData.days.length === 0) {
+            showToast('Select at least one day.', 'error');
+            setIsSubmitting(false);
+            return;
+        }
+
+        const payload = entryKind === 'class'
+            ? {
+                user_id: formData.user_id,
+                days: formData.days,
+                time: `${formData.startTime} - ${formData.endTime}`,
+                kind: 'class',
+                subject: formData.subject.trim(),
+                room: formData.room.trim(),
+                instructor: formData.instructor.trim(),
+            }
+            : {
+                user_id: formData.user_id,
+                days: formData.days,
+                time: `${formData.startTime} - ${formData.endTime}`,
+                kind: 'work',
+                duty_type: formData.duty_type,
+            };
 
         try {
             await axios.post('/api/schedules', payload);
-            showToast("Shift assigned successfully!", "success");
+            const saved = formData.days.length;
+            showToast(
+                entryKind === 'class'
+                    ? (saved === 1 ? 'Class schedule saved.' : `${saved} class days saved.`)
+                    : (saved === 1 ? 'Shift assigned successfully!' : `${saved} work days assigned successfully!`),
+                'success',
+            );
             setIsModalOpen(false);
-            setFormData({
-                user_id: '', day: 'Monday', startTime: '', endTime: '', duty_type: 'Clerical Work', department: '', supervisor: ''
-            });
+            setFormData(emptyForm);
             fetchSchedules(currentPage);
         } catch (error: any) {
-            showToast(error.response?.data?.message || "Failed to assign shift.", "error");
+            showToast(error.response?.data?.message || (entryKind === 'class' ? 'Failed to save class schedule.' : 'Failed to assign shift.'), 'error');
         } finally {
             setIsSubmitting(false);
         }
@@ -427,17 +465,21 @@ const ScheduleManagement = () => {
                     <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                         {isAudit
                             ? 'Read-only list of department requests and assigned schedules across offices.'
-                            : 'Assign and manage weekly shifts for student workers. Request additional personnel or review requested schedule modifications.'}
+                            : canManageSchedules
+                                ? 'Assign duty hours and record class schedules for the same student. Clock-in follows the work schedule only.'
+                                : 'Work and class schedules are recorded by the WSPO coordinator or secretary. You can review the entries already set for your department.'}
                     </p>
                 </div>
 
-                {!isAudit && <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex items-center gap-4">
-                    <div className="flex flex-col text-right">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Quick Action</span>
-                        <span className="text-sm text-slate-500">Deploy new worker</span>
-                    </div>
+                {canManageSchedules && <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex flex-wrap items-center justify-end gap-3">
+                    <button
+                        onClick={() => openScheduleModal('class')}
+                        className="px-5 py-2.5 bg-white hover:bg-violet-50 text-violet-700 border border-violet-200 font-bold text-sm rounded-xl transition-colors flex items-center gap-2"
+                    >
+                        <GraduationCap className="w-4 h-4" /> Add Class
+                    </button>
                     <button 
-                        onClick={() => setIsModalOpen(true)}
+                        onClick={() => openScheduleModal('work')}
                         className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl transition-colors shadow-lg shadow-blue-900/50 flex items-center gap-2"
                     >
                         <Plus className="w-4 h-4" /> Assign Shift
@@ -676,6 +718,23 @@ const ScheduleManagement = () => {
             )}
 
             {/* MAIN SCHEDULES TABLE */}
+            <div className="flex flex-wrap items-center gap-2">
+                {([
+                    ['all', 'All schedules'],
+                    ['work', 'Work shifts'],
+                    ['class', 'Class schedules'],
+                ] as const).map(([value, label]) => (
+                    <button
+                        key={value}
+                        type="button"
+                        onClick={() => { setListKind(value); setCurrentPage(1); setSchedulePage(1); }}
+                        className={`px-4 py-2 rounded-xl text-sm font-bold border transition-colors ${listKind === value ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
+                    >
+                        {label}
+                    </button>
+                ))}
+            </div>
+
             <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden relative min-h-[400px]">
                 
                 {isLoading && (
@@ -693,7 +752,7 @@ const ScheduleManagement = () => {
                             <tr className="bg-slate-50/80 border-b border-slate-200">
                                 <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Student Worker</th>
                                 <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Shift Timing</th>
-                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Duty Details</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Details</th>
                                 <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Actions</th>
                             </tr>
                         </thead>
@@ -708,7 +767,7 @@ const ScheduleManagement = () => {
                                     <td colSpan={4} className="px-6 py-16 text-center text-slate-400">
                                         <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-20" />
                                         <p className="text-base font-semibold text-slate-600">No schedules found</p>
-                                        <p className="text-sm font-medium">Click "Assign Shift" to schedule a worker.</p>
+                                        <p className="text-sm font-medium">{canManageSchedules ? 'Assign a work shift or add a class schedule.' : 'The WSPO coordinator or secretary has not recorded a schedule yet.'}</p>
                                     </td>
                                 </tr>
                             ) : (
@@ -742,16 +801,28 @@ const ScheduleManagement = () => {
                                                 <Clock className="w-4 h-4 text-blue-500" />
                                                 {schedule.time}
                                             </div>
-                                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 uppercase tracking-widest border border-slate-200">
-                                                {schedule.day}
-                                            </span>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 uppercase tracking-widest border border-slate-200">
+                                                    {schedule.day}
+                                                </span>
+                                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border ${schedule.kind === 'class' ? 'bg-violet-50 text-violet-700 border-violet-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                                                    {schedule.kind === 'class' ? <GraduationCap className="w-3 h-3" /> : <Briefcase className="w-3 h-3" />}
+                                                    {schedule.kind === 'class' ? 'Class' : 'Work'}
+                                                </span>
+                                            </div>
                                         </td>
 
                                         <td className="px-6 py-5 align-top">
-                                            <p className="text-sm font-bold text-slate-800">{schedule.duty_type}</p>
-                                            <p className="text-xs font-medium text-slate-500 mt-1 flex items-center gap-1">
-                                                <User className="w-3.5 h-3.5" /> Sup: {schedule.supervisor}
-                                            </p>
+                                            {schedule.kind === 'class' ? (
+                                                <>
+                                                    <p className="text-sm font-bold text-slate-800">{schedule.subject || schedule.duty_type}</p>
+                                                    <p className="text-xs font-medium text-slate-500 mt-1">
+                                                        {[schedule.room, schedule.instructor || schedule.supervisor].filter(Boolean).join(' · ') || 'No room or instructor'}
+                                                    </p>
+                                                </>
+                                            ) : (
+                                                <p className="text-sm font-bold text-slate-800">{schedule.duty_type}</p>
+                                            )}
                                         </td>
 
                                         <td className="px-6 py-5 align-top text-right">
@@ -765,7 +836,7 @@ const ScheduleManagement = () => {
                                                         <p className="text-[11px] text-amber-700 font-medium mb-3 italic leading-relaxed relative z-10 bg-white/50 p-2 rounded-lg border border-amber-100">
                                                             "{schedule.edit_request_note}"
                                                         </p>
-                                                        {!isAudit && <div className="flex gap-2 relative z-10">
+                                                        {canManageSchedules && <div className="flex gap-2 relative z-10">
                                                             <button 
                                                                 onClick={() => handleEditAction(schedule.id, 'approve')} 
                                                                 className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold shadow-sm transition-colors flex items-center justify-center gap-1"
@@ -782,7 +853,7 @@ const ScheduleManagement = () => {
                                                     </div>
                                                 )}
                                                 
-                                                {!isAudit && <button 
+                                                {canManageSchedules && <button 
                                                     onClick={() => handleDelete(schedule.id)}
                                                     className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
                                                     title="Remove Schedule"
@@ -843,7 +914,9 @@ const ScheduleManagement = () => {
                         >
                             <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center sticky top-0 z-10">
                                 <h3 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
-                                    <Plus className="w-5 h-5 text-blue-600" /> Assign New Shift
+                                    {entryKind === 'class'
+                                        ? <><GraduationCap className="w-5 h-5 text-violet-600" /> Add Class Schedule</>
+                                        : <><Plus className="w-5 h-5 text-blue-600" /> Assign New Shift</>}
                                 </h3>
                                 <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-full transition-colors">
                                     <X className="w-5 h-5" />
@@ -852,10 +925,14 @@ const ScheduleManagement = () => {
 
                             <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
                                 
-                                <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex gap-3 mb-2">
-                                    <ShieldCheck className="w-5 h-5 text-blue-600 shrink-0" />
-                                    <p className="text-[11px] font-medium text-blue-800 leading-relaxed">
-                                        Use this form to manually lock a student into a specific weekly shift. This will enforce their availability and prevent unauthorized clock-ins outside of this window.
+                                <div className={`p-4 rounded-xl flex gap-3 mb-2 border ${entryKind === 'class' ? 'bg-violet-50 border-violet-100' : 'bg-blue-50 border-blue-100'}`}>
+                                    {entryKind === 'class'
+                                        ? <GraduationCap className="w-5 h-5 text-violet-600 shrink-0" />
+                                        : <ShieldCheck className="w-5 h-5 text-blue-600 shrink-0" />}
+                                    <p className={`text-[11px] font-medium leading-relaxed ${entryKind === 'class' ? 'text-violet-800' : 'text-blue-800'}`}>
+                                        {entryKind === 'class'
+                                            ? 'Class hours stay separate from duty. A work shift cannot overlap a class already saved for this student. Clock-in still follows the work schedule only.'
+                                            : 'This is the student’s work schedule. It cannot overlap a class or another shift on the same day. Clock-in and clock-out are accepted only inside this shift.'}
                                     </p>
                                 </div>
 
@@ -872,19 +949,53 @@ const ScheduleManagement = () => {
                                     </select>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-5">
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Day of Week</label>
-                                        <select 
-                                            value={formData.day} 
-                                            onChange={e => setFormData({...formData, day: e.target.value})} 
-                                            className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all appearance-none cursor-pointer"
-                                        >
-                                            {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => <option key={d} value={d}>{d}</option>)}
-                                        </select>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Days of the week</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {weekdays.map((day) => {
+                                            const selected = formData.days.includes(day);
+                                            return (
+                                                <button
+                                                    key={day}
+                                                    type="button"
+                                                    onClick={() => setFormData({
+                                                        ...formData,
+                                                        days: selected ? formData.days.filter((item) => item !== day) : [...formData.days, day],
+                                                    })}
+                                                    className={`px-3 py-2 rounded-xl text-sm font-bold border transition-colors ${selected ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300'}`}
+                                                >
+                                                    {day}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Duty Type</label>
+                                    <p className="mt-2 text-xs font-medium text-slate-500">
+                                        {entryKind === 'class'
+                                            ? 'Select every day this class meets.'
+                                            : 'Select every day this shift repeats, including Saturday when the student works.'}
+                                    </p>
+                                </div>
+
+                                {entryKind === 'class' ? (
+                                    <div className="space-y-5">
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Subject</label>
+                                            <input required value={formData.subject} onChange={e => setFormData({...formData, subject: e.target.value})} placeholder="e.g. CS 301 Data Structures" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-violet-600 focus:bg-white transition-all placeholder:text-slate-400 placeholder:font-medium" />
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Room</label>
+                                                <input value={formData.room} onChange={e => setFormData({...formData, room: e.target.value})} placeholder="e.g. CCS 204" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-violet-600 focus:bg-white transition-all placeholder:text-slate-400 placeholder:font-medium" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Instructor</label>
+                                                <input value={formData.instructor} onChange={e => setFormData({...formData, instructor: e.target.value})} placeholder="e.g. Prof. Cruz" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-violet-600 focus:bg-white transition-all placeholder:text-slate-400 placeholder:font-medium" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Duty Type</label>
                                         <select 
                                             value={formData.duty_type} 
                                             onChange={e => setFormData({...formData, duty_type: e.target.value})} 
@@ -896,8 +1007,8 @@ const ScheduleManagement = () => {
                                             <option>Cleaning</option>
                                             <option>Event Setup</option>
                                         </select>
-                                    </div>
                                 </div>
+                                )}
 
                                 <div className="grid grid-cols-2 gap-5">
                                     <div>
@@ -910,23 +1021,12 @@ const ScheduleManagement = () => {
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Department</label>
-                                        <input required type="text" value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} placeholder="e.g. CCS Office" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all placeholder:text-slate-400 placeholder:font-medium" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Supervisor</label>
-                                        <input required type="text" value={formData.supervisor} onChange={e => setFormData({...formData, supervisor: e.target.value})} placeholder="e.g. Mr. Smith" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all placeholder:text-slate-400 placeholder:font-medium" />
-                                    </div>
-                                </div>
-
                                 <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
                                     <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-200 rounded-xl transition-colors">
                                         Cancel
                                     </button>
-                                    <button type="submit" disabled={isSubmitting} className="px-6 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-lg shadow-blue-600/25 disabled:opacity-50 transition-all flex items-center gap-2">
-                                        {isSubmitting ? 'Saving...' : <><CheckCircle2 className="w-4 h-4" /> Finalize Shift</>}
+                                    <button type="submit" disabled={isSubmitting} className={`px-6 py-2.5 text-sm font-bold text-white rounded-xl shadow-lg disabled:opacity-50 transition-all flex items-center gap-2 ${entryKind === 'class' ? 'bg-violet-600 hover:bg-violet-700 shadow-violet-600/25' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/25'}`}>
+                                        {isSubmitting ? 'Saving...' : entryKind === 'class' ? <><CheckCircle2 className="w-4 h-4" /> Save Class</> : <><CheckCircle2 className="w-4 h-4" /> Finalize Shift</>}
                                     </button>
                                 </div>
                             </form>

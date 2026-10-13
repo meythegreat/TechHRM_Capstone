@@ -26,6 +26,7 @@ class Application extends Model
         'preferred_department',
         'available_schedules',
         'reason_for_applying',
+        'form_details',
         'status',
         'source',
         'tracking_code',
@@ -36,8 +37,13 @@ class Application extends Model
     ];
 
     // Tell Laravel to treat this column as an array/JSON
+    protected $hidden = [
+        'form_details',
+    ];
+
     protected $casts = [
         'available_schedules' => 'array',
+        'form_details' => 'array',
         'interview_date' => 'datetime',
     ];
 

@@ -6,8 +6,6 @@ import { AnimatePresence, motion, useReducedMotion, type Variants } from 'framer
 import PageTransition from './PageTransition';
 import Toast from './Toast';
 import { 
-    Wallet, 
-    TrendingUp, 
     CalendarRange, 
     Clock, 
     FileText, 
@@ -18,6 +16,7 @@ import {
     UserCircle, 
     Check,
     Briefcase,
+    GraduationCap,
     ShieldCheck,
     Eye,
     EyeOff,
@@ -37,21 +36,15 @@ import StudentAttendanceTerminal from './StudentAttendanceTerminal';
 import { StudentCompensationView } from './StudentCompensationView';
 import ApplicationStatusTracker from './ApplicationStatusTracker';
 
-interface AttendanceRecord {
-    id: number;
-    date: string;
-    time_in: string;
-    time_out: string | null;
-    rendered_hours: number | string | null;
-    work_type: string | null;
-    task_description: string | null;
-}
-
 interface ScheduleRecord {
     id: number;
+    kind?: 'work' | 'class' | string;
     day: string;
     time: string;
     duty_type: string;
+    subject?: string | null;
+    room?: string | null;
+    instructor?: string | null;
     department: string;
     supervisor: string;
     edit_request_status?: 'none' | 'pending' | 'approved' | 'rejected';
@@ -65,12 +58,6 @@ interface RequirementRecord {
     status: string;
     remarks: string | null;
     created_at: string;
-}
-
-function parseRenderedHours(value: number | string | null | undefined): number {
-    if (value == null || value === '') return 0;
-    const n = typeof value === 'number' ? value : parseFloat(String(value));
-    return Number.isFinite(n) ? n : 0;
 }
 
 interface StudentDashboardProps {
@@ -103,9 +90,6 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
         supervisors: [] as string[]
     });
 
-    const [history, setHistory] = useState<AttendanceRecord[]>([]);
-    const [startDate] = useState('');
-    const [endDate] = useState('');
     const [schedule, setSchedule] = useState<ScheduleRecord[]>([]);
 
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -173,14 +157,6 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
         }
     };
 
-    const fetchHistory = async () => {
-        try {
-            const response = await axios.get('/api/attendance/my-history', { params: { start: startDate, end: endDate } });
-            const payload = response.data;
-            setHistory(Array.isArray(payload) ? payload : (payload.history ?? []));
-        } catch (err) { console.error(err); }
-    };
-
     const fetchSchedule = async () => {
         try {
             const response = await axios.get('/api/my-schedule');
@@ -202,7 +178,6 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
     useEffect(() => {
         const refresh = () => {
             fetchMyProfile();
-            fetchHistory();
             fetchSchedule();
             fetchRequirements();
         };
@@ -218,7 +193,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
             window.removeEventListener(REALTIME_EVENT, refresh);
             document.removeEventListener('visibilitychange', onVisible);
         };
-    }, [startDate, endDate]);
+    }, []);
 
     const handleRequestEdit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -352,9 +327,6 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
         }
     };
 
-    const totalRenderedHours = history.reduce((sum, record) => sum + parseRenderedHours(record.rendered_hours), 0);
-    const hourlyRate = 28; 
-    const estimatedAmount = totalRenderedHours * hourlyRate;
     const requirementsAllVerified = requirements.length > 0 && requirements.every(req => req.status === 'verified');
 
     const studentNavItems = [
@@ -445,53 +417,18 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                         {/* 3. HOURS RENDERED */}
                         {currentPath === 'hours' && (
                             <motion.div variants={staggerContainer} initial="hidden" animate="show" className="space-y-6">
-                                
-                                <motion.div 
-                                    initial={{ opacity: 0, y: -20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
-                                >
-
-                                    <div className="relative z-10">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <Wallet className="w-5 h-5 text-blue-400" />
-                                            <span className="text-sm font-medium text-slate-500">Duty Summary</span>
-                                        </div>
-                                        <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-                                            Hours Rendered
-                                        </h1>
-                                        <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
-                                            Review the hours rendered from your approved attendance logs, and the equivalent amount for Finance.
-                                        </p>
+                                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <FileText className="w-5 h-5 text-blue-400" />
+                                        <span className="text-sm font-medium text-slate-500">Duty Summary</span>
                                     </div>
-
-                                    <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex flex-col items-center sm:items-end text-right">
-                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Rendered Hours</span>
-                                        <div className="text-3xl font-semibold tabular-nums text-slate-900 font-mono tracking-tight flex items-center gap-2">
-                                            <Clock className="w-6 h-6 text-blue-400" />
-                                            {totalRenderedHours.toFixed(2)} <span className="text-sm font-bold text-slate-500">hrs</span>
-                                        </div>
-                                    </div>
+                                    <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+                                        Hours Rendered
+                                    </h1>
+                                    <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
+                                        Your DTR hours, duty deductions, and activity hours for the selected month.
+                                    </p>
                                 </motion.div>
-
-                                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                                    <motion.div variants={cardVariants} className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-                                        <Clock className="mb-4 h-5 w-5 text-blue-600" />
-                                        <p className="text-sm font-medium text-slate-500">Total hours rendered</p>
-                                        <p className="mt-1 text-4xl font-semibold tabular-nums tracking-tight text-slate-900">{totalRenderedHours.toFixed(2)}</p>
-                                    </motion.div>
-                                    <motion.div variants={cardVariants} className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-                                        <TrendingUp className="mb-4 h-5 w-5 text-slate-400" />
-                                        <p className="text-sm font-medium text-slate-500">Hourly rate</p>
-                                        <p className="mt-1 text-4xl font-semibold tabular-nums tracking-tight text-slate-900">₱{hourlyRate.toFixed(2)}</p>
-                                    </motion.div>
-                                    <motion.div variants={cardVariants} className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-                                        <Wallet className="mb-4 h-5 w-5 text-emerald-600" />
-                                        <p className="text-sm font-medium text-slate-500">Estimated earnings</p>
-                                        <p className="mt-1 text-4xl font-semibold tabular-nums tracking-tight text-slate-900">₱{estimatedAmount.toFixed(2)}</p>
-                                    </motion.div>
-                                </div>
-
                                 <StudentCompensationView />
                             </motion.div>
                         )}
@@ -515,7 +452,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                             My Schedule
                                         </h1>
                                         <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
-                                            Your official assigned duty shifts. Formal edits require WSPO review and approval.
+                                            Your duty shifts and class schedule. Clock-in follows the work schedule. Formal duty edits require WSPO review.
                                         </p>
                                     </div>
 
@@ -524,14 +461,15 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Need a change?</span>
                                             <span className="text-sm text-slate-500">Submit a formal request.</span>
                                         </div>
-                                        <button onClick={() => setIsEditModalOpen(true)} disabled={schedule.length === 0} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl transition-colors shadow-lg shadow-blue-900/50 disabled:opacity-50">
+                                        <button onClick={() => setIsEditModalOpen(true)} disabled={schedule.filter((shift) => shift.kind !== 'class').length === 0} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl transition-colors shadow-lg shadow-blue-900/50 disabled:opacity-50">
                                             Request Edit
                                         </button>
                                     </div>
                                 </motion.div>
 
                                 <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-8">
-                                    {schedule.length === 0 ? (
+                                    <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2"><Briefcase className="w-5 h-5 text-blue-600" /> Work schedule</h2>
+                                    {schedule.filter((shift) => shift.kind !== 'class').length === 0 ? (
                                         <div className="py-16 flex flex-col items-center justify-center text-center text-slate-400">
                                             <CalendarRange className="w-16 h-16 mb-4 opacity-20" />
                                             <p className="text-lg font-bold text-slate-600">No shifts assigned yet</p>
@@ -539,7 +477,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                         </div>
                                     ) : (
                                         <div className="space-y-4">
-                                            {schedule.map((shift) => (
+                                            {schedule.filter((shift) => shift.kind !== 'class').map((shift) => (
                                                 <motion.div variants={cardVariants} key={shift.id} className={`flex flex-col sm:flex-row sm:items-center justify-between p-5 rounded-2xl border transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 ${shift.edit_request_status === 'pending' ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200 hover:border-blue-300'}`}>
                                                     <div className="flex items-center gap-5 mb-4 sm:mb-0">
                                                         <div className="w-16 h-16 rounded-xl bg-blue-50 flex flex-col items-center justify-center text-blue-700 border border-blue-100 shadow-inner">
@@ -562,6 +500,39 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                                         <div className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
                                                             <UserCircle className="w-4 h-4 text-slate-400" /> Supervisor: {shift.supervisor}
                                                         </div>
+                                                    </div>
+                                                </motion.div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="bg-white rounded-2xl border border-violet-100 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-8">
+                                    <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2"><GraduationCap className="w-5 h-5 text-violet-600" /> Class schedule</h2>
+                                    {schedule.filter((shift) => shift.kind === 'class').length === 0 ? (
+                                        <div className="py-10 flex flex-col items-center justify-center text-center text-slate-400">
+                                            <GraduationCap className="w-12 h-12 mb-3 opacity-20" />
+                                            <p className="text-base font-bold text-slate-600">No class schedule yet</p>
+                                            <p className="text-sm mt-1">The WSPO coordinator or secretary can add your class hours beside your work schedule.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            {schedule.filter((shift) => shift.kind === 'class').map((shift) => (
+                                                <motion.div variants={cardVariants} key={shift.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-5 rounded-2xl border border-violet-100 bg-violet-50/40">
+                                                    <div className="flex items-center gap-5 mb-4 sm:mb-0">
+                                                        <div className="w-16 h-16 rounded-xl bg-white flex flex-col items-center justify-center text-violet-700 border border-violet-100">
+                                                            <span className="text-sm font-semibold uppercase tracking-wider">{shift.day.substring(0, 3)}</span>
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-semibold text-slate-900 text-xl tracking-tight">{shift.time}</div>
+                                                            <div className="text-xs font-bold text-violet-700 uppercase tracking-widest mt-0.5">{shift.subject || shift.duty_type}</div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-col items-start sm:items-end gap-1.5 pl-20 sm:pl-0">
+                                                        {shift.room && <div className="text-sm font-bold text-slate-900">{shift.room}</div>}
+                                                        {(shift.instructor || shift.supervisor) && (
+                                                            <div className="text-xs font-medium text-slate-500">Instructor: {shift.instructor || shift.supervisor}</div>
+                                                        )}
                                                     </div>
                                                 </motion.div>
                                             ))}
@@ -868,7 +839,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Select Shift</label>
                                 <select required value={selectedShiftId} onChange={(e) => setSelectedShiftId(Number(e.target.value))} className="w-full p-3.5 border border-slate-200 bg-slate-50 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all appearance-none cursor-pointer">
                                     <option value="" disabled>-- Select a shift --</option>
-                                    {schedule.map(shift => <option key={shift.id} value={shift.id}>{shift.day} ({shift.time})</option>)}
+                                    {schedule.filter((shift) => shift.kind !== 'class').map(shift => <option key={shift.id} value={shift.id}>{shift.day} ({shift.time})</option>)}
                                 </select>
                             </div>
                             <div>

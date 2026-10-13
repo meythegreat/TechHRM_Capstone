@@ -24,7 +24,6 @@ const staffNavItems: NavItem[] = [
     { id: 'schedules', label: 'Schedules', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M8 3v4m8-4v4M5 9h14M5 5h14v16H5z" /> },
     { id: 'requirements', label: 'Document Review', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7V3h7l5 5v11a2 2 0 01-2 2z" /> },
     { id: 'pipeline', label: 'Applications', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M4 4h16v16H4zM8 8h8m-8 4h8m-8 4h5" /> },
-    { id: 'tasks', label: 'Task Management', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2" /> },
     { id: 'attendance-hub', label: 'Attendance Hub', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4" /> },
     { id: 'compliance', label: 'Compliance', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M5.1 19h13.8L12 4 5.1 19z" /> },
     { id: 'logs', label: 'Audit Trail', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M6 3h9l3 3v15H6zM9 10h6m-6 4h6" /> },

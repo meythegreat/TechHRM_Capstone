@@ -16,7 +16,16 @@ const QRCode = require('qrcode') as {
 
 function clientAddress(req: IncomingMessage): string {
   const raw = req.socket.remoteAddress ?? ''
-  return raw.startsWith('::ffff:') ? raw.slice('::ffff:'.length) : raw
+  const socketIp = raw.startsWith('::ffff:') ? raw.slice('::ffff:'.length) : raw
+  // Apache on this machine reverse-proxies port 80, so the socket is loopback.
+  // Keep the visitor address Apache already put in X-Forwarded-For.
+  const loopback = socketIp === '127.0.0.1' || socketIp === '::1'
+  const forwarded = req.headers['x-forwarded-for']
+  if (loopback && typeof forwarded === 'string' && forwarded.trim()) {
+    const client = forwarded.split(',')[0]?.trim() ?? ''
+    if (client) return client
+  }
+  return socketIp
 }
 
 function apiProxy(): ProxyOptions {

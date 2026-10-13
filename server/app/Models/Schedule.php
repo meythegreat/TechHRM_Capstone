@@ -11,13 +11,17 @@ class Schedule extends Model
 
     protected $fillable = [
         'user_id',
+        'kind',
         'day',
         'time',
         'duty_type',
+        'subject',
+        'room',
+        'instructor',
         'department',
         'supervisor',
         'edit_request_note',
-        'edit_request_status',  
+        'edit_request_status',
     ];
 
     // Link back to the user

@@ -249,6 +249,40 @@
     border: 1px solid #2a3950 !important;
     color: #f8fafc;
   }
+
+  /* The accounting summary is a paper form and stays light in dark mode. */
+  html.dark .hours-summary-paper {
+    background-color: #fff;
+    color: #000;
+    color-scheme: light;
+    border-color: #cbd5e1;
+  }
+
+  html.dark .hours-summary-paper * {
+    color: #000;
+    border-color: #000;
+  }
+}
+
+/* Accounting summary is a paper form. Keep it white with black text in both themes. */
+.hours-summary-paper {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  color-scheme: light;
+  border-color: #cbd5e1 !important;
+  -webkit-text-fill-color: #000000;
+}
+
+.hours-summary-paper * {
+  color: #000000 !important;
+  border-color: #000000 !important;
+  -webkit-text-fill-color: #000000;
+  background-color: transparent;
+}
+
+.hours-summary-paper img {
+  background-color: transparent !important;
+  -webkit-text-fill-color: initial;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -342,6 +376,18 @@
   .dtr-logo {
     width: 46px !important;
     height: 46px !important;
+  }
+
+  .hours-summary-sheet {
+    width: auto !important;
+    max-width: none !important;
+    margin: 12mm !important;
+  }
+
+  .hours-summary-sheet .sign-input {
+    border: 0 !important;
+    border-bottom: 1px solid #000 !important;
+    box-shadow: none !important;
   }
 }
 

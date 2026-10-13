@@ -33,7 +33,6 @@ const STAFF_PAGE_TITLES: Record<string, string> = {
   schedules: 'Schedules',
   requirements: 'Document Review',
   pipeline: 'Applications',
-  tasks: 'Task Management',
   'attendance-hub': 'Attendance Hub',
   compliance: 'Compliance',
   logs: 'Audit Trail',
@@ -55,7 +54,6 @@ const STUDENT_PAGE_TITLES: Record<string, string> = {
   settings: 'Settings',
 };
 import ApplicationManager from './components/ApplicationManager';
-import TaskAssignmentManager from './components/TaskAssignmentManager';
 import SupervisorAttendanceHub from './components/SupervisorAttendanceHub';
 import DisciplinaryManager from './components/DisciplinaryManager';
 import AdminAnalyticsDashboard from './components/AdminAnalyticsDashboard';
@@ -365,7 +363,6 @@ function App() {
                 <Route path="/schedules" element={<ScheduleManagement />} />
                 <Route path="/requirements" element={<RequirementManagement />} />
                 <Route path="/pipeline" element={<ApplicationManager />} />
-                <Route path="/tasks" element={<TaskAssignmentManager />} />
                 <Route path="/attendance-hub" element={userRole === 'Super Admin' ? <SuperAdminAttendanceAudit /> : <SupervisorAttendanceHub />} />
                 <Route path="/compliance" element={<DisciplinaryManager />} />
                 
