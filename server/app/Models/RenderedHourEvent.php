@@ -35,6 +35,7 @@ class RenderedHourEvent extends Model
         'direction',
         'year_level',
         'group_name',
+        'group_id',
         'starts_at',
         'valid_until',
         'notes',

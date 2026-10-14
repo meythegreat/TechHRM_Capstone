@@ -9,6 +9,7 @@ import {
     AlertCircle,
     Award,
 } from 'lucide-react';
+import OrganizationScheduleCalendar from './OrganizationScheduleCalendar';
 
 interface DashboardData {
     total_hours_rendered: number;
@@ -299,6 +300,8 @@ const StudentOverview = () => {
                     </motion.section>
                 </div>
             </motion.div>
+
+            <OrganizationScheduleCalendar />
 
             <motion.section
                 variants={containerVariants}

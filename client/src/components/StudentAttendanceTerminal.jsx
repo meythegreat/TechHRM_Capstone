@@ -53,6 +53,7 @@ const StudentAttendanceTerminal = () => {
     const [tokenInput, setTokenInput] = useState('');
     const [checkInMethod, setCheckInMethod] = useState('passcode');
     const scanBusy = useRef(false);
+    const repeatGuard = useRef({ code: '', quietFrames: 0 });
     const actionRef = useRef(null);
     const scannerRef = useRef(null);
     const [cameraLive, setCameraLive] = useState(false);
@@ -190,6 +191,9 @@ const StudentAttendanceTerminal = () => {
             await loadSummary();
             await loadDtr();
         } catch (err) {
+            if (method === 'qr') {
+                repeatGuard.current = { code, quietFrames: 0 };
+            }
             scanBusy.current = false;
             playAccessRejectedSound();
             setErrorMsg(err.response?.data?.message || 'Failed to verify token and clock in.');
@@ -217,6 +221,9 @@ const StudentAttendanceTerminal = () => {
             await loadSummary();
             await loadDtr();
         } catch (err) {
+            if (method === 'qr') {
+                repeatGuard.current = { code, quietFrames: 0 };
+            }
             scanBusy.current = false;
             playAccessRejectedSound();
             setErrorMsg(err.response?.data?.message || 'Failed to verify token and clock out.');
@@ -236,6 +243,7 @@ const StudentAttendanceTerminal = () => {
         setCameraLive(false);
         return () => {
             scanBusy.current = false;
+            repeatGuard.current = { code: '', quietFrames: 0 };
             const scanner = scannerRef.current;
             scannerRef.current = null;
             if (scanner?.isScanning) {
@@ -274,6 +282,11 @@ const StudentAttendanceTerminal = () => {
                     if (!activity && !raw.startsWith('THRM1|')) return;
                     const code = raw.slice(activity ? 7 : 6).trim();
                     if (code.length < 16) return;
+                    if (repeatGuard.current.code === code) {
+                        repeatGuard.current.quietFrames = 0;
+                        return;
+                    }
+                    repeatGuard.current.quietFrames = 0;
                     scanBusy.current = true;
                     if (activity) {
                         clockInWith(code, 'qr');
@@ -281,7 +294,13 @@ const StudentAttendanceTerminal = () => {
                     }
                     actionRef.current?.(code, 'qr');
                 },
-                () => {}
+                () => {
+                    if (scanBusy.current || !repeatGuard.current.code) return;
+                    repeatGuard.current.quietFrames += 1;
+                    if (repeatGuard.current.quietFrames >= 10) {
+                        repeatGuard.current = { code: '', quietFrames: 0 };
+                    }
+                }
             );
             setCameraLive(true);
         } catch (err) {

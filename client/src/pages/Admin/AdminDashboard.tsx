@@ -21,6 +21,7 @@ import SuperAdminDashboard from '../../components/SuperAdminDashboard';
 import { bindPopup } from '../../utils/popupDismiss';
 import { REALTIME_EVENT } from '../../utils/realtime';
 import UserAvatar from '../../components/UserAvatar';
+import OrganizationScheduleCalendar from '../../components/OrganizationScheduleCalendar';
 import { formatYearLevel, homeDepartment } from '../../utils/studentAssignment';
 
 const AdminDashboard = () => {
@@ -351,6 +352,8 @@ const AdminDashboard = () => {
                     <p className="text-sm text-slate-500 mt-4 font-medium">Total productive hours recorded.</p>
                 </motion.div>
             </motion.div>
+
+            <OrganizationScheduleCalendar />
 
             <motion.div
                     initial={{ opacity: 0, y: 20 }}

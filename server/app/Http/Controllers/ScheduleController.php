@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Office;
 use App\Models\Schedule;
+use App\Models\SemesterTerm;
 use App\Models\User;
 use App\Support\SuperAdminAudit;
 use Illuminate\Http\Request;
@@ -40,12 +42,67 @@ class ScheduleController extends Controller
             $query->where('kind', $request->query('kind'));
         }
 
+        $name = trim((string) $request->query('name', ''));
+        if ($name !== '') {
+            $like = '%'.addcslashes($name, '%_\\').'%';
+            $query->whereHas('user', function ($relation) use ($like, $user) {
+                if ($user->role === 'Super Admin') {
+                    $relation->withTrashed();
+                }
+                $relation->where('name', 'like', $like);
+            });
+        }
+
+        $day = trim((string) $request->query('day', ''));
+        if (in_array($day, ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], true)) {
+            $query->where('day', $day);
+        }
+
         if ($request->boolean('audit') && $user->role === 'Super Admin') {
             return response()->json($query->latest()->get());
         }
 
         $schedules = $query->latest()->paginate(10);
         return response()->json($schedules);
+    }
+
+    /**
+     * Recurring work and class schedules for the organization calendar.
+     * Shown on Student, Supervisor, WSPO Staff, and Super Admin dashboards.
+     */
+    public function organization(Request $request)
+    {
+        $user = $request->user();
+        abort_unless(in_array($user->role, ['Student', 'Supervisor', 'WSPO Staff', 'Super Admin'], true), 403);
+
+        $schedules = Schedule::with('user:id,name,profile_picture')
+            ->whereHas('user')
+            ->orderBy('day')
+            ->orderBy('time')
+            ->get()
+            ->map(function (Schedule $shift) {
+                return [
+                    'id' => $shift->id,
+                    'day' => $shift->day,
+                    'time' => $shift->time,
+                    'kind' => $shift->kind ?: 'work',
+                    'duty_type' => $shift->duty_type,
+                    'subject' => $shift->subject,
+                    'room' => $shift->room,
+                    'instructor' => $shift->instructor,
+                    'department' => $shift->department,
+                    'student_name' => $shift->user?->name ?? 'Student',
+                    'profile_picture' => $shift->user?->profile_picture,
+                ];
+            })
+            ->values();
+
+        return response()->json([
+            'scope' => 'Organization',
+            'semester' => SemesterTerm::current()?->toPayload(),
+            'offices' => Office::query()->orderBy('name')->pluck('name')->values(),
+            'schedules' => $schedules,
+        ]);
     }
 
     // 3. For Assigning a New Shift (WITH SMART OVERLAP PREVENTION)
@@ -63,6 +120,12 @@ class ScheduleController extends Controller
             'room' => 'nullable|string|max:120',
             'instructor' => 'nullable|string|max:120',
         ]);
+
+        if (! SemesterTerm::current()) {
+            return response()->json([
+                'message' => 'Set the semester length before creating a schedule. Weekly schedules repeat only inside that window.',
+            ], 422);
+        }
 
         $kind = $validated['kind'] ?? 'work';
         $student = User::with('profile')->where('role', 'Student')->findOrFail($validated['user_id']);

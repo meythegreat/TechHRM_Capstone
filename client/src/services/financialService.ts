@@ -71,6 +71,23 @@ export const financialService = {
     return response.data;
   },
 
+  getCleaningGroups: async () => {
+    const response = await axios.get(`${API_BASE_URL}/financial/cleaning-groups`, getAuthHeaders());
+    return response.data;
+  },
+
+  saveCleaningGroup: async (payload: { name: string; user_ids: number[] }, id?: number) => {
+    const response = id
+      ? await axios.put(`${API_BASE_URL}/financial/cleaning-groups/${id}`, payload, getAuthHeaders())
+      : await axios.post(`${API_BASE_URL}/financial/cleaning-groups`, payload, getAuthHeaders());
+    return response.data;
+  },
+
+  deleteCleaningGroup: async (id: number) => {
+    const response = await axios.delete(`${API_BASE_URL}/financial/cleaning-groups/${id}`, getAuthHeaders());
+    return response.data;
+  },
+
   getHourStudents: async () => {
     const response = await axios.get(`${API_BASE_URL}/financial/hour-events/students`, getAuthHeaders());
     return response.data;

@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type FormEvent } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import Toast from './Toast';
-import { REALTIME_EVENT } from '../utils/realtime';
+import { REALTIME_EVENT, emitRealtimeRefresh } from '../utils/realtime';
 import { bindPopup } from '../utils/popupDismiss';
 import UserAvatar from './UserAvatar';
 import { withHomeDepartmentNote } from '../utils/studentAssignment';
@@ -10,7 +10,6 @@ import {
     CalendarDays, 
     Clock, 
     Plus, 
-    User, 
     Users,
     CheckCircle2, 
     AlertCircle, 
@@ -23,7 +22,6 @@ import {
     Briefcase,
     ShieldCheck,
     Send,
-    Search,
     GraduationCap
 } from 'lucide-react';
 import AuditPager, { pageSlice } from './AuditPager';
@@ -31,6 +29,33 @@ import ComboFilter from './ComboFilter';
 
 const HOUR_OPTIONS = Array.from({ length: 12 }, (_, index) => String(index + 1));
 const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0'));
+const SEMESTER_MONTH_OPTIONS = [4, 5, 6];
+
+function semesterEndDate(start: string, months: number) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(start);
+    if (!match) return '';
+    const end = new Date(Number(match[1]), Number(match[2]) - 1 + months, Number(match[3]));
+    end.setDate(end.getDate() - 1);
+    const month = String(end.getMonth() + 1).padStart(2, '0');
+    const day = String(end.getDate()).padStart(2, '0');
+    return `${end.getFullYear()}-${month}-${day}`;
+}
+
+function formatSemesterDate(iso: string) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    if (!match) return iso;
+    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])).toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+    });
+}
+
+function suggestedSemesterStart() {
+    const now = new Date();
+    const year = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+    return `${year}-08-01`;
+}
 
 const scheduleMatchesClock = (rawTime: string, hour: string, minute: string, meridiem: string) => {
     const wantedHour = hour.trim();
@@ -66,6 +91,14 @@ interface UserData {
         year_level?: string | number | null;
         gender?: string | null;
     }
+}
+
+interface SemesterTerm {
+    id: number;
+    label: string;
+    starts_on: string;
+    ends_on: string;
+    months: number;
 }
 
 interface Schedule {
@@ -105,11 +138,21 @@ const ScheduleManagement = () => {
     const currentUserRole = localStorage.getItem('user_role') || '';
     const assignedOffice = (localStorage.getItem('assigned_office') || '').trim().toLowerCase();
     const canManageSchedules = currentUserRole === 'WSPO Staff' && ['', 'wspo', 'unassigned', 'wspo coordinator', 'wspo secretary'].includes(assignedOffice);
+    const canSetSemester = currentUserRole === 'WSPO Staff' || currentUserRole === 'Super Admin';
     const isAudit = currentUserRole === 'Super Admin';
-    const [auditFilters, setAuditFilters] = useState({ date: '', hour: '', minute: '', meridiem: '', department: '', name: '' });
+    const [semester, setSemester] = useState<SemesterTerm | null>(null);
+    const [semesterForm, setSemesterForm] = useState(() => {
+        const starts_on = suggestedSemesterStart();
+        return { label: '1st Semester', starts_on, ends_on: semesterEndDate(starts_on, 5), months: 5 };
+    });
+    const [semesterSaving, setSemesterSaving] = useState(false);
+    const [auditFilters, setAuditFilters] = useState({ date: '', hour: '', minute: '', meridiem: '', department: '' });
+    const [nameFilter, setNameFilter] = useState('');
+    const [dayFilter, setDayFilter] = useState('');
     const [departments, setDepartments] = useState<string[]>([]);
-    const [requestPage, setRequestPage] = useState(1);
     const [schedulePage, setSchedulePage] = useState(1);
+    const [requestSlide, setRequestSlide] = useState(0);
+    const [requestSlideDirection, setRequestSlideDirection] = useState(1);
     const [listKind, setListKind] = useState<'all' | 'work' | 'class'>('all');
     const [entryKind, setEntryKind] = useState<'work' | 'class'>('work');
     const [staffingRequests, setStaffingRequests] = useState<any[]>([]);
@@ -131,12 +174,17 @@ const ScheduleManagement = () => {
     const [formData, setFormData] = useState(emptyForm);
 
     const openScheduleModal = (kind: 'work' | 'class') => {
+        if (!semester) {
+            showToast('Set the semester length before creating a schedule.', 'error');
+            return;
+        }
         setEntryKind(kind);
         setFormData(emptyForm);
         setIsModalOpen(true);
     };
 
     useEffect(() => {
+        fetchSemester();
         fetchStudents();
         fetchStaffingRequests();
         if (currentUserRole !== 'Supervisor') {
@@ -157,7 +205,7 @@ const ScheduleManagement = () => {
     useEffect(() => {
         if (isAudit) return;
         fetchSchedules(currentPage);
-    }, [currentPage, listKind]);
+    }, [currentPage, listKind, nameFilter, dayFilter]);
 
     useEffect(() => {
         if (!isAudit) return;
@@ -167,6 +215,49 @@ const ScheduleManagement = () => {
     const showToast = (text: string, type: 'success' | 'error') => {
         setToastMsg({ text, type });
     };
+
+    const fetchSemester = async () => {
+        try {
+            const response = await axios.get('/api/semester');
+            const next = response.data?.semester ?? null;
+            setSemester(next);
+            if (next) {
+                setSemesterForm({
+                    label: next.label || '1st Semester',
+                    starts_on: String(next.starts_on).slice(0, 10),
+                    ends_on: String(next.ends_on).slice(0, 10),
+                    months: Number(next.months) || 5,
+                });
+            }
+        } catch (error) {
+            console.error('Failed to fetch semester', error);
+        }
+    };
+
+    const saveSemester = async (event: FormEvent) => {
+        event.preventDefault();
+        if (!canSetSemester || semesterSaving) return;
+        setSemesterSaving(true);
+        try {
+            const response = await axios.put('/api/semester', {
+                label: semesterForm.label.trim(),
+                starts_on: semesterForm.starts_on,
+                ends_on: semesterForm.ends_on,
+            });
+            setSemester(response.data.semester);
+            showToast(response.data.message || 'Semester window saved.', 'success');
+            emitRealtimeRefresh();
+        } catch (error: any) {
+            const fieldError = error.response?.data?.errors?.label?.[0]
+                || error.response?.data?.errors?.starts_on?.[0]
+                || error.response?.data?.errors?.ends_on?.[0];
+            showToast(fieldError || error.response?.data?.message || 'Failed to save the semester.', 'error');
+        } finally {
+            setSemesterSaving(false);
+        }
+    };
+
+    const semesterDatesValid = Boolean(semesterForm.starts_on && semesterForm.ends_on && semesterForm.ends_on >= semesterForm.starts_on);
 
     const fetchStaffingRequests = async () => {
         try {
@@ -302,7 +393,9 @@ const ScheduleManagement = () => {
         if (!silent) setIsLoading(true);
         try {
             const kindQuery = listKind === 'all' ? '' : `&kind=${listKind}`;
-            const response = await axios.get(isAudit ? `/api/schedules?audit=1${kindQuery}` : `/api/schedules?page=${page}${kindQuery}`);
+            const nameQuery = !isAudit && nameFilter.trim() ? `&name=${encodeURIComponent(nameFilter.trim())}` : '';
+            const dayQuery = !isAudit && dayFilter ? `&day=${encodeURIComponent(dayFilter)}` : '';
+            const response = await axios.get(isAudit ? `/api/schedules?audit=1${kindQuery}` : `/api/schedules?page=${page}${kindQuery}${nameQuery}${dayQuery}`);
             if (isAudit) {
                 setSchedules(Array.isArray(response.data) ? response.data : []);
                 setTotalPages(1);
@@ -331,7 +424,7 @@ const ScheduleManagement = () => {
             clearInterval(interval);
             window.removeEventListener(REALTIME_EVENT, refresh);
         };
-    }, [currentPage, listKind]);
+    }, [currentPage, listKind, nameFilter, dayFilter]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -418,30 +511,67 @@ const ScheduleManagement = () => {
 
     const filteredRequests = useMemo(() => {
         if (!isAudit) return staffingRequests;
-        const name = auditFilters.name.trim().toLowerCase();
+        const name = nameFilter.trim().toLowerCase();
         return staffingRequests.filter((request) => {
             if (auditFilters.department && request.department !== auditFilters.department) return false;
             if (auditFilters.date && String(request.created_at || '').slice(0, 10) !== auditFilters.date) return false;
-            if (name && !`${request.requester?.name || ''} ${request.department}`.toLowerCase().includes(name)) return false;
+            if (name && !`${request.requester?.name || ''} ${request.department} ${(request.assigned_students || []).map((student: UserData) => student.name).join(' ')}`.toLowerCase().includes(name)) return false;
             return true;
         });
-    }, [isAudit, staffingRequests, auditFilters]);
+    }, [isAudit, staffingRequests, auditFilters, nameFilter]);
+
+    const studentNames = useMemo(() => {
+        const names = new Set<string>();
+        students.forEach((student) => {
+            const name = student.name?.trim();
+            if (name) names.add(name);
+        });
+        schedules.forEach((schedule) => {
+            const name = schedule.user?.name?.trim();
+            if (name) names.add(name);
+        });
+        staffingRequests.forEach((request) => {
+            const requester = request.requester?.name?.trim();
+            if (requester) names.add(requester);
+            (request.assigned_students || []).forEach((student: UserData) => {
+                const name = student.name?.trim();
+                if (name) names.add(name);
+            });
+        });
+        return Array.from(names).sort((left, right) => left.localeCompare(right));
+    }, [students, schedules, staffingRequests]);
+
+    const applyNameFilter = (name: string) => {
+        setNameFilter(name);
+        setCurrentPage(1);
+        setRequestSlide(0);
+        setSchedulePage(1);
+    };
+
+    const applyDayFilter = (day: string) => {
+        setDayFilter(day);
+        setCurrentPage(1);
+        setSchedulePage(1);
+    };
+
+    const listFiltersActive = Boolean(nameFilter.trim() || dayFilter);
 
     const filteredSchedules = useMemo(() => {
         if (!isAudit) return schedules;
-        const name = auditFilters.name.trim().toLowerCase();
+        const name = nameFilter.trim().toLowerCase();
         return schedules.filter((schedule) => {
             if (auditFilters.department && schedule.department !== auditFilters.department) return false;
             if (auditWeekday && schedule.day !== auditWeekday) return false;
             if (!scheduleMatchesClock(schedule.time, auditFilters.hour, auditFilters.minute, auditFilters.meridiem)) return false;
+            if (dayFilter && schedule.day !== dayFilter) return false;
             if (name && !`${schedule.user?.name || ''} ${schedule.supervisor || ''}`.toLowerCase().includes(name)) return false;
             return true;
         });
-    }, [isAudit, schedules, auditFilters, auditWeekday]);
+    }, [isAudit, schedules, auditFilters, auditWeekday, nameFilter, dayFilter]);
 
-    const pagedRequests = pageSlice(filteredRequests, requestPage);
     const pagedSchedules = pageSlice(filteredSchedules, schedulePage);
-    const visibleRequests = isAudit ? pagedRequests.rows : staffingRequests;
+    const requestSlides = isAudit ? filteredRequests : staffingRequests;
+    const requestSlideIndex = requestSlides.length === 0 ? 0 : Math.min(requestSlide, requestSlides.length - 1);
     const visibleSchedules = isAudit ? pagedSchedules.rows : schedules;
 
     return (
@@ -464,34 +594,136 @@ const ScheduleManagement = () => {
                     </h1>
                     <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                         {isAudit
-                            ? 'Read-only list of department requests and assigned schedules across offices.'
+                            ? 'Set the semester window, then review department requests and assigned schedules. Other changes stay read-only.'
                             : canManageSchedules
-                                ? 'Assign duty hours and record class schedules for the same student. Clock-in follows the work schedule only.'
+                                ? 'Set how long the semester runs, then assign duty hours and class schedules. Those entries repeat each week until the semester ends.'
                                 : 'Work and class schedules are recorded by the WSPO coordinator or secretary. You can review the entries already set for your department.'}
                     </p>
                 </div>
 
                 {canManageSchedules && <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex flex-wrap items-center justify-end gap-3">
                     <button
+                        type="button"
                         onClick={() => openScheduleModal('class')}
-                        className="px-5 py-2.5 bg-white hover:bg-violet-50 text-violet-700 border border-violet-200 font-bold text-sm rounded-xl transition-colors flex items-center gap-2"
+                        disabled={!semester}
+                        className="px-5 py-2.5 bg-white hover:bg-violet-50 text-violet-700 border border-violet-200 font-bold text-sm rounded-xl transition-colors flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
                     >
                         <GraduationCap className="w-4 h-4" /> Add Class
                     </button>
-                    <button 
+                    <button
+                        type="button"
                         onClick={() => openScheduleModal('work')}
-                        className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl transition-colors shadow-lg shadow-blue-900/50 flex items-center gap-2"
+                        disabled={!semester}
+                        className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl transition-colors shadow-lg shadow-blue-900/50 flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <Plus className="w-4 h-4" /> Assign Shift
                     </button>
                 </div>}
             </motion.div>
 
+            {canSetSemester ? (
+                <form onSubmit={saveSemester} className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-6">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <h2 className="text-lg font-semibold text-slate-900">Semester length</h2>
+                            <p className="mt-1 max-w-2xl text-sm text-slate-500">
+                                Set this before creating schedules. A semester usually lasts 5 months, and weekly schedules repeat only between the start and end dates.
+                            </p>
+                        </div>
+                        {semester && (
+                            <p className="text-sm font-medium text-slate-700">
+                                Current: {semester.label}, {formatSemesterDate(semester.starts_on)} – {formatSemesterDate(semester.ends_on)}
+                            </p>
+                        )}
+                    </div>
+                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5 lg:items-end">
+                        <label className="block">
+                            <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-slate-500">Semester</span>
+                            <input
+                                value={semesterForm.label}
+                                onChange={(event) => setSemesterForm((current) => ({ ...current, label: event.target.value }))}
+                                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-blue-600"
+                                placeholder="1st Semester"
+                                maxLength={80}
+                                required
+                            />
+                        </label>
+                        <label className="block">
+                            <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-slate-500">Starts</span>
+                            <input
+                                type="date"
+                                value={semesterForm.starts_on}
+                                onChange={(event) => {
+                                    const starts_on = event.target.value;
+                                    setSemesterForm((current) => ({
+                                        ...current,
+                                        starts_on,
+                                        ends_on: current.ends_on && current.ends_on >= starts_on
+                                            ? current.ends_on
+                                            : semesterEndDate(starts_on, current.months),
+                                    }));
+                                }}
+                                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-blue-600"
+                                required
+                            />
+                        </label>
+                        <label className="block">
+                            <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-slate-500">Ends</span>
+                            <input
+                                type="date"
+                                value={semesterForm.ends_on}
+                                min={semesterForm.starts_on}
+                                onChange={(event) => setSemesterForm((current) => ({ ...current, ends_on: event.target.value }))}
+                                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-blue-600"
+                                required
+                            />
+                        </label>
+                        <label className="block">
+                            <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-slate-500">Length</span>
+                            <select
+                                value={semesterForm.months}
+                                onChange={(event) => {
+                                    const months = Number(event.target.value);
+                                    setSemesterForm((current) => ({
+                                        ...current,
+                                        months,
+                                        ends_on: semesterEndDate(current.starts_on, months),
+                                    }));
+                                }}
+                                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-blue-600"
+                            >
+                                {SEMESTER_MONTH_OPTIONS.map((months) => (
+                                    <option key={months} value={months}>{months} months</option>
+                                ))}
+                            </select>
+                        </label>
+                        <button
+                            type="submit"
+                            disabled={semesterSaving || !semesterDatesValid || !semesterForm.label.trim()}
+                            className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {semesterSaving ? 'Saving...' : semester ? 'Update semester' : 'Save semester'}
+                        </button>
+                    </div>
+                    {semesterForm.starts_on && semesterForm.ends_on && (
+                        <p className={`mt-3 text-sm ${semesterDatesValid ? 'text-slate-600' : 'text-rose-600'}`}>
+                            {semesterDatesValid
+                                ? <>Schedules repeat each week from <span className="font-semibold text-slate-900">{formatSemesterDate(semesterForm.starts_on)}</span> through <span className="font-semibold text-slate-900">{formatSemesterDate(semesterForm.ends_on)}</span>.</>
+                                : 'The end date must be on or after the start date.'}
+                        </p>
+                    )}
+                </form>
+            ) : semester ? (
+                <div className="rounded-2xl border border-slate-200/80 bg-white px-5 py-4 text-sm text-slate-600 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+                    <span className="font-semibold text-slate-900">{semester.label}</span> runs {formatSemesterDate(semester.starts_on)} through {formatSemesterDate(semester.ends_on)}. Weekly schedules repeat only inside that window.
+                </div>
+            ) : null}
+
             {isAudit && (
                 <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 grid grid-cols-1 lg:grid-cols-[auto_1fr_auto_auto] gap-3 items-end">
                     <label className="block">
                         <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Date</span>
-                        <input type="date" value={auditFilters.date} onChange={(event) => { setAuditFilters({ ...auditFilters, date: event.target.value }); setRequestPage(1); setSchedulePage(1); }} className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none" />
+                        <input type="date" value={auditFilters.date} onChange={(event) => { setAuditFilters({ ...auditFilters, date: event.target.value }); setRequestSlide(0); setSchedulePage(1); }} className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none" />
                     </label>
                     <div>
                         <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Time</span>
@@ -503,14 +735,15 @@ const ScheduleManagement = () => {
                     </div>
                     <label className="block min-w-[220px]">
                         <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Department</span>
-                        <ComboFilter commitOnType={false} value={auditFilters.department} onChange={(department) => { setAuditFilters({ ...auditFilters, department }); setRequestPage(1); setSchedulePage(1); }} options={departments} placeholder="All departments" emptyLabel="All departments" />
+                        <ComboFilter commitOnType={false} value={auditFilters.department} onChange={(department) => { setAuditFilters({ ...auditFilters, department }); setRequestSlide(0); setSchedulePage(1); }} options={departments} placeholder="All departments" emptyLabel="All departments" />
                     </label>
-                    <label className="block">
+                    <label className="block min-w-[220px]">
                         <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Name</span>
-                        <span className="flex items-center gap-2 px-3 bg-slate-50 border border-slate-200 rounded-xl">
-                            <Search className="w-4 h-4 text-slate-400" />
-                            <input value={auditFilters.name} onChange={(event) => { setAuditFilters({ ...auditFilters, name: event.target.value }); setRequestPage(1); setSchedulePage(1); }} placeholder="Name" className="w-full py-2.5 bg-transparent text-sm font-medium outline-none" />
-                        </span>
+                        <ComboFilter commitOnType={false} value={nameFilter} onChange={applyNameFilter} options={studentNames} placeholder="Search by name" emptyLabel="All names" />
+                    </label>
+                    <label className="block min-w-[180px]">
+                        <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Day</span>
+                        <ComboFilter commitOnType={false} value={dayFilter} onChange={applyDayFilter} options={weekdays} placeholder="All days" emptyLabel="All days" />
                     </label>
                 </div>
             )}
@@ -605,17 +838,62 @@ const ScheduleManagement = () => {
             {/* STAFFING REQUESTS LIST (WSPO & Admin View) */}
             {(isAudit ? filteredRequests.length > 0 || staffingRequests.length > 0 : staffingRequests.length > 0) && (
                 <div className="space-y-4">
-                    <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2 border-b border-slate-200 pb-2">
-                        <Briefcase className="w-5 h-5 text-indigo-600" />
-                        {currentUserRole === 'Supervisor' ? 'Your Active Staffing Requests' : isAudit ? 'Department Requests' : 'Pending Department Requests'}
-                    </h2>
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-                        {visibleRequests.map(request => {
+                    <div className="flex flex-col gap-3 border-b border-slate-200 pb-3 sm:flex-row sm:items-center sm:justify-between">
+                        <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                            <Briefcase className="w-5 h-5 text-indigo-600" />
+                            {currentUserRole === 'Supervisor' ? 'Your Active Staffing Requests' : isAudit ? 'Department Requests' : 'Pending Department Requests'}
+                        </h2>
+                        {requestSlides.length > 0 && (
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    disabled={requestSlideIndex === 0}
+                                    onClick={() => {
+                                        setRequestSlideDirection(-1);
+                                        setRequestSlide(requestSlideIndex - 1);
+                                    }}
+                                    className="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-40 transition-colors flex items-center gap-1 shadow-sm"
+                                >
+                                    <ChevronLeft className="w-4 h-4" /> Previous
+                                </button>
+                                <span className="min-w-[4.5rem] text-center text-sm font-bold text-slate-700">
+                                    {requestSlideIndex + 1} of {requestSlides.length}
+                                </span>
+                                <button
+                                    type="button"
+                                    disabled={requestSlideIndex >= requestSlides.length - 1}
+                                    onClick={() => {
+                                        setRequestSlideDirection(1);
+                                        setRequestSlide(requestSlideIndex + 1);
+                                    }}
+                                    className="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-40 transition-colors flex items-center gap-1 shadow-sm"
+                                >
+                                    Next <ChevronRight className="w-4 h-4" />
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    {requestSlides.length === 0 ? (
+                        <div className="bg-white border border-slate-200 rounded-2xl px-6 py-12 text-center text-slate-500 font-medium">
+                            No department requests match these filters.
+                        </div>
+                    ) : (
+                    <div className="relative overflow-hidden">
+                        <AnimatePresence mode="wait" initial={false}>
+                        {(() => {
+                            const request = requestSlides[requestSlideIndex];
                             const selectedIds = assignmentSelections[request.id] || [];
                             const assignedNames = assignedStudentNames(request);
-                            
+
                             return (
-                                <div key={request.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col justify-between hover:border-indigo-200 transition-colors">
+                                <motion.div
+                                    key={request.id}
+                                    initial={{ opacity: 0, x: requestSlideDirection * 36 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: requestSlideDirection * -36 }}
+                                    transition={{ duration: 0.22 }}
+                                    className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col justify-between"
+                                >
                                     <div>
                                         <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                                             <div>
@@ -709,30 +987,45 @@ const ScheduleManagement = () => {
                                             </div>
                                         </div>
                                     )}
-                                </div>
+                                </motion.div>
                             );
-                        })}
+                        })()}
+                        </AnimatePresence>
                     </div>
-                    {isAudit && <AuditPager page={pagedRequests.page} totalPages={pagedRequests.totalPages} total={pagedRequests.total} onPage={setRequestPage} />}
+                    )}
                 </div>
             )}
 
             {/* MAIN SCHEDULES TABLE */}
-            <div className="flex flex-wrap items-center gap-2">
-                {([
-                    ['all', 'All schedules'],
-                    ['work', 'Work shifts'],
-                    ['class', 'Class schedules'],
-                ] as const).map(([value, label]) => (
-                    <button
-                        key={value}
-                        type="button"
-                        onClick={() => { setListKind(value); setCurrentPage(1); setSchedulePage(1); }}
-                        className={`px-4 py-2 rounded-xl text-sm font-bold border transition-colors ${listKind === value ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
-                    >
-                        {label}
-                    </button>
-                ))}
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div className="flex flex-wrap items-center gap-2">
+                    {([
+                        ['all', 'All schedules'],
+                        ['work', 'Work shifts'],
+                        ['class', 'Class schedules'],
+                    ] as const).map(([value, label]) => (
+                        <button
+                            key={value}
+                            type="button"
+                            onClick={() => { setListKind(value); setCurrentPage(1); setSchedulePage(1); }}
+                            className={`px-4 py-2 rounded-xl text-sm font-bold border transition-colors ${listKind === value ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
+                        >
+                            {label}
+                        </button>
+                    ))}
+                </div>
+                {!isAudit && (
+                    <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:w-auto lg:min-w-[28rem]">
+                        <label className="block">
+                            <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Search by name</span>
+                            <ComboFilter commitOnType={false} value={nameFilter} onChange={applyNameFilter} options={studentNames} placeholder="Search by name" emptyLabel="All names" />
+                        </label>
+                        <label className="block">
+                            <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Day</span>
+                            <ComboFilter commitOnType={false} value={dayFilter} onChange={applyDayFilter} options={weekdays} placeholder="All days" emptyLabel="All days" />
+                        </label>
+                    </div>
+                )}
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden relative min-h-[400px]">
@@ -766,8 +1059,8 @@ const ScheduleManagement = () => {
                                 <tr>
                                     <td colSpan={4} className="px-6 py-16 text-center text-slate-400">
                                         <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                                        <p className="text-base font-semibold text-slate-600">No schedules found</p>
-                                        <p className="text-sm font-medium">{canManageSchedules ? 'Assign a work shift or add a class schedule.' : 'The WSPO coordinator or secretary has not recorded a schedule yet.'}</p>
+                                        <p className="text-base font-semibold text-slate-600">{listFiltersActive ? 'No schedules match these filters' : 'No schedules found'}</p>
+                                        <p className="text-sm font-medium">{listFiltersActive ? 'Choose another name or day, or clear the filters.' : canManageSchedules ? 'Assign a work shift or add a class schedule.' : 'The WSPO coordinator or secretary has not recorded a schedule yet.'}</p>
                                     </td>
                                 </tr>
                             ) : (

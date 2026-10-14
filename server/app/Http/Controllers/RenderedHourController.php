@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\DailyCleaningGroup;
 use App\Models\RenderedHourEntry;
 use App\Models\RenderedHourEvent;
 use App\Models\User;
@@ -354,6 +355,7 @@ class RenderedHourController extends Controller
             'direction' => 'nullable|in:add,deduct',
             'year_level' => 'nullable|integer|min:1|max:4',
             'group_name' => 'nullable|string|max:80',
+            'group_id' => 'nullable|integer|exists:daily_cleaning_groups,id',
             'starts_at' => 'nullable|date_format:H:i',
             'valid_until' => 'nullable|date_format:H:i',
             'notes' => 'nullable|string|max:1000',
@@ -385,8 +387,10 @@ class RenderedHourController extends Controller
             $validated['valid_until'] = $start->copy()->addMinutes($window)->format('H:i');
         }
 
-        if ($kind === RenderedHourEvent::DAILY_CLEANING && trim((string) ($validated['group_name'] ?? '')) === '') {
-            abort(422, 'Name the cleaning group. Groups can mix year levels.');
+        if ($kind === RenderedHourEvent::DAILY_CLEANING) {
+            $group = $this->cleaningGroup($request);
+            $validated['group_id'] = $group->id;
+            $validated['group_name'] = $group->name;
         }
 
         if ($kind === RenderedHourEvent::GENERAL_CLEANING && empty($validated['year_level'])) {
@@ -423,6 +427,19 @@ class RenderedHourController extends Controller
         return $validated;
     }
 
+    private function cleaningGroup(Request $request): DailyCleaningGroup
+    {
+        $group = DailyCleaningGroup::query()->with('students')->find($request->input('group_id'));
+        if (!$group) {
+            abort(422, 'Choose a cleaning group.');
+        }
+        if ($group->students->isEmpty()) {
+            abort(422, 'That cleaning group has no students.');
+        }
+
+        return $group;
+    }
+
     /**
      * @param  array<string, mixed>  $validated
      * @return list<int>
@@ -433,10 +450,14 @@ class RenderedHourController extends Controller
             return [];
         }
 
-        $ids = collect($request->input('user_ids', []))
-            ->map(fn ($id) => (int) $id)
-            ->unique()
-            ->values();
+        if ($kind === RenderedHourEvent::DAILY_CLEANING) {
+            $ids = $this->cleaningGroup($request)->students->pluck('id')->map(fn ($id) => (int) $id)->unique()->values();
+        } else {
+            $ids = collect($request->input('user_ids', []))
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values();
+        }
 
         if ($ids->isEmpty()) {
             abort(422, 'Choose at least one student.');
@@ -485,6 +506,7 @@ class RenderedHourController extends Controller
             'direction' => $validated['direction'],
             'year_level' => $validated['kind'] === RenderedHourEvent::GENERAL_CLEANING ? ($validated['year_level'] ?? null) : null,
             'group_name' => $validated['kind'] === RenderedHourEvent::DAILY_CLEANING ? ($validated['group_name'] ?? null) : null,
+            'group_id' => $validated['kind'] === RenderedHourEvent::DAILY_CLEANING ? ($validated['group_id'] ?? null) : null,
             'starts_at' => $validated['starts_at'] ?? null,
             'valid_until' => $validated['valid_until'] ?? null,
             'notes' => $validated['notes'] ?? null,

@@ -20,6 +20,7 @@ import {
 import { REALTIME_EVENT } from '../utils/realtime';
 import { bindPopup } from '../utils/popupDismiss';
 import UserAvatar from './UserAvatar';
+import OrganizationScheduleCalendar from './OrganizationScheduleCalendar';
 
 interface EnrolledOffice {
     office: string;
@@ -388,6 +389,8 @@ const SuperAdminDashboard = () => {
                     </div>
                 </motion.div>
             </motion.div>
+
+            <OrganizationScheduleCalendar />
 
             {/* --- DASHBOARD SPLIT VIEW --- */}
             <motion.div 

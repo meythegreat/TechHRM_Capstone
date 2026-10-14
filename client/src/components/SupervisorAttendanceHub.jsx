@@ -5,6 +5,8 @@ import QRCode from 'qrcode';
 import { fetchAnomalyLogs, fetchLivePasscode, fetchLiveQr } from '../services/advancedAttendanceService';
 import { financialService } from '../services/financialService';
 import { ActivityQrCard } from './hours/ActivityQrCard';
+import { AddActivityHoursDialog } from './hours/AddActivityHoursDialog';
+import { CleaningGroupsDialog } from './hours/CleaningGroupsDialog';
 import { 
     KeyRound, 
     QrCode,
@@ -17,6 +19,8 @@ import {
     Copy,
     Activity,
     Maximize2,
+    Plus,
+    Users,
     X
 } from 'lucide-react';
 
@@ -24,6 +28,9 @@ const SupervisorAttendanceHub = () => {
     const [selectedType] = useState('Daily Clock');
     const [activityEvents, setActivityEvents] = useState([]);
     const [activityEventId, setActivityEventId] = useState('');
+    const [activityFormOpen, setActivityFormOpen] = useState(false);
+    const [groupsOpen, setGroupsOpen] = useState(false);
+    const [activityNotice, setActivityNotice] = useState('');
     const [descInput, setDescInput] = useState('');
     const [activeToken, setActiveToken] = useState(null);
     const [passcodeSeconds, setPasscodeSeconds] = useState(0);
@@ -43,6 +50,7 @@ const SupervisorAttendanceHub = () => {
     const userRole = localStorage.getItem('user_role') || '';
     const storedOffice = localStorage.getItem('assigned_office') || 'Unassigned';
     const canIssueActivity = userRole === 'WSPO Staff' && ['WSPO Coordinator', 'WSPO Secretary', 'WSPO President', 'WSPO', 'Unassigned', ''].includes(storedOffice);
+    const canManageCleaningGroups = userRole === 'WSPO Staff' && ['WSPO Coordinator', 'WSPO', ''].includes(storedOffice);
     const supervisorDepartment = userRole === 'WSPO Staff' && ['WSPO Coordinator', 'WSPO', 'Unassigned', ''].includes(storedOffice)
         ? 'WSPO'
         : storedOffice;
@@ -53,16 +61,25 @@ const SupervisorAttendanceHub = () => {
         loadAnomalies();
     }, []);
 
-    useEffect(() => {
-        if (!canIssueActivity) return undefined;
-        const today = new Date().toISOString().slice(0, 10);
-        financialService.getHourEvents(today, today)
+    const loadActivityEvents = (preferId) => {
+        const now = new Date();
+        const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+        return financialService.getHourEvents(today, today)
             .then((res) => {
                 const rows = (res.events || []).filter((event) => event.uses_attendance);
                 setActivityEvents(rows);
-                setActivityEventId((current) => current || (rows[0] ? String(rows[0].id) : ''));
+                setActivityEventId((current) => {
+                    if (preferId && rows.some((event) => String(event.id) === String(preferId))) return String(preferId);
+                    if (current && rows.some((event) => String(event.id) === String(current))) return current;
+                    return rows[0] ? String(rows[0].id) : '';
+                });
             })
             .catch(() => setActivityEvents([]));
+    };
+
+    useEffect(() => {
+        if (!canIssueActivity) return undefined;
+        loadActivityEvents();
         return undefined;
     }, [canIssueActivity]);
 
@@ -426,15 +443,41 @@ const SupervisorAttendanceHub = () => {
 
                 {canIssueActivity && (
                     <section className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] p-6 sm:p-8 space-y-4">
-                        <div>
-                            <h2 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
-                                <QrCode className="w-5 h-5 text-blue-600" />
-                                Activity QR
-                            </h2>
-                            <p className="mt-1 text-sm text-slate-500">
-                                Daily cleaning, general cleaning, devotional, and assembly. Create the activity in Hours Rendered, then show its QR here.
-                            </p>
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <h2 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
+                                    <QrCode className="w-5 h-5 text-blue-600" />
+                                    Activity QR
+                                </h2>
+                                <p className="mt-1 text-sm text-slate-500">
+                                    Create daily cleaning, general cleaning, a devotional, an assembly, or a special request here, then show today&apos;s QR.
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2 shrink-0">
+                                {canManageCleaningGroups && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setGroupsOpen(true)}
+                                        className="px-4 py-2.5 bg-white border border-slate-200 hover:border-blue-300 text-slate-800 text-sm font-bold rounded-xl inline-flex items-center gap-2"
+                                    >
+                                        <Users className="w-4 h-4" /> Cleaning groups
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setActivityNotice('');
+                                        setActivityFormOpen(true);
+                                    }}
+                                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-xl inline-flex items-center gap-2"
+                                >
+                                    <Plus className="w-4 h-4" /> Add activity
+                                </button>
+                            </div>
                         </div>
+                        {activityNotice && (
+                            <div className="bg-blue-50 border border-blue-200 text-blue-800 text-sm font-semibold rounded-2xl px-5 py-3">{activityNotice}</div>
+                        )}
                         {activityEvents.length === 0 ? (
                             <p className="text-sm text-slate-500">No activity attendance is scheduled for today.</p>
                         ) : (
@@ -457,6 +500,24 @@ const SupervisorAttendanceHub = () => {
                             </div>
                         )}
                     </section>
+                )}
+
+                {groupsOpen && <CleaningGroupsDialog onClose={() => setGroupsOpen(false)} />}
+
+                {activityFormOpen && (
+                    <AddActivityHoursDialog
+                        onClose={() => setActivityFormOpen(false)}
+                        onSaved={(event) => {
+                            setActivityFormOpen(false);
+                            const now = new Date();
+                            const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+                            const showsToday = event?.uses_attendance && event?.event_date === today;
+                            setActivityNotice(showsToday
+                                ? 'Activity saved. Its QR is ready below.'
+                                : 'Activity saved. It appears in Hours Rendered. Today’s QR list updates when the activity date is today.');
+                            loadActivityEvents(showsToday ? event.id : undefined);
+                        }}
+                    />
                 )}
 
                 {/* RIGHT COLUMN: ANOMALY RADAR */}
