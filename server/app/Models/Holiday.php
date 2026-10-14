@@ -11,6 +11,10 @@ class Holiday extends Model
         'date',
         'end_date',
         'name',
+        'kind',
+        'portion',
+        'starts_at',
+        'ends_at',
         'created_by',
     ];
 

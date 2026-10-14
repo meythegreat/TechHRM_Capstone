@@ -24,6 +24,10 @@ interface HolidaySpan {
     date: string;
     end_date?: string | null;
     name: string;
+    kind?: string | null;
+    portion?: string | null;
+    starts_at?: string | null;
+    ends_at?: string | null;
 }
 
 interface SemesterWindow {
@@ -49,13 +53,57 @@ function formatSemesterDate(iso: string) {
     });
 }
 
+function coversDate(holiday: HolidaySpan, key: string) {
+    const start = holiday.date.slice(0, 10);
+    const end = (holiday.end_date || holiday.date).slice(0, 10);
+    return key >= start && key <= end;
+}
+
 function holidayOn(date: Date, holidays: HolidaySpan[]) {
     const key = dateKey(date);
-    return holidays.find((holiday) => {
-        const start = holiday.date.slice(0, 10);
-        const end = (holiday.end_date || holiday.date).slice(0, 10);
-        return key >= start && key <= end;
-    }) ?? null;
+    return holidays.find((holiday) => (holiday.kind || 'holiday') !== 'break' && coversDate(holiday, key)) ?? null;
+}
+
+function breakOn(date: Date, holidays: HolidaySpan[]) {
+    const key = dateKey(date);
+    return holidays.find((holiday) => holiday.kind === 'break' && coversDate(holiday, key)) ?? null;
+}
+
+function clockMinutes(value: string) {
+    const match = String(value).match(/(\d{1,2}):(\d{2})/);
+    if (!match) return null;
+    return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function shiftWindow(time: string): [number, number] | null {
+    const matches = [...String(time || '').matchAll(/(\d{1,2}):(\d{2})\s*(am|pm)?/gi)];
+    if (matches.length < 2) return null;
+    const toMinutes = (match: RegExpMatchArray) => {
+        let hour = Number(match[1]);
+        const minute = Number(match[2]);
+        const meridiem = match[3]?.toLowerCase();
+        if (meridiem === 'pm' && hour < 12) hour += 12;
+        if (meridiem === 'am' && hour === 12) hour = 0;
+        return hour * 60 + minute;
+    };
+    let start = toMinutes(matches[0]);
+    let end = toMinutes(matches[1]);
+    if (end <= start) end += 24 * 60;
+    return [start, end];
+}
+
+function scheduleBlocked(date: Date, shift: OrgSchedule, holidays: HolidaySpan[]) {
+    const key = dateKey(date);
+    const window = shiftWindow(shift.time);
+    return holidays.some((holiday) => {
+        if (!coversDate(holiday, key)) return false;
+        const fullClosure = holiday.kind === 'break' || (holiday.portion || 'full') !== 'half';
+        if (fullClosure) return true;
+        const start = holiday.starts_at ? clockMinutes(holiday.starts_at) : null;
+        const end = holiday.ends_at ? clockMinutes(holiday.ends_at) : null;
+        if (start == null || end == null || !window) return true;
+        return window[0] < end && start < window[1];
+    });
 }
 
 function holidayRangeLabel(holiday: HolidaySpan) {
@@ -159,7 +207,7 @@ const OrganizationScheduleCalendar = () => {
     const [selected, setSelected] = useState(() => new Date());
     const [office, setOffice] = useState('');
     const [places, setPlaces] = useState<string[]>([]);
-    const [category, setCategory] = useState<'all' | 'work' | 'class' | 'holiday'>('all');
+    const [category, setCategory] = useState<'all' | 'work' | 'class' | 'holiday' | 'break'>('all');
 
     useEffect(() => {
         let active = true;
@@ -221,11 +269,12 @@ const OrganizationScheduleCalendar = () => {
     const showWork = category === 'all' || category === 'work';
     const showClass = category === 'all' || category === 'class';
     const showHoliday = category === 'all' || category === 'holiday';
+    const showBreak = category === 'all' || category === 'break';
 
     const visible = useMemo(() => {
         if (category === 'work') return officeSchedules.filter((shift) => !isClassShift(shift));
         if (category === 'class') return officeSchedules.filter((shift) => isClassShift(shift));
-        if (category === 'holiday') return [];
+        if (category === 'holiday' || category === 'break') return [];
         return officeSchedules;
     }, [officeSchedules, category]);
 
@@ -244,10 +293,13 @@ const OrganizationScheduleCalendar = () => {
     const today = new Date();
     const selectedName = selected.toLocaleDateString('en-US', { weekday: 'long' });
     const selectedInSemester = insideSemester(selected, semester);
-    const selectedShifts = selectedInSemester ? (byWeekday.get(selectedName) ?? []) : [];
+    const weekdayShifts = selectedInSemester ? (byWeekday.get(selectedName) ?? []) : [];
+    const selectedShifts = weekdayShifts.filter((shift) => !scheduleBlocked(selected, shift, holidays));
+    const hiddenShifts = weekdayShifts.filter((shift) => scheduleBlocked(selected, shift, holidays));
     const selectedWork = selectedShifts.filter((shift) => !isClassShift(shift));
     const selectedClass = selectedShifts.filter((shift) => isClassShift(shift));
-    const selectedHoliday = holidayOn(selected, holidays);
+    const selectedHoliday = showHoliday ? holidayOn(selected, holidays) : null;
+    const selectedBreak = showBreak ? breakOn(selected, holidays) : null;
     const monthLabel = cursor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
     const shiftMonth = (delta: number) => {
@@ -277,6 +329,9 @@ const OrganizationScheduleCalendar = () => {
                         <span className="inline-flex items-center gap-1.5 text-amber-700">
                             <Flag className="h-3.5 w-3.5" /> Holiday
                         </span>
+                        <span className="inline-flex items-center gap-1.5 text-teal-700">
+                            <Flag className="h-3.5 w-3.5" /> Class break
+                        </span>
                     </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -291,7 +346,7 @@ const OrganizationScheduleCalendar = () => {
                     />
                     <select
                         value={category}
-                        onChange={(event) => setCategory(event.target.value as 'all' | 'work' | 'class' | 'holiday')}
+                        onChange={(event) => setCategory(event.target.value as 'all' | 'work' | 'class' | 'holiday' | 'break')}
                         className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-600"
                         aria-label="Filter by schedule category"
                     >
@@ -299,6 +354,7 @@ const OrganizationScheduleCalendar = () => {
                         <option value="work">Work</option>
                         <option value="class">Class</option>
                         <option value="holiday">Holiday</option>
+                        <option value="break">Class break</option>
                     </select>
                     <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
                         <button type="button" onClick={() => shiftMonth(-1)} className="rounded-lg p-1.5 text-slate-500 hover:bg-white hover:text-slate-900" aria-label="Previous month">
@@ -331,10 +387,12 @@ const OrganizationScheduleCalendar = () => {
                                 if (!date) return <div key={`empty-${index}`} className="h-24 rounded-xl bg-slate-50/60" />;
                                 const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
                                 const inWindow = insideSemester(date, semester);
-                                const dayShifts = inWindow ? (byWeekday.get(weekday) ?? []) : [];
+                                const dayShifts = (inWindow ? (byWeekday.get(weekday) ?? []) : [])
+                                    .filter((shift) => !scheduleBlocked(date, shift, holidays));
                                 const workCount = dayShifts.filter((shift) => !isClassShift(shift)).length;
                                 const classCount = dayShifts.filter((shift) => isClassShift(shift)).length;
                                 const holiday = showHoliday ? holidayOn(date, holidays) : null;
+                                const classBreak = showBreak ? breakOn(date, holidays) : null;
                                 const isToday = sameDay(date, today);
                                 const isSelected = sameDay(date, selected);
                                 return (
@@ -343,7 +401,7 @@ const OrganizationScheduleCalendar = () => {
                                         type="button"
                                         onClick={() => setSelected(date)}
                                         aria-pressed={isSelected}
-                                        aria-label={`${date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}, ${workCount} work, ${classCount} class${holiday ? `, holiday ${holiday.name}` : ''}`}
+                                        aria-label={`${date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}, ${workCount} work, ${classCount} class${holiday ? `, holiday ${holiday.name}${holiday.portion === 'half' ? ' half day' : ''}` : ''}${classBreak ? `, class break ${classBreak.name}` : ''}`}
                                         className={`flex h-24 flex-col items-start rounded-xl px-1.5 py-1.5 text-left transition-colors sm:px-2 ${
                                             isSelected
                                                 ? 'bg-slate-900 text-white'
@@ -356,9 +414,14 @@ const OrganizationScheduleCalendar = () => {
                                     >
                                         <span className="text-sm font-semibold tabular-nums">{date.getDate()}</span>
                                         <span className="mt-auto flex w-full flex-col gap-0.5">
+                                            {classBreak && (
+                                                <span title={classBreak.name} className={`truncate rounded px-1 text-[10px] font-semibold leading-4 ${isSelected ? 'bg-teal-500/30 text-teal-100' : 'bg-teal-50 text-teal-800'}`}>
+                                                    {classBreak.name}
+                                                </span>
+                                            )}
                                             {holiday && (
                                                 <span title={holiday.name} className={`truncate rounded px-1 text-[10px] font-semibold leading-4 ${isSelected ? 'bg-amber-500/30 text-amber-100' : 'bg-amber-50 text-amber-800'}`}>
-                                                    {holiday.name}
+                                                    {holiday.portion === 'half' ? `${holiday.name} · Half` : holiday.name}
                                                 </span>
                                             )}
                                             {workCount > 0 && (
@@ -387,8 +450,10 @@ const OrganizationScheduleCalendar = () => {
                         <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm font-medium">
                             {showWork && <span className="text-blue-700">{selectedWork.length} work</span>}
                             {showClass && <span className="text-violet-700">{selectedClass.length} class</span>}
-                            {showHoliday && selectedHoliday && <span className="text-amber-700">Holiday</span>}
+                            {showHoliday && selectedHoliday && <span className="text-amber-700">{selectedHoliday.portion === 'half' ? 'Half-day holiday' : 'Holiday'}</span>}
+                            {showBreak && selectedBreak && <span className="text-teal-700">Class break</span>}
                             {category === 'holiday' && !selectedHoliday && <span className="text-slate-500">No holiday</span>}
+                            {category === 'break' && !selectedBreak && <span className="text-slate-500">No class break</span>}
                         </p>
                     </div>
                     <div className="max-h-[28rem] overflow-y-auto">
@@ -400,7 +465,32 @@ const OrganizationScheduleCalendar = () => {
                             </div>
                             <div className="px-6 py-3.5">
                                 <p className="text-sm font-semibold text-slate-900">{selectedHoliday.name}</p>
-                                <p className="mt-1 text-xs text-slate-500">{holidayRangeLabel(selectedHoliday)}</p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                    {holidayRangeLabel(selectedHoliday)}
+                                    {selectedHoliday.portion === 'half' && selectedHoliday.starts_at && selectedHoliday.ends_at
+                                        ? ` · ${selectedHoliday.starts_at}–${selectedHoliday.ends_at}`
+                                        : selectedHoliday.portion === 'half'
+                                            ? ' · Half day'
+                                            : ''}
+                                </p>
+                                {hiddenShifts.length > 0 && (
+                                    <p className="mt-2 text-xs text-slate-500">Work and class schedules during this holiday are hidden.</p>
+                                )}
+                            </div>
+                        </section>
+                    )}
+                    {showBreak && selectedBreak && (
+                        <section className="border-b border-slate-100">
+                            <div className="flex items-center gap-2 bg-teal-50/80 px-6 py-3 text-xs font-semibold uppercase tracking-wide text-teal-800">
+                                <Flag className="h-3.5 w-3.5" />
+                                Class break
+                            </div>
+                            <div className="px-6 py-3.5">
+                                <p className="text-sm font-semibold text-slate-900">{selectedBreak.name}</p>
+                                <p className="mt-1 text-xs text-slate-500">{holidayRangeLabel(selectedBreak)}</p>
+                                {hiddenShifts.length > 0 && (
+                                    <p className="mt-2 text-xs text-slate-500">Work and class schedules during this break are hidden.</p>
+                                )}
                             </div>
                         </section>
                     )}
@@ -409,6 +499,13 @@ const OrganizationScheduleCalendar = () => {
                             <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 text-center">
                                 <Flag className="mb-3 h-8 w-8 text-slate-300" />
                                 <p className="text-sm font-medium text-slate-600">No holiday on this date.</p>
+                            </div>
+                        )
+                    ) : category === 'break' ? (
+                        selectedBreak ? null : (
+                            <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 text-center">
+                                <Flag className="mb-3 h-8 w-8 text-slate-300" />
+                                <p className="text-sm font-medium text-slate-600">No class break on this date.</p>
                             </div>
                         )
                     ) : !semester ? (
@@ -422,15 +519,15 @@ const OrganizationScheduleCalendar = () => {
                             <p className="text-sm font-medium text-slate-600">This date is outside {semester.label}.</p>
                             <p className="mt-1 text-xs text-slate-500">Weekly schedules repeat from {formatSemesterDate(semester.starts_on)} through {formatSemesterDate(semester.ends_on)}.</p>
                         </div>
-                    ) : selectedShifts.length === 0 ? (
+                    ) : selectedShifts.length === 0 && hiddenShifts.length === 0 ? (
                         <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 text-center">
                             <CalendarDays className="mb-3 h-8 w-8 text-slate-300" />
                             <p className="text-sm font-medium text-slate-600">Nothing is scheduled on {selectedName}s.</p>
                         </div>
                     ) : (
                         <div>
-                            {showWork && <ScheduleGroup title="Work" shifts={selectedWork} tone="work" />}
-                            {showClass && <ScheduleGroup title="Class" shifts={selectedClass} tone="class" />}
+                            {showWork && (selectedWork.length > 0 || hiddenShifts.length === 0) && <ScheduleGroup title="Work" shifts={selectedWork} tone="work" />}
+                            {showClass && (selectedClass.length > 0 || hiddenShifts.length === 0) && <ScheduleGroup title="Class" shifts={selectedClass} tone="class" />}
                         </div>
                     )}
                     </div>

@@ -27,7 +27,7 @@ interface TimesheetPrintViewProps {
     penaltyHours?: number;
     startDate: string;
     endDate: string;
-    holidays?: { date: string; end_date?: string | null; name?: string }[];
+    holidays?: { date: string; end_date?: string | null; name?: string; kind?: string | null; portion?: string | null }[];
 }
 
 interface DaySlots {
@@ -139,7 +139,19 @@ const TimesheetPrintView: React.FC<TimesheetPrintViewProps> = ({
     const year = monthBase.getFullYear();
     const month = monthBase.getMonth();
     const monthLabel = monthBase.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    const holidayDates = new Set(holidays.flatMap((holiday) => holidayDateKeys(holiday.date, holiday.end_date)));
+    const holidayRemarks = new Map<string, string[]>();
+    holidays.forEach((holiday) => {
+        const label = holiday.kind === 'break'
+            ? (holiday.name || 'Class break')
+            : holiday.portion === 'half'
+                ? 'Half-day holiday'
+                : 'Holiday';
+        holidayDateKeys(holiday.date, holiday.end_date).forEach((key) => {
+            const current = holidayRemarks.get(key) ?? [];
+            if (!current.includes(label)) current.push(label);
+            holidayRemarks.set(key, current);
+        });
+    });
 
     const byDay: Record<number, DaySlots> = {};
     history.forEach((record) => {
@@ -305,7 +317,7 @@ const TimesheetPrintView: React.FC<TimesheetPrintViewProps> = ({
                         const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                         const weekday = date.getDay();
                         const remarks: string[] = [];
-                        if (dayExists && holidayDates.has(dateKey)) remarks.push('Holiday');
+                        if (dayExists) (holidayRemarks.get(dateKey) ?? []).forEach((label) => remarks.push(label));
                         if (dayExists && weekday === 6) remarks.push('Saturday');
                         if (dayExists && weekday === 0) remarks.push('Sunday');
                         (slots?.remarks ?? []).forEach((remark) => {
