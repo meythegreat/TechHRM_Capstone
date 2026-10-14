@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Office extends Model
 {
-    protected $fillable = ['name'];
+    protected $fillable = ['name', 'abbreviation'];
 
     /** Official office names, in display order. */
     public static function names(): array

@@ -145,6 +145,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::post('/schedules', [ScheduleController::class, 'store']);
 
+        Route::put('/schedules/{id}', [ScheduleController::class, 'update']);
+
         Route::delete('/schedules/{id}', [ScheduleController::class, 'destroy']);
 
         Route::patch('/schedules/{id}/resolve-request', [ScheduleController::class, 'resolveRequest']);

@@ -44,6 +44,7 @@ class OfficeController extends Controller
             return [
                 'id' => $office->id,
                 'name' => $office->name,
+                'abbreviation' => $office->abbreviation,
                 'student_count' => (int) ($studentCounts[$office->name] ?? 0),
                 'supervisor_count' => (int) ($supervisorCounts[$office->name] ?? 0),
             ];
@@ -114,12 +115,18 @@ class OfficeController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
+            'abbreviation' => ['nullable', 'string', 'max:32'],
         ]);
 
         $name = $this->normalizeName($validated['name']);
+        $abbreviation = $this->normalizeAbbreviation($validated['abbreviation'] ?? null);
         $this->assertUniqueName($name);
+        $this->assertUniqueAbbreviation($abbreviation);
 
-        $office = Office::create(['name' => $name]);
+        $office = Office::create([
+            'name' => $name,
+            'abbreviation' => $abbreviation,
+        ]);
 
         return response()->json($office, 201);
     }
@@ -128,20 +135,26 @@ class OfficeController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
+            'abbreviation' => ['nullable', 'string', 'max:32'],
         ]);
 
         $name = $this->normalizeName($validated['name']);
+        $abbreviation = $this->normalizeAbbreviation($validated['abbreviation'] ?? null);
         $previous = $office->name;
 
         if (strcasecmp($name, $previous) !== 0) {
             $this->assertUniqueName($name, $office->id);
         }
+        $this->assertUniqueAbbreviation($abbreviation, $office->id);
 
-        DB::transaction(function () use ($office, $previous, $name) {
+        DB::transaction(function () use ($office, $previous, $name, $abbreviation) {
             if ($name !== $previous) {
                 $this->renameReferences($previous, $name);
             }
-            $office->update(['name' => $name]);
+            $office->update([
+                'name' => $name,
+                'abbreviation' => $abbreviation,
+            ]);
         });
 
         return response()->json($office->fresh());
@@ -184,6 +197,13 @@ class OfficeController extends Controller
         return trim(preg_replace('/\s+/', ' ', $name) ?? '');
     }
 
+    private function normalizeAbbreviation(?string $abbreviation): ?string
+    {
+        $value = trim(preg_replace('/\s+/', ' ', (string) $abbreviation) ?? '');
+
+        return $value === '' ? null : $value;
+    }
+
     private function assertUniqueName(string $name, ?int $ignoreId = null): void
     {
         $exists = Office::query()
@@ -193,6 +213,22 @@ class OfficeController extends Controller
 
         if ($name === '' || $exists) {
             abort(422, $name === '' ? 'Office name is required.' : 'An office with this name already exists.');
+        }
+    }
+
+    private function assertUniqueAbbreviation(?string $abbreviation, ?int $ignoreId = null): void
+    {
+        if ($abbreviation === null) {
+            return;
+        }
+
+        $exists = Office::query()
+            ->when($ignoreId, fn ($query) => $query->where('id', '!=', $ignoreId))
+            ->whereRaw('LOWER(abbreviation) = ?', [mb_strtolower($abbreviation)])
+            ->exists();
+
+        if ($exists) {
+            abort(422, 'An office with this abbreviation already exists.');
         }
     }
 

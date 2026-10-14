@@ -8,7 +8,9 @@ export interface HourStudentRow {
   name: string;
   student_id_number?: string | null;
   course?: string | null;
+  course_abbreviation?: string | null;
   assigned_office?: string | null;
+  office_abbreviation?: string | null;
   year_level?: number | null;
   dtr_hours: number;
   duty_deduction: number;
@@ -71,7 +73,11 @@ export const DEFAULT_HOURLY_RATE = 28;
 export const pesoText = (hours: number, rate: number) => {
   const amount = (Number(hours) || 0) * (Number(rate) || 0);
   const sign = amount < 0 ? '-' : '';
-  return `${sign}₱${Math.abs(amount).toFixed(2)}`;
+  const formatted = Math.abs(amount).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${sign}₱${formatted}`;
 };
 
 const dutyMonth = (start?: string) => {
@@ -83,9 +89,13 @@ const dutyMonth = (start?: string) => {
 
 const cell = 'border border-black px-1 py-1 text-[10px] align-middle';
 
+const assignmentArea = (student: HourStudentRow) =>
+  student.office_abbreviation?.trim() || student.assigned_office || '—';
+
 const courseYear = (student: HourStudentRow) => {
+  const course = student.course_abbreviation?.trim() || student.course;
   const year = student.year_level ? `Year ${student.year_level}` : '';
-  return [student.course, year].filter(Boolean).join(' / ') || '—';
+  return [course, year].filter(Boolean).join(' / ') || '—';
 };
 
 const renderedHours = (student: HourStudentRow) => roundHours(student.dtr_hours - student.duty_deduction);
@@ -238,7 +248,7 @@ export function HoursSummarySheet({ report, rate }: { report: HoursReport | null
                 {group.students.map((student) => (
                   <tr key={student.user_id}>
                     <td className={cell}>{student.name}</td>
-                    <td className={cell}>{student.assigned_office || '—'}</td>
+                    <td className={cell}>{assignmentArea(student)}</td>
                     <td className={cell}>{courseYear(student)}</td>
                     <td className={`${cell} text-right`}>{hoursText(renderedHours(student))}</td>
                     <td className={`${cell} text-right`}>{hoursText(student.special_request)}</td>
@@ -273,7 +283,7 @@ export function HoursSummarySheet({ report, rate }: { report: HoursReport | null
           </tbody>
         </table>
 
-        <div className="mt-10">
+        <div className="hours-summary-signoff mt-10">
           <p className="text-[11px] font-bold text-left">Signed:</p>
           <div className="grid grid-cols-2 gap-10 mt-8">
             <Signatory label="WSPO Secretary" name={report?.signatories?.secretary || ''} />
@@ -375,7 +385,7 @@ function Signatory({ label, name }: { label: string; name: string }) {
   return (
     <div className="mx-auto w-full max-w-[240px] text-center">
       <div className="border-b border-black h-8" />
-      <p className="mt-1 text-center text-[12px] font-bold">{name}</p>
+      <p className="mt-1 text-center text-[14px] font-bold uppercase tracking-wide">{name}</p>
       <p className="text-center text-[11px]">{label}</p>
     </div>
   );

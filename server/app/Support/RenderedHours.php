@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\Attendance;
 use App\Models\DisciplinaryRecord;
+use App\Models\Office;
 use App\Models\RenderedHourEvent;
 use App\Models\User;
 use Carbon\Carbon;
@@ -68,6 +69,7 @@ class RenderedHours
         $dtr = self::verifiedHoursByUser($start, $end);
         $duty = self::dutyHoursByUser($start->toDateString(), $end->toDateString());
         $deltas = self::deltasBetween($start, $end);
+        $abbreviations = self::officeAbbreviations();
 
         $rows = [];
         foreach ($students as $student) {
@@ -82,12 +84,16 @@ class RenderedHours
             }
 
             $year = $student->profile?->year_level;
+            $officeName = trim((string) ($student->profile?->assigned_office ?? ''));
+            $courseName = trim((string) ($student->profile?->course ?? ''));
             $rows[] = [
                 'user_id' => $student->id,
                 'name' => $student->name,
                 'student_id_number' => $student->profile?->student_id_number,
                 'course' => $student->profile?->course,
+                'course_abbreviation' => self::abbreviationFor($courseName, $abbreviations),
                 'assigned_office' => $student->profile?->assigned_office,
+                'office_abbreviation' => self::abbreviationFor($officeName, $abbreviations),
                 'year_level' => $year ? (int) $year : null,
                 'dtr_hours' => $dtrHours,
                 'duty_deduction' => $dutyHours,
@@ -150,6 +156,73 @@ class RenderedHours
             'summary' => $summary,
             'grand' => $grand,
         ];
+    }
+
+    /**
+     * Names that refer to the same college when a student course
+     * does not use the exact office name.
+     *
+     * @var list<list<string>>
+     */
+    private const LABEL_GROUPS = [
+        ['College of Computer Studies', 'College of Computer Studies (CCS)', 'CCS Office'],
+        ['College of Business and Accountancy', 'College of Business Administration', 'Business Office'],
+        ['College of Hospitality and Tourism Management', 'College of Hotel and Tourism Management'],
+        ['College of Criminal Justice Education'],
+        ['College of Electronic Engineering', 'College of Engineering'],
+        ['College of Nursing'],
+        ['College of Teacher Education'],
+        ['College of Arts and Sciences'],
+        ['Graduate School'],
+        ['High School', 'Senior High School Department'],
+        ['Junior High School Department'],
+        ['Kindergarten/Elementary', 'Elementary Department'],
+        ['Pre-School Department'],
+    ];
+
+    /**
+     * @return array<string, string>
+     */
+    private static function officeAbbreviations(): array
+    {
+        $abbreviations = [];
+        foreach (Office::query()->get(['name', 'abbreviation']) as $office) {
+            $abbreviation = trim((string) $office->abbreviation);
+            if ($abbreviation === '') {
+                continue;
+            }
+            $abbreviations[mb_strtolower($office->name)] = $abbreviation;
+        }
+
+        return $abbreviations;
+    }
+
+    /**
+     * @param  array<string, string>  $abbreviations
+     */
+    private static function abbreviationFor(string $label, array $abbreviations): ?string
+    {
+        $key = mb_strtolower(trim($label));
+        if ($key === '') {
+            return null;
+        }
+        if (isset($abbreviations[$key])) {
+            return $abbreviations[$key];
+        }
+
+        foreach (self::LABEL_GROUPS as $group) {
+            $names = array_map(fn (string $name) => mb_strtolower($name), $group);
+            if (!in_array($key, $names, true)) {
+                continue;
+            }
+            foreach ($names as $name) {
+                if (isset($abbreviations[$name])) {
+                    return $abbreviations[$name];
+                }
+            }
+        }
+
+        return null;
     }
 
     public static function yearLabel(?int $year): string

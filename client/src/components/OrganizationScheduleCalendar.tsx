@@ -119,7 +119,7 @@ function insideSemester(date: Date, semester: SemesterWindow | null) {
     return key >= semester.starts_on && key <= semester.ends_on;
 }
 
-const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 function startMinutes(time: string) {
     const match = String(time || '').match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
@@ -142,7 +142,7 @@ function monthCells(cursor: Date) {
     const year = cursor.getFullYear();
     const month = cursor.getMonth();
     const first = new Date(year, month, 1);
-    const lead = (first.getDay() + 6) % 7;
+    const lead = first.getDay();
     const count = new Date(year, month + 1, 0).getDate();
     const cells: Array<Date | null> = [];
     for (let index = 0; index < lead; index += 1) cells.push(null);

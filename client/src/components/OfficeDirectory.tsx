@@ -18,6 +18,7 @@ import {
 interface OfficeRecord {
     id: number;
     name: string;
+    abbreviation?: string | null;
     student_count: number;
     supervisor_count: number;
 }
@@ -37,8 +38,10 @@ const OfficeDirectory = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [newName, setNewName] = useState('');
+    const [newAbbreviation, setNewAbbreviation] = useState('');
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editingName, setEditingName] = useState('');
+    const [editingAbbreviation, setEditingAbbreviation] = useState('');
     const [busyId, setBusyId] = useState<number | 'new' | null>(null);
     const [toast, setToast] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
     const [breakdown, setBreakdown] = useState<{
@@ -86,7 +89,10 @@ const OfficeDirectory = () => {
     const visibleOffices = useMemo(() => {
         const query = searchQuery.trim().toLowerCase();
         if (!query) return offices;
-        return offices.filter((office) => office.name.toLowerCase().includes(query));
+        return offices.filter((office) =>
+            office.name.toLowerCase().includes(query)
+            || (office.abbreviation || '').toLowerCase().includes(query)
+        );
     }, [offices, searchQuery]);
 
     const createOffice = async () => {
@@ -94,8 +100,12 @@ const OfficeDirectory = () => {
         if (!name) return;
         setBusyId('new');
         try {
-            await axios.post('/api/offices', { name });
+            await axios.post('/api/offices', {
+                name,
+                abbreviation: newAbbreviation.trim() || null,
+            });
             setNewName('');
+            setNewAbbreviation('');
             showToast('Office successfully added.', 'success');
             await loadOffices();
         } catch (error) {
@@ -107,15 +117,25 @@ const OfficeDirectory = () => {
 
     const saveOffice = async (office: OfficeRecord) => {
         const name = editingName.trim();
-        if (!name || name === office.name) {
+        const abbreviation = editingAbbreviation.trim();
+        if (!name) return;
+        if (name === office.name && abbreviation === (office.abbreviation || '')) {
             setEditingId(null);
             return;
         }
         setBusyId(office.id);
         try {
-            await axios.put(`/api/offices/${office.id}`, { name });
+            await axios.put(`/api/offices/${office.id}`, {
+                name,
+                abbreviation: abbreviation || null,
+            });
             setEditingId(null);
-            showToast('Office updated. Student and supervisor assignments were updated automatically.', 'success');
+            showToast(
+                name === office.name
+                    ? 'Office abbreviation updated.'
+                    : 'Office updated. Student and supervisor assignments were updated automatically.',
+                'success',
+            );
             await loadOffices();
         } catch (error) {
             showToast(errorMessage(error, 'Could not update that office.'), 'error');
@@ -203,7 +223,7 @@ const OfficeDirectory = () => {
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                     <input 
                         type="text" 
-                        placeholder="Search offices by name..."
+                        placeholder="Search offices by name or abbreviation..."
                         value={searchQuery}
                         onChange={(event) => setSearchQuery(event.target.value)}
                         className="w-full pl-12 pr-4 py-2.5 bg-transparent font-medium text-slate-900 outline-none placeholder:text-slate-400"
@@ -219,13 +239,20 @@ const OfficeDirectory = () => {
                 {canEdit && (
                     <form 
                         onSubmit={(e) => { e.preventDefault(); void createOffice(); }}
-                        className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-2 md:w-[450px]"
+                        className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-2 md:w-[620px]"
                     >
                         <input
                             value={newName}
                             onChange={(e) => setNewName(e.target.value)}
-                            placeholder="Add new office name..."
+                            placeholder="Office name"
                             className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl font-bold text-slate-900 outline-none focus:bg-white focus:border-indigo-300 transition-all placeholder:text-slate-400 placeholder:font-medium"
+                        />
+                        <input
+                            value={newAbbreviation}
+                            onChange={(e) => setNewAbbreviation(e.target.value)}
+                            placeholder="Abbrev. (optional)"
+                            maxLength={32}
+                            className="w-40 shrink-0 px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl font-bold text-slate-900 outline-none focus:bg-white focus:border-indigo-300 transition-all placeholder:text-slate-400 placeholder:font-medium"
                         />
                         <button
                             type="submit"
@@ -261,6 +288,7 @@ const OfficeDirectory = () => {
                         <thead>
                             <tr className="bg-slate-50/80 border-b border-slate-200">
                                 <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Office / Department Name</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider w-40">Abbreviation</th>
                                 <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">Students</th>
                                 <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">Supervisors</th>
                                 {canEdit && <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right w-40">Actions</th>}
@@ -274,7 +302,7 @@ const OfficeDirectory = () => {
                         >
                             {!isLoading && visibleOffices.length === 0 ? (
                                 <tr>
-                                    <td colSpan={canEdit ? 4 : 3} className="px-6 py-16 text-center text-slate-400">
+                                    <td colSpan={canEdit ? 5 : 4} className="px-6 py-16 text-center text-slate-400">
                                         <Building2 className="w-12 h-12 mx-auto mb-3 opacity-20" />
                                         <p className="text-base font-semibold text-slate-600">No offices found</p>
                                         <p className="text-sm font-medium">{searchQuery ? 'Try a different search term.' : 'Use the form above to add a new office.'}</p>
@@ -294,6 +322,7 @@ const OfficeDirectory = () => {
                                                         value={editingName}
                                                         onChange={(event) => setEditingName(event.target.value)}
                                                         onKeyDown={(e) => { if(e.key === 'Enter') void saveOffice(office); }}
+                                                        placeholder="Office name"
                                                         className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 transition-all shadow-sm"
                                                     />
                                                 ) : (
@@ -305,6 +334,21 @@ const OfficeDirectory = () => {
                                                             {office.name}
                                                         </p>
                                                     </div>
+                                                )}
+                                            </td>
+
+                                            <td className="px-6 py-5 align-middle">
+                                                {isEditing ? (
+                                                    <input
+                                                        value={editingAbbreviation}
+                                                        onChange={(event) => setEditingAbbreviation(event.target.value)}
+                                                        onKeyDown={(e) => { if (e.key === 'Enter') void saveOffice(office); }}
+                                                        placeholder="Optional"
+                                                        maxLength={32}
+                                                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 transition-all shadow-sm"
+                                                    />
+                                                ) : (
+                                                    <span className="text-sm font-semibold text-slate-700">{office.abbreviation || '—'}</span>
                                                 )}
                                             </td>
 
@@ -347,9 +391,9 @@ const OfficeDirectory = () => {
                                                             <>
                                                                 <button
                                                                     type="button"
-                                                                    onClick={() => { setEditingId(office.id); setEditingName(office.name); }}
+                                                                    onClick={() => { setEditingId(office.id); setEditingName(office.name); setEditingAbbreviation(office.abbreviation || ''); }}
                                                                     className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                                                                    title="Rename office"
+                                                                    title="Edit office"
                                                                 >
                                                                     <Pencil className="w-5 h-5" />
                                                                 </button>

@@ -333,6 +333,11 @@
     margin: 0;
   }
 
+  @page hours-rendered {
+    size: A4 portrait;
+    margin: 20mm 28mm 18mm 28mm;
+  }
+
   html,
   body {
     background: white !important;
@@ -378,10 +383,31 @@
     height: 46px !important;
   }
 
+  .hours-rendered-root {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
   .hours-summary-sheet {
+    page: hours-rendered;
     width: auto !important;
     max-width: none !important;
-    margin: 12mm !important;
+    margin: 0 !important;
+  }
+
+  .hours-summary-sheet table {
+    margin-top: 0 !important;
+  }
+
+  .hours-summary-sheet thead {
+    display: table-header-group;
+  }
+
+  .hours-summary-sheet tr,
+  .hours-summary-signoff {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   .hours-summary-sheet .sign-input {

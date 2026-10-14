@@ -148,38 +148,9 @@ class ScheduleController extends Controller
         }
 
         $days = array_values(array_unique($validated['days']));
-        $newTimes = preg_split('/\s*-\s*/', $validated['time']) ?: [];
-        if (count($newTimes) !== 2) {
-            return response()->json(['message' => 'Enter a start and end time.'], 422);
-        }
-        $newStart = Carbon::parse($newTimes[0]);
-        $newEnd = Carbon::parse($newTimes[1]);
-        if ($newEnd->lte($newStart)) {
-            $newEnd->addDay();
-        }
-
-        $existingShifts = Schedule::where('user_id', $student->id)
-            ->whereIn('day', $days)
-            ->get();
-
-        foreach ($existingShifts as $shift) {
-            $existingTimes = preg_split('/\s*-\s*/', (string) $shift->time) ?: [];
-            if (count($existingTimes) !== 2) {
-                continue;
-            }
-            $existingStart = Carbon::parse($existingTimes[0]);
-            $existingEnd = Carbon::parse($existingTimes[1]);
-            if ($existingEnd->lte($existingStart)) {
-                $existingEnd->addDay();
-            }
-            if ($newStart->lt($existingEnd) && $newEnd->gt($existingStart)) {
-                $existingKind = ($shift->kind ?? 'work') === 'class' ? 'class' : 'work shift';
-                $detail = $shift->kind === 'class' && $shift->subject ? " ({$shift->subject})" : '';
-
-                return response()->json([
-                    'message' => "Conflict! This student already has a {$existingKind}{$detail} on {$shift->day} from {$shift->time}.",
-                ], 422);
-            }
+        $conflict = $this->scheduleConflict($student->id, $days, $validated['time']);
+        if ($conflict) {
+            return response()->json(['message' => $conflict], 422);
         }
 
         $subject = trim((string) ($validated['subject'] ?? ''));
@@ -212,7 +183,70 @@ class ScheduleController extends Controller
         ]);
     }
 
-    // 4. For Removing a Shift
+    // 4. For editing one class or work row
+    public function update(Request $request, int $id)
+    {
+        SuperAdminAudit::denyMutation($request);
+        abort_unless(
+            app(UserController::class)->canManageWorkSchedules($request->user()),
+            403,
+            'Only the WSPO coordinator or secretary can edit a schedule.'
+        );
+
+        $schedule = Schedule::findOrFail($id);
+        $kind = ($schedule->kind ?? 'work') === 'class' ? 'class' : 'work';
+
+        $validated = $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'day' => 'required|string|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
+            'time' => 'required|string',
+            'duty_type' => $kind === 'class' ? 'nullable|string|max:120' : 'required|string|max:120',
+            'subject' => $kind === 'class' ? 'required|string|max:160' : 'nullable|string|max:160',
+            'room' => 'nullable|string|max:120',
+            'instructor' => 'nullable|string|max:120',
+        ]);
+
+        $student = User::with('profile')->where('role', 'Student')->findOrFail($validated['user_id']);
+        $department = trim((string) ($student->profile?->assigned_office ?? ''));
+        if ($kind === 'work' && $department === '') {
+            return response()->json([
+                'message' => 'This student has no assigned office yet.',
+            ], 422);
+        }
+        if ($department === '') {
+            $department = 'Unassigned';
+        }
+
+        $conflict = $this->scheduleConflict($student->id, [$validated['day']], $validated['time'], $schedule->id);
+        if ($conflict) {
+            return response()->json(['message' => $conflict], 422);
+        }
+
+        $subject = trim((string) ($validated['subject'] ?? ''));
+        $room = trim((string) ($validated['room'] ?? ''));
+        $instructor = trim((string) ($validated['instructor'] ?? ''));
+
+        $schedule->update([
+            'user_id' => $student->id,
+            'day' => $validated['day'],
+            'time' => $validated['time'],
+            'duty_type' => $kind === 'class' ? ($subject !== '' ? $subject : 'Class') : $validated['duty_type'],
+            'subject' => $kind === 'class' ? $subject : null,
+            'room' => $kind === 'class' && $room !== '' ? $room : null,
+            'instructor' => $kind === 'class' && $instructor !== '' ? $instructor : null,
+            'department' => $department,
+            'supervisor' => $kind === 'class' ? $instructor : (string) $schedule->supervisor,
+            'edit_request_status' => 'none',
+            'edit_request_note' => null,
+        ]);
+
+        return response()->json([
+            'message' => $kind === 'class' ? 'Class schedule updated.' : 'Work schedule updated.',
+            'schedule' => $schedule->fresh(['user:id,name,profile_picture']),
+        ]);
+    }
+
+    // 5. For Removing a Shift
     public function destroy(Request $request, int $id)
     {
         SuperAdminAudit::denyMutation($request);
@@ -286,5 +320,63 @@ class ScheduleController extends Controller
         ]);
 
         return response()->json(['message' => 'Student request acknowledged and cleared.']);
+    }
+
+    /**
+     * @param  list<string>  $days
+     */
+    private function scheduleConflict(int $userId, array $days, string $time, ?int $ignoreId = null): ?string
+    {
+        $incoming = $this->timeBounds($time);
+        if (! $incoming) {
+            return 'Enter a start and end time.';
+        }
+
+        [$newStart, $newEnd] = $incoming;
+        $existingShifts = Schedule::where('user_id', $userId)
+            ->whereIn('day', $days)
+            ->when($ignoreId, fn ($query) => $query->where('id', '!=', $ignoreId))
+            ->get();
+
+        foreach ($existingShifts as $shift) {
+            $existing = $this->timeBounds((string) $shift->time);
+            if (! $existing) {
+                continue;
+            }
+
+            [$existingStart, $existingEnd] = $existing;
+            if ($newStart->lt($existingEnd) && $newEnd->gt($existingStart)) {
+                $existingKind = ($shift->kind ?? 'work') === 'class' ? 'class' : 'work shift';
+                $detail = $shift->kind === 'class' && $shift->subject ? " ({$shift->subject})" : '';
+
+                return "Conflict! This student already has a {$existingKind}{$detail} on {$shift->day} from {$shift->time}.";
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{0: Carbon, 1: Carbon}|null
+     */
+    private function timeBounds(string $time): ?array
+    {
+        $parts = preg_split('/\s*-\s*/', trim($time)) ?: [];
+        if (count($parts) !== 2) {
+            return null;
+        }
+
+        try {
+            $start = Carbon::parse(trim($parts[0]));
+            $end = Carbon::parse(trim($parts[1]));
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if ($end->lte($start)) {
+            $end->addDay();
+        }
+
+        return [$start, $end];
     }
 }
