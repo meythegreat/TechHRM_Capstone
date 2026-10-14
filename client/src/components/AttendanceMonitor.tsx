@@ -134,7 +134,10 @@ interface AttendanceMonitorProps {
 
 const isWspoOffice = (office?: string | null) => {
     const key = (office || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    return key === 'wspo' || key === 'workingstudentsprogramoffice' || key === 'wspooffice';
+    return key === 'wspo'
+        || key === 'workingstudentsprogramoffice'
+        || key === 'workstudentprogramorganization'
+        || key === 'wspooffice';
 };
 
 const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {

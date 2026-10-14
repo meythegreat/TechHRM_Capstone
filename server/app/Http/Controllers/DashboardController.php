@@ -318,37 +318,6 @@ class DashboardController extends Controller
 
     private function departmentAliases(string $department): array
     {
-        $groups = [
-            ['CCS', 'College of Computer Studies', 'College of Computer Studies (CCS)', 'CCS Office'],
-            ['CBA', 'College of Business and Accountancy', 'College of Business Administration', 'Business Office'],
-            ['CHTM', 'College of Hotel and Tourism Management', 'College of Hospitality and Tourism Management'],
-            ['CCJE', 'College of Criminal Justice Education'],
-            ['COE', 'College of Engineering'],
-            ['CON', 'College of Nursing'],
-            ['CTE', 'College of Teacher Education'],
-            ['CAS', 'College of Arts and Sciences'],
-            ['GS', 'Graduate School'],
-            ['SHS', 'Senior High School Department'],
-            ['JHS', 'Junior High School Department'],
-            ['ES', 'Elementary Department'],
-            ['PS', 'Pre-School Department'],
-            ['WSPO', 'Working Students Program Office', 'WSPO Office'],
-        ];
-
-        $normalized = strtolower((string) preg_replace('/[^a-z0-9]/i', '', $department));
-        foreach ($groups as $group) {
-            $aliases = array_map(
-                fn (string $name) => strtolower((string) preg_replace('/[^a-z0-9]/i', '', $name)),
-                $group
-            );
-            if (in_array($normalized, $aliases, true)) {
-                return $group;
-            }
-        }
-
-        return array_values(array_unique([
-            trim($department),
-            trim((string) preg_replace('/\\s*\\([^)]*\\)/', '', $department)),
-        ]));
+        return app(UserController::class)->officeNames($department);
     }
 }

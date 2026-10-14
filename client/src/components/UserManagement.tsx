@@ -3,6 +3,7 @@ import axios from "axios";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import Toast from "./Toast";
 import UserAvatar from "./UserAvatar";
+import ComboFilter from "./ComboFilter";
 import { REALTIME_EVENT } from "../utils/realtime";
 import { bindPopup } from "../utils/popupDismiss";
 import {
@@ -55,6 +56,13 @@ interface UserRecord {
 
 const GENDERS = ['Male', 'Female'];
 
+const ROLE_FILTERS = [
+  { value: 'Student', label: 'Student Worker' },
+  { value: 'Supervisor', label: 'Department Supervisor' },
+  { value: 'WSPO Staff', label: 'WSPO Staff' },
+  { value: 'Super Admin', label: 'Super Admin' },
+];
+
 const UserManagement = () => {
   const currentUserRole = localStorage.getItem("user_role") || "";
   const canManageSecurity = currentUserRole === "Super Admin" || currentUserRole === "WSPO Staff";
@@ -66,6 +74,8 @@ const UserManagement = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("");
   const [toastMsg, setToastMsg] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -103,20 +113,20 @@ const UserManagement = () => {
   useEffect(() => {
     const handler = setTimeout(() => {
       setCurrentPage(1);
-      fetchUsers(1, searchQuery);
-    }, 500);
+      fetchUsers(1, searchQuery, false, roleFilter, departmentFilter);
+    }, 400);
     return () => clearTimeout(handler);
-  }, [searchQuery]);
+  }, [searchQuery, roleFilter, departmentFilter]);
 
   useEffect(() => {
-    const refresh = () => fetchUsers(currentPage, searchQuery, true);
+    const refresh = () => fetchUsers(currentPage, searchQuery, true, roleFilter, departmentFilter);
     const interval = setInterval(refresh, 5000);
     window.addEventListener(REALTIME_EVENT, refresh);
     return () => {
       clearInterval(interval);
       window.removeEventListener(REALTIME_EVENT, refresh);
     };
-  }, [currentPage, searchQuery]);
+  }, [currentPage, searchQuery, roleFilter, departmentFilter]);
 
   useEffect(() => {
     axios.get('/api/department-supervisors')
@@ -147,10 +157,10 @@ const UserManagement = () => {
     setToastMsg({ text, type });
   };
 
-  const fetchUsers = async (page: number, search: string = searchQuery, silent = false) => {
+  const fetchUsers = async (page: number, search: string = searchQuery, silent = false, role: string = roleFilter, department: string = departmentFilter) => {
     if (!silent) setIsLoading(true);
     try {
-      const response = await axios.get('/api/users', { params: { page, search } });
+      const response = await axios.get('/api/users', { params: { page, search, role, department } });
       const data = response.data.data || response.data;
       setUsers(Array.isArray(data) ? data : []);
       if (response.data.current_page) {
@@ -415,15 +425,43 @@ const UserManagement = () => {
           </div>
       </motion.div>
 
-      {/* SEARCH BAR */}
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 flex items-center relative z-20">
+      {/* SEARCH AND FILTERS */}
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-2 lg:flex-row lg:items-center relative z-20">
         <div className="flex-1 relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input type="text" placeholder="Search users by name, ID, department, or role across all pages..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-12 pr-4 py-3 bg-transparent font-medium text-slate-900 outline-none placeholder:text-slate-400" />
+            <input type="text" placeholder="Search users by name, username, email, or student ID..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-12 pr-4 py-3 bg-transparent font-medium text-slate-900 outline-none placeholder:text-slate-400" />
         </div>
-        {searchQuery && (
-            <button onClick={() => setSearchQuery("")} className="p-2 mr-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"><X className="w-4 h-4" /></button>
-        )}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center px-1 pb-1 lg:px-0 lg:pb-0 lg:pr-1">
+            <select
+                value={roleFilter}
+                onChange={(event) => setRoleFilter(event.target.value)}
+                aria-label="Filter by role"
+                className="w-full sm:w-52 px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600"
+            >
+                <option value="">All roles</option>
+                {ROLE_FILTERS.map((role) => (
+                    <option key={role.value} value={role.value}>{role.label}</option>
+                ))}
+            </select>
+            <ComboFilter
+                className="w-full sm:w-72"
+                value={departmentFilter}
+                onChange={setDepartmentFilter}
+                options={officeChoices([...(universityOffices.length === 0 ? FCU_DEPARTMENTS : []), ...(departmentFilter ? [departmentFilter] : [])])}
+                placeholder="All departments"
+                emptyLabel="All departments"
+                commitOnType={false}
+            />
+            {(searchQuery || roleFilter || departmentFilter) && (
+                <button
+                    type="button"
+                    onClick={() => { setSearchQuery(""); setRoleFilter(""); setDepartmentFilter(""); }}
+                    className="px-3 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors whitespace-nowrap"
+                >
+                    Clear
+                </button>
+            )}
+        </div>
       </motion.div>
 
       <Toast
@@ -457,7 +495,7 @@ const UserManagement = () => {
                           <tr>
                               <td colSpan={4} className="px-6 py-16 text-center text-slate-400">
                                   <Users className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                                  <p className="text-base font-semibold text-slate-600">No users found</p>
+                                  <p className="text-base font-semibold text-slate-600">{(searchQuery || roleFilter || departmentFilter) ? 'No users match these filters' : 'No users found'}</p>
                               </td>
                           </tr>
                       ) : (

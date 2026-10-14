@@ -31,6 +31,19 @@ class UserController extends Controller
             $query->whereNotIn('role', ['Super Admin', 'WSPO Staff']);
         }
 
+        $roles = ['Student', 'Supervisor', 'WSPO Staff', 'Super Admin'];
+        if ($request->filled('role') && in_array($request->role, $roles, true)) {
+            $query->where('role', $request->role);
+        }
+
+        if ($request->filled('department')) {
+            $department = $request->string('department')->trim()->toString();
+            $query->whereHas('profile', function ($profileQuery) use ($department) {
+                $profileQuery->where('assigned_office', $department)
+                    ->orWhereJsonContains('supervised_departments', $department);
+            });
+        }
+
         // 2. DYNAMIC SEARCH FUNCTIONALITY
         if ($request->has('search') && $request->search != '') {
             $searchTerm = $request->search;
@@ -127,6 +140,25 @@ class UserController extends Controller
      */
     private function departmentAliases(string $department): array
     {
+        $seed = $this->staticDepartmentAliases($department);
+        $expanded = $this->mergeStoredOfficeLabels($seed);
+
+        $withGroups = $expanded;
+        foreach ($expanded as $label) {
+            $withGroups = array_merge($withGroups, $this->staticDepartmentAliases($label));
+        }
+
+        return $this->mergeStoredOfficeLabels($withGroups);
+    }
+
+    /**
+     * Older records and the WSPO coordinator still use these labels.
+     * A renamed office is added from the offices table in departmentAliases().
+     *
+     * @return list<string>
+     */
+    private function staticDepartmentAliases(string $department): array
+    {
         $groups = [
             ['CCS', 'College of Computer Studies', 'College of Computer Studies (CCS)', 'CCS Office'],
             ['CBA', 'College of Business and Accountancy', 'College of Business Administration', 'Business Office'],
@@ -141,7 +173,7 @@ class UserController extends Controller
             ['JHS', 'Junior High School Department'],
             ['ES', 'Elementary Department'],
             ['PS', 'Pre-School Department'],
-            ['WSPO', 'Working Students Program Office', 'WSPO Office'],
+            ['WSPO', 'Working Students Program Office', 'WSPO Office', 'Work-Student Program Organization'],
         ];
 
         $normalized = $this->normalizeDepartment($department);
@@ -151,10 +183,45 @@ class UserController extends Controller
             }
         }
 
-        return array_values(array_unique([
+        return array_values(array_unique(array_filter([
             trim($department),
             trim((string) preg_replace('/\\s*\\([^)]*\\)/', '', $department)),
-        ]));
+        ])));
+    }
+
+    /**
+     * @param  list<string>  $aliases
+     * @return list<string>
+     */
+    private function mergeStoredOfficeLabels(array $aliases): array
+    {
+        $keys = [];
+        foreach ($aliases as $alias) {
+            $key = $this->normalizeDepartment($alias);
+            if ($key !== '') {
+                $keys[$key] = true;
+            }
+        }
+
+        $labels = $aliases;
+        foreach (Office::query()->get(['name', 'abbreviation']) as $office) {
+            $abbreviation = trim((string) $office->abbreviation);
+            $nameKey = $this->normalizeDepartment($office->name);
+            $abbreviationKey = $this->normalizeDepartment($abbreviation);
+            if (!isset($keys[$nameKey]) && ($abbreviationKey === '' || !isset($keys[$abbreviationKey]))) {
+                continue;
+            }
+
+            $labels[] = $office->name;
+            if ($abbreviation !== '') {
+                $labels[] = $abbreviation;
+            }
+        }
+
+        return array_values(array_unique(array_filter(array_map(
+            fn ($label) => trim((string) $label),
+            $labels
+        ))));
     }
 
     private function normalizeDepartment(string $department): string

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Http\Controllers\UserController;
 use App\Models\Notification;
 use App\Models\User;
 
@@ -89,35 +90,7 @@ class DepartmentAssignmentNotifier
     /** @return list<string> */
     private function aliases(string $department): array
     {
-        $groups = [
-            ['CCS', 'College of Computer Studies', 'College of Computer Studies (CCS)', 'CCS Office'],
-            ['CBA', 'College of Business and Accountancy', 'College of Business Administration', 'Business Office'],
-            ['CHTM', 'College of Hotel and Tourism Management', 'College of Hospitality and Tourism Management'],
-            ['CCJE', 'College of Criminal Justice Education'],
-            ['COE', 'College of Engineering'],
-            ['CON', 'College of Nursing'],
-            ['CTE', 'College of Teacher Education'],
-            ['CAS', 'College of Arts and Sciences'],
-            ['GS', 'Graduate School'],
-            ['SHS', 'Senior High School Department'],
-            ['JHS', 'Junior High School Department'],
-            ['ES', 'Elementary Department'],
-            ['PS', 'Pre-School Department'],
-            ['WSPO', 'Working Students Program Office', 'WSPO Office'],
-        ];
-
-        $normalized = $this->normalize($department);
-        foreach ($groups as $group) {
-            $aliases = array_map([$this, 'normalize'], $group);
-            if (in_array($normalized, $aliases, true)) {
-                return $group;
-            }
-        }
-
-        return array_values(array_unique(array_filter([
-            trim($department),
-            trim((string) preg_replace('/\s*\([^)]*\)/', '', $department)),
-        ])));
+        return app(UserController::class)->officeNames($department);
     }
 
     private function normalize(string $department): string
