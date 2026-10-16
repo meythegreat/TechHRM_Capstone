@@ -40,6 +40,7 @@ const STAFF_PAGE_TITLES: Record<string, string> = {
   offices: 'Offices',
   analytics: 'Reports & Analytics',
   financial: 'Hours Rendered',
+  help: 'Help',
   settings: 'Profile Settings',
 };
 
@@ -51,6 +52,7 @@ const STUDENT_PAGE_TITLES: Record<string, string> = {
   requirements: 'Requirements',
   disciplinary: 'Disciplinary Records',
   application: 'Application Status',
+  help: 'Help',
   settings: 'Settings',
 };
 import ApplicationManager from './components/ApplicationManager';
@@ -59,6 +61,7 @@ import DisciplinaryManager from './components/DisciplinaryManager';
 import AdminAnalyticsDashboard from './components/AdminAnalyticsDashboard';
 import StaffProfileSettings from './components/StaffProfileSettings';
 import OfficeDirectory from './components/OfficeDirectory';
+import HelpPage from './components/HelpPage';
 
 class PageErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
@@ -375,6 +378,7 @@ function App() {
                     <Route path="/financial" element={<FinancialManagement />} />
                   </>
                 )}
+                <Route path="/help" element={<HelpPage userRole={userRole} />} />
                 <Route
                   path="/settings"
                   element={

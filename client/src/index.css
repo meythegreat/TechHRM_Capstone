@@ -16,14 +16,22 @@
     --color-red-50: #450a0a;
     --color-indigo-50: #1e1b4b;
     --color-purple-50: #3b0764;
+    --color-violet-50: #2e1065;
+    --color-teal-50: #042f2e;
     --color-rose-50: #4c0519;
     --color-red-100: #7f1d1d;
     --color-amber-100: #78350f;
     --color-indigo-100: #312e81;
+    --color-violet-100: #4c1d95;
+    --color-teal-100: #134e4a;
     --color-amber-200: #92400e;
     --color-red-200: #991b1b;
     --color-indigo-200: #3730a3;
     --color-purple-200: #6b21a8;
+    --color-violet-200: #5b21b6;
+    --color-teal-200: #115e59;
+    --color-violet-300: #6d28d9;
+    --color-violet-400: #8b5cf6;
     --color-gray-300: #3d4f68;
     color: #e2e8f0;
     scrollbar-color: #3d4f68 #0a1020;
@@ -115,6 +123,59 @@
     background-color: #1e3a8a;
   }
 
+  html.dark :is(.bg-violet-100, .bg-violet-200) {
+    background-color: #4c1d95;
+  }
+
+  html.dark :is(.bg-teal-100, .bg-teal-200) {
+    background-color: #134e4a;
+  }
+
+  html.dark :is(
+    .bg-violet-50\/70,
+    .bg-violet-50\/60,
+    .bg-violet-50\/50,
+    .bg-violet-50\/40
+  ) {
+    background-color: rgb(46 16 101 / 0.55);
+  }
+
+  html.dark :is(.bg-violet-50, .hover\:bg-violet-50:hover) {
+    background-color: #2e1065;
+  }
+
+  html.dark :is(.bg-teal-50, .hover\:bg-teal-50:hover) {
+    background-color: #042f2e;
+  }
+
+  html.dark :is(.bg-teal-50\/80, .bg-teal-50\/70) {
+    background-color: rgb(4 47 46 / 0.7);
+  }
+
+  html.dark :is(.bg-amber-50\/80, .bg-amber-50\/70) {
+    background-color: rgb(69 26 3 / 0.7);
+  }
+
+  html.dark :is(.bg-blue-50\/80, .bg-blue-50\/70, .bg-blue-50\/60, .bg-blue-50\/50, .bg-blue-50\/40) {
+    background-color: rgb(23 37 84 / 0.7);
+  }
+
+  html.dark :is(.border-l-blue-500, .border-blue-500) {
+    border-color: #60a5fa;
+  }
+
+  html.dark :is(.ring-blue-200, .ring-blue-300, .ring-blue-400) {
+    --tw-ring-color: #3b82f6;
+  }
+
+  html.dark :is(.bg-blue-50, .hover\:bg-blue-50:hover) {
+    background-color: #172554;
+  }
+
+  html.dark :is(.bg-slate-50\/80, .bg-slate-50\/60) {
+    background-color: rgb(23 32 51 / 0.75);
+  }
+
   html.dark .group:hover .group-hover\:bg-blue-100 {
     background-color: #1e3a8a;
   }
@@ -136,9 +197,25 @@
     .border-indigo-300,
     .border-amber-300,
     .border-purple-200,
+    .border-violet-100,
+    .border-violet-200,
+    .border-teal-100,
+    .border-teal-200,
     .border-blue-300
   ) {
     border-color: #3d4f68;
+  }
+
+  html.dark :is(.border-l-violet-500, .border-violet-500) {
+    border-color: #8b5cf6;
+  }
+
+  html.dark :is(
+    .ring-violet-200,
+    .ring-violet-300,
+    .ring-violet-400
+  ) {
+    --tw-ring-color: #7c3aed;
   }
 
   html.dark :is(.hover\:border-blue-300:hover, .hover\:border-blue-400:hover, .hover\:border-blue-200:hover) {
@@ -234,6 +311,22 @@
 
   html.dark :is(.text-purple-700, .text-purple-600) {
     color: #d8b4fe;
+  }
+
+  html.dark :is(.text-violet-800, .text-violet-700, .text-violet-600, .text-violet-100) {
+    color: #c4b5fd;
+  }
+
+  html.dark :is(.text-teal-800, .text-teal-700, .text-teal-600, .text-teal-100) {
+    color: #5eead4;
+  }
+
+  html.dark :is(.text-amber-100) {
+    color: #fcd34d;
+  }
+
+  html.dark :is(.text-blue-100) {
+    color: #93c5fd;
   }
 
   html.dark .recharts-cartesian-grid line {

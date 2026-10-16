@@ -301,7 +301,7 @@ const StudentOverview = () => {
                 </div>
             </motion.div>
 
-            <OrganizationScheduleCalendar />
+            <OrganizationScheduleCalendar personal />
 
             <motion.section
                 variants={containerVariants}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { CalendarDays, ChevronLeft, ChevronRight, Clock, GraduationCap, Briefcase, Flag } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Clock, GraduationCap, Briefcase, Flag } from 'lucide-react';
 import { REALTIME_EVENT } from '../utils/realtime';
 import UserAvatar from './UserAvatar';
 import ComboFilter from './ComboFilter';
@@ -160,13 +160,36 @@ function isClassShift(shift: OrgSchedule) {
     return shift.kind === 'class';
 }
 
-function ScheduleGroup({ title, shifts, tone }: { title: string; shifts: OrgSchedule[]; tone: 'work' | 'class' }) {
+function ScheduleGroup({
+    title,
+    shifts,
+    tone,
+    personal = false,
+    highlight = false,
+}: {
+    title: string;
+    shifts: OrgSchedule[];
+    tone: 'work' | 'class';
+    personal?: boolean;
+    highlight?: boolean;
+}) {
     const isClass = tone === 'class';
     return (
-        <section className="border-b border-slate-100 last:border-b-0">
+        <section className={`border-b border-slate-100 last:border-b-0 ${
+            highlight
+                ? isClass
+                    ? 'bg-violet-50/40 ring-1 ring-inset ring-violet-200'
+                    : 'bg-blue-50/40 ring-1 ring-inset ring-blue-200'
+                : ''
+        }`}>
             <div className={`flex items-center gap-2 px-6 py-3 text-xs font-semibold uppercase tracking-wide ${isClass ? 'bg-violet-50/70 text-violet-700' : 'bg-blue-50/70 text-blue-700'}`}>
                 {isClass ? <GraduationCap className="h-3.5 w-3.5" /> : <Briefcase className="h-3.5 w-3.5" />}
                 {title}
+                {highlight && (
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold normal-case tracking-wide text-white ${isClass ? 'bg-violet-600' : 'bg-blue-600'}`}>
+                        This day
+                    </span>
+                )}
                 <span className="ml-auto tabular-nums">{shifts.length}</span>
             </div>
             {shifts.length === 0 ? (
@@ -174,15 +197,38 @@ function ScheduleGroup({ title, shifts, tone }: { title: string; shifts: OrgSche
             ) : (
                 <ul className="divide-y divide-slate-100">
                     {shifts.map((shift) => (
-                        <li key={shift.id} className="flex items-start gap-3 px-6 py-3.5">
-                            <UserAvatar name={shift.student_name} picture={shift.profile_picture} className="h-9 w-9 rounded-full bg-slate-100 text-xs text-slate-600" />
+                        <li
+                            key={shift.id}
+                            className={`flex items-start gap-3 px-6 py-3.5 ${
+                                highlight
+                                    ? isClass
+                                        ? 'border-l-4 border-l-violet-500 bg-violet-50/50'
+                                        : 'border-l-4 border-l-blue-500 bg-blue-50/50'
+                                    : ''
+                            }`}
+                        >
+                            {!personal && (
+                                <UserAvatar name={shift.student_name} picture={shift.profile_picture} className="h-9 w-9 rounded-full bg-slate-100 text-xs text-slate-600" />
+                            )}
+                            {personal && isClass && (
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
+                                    <GraduationCap className="h-4 w-4" />
+                                </div>
+                            )}
+                            {personal && !isClass && (
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+                                    <Briefcase className="h-4 w-4" />
+                                </div>
+                            )}
                             <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm font-semibold text-slate-900">{shift.student_name}</p>
-                                <p className="mt-0.5 truncate text-sm text-slate-700">{scheduleTitle(shift)}</p>
+                                {!personal && <p className="truncate text-sm font-semibold text-slate-900">{shift.student_name}</p>}
+                                <p className={`truncate text-sm ${personal ? 'font-semibold text-slate-900' : 'mt-0.5 text-slate-700'}`}>
+                                    {scheduleTitle(shift)}
+                                </p>
                                 <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
                                     <Clock className="h-3.5 w-3.5" />
                                     {shift.time}
-                                    {shift.department ? ` · ${shift.department}` : ''}
+                                    {(!personal || !isClass) && shift.department ? ` · ${shift.department}` : ''}
                                     {shift.room ? ` · ${shift.room}` : ''}
                                     {shift.instructor ? ` · ${shift.instructor}` : ''}
                                 </p>
@@ -195,7 +241,12 @@ function ScheduleGroup({ title, shifts, tone }: { title: string; shifts: OrgSche
     );
 }
 
-const OrganizationScheduleCalendar = () => {
+interface OrganizationScheduleCalendarProps {
+    /** When true, show only the signed-in student's work and class schedule. */
+    personal?: boolean;
+}
+
+const OrganizationScheduleCalendar = ({ personal = false }: OrganizationScheduleCalendarProps) => {
     const [schedules, setSchedules] = useState<OrgSchedule[]>([]);
     const [holidays, setHolidays] = useState<HolidaySpan[]>([]);
     const [semester, setSemester] = useState<SemesterWindow | null>(null);
@@ -208,34 +259,86 @@ const OrganizationScheduleCalendar = () => {
     const [office, setOffice] = useState('');
     const [places, setPlaces] = useState<string[]>([]);
     const [category, setCategory] = useState<'all' | 'work' | 'class' | 'holiday' | 'break'>('all');
+    const [isExpanded, setIsExpanded] = useState(() => {
+        if (typeof window === 'undefined') return true;
+        const key = personal ? 'techhrm-calendar-expanded-personal' : 'techhrm-calendar-expanded-org';
+        const stored = window.localStorage.getItem(key);
+        if (stored === '0') return false;
+        if (stored === '1') return true;
+        return true;
+    });
 
     useEffect(() => {
         let active = true;
         const load = async () => {
             try {
-                const [scheduleResult, holidayResult] = await Promise.allSettled([
-                    axios.get('/api/organization-schedules'),
-                    axios.get('/api/holidays'),
-                ]);
-                if (!active) return;
-                if (scheduleResult.status === 'fulfilled') {
-                    const response = scheduleResult.value;
-                    setSchedules(Array.isArray(response.data?.schedules) ? response.data.schedules : []);
-                    setPlaces(Array.isArray(response.data?.offices) ? response.data.offices.filter((name: unknown) => typeof name === 'string' && name.trim() !== '') : []);
-                    const nextSemester = response.data?.semester;
-                    setSemester(nextSemester?.starts_on && nextSemester?.ends_on ? nextSemester : null);
+                if (personal) {
+                    const studentName = localStorage.getItem('user_name') || 'Student';
+                    const avatar = localStorage.getItem('profile_picture');
+                    const [mineResult, holidayResult, semesterResult] = await Promise.allSettled([
+                        axios.get('/api/my-schedule'),
+                        axios.get('/api/holidays'),
+                        axios.get('/api/semester'),
+                    ]);
+                    if (!active) return;
+                    if (mineResult.status === 'fulfilled') {
+                        const rows = Array.isArray(mineResult.value.data) ? mineResult.value.data : [];
+                        setSchedules(rows.map((shift: Record<string, unknown>) => ({
+                            id: Number(shift.id),
+                            day: String(shift.day || ''),
+                            time: String(shift.time || ''),
+                            kind: String(shift.kind || 'work'),
+                            duty_type: (shift.duty_type as string | null) ?? null,
+                            subject: (shift.subject as string | null) ?? null,
+                            room: (shift.room as string | null) ?? null,
+                            instructor: (shift.instructor as string | null) ?? (shift.supervisor as string | null) ?? null,
+                            department: (shift.department as string | null) ?? null,
+                            student_name: studentName,
+                            profile_picture: avatar,
+                        })));
+                        setPlaces([]);
+                    } else {
+                        console.error('Failed to load personal schedules', mineResult.reason);
+                        setSchedules([]);
+                    }
+                    if (holidayResult.status === 'fulfilled') {
+                        setHolidays(Array.isArray(holidayResult.value.data) ? holidayResult.value.data : []);
+                    } else {
+                        console.error('Failed to load holidays', holidayResult.reason);
+                        setHolidays([]);
+                    }
+                    if (semesterResult.status === 'fulfilled') {
+                        const nextSemester = semesterResult.value.data?.semester;
+                        setSemester(nextSemester?.starts_on && nextSemester?.ends_on ? nextSemester : null);
+                    } else {
+                        console.error('Failed to load semester', semesterResult.reason);
+                        setSemester(null);
+                    }
                 } else {
-                    console.error('Failed to load organization schedules', scheduleResult.reason);
-                    setSchedules([]);
-                }
-                if (holidayResult.status === 'fulfilled') {
-                    setHolidays(Array.isArray(holidayResult.value.data) ? holidayResult.value.data : []);
-                } else {
-                    console.error('Failed to load holidays', holidayResult.reason);
-                    setHolidays([]);
+                    const [scheduleResult, holidayResult] = await Promise.allSettled([
+                        axios.get('/api/organization-schedules'),
+                        axios.get('/api/holidays'),
+                    ]);
+                    if (!active) return;
+                    if (scheduleResult.status === 'fulfilled') {
+                        const response = scheduleResult.value;
+                        setSchedules(Array.isArray(response.data?.schedules) ? response.data.schedules : []);
+                        setPlaces(Array.isArray(response.data?.offices) ? response.data.offices.filter((name: unknown) => typeof name === 'string' && name.trim() !== '') : []);
+                        const nextSemester = response.data?.semester;
+                        setSemester(nextSemester?.starts_on && nextSemester?.ends_on ? nextSemester : null);
+                    } else {
+                        console.error('Failed to load organization schedules', scheduleResult.reason);
+                        setSchedules([]);
+                    }
+                    if (holidayResult.status === 'fulfilled') {
+                        setHolidays(Array.isArray(holidayResult.value.data) ? holidayResult.value.data : []);
+                    } else {
+                        console.error('Failed to load holidays', holidayResult.reason);
+                        setHolidays([]);
+                    }
                 }
             } catch (error) {
-                console.error('Failed to load organization calendar', error);
+                console.error(personal ? 'Failed to load personal calendar' : 'Failed to load organization calendar', error);
                 if (active) {
                     setSchedules([]);
                     setHolidays([]);
@@ -252,7 +355,7 @@ const OrganizationScheduleCalendar = () => {
             clearInterval(interval);
             window.removeEventListener(REALTIME_EVENT, load);
         };
-    }, []);
+    }, [personal]);
 
     const offices = useMemo(() => {
         const fromSchedules = schedules
@@ -301,72 +404,268 @@ const OrganizationScheduleCalendar = () => {
     const selectedHoliday = showHoliday ? holidayOn(selected, holidays) : null;
     const selectedBreak = showBreak ? breakOn(selected, holidays) : null;
     const monthLabel = cursor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const selectedIsToday = sameDay(selected, today);
+    const todayName = today.toLocaleDateString('en-US', { weekday: 'long' });
+    const todayInSemester = insideSemester(today, semester);
+    const todayWeekdayShifts = todayInSemester ? (byWeekday.get(todayName) ?? []) : [];
+    const todayShifts = todayWeekdayShifts.filter((shift) => !scheduleBlocked(today, shift, holidays));
+    const todayWork = todayShifts.filter((shift) => !isClassShift(shift));
+    const todayClasses = todayShifts.filter((shift) => isClassShift(shift));
+    const todayHasWork = showWork && todayWork.length > 0;
+    const todayHasClass = showClass && todayClasses.length > 0;
+    const showTodayPanel = personal && (showWork || showClass) && category !== 'holiday' && category !== 'break';
+    const highlightClasses = personal && selectedClass.length > 0;
+    const highlightWork = personal && selectedWork.length > 0 && selectedClass.length === 0;
 
     const shiftMonth = (delta: number) => {
         setCursor((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1));
     };
 
+    const toggleExpanded = () => {
+        setIsExpanded((current) => {
+            const next = !current;
+            const key = personal ? 'techhrm-calendar-expanded-personal' : 'techhrm-calendar-expanded-org';
+            window.localStorage.setItem(key, next ? '1' : '0');
+            return next;
+        });
+    };
+
     return (
         <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-            <div className="flex flex-col gap-4 border-b border-slate-100 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                    <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
-                        <CalendarDays className="h-5 w-5 text-blue-600" />
-                        Organization schedule
-                    </h2>
-                    <p className="mt-1 text-sm text-slate-500">
-                        {semester
-                            ? `${semester.label} runs ${formatSemesterDate(semester.starts_on)} through ${formatSemesterDate(semester.ends_on)}. Schedules repeat each week inside that window.`
-                            : 'Schedules repeat each week after WSPO staff or a super admin sets the semester length.'}
-                    </p>
-                    <div className="mt-3 flex items-center gap-3 text-xs font-semibold">
-                        <span className="inline-flex items-center gap-1.5 text-blue-700">
-                            <Briefcase className="h-3.5 w-3.5" /> Work
-                        </span>
-                        <span className="inline-flex items-center gap-1.5 text-violet-700">
-                            <GraduationCap className="h-3.5 w-3.5" /> Class
-                        </span>
-                        <span className="inline-flex items-center gap-1.5 text-amber-700">
-                            <Flag className="h-3.5 w-3.5" /> Holiday
-                        </span>
-                        <span className="inline-flex items-center gap-1.5 text-teal-700">
-                            <Flag className="h-3.5 w-3.5" /> Class break
-                        </span>
-                    </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    <ComboFilter
-                        commitOnType={false}
-                        value={office}
-                        onChange={setOffice}
-                        options={offices}
-                        placeholder="All departments and offices"
-                        emptyLabel="All departments and offices"
-                        className="w-full min-w-0 sm:w-72"
-                    />
-                    <select
-                        value={category}
-                        onChange={(event) => setCategory(event.target.value as 'all' | 'work' | 'class' | 'holiday' | 'break')}
-                        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-600"
-                        aria-label="Filter by schedule category"
+            <div className={`px-6 py-5 ${isExpanded ? 'border-b border-slate-100' : ''}`}>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <button
+                        type="button"
+                        onClick={toggleExpanded}
+                        aria-expanded={isExpanded}
+                        aria-controls="schedule-calendar-body"
+                        className="min-w-0 flex-1 rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
                     >
-                        <option value="all">All categories</option>
-                        <option value="work">Work</option>
-                        <option value="class">Class</option>
-                        <option value="holiday">Holiday</option>
-                        <option value="break">Class break</option>
-                    </select>
-                    <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
-                        <button type="button" onClick={() => shiftMonth(-1)} className="rounded-lg p-1.5 text-slate-500 hover:bg-white hover:text-slate-900" aria-label="Previous month">
-                            <ChevronLeft className="h-4 w-4" />
-                        </button>
-                        <span className="min-w-36 px-2 text-center text-sm font-semibold text-slate-900">{monthLabel}</span>
-                        <button type="button" onClick={() => shiftMonth(1)} className="rounded-lg p-1.5 text-slate-500 hover:bg-white hover:text-slate-900" aria-label="Next month">
-                            <ChevronRight className="h-4 w-4" />
-                        </button>
-                    </div>
+                        <div className="flex items-start gap-3">
+                            <div className="min-w-0 flex-1">
+                                <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+                                    <CalendarDays className="h-5 w-5 shrink-0 text-blue-600" />
+                                    {personal ? 'My schedule' : 'Organization schedule'}
+                                </h2>
+                                {isExpanded ? (
+                                    <>
+                                        <p className="mt-1 text-sm text-slate-500">
+                                            {personal
+                                                ? semester
+                                                    ? `${semester.label} runs ${formatSemesterDate(semester.starts_on)} through ${formatSemesterDate(semester.ends_on)}. Select a day to see your work and class blocks.`
+                                                    : 'Select a day to see your work and class schedule once the semester window is set.'
+                                                : semester
+                                                    ? `${semester.label} runs ${formatSemesterDate(semester.starts_on)} through ${formatSemesterDate(semester.ends_on)}. Schedules repeat each week inside that window.`
+                                                    : 'Schedules repeat each week after WSPO staff or a super admin sets the semester length.'}
+                                        </p>
+                                        <div className="mt-3 flex items-center gap-3 text-xs font-semibold">
+                                            <span className="inline-flex items-center gap-1.5 text-blue-700">
+                                                <Briefcase className="h-3.5 w-3.5" /> Work
+                                            </span>
+                                            <span className="inline-flex items-center gap-1.5 text-violet-700">
+                                                <GraduationCap className="h-3.5 w-3.5" /> Class
+                                            </span>
+                                            <span className="inline-flex items-center gap-1.5 text-amber-700">
+                                                <Flag className="h-3.5 w-3.5" /> Holiday
+                                            </span>
+                                            <span className="inline-flex items-center gap-1.5 text-teal-700">
+                                                <Flag className="h-3.5 w-3.5" /> Class break
+                                            </span>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                                        <span>{monthLabel}</span>
+                                        {personal && (
+                                            <>
+                                                <span className="text-slate-300">·</span>
+                                                <span className="font-medium text-blue-700">{todayWork.length} work today</span>
+                                                <span className="font-medium text-violet-700">{todayClasses.length} class today</span>
+                                            </>
+                                        )}
+                                        {!personal && <span>Calendar collapsed</span>}
+                                    </div>
+                                )}
+                            </div>
+                            <ChevronDown
+                                className={`mt-1 h-5 w-5 shrink-0 text-slate-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                                aria-hidden="true"
+                            />
+                        </div>
+                    </button>
+                    {isExpanded && (
+                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                            {!personal && (
+                                <ComboFilter
+                                    commitOnType={false}
+                                    value={office}
+                                    onChange={setOffice}
+                                    options={offices}
+                                    placeholder="All departments and offices"
+                                    emptyLabel="All departments and offices"
+                                    className="w-full min-w-0 sm:w-72"
+                                />
+                            )}
+                            <select
+                                value={category}
+                                onChange={(event) => setCategory(event.target.value as 'all' | 'work' | 'class' | 'holiday' | 'break')}
+                                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-600"
+                                aria-label="Filter by schedule category"
+                            >
+                                <option value="all">All categories</option>
+                                <option value="work">Work</option>
+                                <option value="class">Class</option>
+                                <option value="holiday">Holiday</option>
+                                <option value="break">Class break</option>
+                            </select>
+                            <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+                                <button type="button" onClick={() => shiftMonth(-1)} className="rounded-lg p-1.5 text-slate-500 hover:bg-white hover:text-slate-900" aria-label="Previous month">
+                                    <ChevronLeft className="h-4 w-4" />
+                                </button>
+                                <span className="min-w-36 px-2 text-center text-sm font-semibold text-slate-900">{monthLabel}</span>
+                                <button type="button" onClick={() => shiftMonth(1)} className="rounded-lg p-1.5 text-slate-500 hover:bg-white hover:text-slate-900" aria-label="Next month">
+                                    <ChevronRight className="h-4 w-4" />
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
+
+            {isExpanded && (
+            <div id="schedule-calendar-body">
+            {showTodayPanel && (
+                <div className={`border-b px-6 py-4 ${
+                    todayHasClass && !todayHasWork
+                        ? 'border-violet-100 bg-violet-50/60'
+                        : todayHasWork && !todayHasClass
+                            ? 'border-blue-100 bg-blue-50/60'
+                            : todayHasWork || todayHasClass
+                                ? 'border-slate-100 bg-slate-50/80'
+                                : 'border-slate-100 bg-slate-50/60'
+                }`}>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <p className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wide ${
+                                todayHasClass && !todayHasWork
+                                    ? 'text-violet-700'
+                                    : todayHasWork && !todayHasClass
+                                        ? 'text-blue-700'
+                                        : 'text-slate-600'
+                            }`}>
+                                {todayHasClass && !todayHasWork ? (
+                                    <GraduationCap className="h-3.5 w-3.5" />
+                                ) : todayHasWork && !todayHasClass ? (
+                                    <Briefcase className="h-3.5 w-3.5" />
+                                ) : (
+                                    <CalendarDays className="h-3.5 w-3.5" />
+                                )}
+                                {todayHasClass && !todayHasWork
+                                    ? "Today's class schedule"
+                                    : todayHasWork && !todayHasClass
+                                        ? "Today's work schedule"
+                                        : "Today's schedule"}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-600">
+                                {today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                            </p>
+                        </div>
+                        {!selectedIsToday && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSelected(today);
+                                    setCursor(new Date(today.getFullYear(), today.getMonth(), 1));
+                                }}
+                                className={`rounded-lg bg-white px-3 py-1.5 text-xs font-semibold shadow-sm hover:bg-slate-50 ${
+                                    todayHasClass && !todayHasWork
+                                        ? 'text-violet-700 ring-1 ring-violet-200 hover:bg-violet-50'
+                                        : todayHasWork && !todayHasClass
+                                            ? 'text-blue-700 ring-1 ring-blue-200 hover:bg-blue-50'
+                                            : 'text-slate-700 ring-1 ring-slate-200'
+                                }`}
+                            >
+                                Jump to today
+                            </button>
+                        )}
+                    </div>
+                    {!todayHasWork && !todayHasClass ? (
+                        <p className="mt-3 text-sm text-slate-500">
+                            {showWork && showClass
+                                ? 'No work or class scheduled for today.'
+                                : showWork
+                                    ? 'No work scheduled for today.'
+                                    : 'No classes scheduled for today.'}
+                        </p>
+                    ) : (
+                        <div className="mt-3 space-y-4">
+                            {todayHasWork && (
+                                <div>
+                                    {todayHasClass && (
+                                        <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-blue-700">
+                                            <Briefcase className="h-3 w-3" /> Work
+                                        </p>
+                                    )}
+                                    <ul className="space-y-2">
+                                        {todayWork.map((shift) => (
+                                            <li
+                                                key={`today-work-${shift.id}`}
+                                                className="flex items-start gap-3 rounded-xl border border-blue-200 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+                                            >
+                                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+                                                    <Briefcase className="h-4 w-4" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate text-sm font-semibold text-slate-900">{scheduleTitle(shift)}</p>
+                                                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                                                        <span className="inline-flex items-center gap-1">
+                                                            <Clock className="h-3.5 w-3.5" />
+                                                            {shift.time}
+                                                        </span>
+                                                        {shift.department ? <span>{shift.department}</span> : null}
+                                                    </p>
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                            {todayHasClass && (
+                                <div>
+                                    {todayHasWork && (
+                                        <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-violet-700">
+                                            <GraduationCap className="h-3 w-3" /> Class
+                                        </p>
+                                    )}
+                                    <ul className="space-y-2">
+                                        {todayClasses.map((shift) => (
+                                            <li
+                                                key={`today-class-${shift.id}`}
+                                                className="flex items-start gap-3 rounded-xl border border-violet-200 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+                                            >
+                                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
+                                                    <GraduationCap className="h-4 w-4" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate text-sm font-semibold text-slate-900">{scheduleTitle(shift)}</p>
+                                                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                                                        <span className="inline-flex items-center gap-1">
+                                                            <Clock className="h-3.5 w-3.5" />
+                                                            {shift.time}
+                                                        </span>
+                                                        {shift.room ? <span>{shift.room}</span> : null}
+                                                        {shift.instructor ? <span>{shift.instructor}</span> : null}
+                                                    </p>
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
 
             <div className="grid gap-0 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.8fr)]">
                 <div className="border-b border-slate-100 p-4 sm:p-6 lg:border-b-0 lg:border-r">
@@ -395,6 +694,8 @@ const OrganizationScheduleCalendar = () => {
                                 const classBreak = showBreak ? breakOn(date, holidays) : null;
                                 const isToday = sameDay(date, today);
                                 const isSelected = sameDay(date, selected);
+                                const hasClass = classCount > 0;
+                                const hasWorkOnly = workCount > 0 && !hasClass;
                                 return (
                                     <button
                                         key={date.toISOString()}
@@ -404,12 +705,24 @@ const OrganizationScheduleCalendar = () => {
                                         aria-label={`${date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}, ${workCount} work, ${classCount} class${holiday ? `, holiday ${holiday.name}${holiday.portion === 'half' ? ' half day' : ''}` : ''}${classBreak ? `, class break ${classBreak.name}` : ''}`}
                                         className={`flex h-24 flex-col items-start rounded-xl px-1.5 py-1.5 text-left transition-colors sm:px-2 ${
                                             isSelected
-                                                ? 'bg-slate-900 text-white'
+                                                ? personal && hasClass
+                                                    ? 'bg-violet-700 text-white ring-2 ring-violet-300'
+                                                    : personal && hasWorkOnly
+                                                        ? 'bg-blue-700 text-white ring-2 ring-blue-300'
+                                                        : 'bg-slate-900 text-white'
                                                 : !inWindow
                                                     ? 'text-slate-300 hover:bg-slate-50'
-                                                    : isToday
-                                                        ? 'bg-slate-100 text-slate-900 ring-1 ring-inset ring-slate-300'
-                                                        : 'text-slate-700 hover:bg-slate-50'
+                                                    : personal && hasClass
+                                                        ? isToday
+                                                            ? 'bg-violet-50 text-slate-900 ring-2 ring-inset ring-violet-400'
+                                                            : 'bg-violet-50/70 text-slate-900 ring-1 ring-inset ring-violet-200 hover:bg-violet-50'
+                                                        : personal && hasWorkOnly
+                                                            ? isToday
+                                                                ? 'bg-blue-50 text-slate-900 ring-2 ring-inset ring-blue-400'
+                                                                : 'bg-blue-50/70 text-slate-900 ring-1 ring-inset ring-blue-200 hover:bg-blue-50'
+                                                            : isToday
+                                                                ? 'bg-slate-100 text-slate-900 ring-1 ring-inset ring-slate-300'
+                                                                : 'text-slate-700 hover:bg-slate-50'
                                         }`}
                                     >
                                         <span className="text-sm font-semibold tabular-nums">{date.getDate()}</span>
@@ -443,13 +756,36 @@ const OrganizationScheduleCalendar = () => {
                 </div>
 
                 <div className="flex min-h-72 flex-col">
-                    <div className="border-b border-slate-100 px-6 py-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                            {selected.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                    <div className={`border-b px-6 py-4 ${
+                        highlightClasses
+                            ? 'border-violet-100 bg-violet-50/50'
+                            : highlightWork
+                                ? 'border-blue-100 bg-blue-50/50'
+                                : 'border-slate-100'
+                    }`}>
+                        <p className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                            <span>
+                                {selected.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                            </span>
+                            {selectedIsToday && (
+                                <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-bold normal-case tracking-wide text-white">
+                                    Today
+                                </span>
+                            )}
+                            {highlightClasses && (
+                                <span className="rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-bold normal-case tracking-wide text-white">
+                                    Class day
+                                </span>
+                            )}
+                            {highlightWork && (
+                                <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold normal-case tracking-wide text-white">
+                                    Work day
+                                </span>
+                            )}
                         </p>
                         <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm font-medium">
-                            {showWork && <span className="text-blue-700">{selectedWork.length} work</span>}
-                            {showClass && <span className="text-violet-700">{selectedClass.length} class</span>}
+                            {showWork && <span className={highlightWork ? 'font-semibold text-blue-800' : 'text-blue-700'}>{selectedWork.length} work</span>}
+                            {showClass && <span className={highlightClasses ? 'font-semibold text-violet-800' : 'text-violet-700'}>{selectedClass.length} class</span>}
                             {showHoliday && selectedHoliday && <span className="text-amber-700">{selectedHoliday.portion === 'half' ? 'Half-day holiday' : 'Holiday'}</span>}
                             {showBreak && selectedBreak && <span className="text-teal-700">Class break</span>}
                             {category === 'holiday' && !selectedHoliday && <span className="text-slate-500">No holiday</span>}
@@ -526,13 +862,31 @@ const OrganizationScheduleCalendar = () => {
                         </div>
                     ) : (
                         <div>
-                            {showWork && (selectedWork.length > 0 || hiddenShifts.length === 0) && <ScheduleGroup title="Work" shifts={selectedWork} tone="work" />}
-                            {showClass && (selectedClass.length > 0 || hiddenShifts.length === 0) && <ScheduleGroup title="Class" shifts={selectedClass} tone="class" />}
+                            {showWork && (selectedWork.length > 0 || hiddenShifts.length === 0) && (
+                                <ScheduleGroup
+                                    title="Work"
+                                    shifts={selectedWork}
+                                    tone="work"
+                                    personal={personal}
+                                    highlight={highlightWork}
+                                />
+                            )}
+                            {showClass && (selectedClass.length > 0 || hiddenShifts.length === 0) && (
+                                <ScheduleGroup
+                                    title="Class"
+                                    shifts={selectedClass}
+                                    tone="class"
+                                    personal={personal}
+                                    highlight={highlightClasses}
+                                />
+                            )}
                         </div>
                     )}
                     </div>
                 </div>
             </div>
+            </div>
+            )}
         </section>
     );
 };

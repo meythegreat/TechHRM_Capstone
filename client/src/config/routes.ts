@@ -7,6 +7,7 @@ export const STUDENT_PATHS = new Set([
   'requirements',
   'disciplinary',
   'application',
+  'help',
   'settings',
 ]);
 
@@ -17,6 +18,7 @@ export const STAFF_BASE_PATHS = new Set([
   'schedules',
   'attendance-hub',
   'compliance',
+  'help',
   'settings',
 ]);
 
