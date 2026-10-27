@@ -13,8 +13,9 @@ return new class extends Migration
             $table->date('end_date')->nullable()->after('date');
         });
 
+        $dateColumn = Schema::getConnection()->getQueryGrammar()->wrap('date');
         DB::table('holidays')->whereNull('end_date')->update([
-            'end_date' => DB::raw('`date`'),
+            'end_date' => DB::raw($dateColumn),
         ]);
     }
 
