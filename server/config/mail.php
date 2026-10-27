@@ -111,8 +111,14 @@ return [
     */
 
     'from' => [
-        'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
+        'address' => env('MAIL_FROM_ADDRESS', 'onboarding@resend.dev'),
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),
     ],
+
+    /*
+    | Contact address shown in outbound email footers. Separate from MAIL_FROM_ADDRESS
+    | because Resend cannot send from an @gmail.com address without a verified domain.
+    */
+    'contact_address' => env('MAIL_CONTACT_ADDRESS', 'miguel102104@gmail.com'),
 
 ];
