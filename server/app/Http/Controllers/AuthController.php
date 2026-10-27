@@ -303,6 +303,7 @@ class AuthController extends Controller
             : (filter_var($user->username, FILTER_VALIDATE_EMAIL) ? $user->username : 'Not on file');
         $accountEmail = htmlspecialchars($accountEmail, ENT_QUOTES, 'UTF-8');
         $password = htmlspecialchars($temporaryPassword, ENT_QUOTES, 'UTF-8');
+        $contactEmail = htmlspecialchars((string) config('mail.contact_address', 'miguel102104@gmail.com'), ENT_QUOTES, 'UTF-8');
 
         return <<<HTML
 <!DOCTYPE html>
@@ -349,7 +350,7 @@ class AuthController extends Controller
           <tr>
             <td style="padding:18px 32px;background:#102179;">
               <p style="margin:0;color:#FFD500;font-size:13px;font-weight:bold;">TechHRM WSPO</p>
-              <p style="margin:4px 0 0;color:#4AECED;font-size:13px;">miguel102104@gmail.com</p>
+              <p style="margin:4px 0 0;color:#4AECED;font-size:13px;">{$contactEmail}</p>
             </td>
           </tr>
         </table>
