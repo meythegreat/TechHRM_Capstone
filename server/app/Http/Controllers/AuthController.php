@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use App\Models\User;
 use App\Models\Application;
@@ -95,33 +95,20 @@ class AuthController extends Controller
         }
 
         $temporaryPassword = Str::password(12, symbols: false);
-        $payload = [
-            'event' => 'forgot_password',
-            'name' => $user->name,
-            'username' => $user->username,
-            'email' => $email,
-            'from_email' => 'techhrmwspo@gmail.com',
-            'from_name' => 'TechHRM WSPO',
-            'temporary_password' => $temporaryPassword,
-            'subject' => 'Your TechHRM temporary password',
-            'message' => $this->resetEmailBody($user, $temporaryPassword),
-        ];
-
-        $webhookUrl = config('services.n8n.forgot_password_webhook');
+        $fromAddress = config('mail.from.address', 'techhrmwspo@gmail.com');
+        $fromName = config('mail.from.name', 'TechHRM WSPO');
 
         try {
-            $webhook = Http::timeout(20)->asJson()->post($webhookUrl, $payload);
+            Mail::html($this->resetEmailBody($user, $temporaryPassword), function ($message) use ($email, $fromAddress, $fromName) {
+                $message->to($email)
+                    ->from($fromAddress, $fromName)
+                    ->subject('Your TechHRM temporary password');
+            });
         } catch (\Throwable $e) {
             report($e);
 
             return response()->json([
-                'message' => 'Could not reach n8n to send the Gmail reset. Start n8n, confirm N8N_FORGOT_PASSWORD_WEBHOOK, then try again.',
-            ], 502);
-        }
-
-        if (!$webhook->successful()) {
-            return response()->json([
-                'message' => 'n8n did not send the Gmail reset. Activate the forgot-password workflow and reconnect Gmail in n8n.',
+                'message' => 'Could not send the password reset email. Check the Gmail SMTP settings (MAIL_HOST, MAIL_USERNAME, MAIL_PASSWORD), then try again.',
             ], 502);
         }
 

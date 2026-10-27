@@ -35,11 +35,4 @@ return [
         ],
     ],
 
-    'n8n' => [
-        'forgot_password_webhook' => env(
-            'N8N_FORGOT_PASSWORD_WEBHOOK',
-            'http://localhost:5678/webhook/techhrm/forgot-password'
-        ),
-    ],
-
 ];
