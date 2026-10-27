@@ -36,7 +36,11 @@ return new class extends Migration
                 ->where('status', 'Credited')
                 ->update(['status' => 'Forwarded to Finance']);
 
-            DB::statement("ALTER TABLE financial_records MODIFY status ENUM('Draft', 'Approved', 'Locked', 'Forwarded to Finance') NOT NULL DEFAULT 'Draft'");
+            if (Schema::getConnection()->getDriverName() === 'mysql') {
+                DB::statement("ALTER TABLE financial_records MODIFY status ENUM('Draft', 'Approved', 'Locked', 'Forwarded to Finance') NOT NULL DEFAULT 'Draft'");
+            } else {
+                DB::statement('ALTER TABLE financial_records DROP CONSTRAINT IF EXISTS financial_records_status_check');
+            }
         }
     }
 
@@ -50,7 +54,9 @@ return new class extends Migration
             ->where('status', 'Forwarded to Finance')
             ->update(['status' => 'Credited']);
 
-        DB::statement("ALTER TABLE financial_records MODIFY status ENUM('Draft', 'Approved', 'Locked', 'Credited') NOT NULL DEFAULT 'Draft'");
+        if (Schema::getConnection()->getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE financial_records MODIFY status ENUM('Draft', 'Approved', 'Locked', 'Credited') NOT NULL DEFAULT 'Draft'");
+        }
 
         if (Schema::hasColumn('financial_records', 'estimated_gross_amount')) {
             Schema::table('financial_records', function (Blueprint $table) {

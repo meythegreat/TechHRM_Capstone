@@ -10,22 +10,28 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('rendered_hour_events', function (Blueprint $table) {
-            $table->time('starts_at')->nullable()->after('group_name');
+            $table->time('starts_at')->nullable();
         });
 
-        DB::statement('ALTER TABLE daily_tokens MODIFY type VARCHAR(40) NOT NULL');
+        $driver = Schema::getConnection()->getDriverName();
+        if ($driver === 'mysql') {
+            DB::statement('ALTER TABLE daily_tokens MODIFY type VARCHAR(40) NOT NULL');
+        } else {
+            DB::statement('ALTER TABLE daily_tokens DROP CONSTRAINT IF EXISTS daily_tokens_type_check');
+            DB::statement('ALTER TABLE daily_tokens ALTER COLUMN type TYPE VARCHAR(40)');
+        }
 
         Schema::table('daily_tokens', function (Blueprint $table) {
-            $table->foreignId('event_id')->nullable()->after('description')->constrained('rendered_hour_events')->nullOnDelete();
+            $table->foreignId('event_id')->nullable()->constrained('rendered_hour_events')->nullOnDelete();
         });
 
         Schema::table('attendances', function (Blueprint $table) {
-            $table->foreignId('rendered_hour_event_id')->nullable()->after('anomaly_reason')->constrained('rendered_hour_events')->nullOnDelete();
-            $table->decimal('activity_hours', 8, 2)->nullable()->after('rendered_hour_event_id');
+            $table->foreignId('rendered_hour_event_id')->nullable()->constrained('rendered_hour_events')->nullOnDelete();
+            $table->decimal('activity_hours', 8, 2)->nullable();
         });
 
         Schema::table('rendered_hour_entries', function (Blueprint $table) {
-            $table->foreignId('attendance_id')->nullable()->after('hours_delta')->constrained('attendances')->nullOnDelete();
+            $table->foreignId('attendance_id')->nullable()->constrained('attendances')->nullOnDelete();
         });
 
         DB::table('rendered_hour_events')
@@ -59,7 +65,9 @@ return new class extends Migration
             $table->dropConstrainedForeignId('event_id');
         });
 
-        DB::statement("ALTER TABLE daily_tokens MODIFY type ENUM('Daily Clock', 'Cleaning', 'Meeting') NOT NULL");
+        if (Schema::getConnection()->getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE daily_tokens MODIFY type ENUM('Daily Clock', 'Cleaning', 'Meeting') NOT NULL");
+        }
 
         Schema::table('rendered_hour_events', function (Blueprint $table) {
             $table->dropColumn('starts_at');

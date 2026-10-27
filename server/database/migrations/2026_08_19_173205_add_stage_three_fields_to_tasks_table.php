@@ -9,19 +9,21 @@ return new class extends Migration
 {
     public function up(): void
     {
-        DB::statement("ALTER TABLE tasks MODIFY status ENUM('Pending', 'Assigned', 'In Progress', 'Completed', 'Verified') DEFAULT 'Pending'");
+        if (Schema::getConnection()->getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE tasks MODIFY status ENUM('Pending', 'Assigned', 'In Progress', 'Completed', 'Verified') DEFAULT 'Pending'");
+        }
 
         Schema::table('tasks', function (Blueprint $table) {
             if (!Schema::hasColumn('tasks', 'task_type')) {
-                $table->enum('task_type', ['Routine', 'Special Project'])->default('Routine')->after('description');
+                $table->enum('task_type', ['Routine', 'Special Project'])->default('Routine');
             }
 
             if (!Schema::hasColumn('tasks', 'priority')) {
-                $table->enum('priority', ['Low', 'Medium', 'High'])->default('Medium')->after('task_type');
+                $table->enum('priority', ['Low', 'Medium', 'High'])->default('Medium');
             }
 
             if (!Schema::hasColumn('tasks', 'evaluation_notes')) {
-                $table->text('evaluation_notes')->nullable()->after('supervisor_notes');
+                $table->text('evaluation_notes')->nullable();
             }
         });
     }
@@ -30,7 +32,10 @@ return new class extends Migration
     {
         DB::table('tasks')->where('status', 'Verified')->update(['status' => 'Completed']);
         DB::table('tasks')->where('status', 'Assigned')->update(['status' => 'Pending']);
-        DB::statement("ALTER TABLE tasks MODIFY status ENUM('Pending', 'In Progress', 'Completed') DEFAULT 'Pending'");
+
+        if (Schema::getConnection()->getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE tasks MODIFY status ENUM('Pending', 'In Progress', 'Completed') DEFAULT 'Pending'");
+        }
 
         Schema::table('tasks', function (Blueprint $table) {
             $columns = array_filter([
