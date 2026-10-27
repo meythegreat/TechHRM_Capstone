@@ -240,7 +240,7 @@ class AuthController extends Controller
             return 'Password reset email is not configured. Set RESEND_API_KEY in the server environment.';
         }
 
-        $fromAddress = config('mail.from.address', 'beth.t@example.com');
+        $fromAddress = config('mail.from.address', 'onboarding@resend.dev');
         $fromName = config('mail.from.name', 'TechHRM WSPO');
         $from = sprintf('%s <%s>', $fromName, $fromAddress);
 
@@ -267,7 +267,12 @@ class AuthController extends Controller
 
         report(new \RuntimeException('Resend password reset failed: '.$response->body()));
 
-        return 'Could not send the password reset email through Resend. Confirm RESEND_API_KEY and MAIL_FROM_ADDRESS, then try again.';
+        $resendMessage = data_get($response->json(), 'message');
+        if (is_string($resendMessage) && $resendMessage !== '') {
+            return 'Could not send the password reset email: '.$resendMessage;
+        }
+
+        return 'Could not send the password reset email through Resend. Confirm RESEND_API_KEY and MAIL_FROM_ADDRESS (use onboarding@resend.dev until a domain is verified), then try again.';
     }
 
     private function resetDestination(User $user, string $identifier): ?string
