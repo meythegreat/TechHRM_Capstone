@@ -413,7 +413,7 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
     const todayClasses = todayShifts.filter((shift) => isClassShift(shift));
     const todayHasWork = showWork && todayWork.length > 0;
     const todayHasClass = showClass && todayClasses.length > 0;
-    const showTodayPanel = personal && (showWork || showClass) && category !== 'holiday' && category !== 'break';
+    const showTodayPanel = personal && (showWork || showClass);
     const highlightClasses = personal && selectedClass.length > 0;
     const highlightWork = personal && selectedWork.length > 0 && selectedClass.length === 0;
 

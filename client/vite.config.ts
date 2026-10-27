@@ -47,8 +47,7 @@ function lanIPv4() {
   const rows: { iface: string; address: string }[] = []
   for (const [iface, addrs] of Object.entries(os.networkInterfaces())) {
     for (const addr of addrs ?? []) {
-      const family = addr.family === 'IPv4' || addr.family === 4
-      if (family && !addr.internal) {
+      if (addr.family === 'IPv4' && !addr.internal) {
         rows.push({ iface, address: addr.address })
       }
     }
@@ -129,26 +128,30 @@ async function devCertificate() {
   return { key: pems.private, cert: pems.cert }
 }
 
-export default defineConfig(async () => ({
-  plugins: [react(), tailwindcss(), lanPhonePlugin()],
-  // Keep React and React DOM singletons when dependencies such as
-  // Framer Motion are optimized by Vite. Without this, Vite can resolve a
-  // second React copy from the repository root and crash at runtime.
-  resolve: {
-    dedupe: ['react', 'react-dom'],
-  },
-  server: {
-    host: '0.0.0.0',
-    port: 5173,
-    strictPort: true,
-    allowedHosts: true,
-    // Phones only show the camera prompt on HTTPS. A LAN http:// address never asks.
-    https: await devCertificate(),
-    // Do not pin hmr.host. The browser uses the hostname it loaded
-    // (localhost, Wi-Fi IP, or Ethernet IP).
-    proxy: {
-      '/api': apiProxy(),
-      '/sanctum': apiProxy(),
+export default defineConfig(async ({ command }) => {
+  // HTTPS certs are only needed for local `vite` / phone testing — skip on production builds.
+  const https = command === 'serve' ? await devCertificate() : undefined
+  return {
+    plugins: [react(), tailwindcss(), lanPhonePlugin()],
+    // Keep React and React DOM singletons when dependencies such as
+    // Framer Motion are optimized by Vite. Without this, Vite can resolve a
+    // second React copy from the repository root and crash at runtime.
+    resolve: {
+      dedupe: ['react', 'react-dom'],
     },
-  },
-}))
+    server: {
+      host: '0.0.0.0',
+      port: 5173,
+      strictPort: true,
+      allowedHosts: true as const,
+      // Phones only show the camera prompt on HTTPS. A LAN http:// address never asks.
+      https,
+      // Do not pin hmr.host. The browser uses the hostname it loaded
+      // (localhost, Wi-Fi IP, or Ethernet IP).
+      proxy: {
+        '/api': apiProxy(),
+        '/sanctum': apiProxy(),
+      },
+    },
+  }
+})

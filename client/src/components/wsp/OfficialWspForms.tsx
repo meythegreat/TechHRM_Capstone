@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { CAMPUS_LETTERHEAD, OFFICIAL_FORM_META } from '../../constants/campusDocuments';
 import { displayDate, safeImage, sheetName, type OfficialFormDetails, type OfficialIdentity } from './officialForm';
 
@@ -14,8 +15,16 @@ const Tick = ({ on }: { on: boolean }) => (
     </span>
 );
 
-const Rule = ({ value, className = '' }: { value?: string | number | null; className?: string }) => (
-    <span className={`rule ${className}`}>{text(value) || '\u00a0'}</span>
+const Rule = ({
+    value,
+    className = '',
+    style,
+}: {
+    value?: string | number | null;
+    className?: string;
+    style?: CSSProperties;
+}) => (
+    <span className={`rule ${className}`} style={style}>{text(value) || '\u00a0'}</span>
 );
 
 const Jobs = ({ selected, other }: { selected?: string; other?: string }) => {
