@@ -393,7 +393,14 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                             <p className="text-sm font-semibold text-slate-900">{fullName}</p>
                         </div>
                         <div className="w-10 h-10 bg-slate-100 border-2 border-slate-200 rounded-full flex items-center justify-center text-slate-600 font-bold shadow-sm overflow-hidden group">
-                            {avatarPath ? <SecureImage filePath={avatarPath} altText="Nav Avatar" className="w-full h-full object-cover group-hover:scale-110 transition-transform" /> : firstName.charAt(0)}
+                            {avatarPath ? (
+                                <SecureImage
+                                    filePath={avatarPath}
+                                    altText="Nav Avatar"
+                                    className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                                    fallback={firstName.charAt(0)}
+                                />
+                            ) : firstName.charAt(0)}
                         </div>
                     </div>
                 </header>
@@ -721,7 +728,16 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                         <motion.div variants={cardVariants} className="flex flex-col items-center md:w-1/3 w-full">
                                             <div className="relative group cursor-pointer">
                                                 <div className="w-40 h-40 bg-slate-100 rounded-full border-4 border-white shadow-xl flex items-center justify-center overflow-hidden">
-                                                    {avatarPath ? <SecureImage filePath={avatarPath} altText="Profile" className="w-full h-full object-cover" /> : <span className="text-slate-400 font-semibold text-5xl">{firstName.charAt(0)}</span>}
+                                                    {avatarPath ? (
+                                                        <SecureImage
+                                                            filePath={avatarPath}
+                                                            altText="Profile"
+                                                            className="w-full h-full object-cover"
+                                                            fallback={<span className="text-slate-400 font-semibold text-5xl">{firstName.charAt(0)}</span>}
+                                                        />
+                                                    ) : (
+                                                        <span className="text-slate-400 font-semibold text-5xl">{firstName.charAt(0)}</span>
+                                                    )}
                                                 </div>
                                                 <AvatarPhotoMenu
                                                     inputId="avatarUpload"

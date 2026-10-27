@@ -195,7 +195,12 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
                         <div className="relative group cursor-pointer">
                             <div className="w-40 h-40 bg-slate-100 rounded-full border-4 border-white shadow-xl flex items-center justify-center overflow-hidden">
                                 {avatarPath ? (
-                                    <SecureImage filePath={avatarPath} altText="Profile" className="w-full h-full object-cover" />
+                                    <SecureImage
+                                        filePath={avatarPath}
+                                        altText="Profile"
+                                        className="w-full h-full object-cover"
+                                        fallback={<span className="text-slate-400 font-semibold text-5xl">{firstName.charAt(0)}</span>}
+                                    />
                                 ) : (
                                     <span className="text-slate-400 font-semibold text-5xl">{firstName.charAt(0)}</span>
                                 )}

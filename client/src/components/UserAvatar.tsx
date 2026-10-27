@@ -15,13 +15,19 @@ export default function UserAvatar({
     const path = normalizeFilePath(picture || '');
     const firstName = String(name || '').trim().split(/\s+/)[0] || '';
     const initial = (firstName.charAt(0) || '?').toUpperCase();
+    const initials = <span aria-hidden="true">{initial}</span>;
 
     return (
         <div className={`flex items-center justify-center font-semibold shrink-0 overflow-hidden shadow-sm ${className}`}>
             {path ? (
-                <SecureImage filePath={path} altText={firstName || 'Profile'} className="w-full h-full object-cover" />
+                <SecureImage
+                    filePath={path}
+                    altText={firstName || 'Profile'}
+                    className="w-full h-full object-cover"
+                    fallback={initials}
+                />
             ) : (
-                <span aria-hidden="true">{initial}</span>
+                initials
             )}
         </div>
     );

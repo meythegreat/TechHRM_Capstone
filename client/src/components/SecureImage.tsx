@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import axios from 'axios';
 import { normalizeFilePath } from '../utils/secureFile';
 
@@ -6,18 +6,26 @@ interface SecureImageProps {
     filePath: string;
     altText?: string;
     className?: string;
+    /** Shown when the image cannot be loaded (e.g. initials for avatars). */
+    fallback?: ReactNode;
 }
 
-export default function SecureImage({ filePath, altText = 'Secure Image', className = '' }: SecureImageProps) {
+export default function SecureImage({ filePath, altText = 'Secure Image', className = '', fallback }: SecureImageProps) {
     const [imageSrc, setImageSrc] = useState<string | null>(null);
     const [error, setError] = useState(false);
 
     useEffect(() => {
         const path = normalizeFilePath(filePath);
-        if (!path) return;
-
         let objectUrl: string | null = null;
         let cancelled = false;
+
+        setImageSrc(null);
+        setError(false);
+
+        if (!path) {
+            setError(true);
+            return;
+        }
 
         const fetchImage = async () => {
             try {
@@ -48,11 +56,10 @@ export default function SecureImage({ filePath, altText = 'Secure Image', classN
     }, [filePath]);
 
     if (error) {
-        return (
-            <div className={`bg-gray-200 flex items-center justify-center text-xs text-gray-500 ${className}`}>
-                Image Unavailable
-            </div>
-        );
+        if (fallback !== undefined) {
+            return <>{fallback}</>;
+        }
+        return <div className={`bg-gray-100 ${className}`} aria-hidden="true" />;
     }
 
     if (!imageSrc) {

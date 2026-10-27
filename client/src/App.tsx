@@ -347,7 +347,12 @@ function App() {
               title="Profile settings"
             >
               {adminAvatar ? (
-                <SecureImage filePath={adminAvatar} altText="Admin Avatar" className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                <SecureImage
+                  filePath={adminAvatar}
+                  altText="Admin Avatar"
+                  className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                  fallback={adminFirstName.charAt(0).toUpperCase()}
+                />
               ) : (
                 adminFirstName.charAt(0).toUpperCase()
               )}
