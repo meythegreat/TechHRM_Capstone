@@ -14,6 +14,12 @@ class AdminUserSeeder extends Seeder
      */
     public function run(): void
     {
+        // Keep existing production/local data intact. Only seed demo accounts on an empty users table.
+        if (User::withTrashed()->exists()) {
+            $this->command?->info('Users already exist; skipping AdminUserSeeder.');
+            return;
+        }
+
         // 1. Super Admin Account
         User::updateOrCreate(
             ['username' => 'superadmin'],
