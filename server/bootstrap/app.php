@@ -16,9 +16,14 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         // Vite proxies API calls from this machine. Trust only loopback so the
         // forwarded client address is used, and a direct connection cannot spoof it.
+        // Trust Render/Cloudflare proxies in production; keep loopback-only for local XAMPP.
+        // Use config() so this still works when `php artisan config:cache` is used.
         $middleware->trustProxies(
-            at: ['127.0.0.1', '::1', '::ffff:127.0.0.1'],
-            headers: Request::HEADER_X_FORWARDED_FOR,
+            at: config('app.env') === 'local' ? ['127.0.0.1', '::1', '::ffff:127.0.0.1'] : '*',
+            headers: Request::HEADER_X_FORWARDED_FOR
+                | Request::HEADER_X_FORWARDED_HOST
+                | Request::HEADER_X_FORWARDED_PORT
+                | Request::HEADER_X_FORWARDED_PROTO,
         );
 
         $middleware->alias([
