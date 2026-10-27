@@ -349,7 +349,7 @@ class AuthController extends Controller
           <tr>
             <td style="padding:18px 32px;background:#102179;">
               <p style="margin:0;color:#FFD500;font-size:13px;font-weight:bold;">TechHRM WSPO</p>
-              <p style="margin:4px 0 0;color:#4AECED;font-size:13px;">techhrmwspo@gmail.com</p>
+              <p style="margin:4px 0 0;color:#4AECED;font-size:13px;">miguel102104@gmail.com</p>
             </td>
           </tr>
         </table>
