@@ -11,7 +11,10 @@ scheduleThemeSync()
 armSounds()
 
 // In dev, Vite proxies /api to Laravel (see vite.config.ts) — avoids CORS issues.
-axios.defaults.baseURL = import.meta.env.DEV ? '' : 'http://localhost:8000'
+// In production, set VITE_API_URL to the Render API (e.g. https://techhrm-capstone.onrender.com).
+axios.defaults.baseURL = import.meta.env.DEV
+  ? ''
+  : (import.meta.env.VITE_API_URL || 'https://techhrm-capstone.onrender.com')
 axios.defaults.withCredentials = true
 
 // Attach Bearer token automatically (persisted login)
