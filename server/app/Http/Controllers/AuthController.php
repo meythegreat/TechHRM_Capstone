@@ -107,19 +107,21 @@ class AuthController extends Controller
             'message' => $this->resetEmailBody($user, $temporaryPassword),
         ];
 
+        $webhookUrl = config('services.n8n.forgot_password_webhook');
+
         try {
-            $webhook = Http::timeout(20)->post(config('services.n8n.forgot_password_webhook'), $payload);
+            $webhook = Http::timeout(20)->asJson()->post($webhookUrl, $payload);
         } catch (\Throwable $e) {
             report($e);
 
             return response()->json([
-                'message' => 'Could not reach n8n to send the Gmail reset. Start n8n, then try again.',
+                'message' => 'Could not reach n8n to send the Gmail reset. Start n8n, confirm N8N_FORGOT_PASSWORD_WEBHOOK, then try again.',
             ], 502);
         }
 
         if (!$webhook->successful()) {
             return response()->json([
-                'message' => 'n8n did not send the Gmail reset. Check that the forgot-password workflow is active and Gmail is connected.',
+                'message' => 'n8n did not send the Gmail reset. Activate the forgot-password workflow and reconnect Gmail in n8n.',
             ], 502);
         }
 
