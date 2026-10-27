@@ -23,10 +23,15 @@ import {
     Briefcase,
     ShieldCheck,
     Send,
-    GraduationCap
+    GraduationCap,
+    FileText,
+    Paperclip,
+    Printer,
 } from 'lucide-react';
 import AuditPager, { pageSlice } from './AuditPager';
 import ComboFilter from './ComboFilter';
+import WsaExtraServiceLetter, { printExtraServiceLetter } from './staffing/WsaExtraServiceLetter';
+import SecureFileViewerModal from './SecureFileViewerModal';
 
 const HOUR_OPTIONS = Array.from({ length: 12 }, (_, index) => String(index + 1));
 const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0'));
@@ -50,6 +55,28 @@ function formatSemesterDate(iso: string) {
         day: 'numeric',
         year: 'numeric',
     });
+}
+
+function formatExtraServiceDate(iso: string) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    if (!match) return '';
+    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])).toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+    });
+}
+
+function formatDutyPeriod(startDate: string, endDate: string, hoursPerDay: number | string) {
+    const start = formatExtraServiceDate(startDate);
+    const end = formatExtraServiceDate(endDate);
+    const hours = Number(hoursPerDay);
+    if (!start || !end || !Number.isFinite(hours) || hours <= 0) return '';
+    const hoursLabel = hours === 1 ? '1 hour/day' : `${hours} hours/day`;
+    if (startDate === endDate) {
+        return `${start} · ${hoursLabel}`;
+    }
+    return `${start} – ${end} · ${hoursLabel}`;
 }
 
 function timeInputValue(raw: string) {
@@ -179,7 +206,33 @@ const ScheduleManagement = () => {
     const [staffingRequests, setStaffingRequests] = useState<any[]>([]);
     const [staffingCandidates, setStaffingCandidates] = useState<UserData[]>([]);
     const [assignmentSelections, setAssignmentSelections] = useState<Record<number, number[]>>({});
-    const [staffingForm, setStaffingForm] = useState({ duty_type: 'Clerical', duty_request: '', quantity: 1, requested_genders: ['Male'] });
+    const emptyStaffingForm = {
+        duty_type: 'Clerical',
+        duty_request: '',
+        event_title: '',
+        duty_start_date: '',
+        duty_end_date: '',
+        hours_per_day: 4,
+        reason: '',
+        quantity: 1,
+        requested_genders: ['Male'] as string[],
+    };
+    const [staffingForm, setStaffingForm] = useState(emptyStaffingForm);
+    const [approvalLetterFile, setApprovalLetterFile] = useState<File | null>(null);
+    const [draftRequestId, setDraftRequestId] = useState<number | null>(null);
+    const [coordinatorName, setCoordinatorName] = useState('');
+    const [letterSaving, setLetterSaving] = useState(false);
+    const [letterViewerPath, setLetterViewerPath] = useState<string | null>(null);
+    const [letterViewerTitle, setLetterViewerTitle] = useState('Signed approval letter');
+    const supervisorName = localStorage.getItem('user_name') || '';
+    const supervisorDepartment = localStorage.getItem('assigned_office') || '';
+    const isExtraServiceRequest = staffingForm.duty_type === 'Request';
+    const letterDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const dutyPeriodLabel = formatDutyPeriod(
+        staffingForm.duty_start_date,
+        staffingForm.duty_end_date,
+        staffingForm.hours_per_day
+    );
 
     const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     const emptyForm = {
@@ -234,6 +287,7 @@ const ScheduleManagement = () => {
         fetchSemester();
         fetchStudents();
         fetchStaffingRequests();
+        fetchExtraServiceSignatories();
         if (currentUserRole !== 'Supervisor') {
             fetchStaffingCandidates();
         }
@@ -312,6 +366,15 @@ const ScheduleManagement = () => {
             setStaffingRequests(response.data);
         } catch (error) {
             console.error('Failed to fetch staffing requests', error);
+        }
+    };
+
+    const fetchExtraServiceSignatories = async () => {
+        try {
+            const response = await axios.get('/api/staffing-requests/signatories');
+            setCoordinatorName(String(response.data?.coordinator || '').trim());
+        } catch (error) {
+            console.error('Failed to fetch Extra Service signatories', error);
         }
     };
 
@@ -396,16 +459,159 @@ const ScheduleManagement = () => {
         return names.length > 0 ? names.join(', ') : '';
     };
 
+    const appendExtraServiceFields = (body: FormData) => {
+        body.append('event_title', staffingForm.event_title.trim());
+        body.append('duty_period', dutyPeriodLabel);
+        body.append('duty_start_date', staffingForm.duty_start_date);
+        body.append('duty_end_date', staffingForm.duty_end_date);
+        body.append('hours_per_day', String(staffingForm.hours_per_day));
+        body.append('reason', staffingForm.reason.trim());
+        body.append('duty_request', staffingForm.reason.trim());
+    };
+
+    const validateExtraServiceForm = () => {
+        if (!staffingForm.event_title.trim() || !dutyPeriodLabel || !staffingForm.reason.trim()) {
+            showToast('Extra Service requests need an event title, duty dates, hours/day, and reason.', 'error');
+            return false;
+        }
+        if (staffingForm.duty_end_date < staffingForm.duty_start_date) {
+            showToast('Duty end date must be on or after the start date.', 'error');
+            return false;
+        }
+        return true;
+    };
+
+    const buildExtraServiceJsonBody = () => ({
+        event_title: staffingForm.event_title.trim(),
+        duty_period: dutyPeriodLabel,
+        duty_start_date: staffingForm.duty_start_date,
+        duty_end_date: staffingForm.duty_end_date,
+        hours_per_day: staffingForm.hours_per_day,
+        reason: staffingForm.reason.trim(),
+        quantity: staffingForm.quantity,
+        requested_genders: staffingForm.requested_genders,
+    });
+
     const submitStaffingRequest = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (isExtraServiceRequest) {
+            if (!validateExtraServiceForm()) return;
+            if (!approvalLetterFile) {
+                showToast('Attach the signed Extra Service approval letter before submitting.', 'error');
+                return;
+            }
+        }
+
         try {
-            await axios.post('/api/staffing-requests', staffingForm);
-            setStaffingForm({ duty_type: 'Clerical', duty_request: '', quantity: 1, requested_genders: ['Male'] });
+            if (isExtraServiceRequest && draftRequestId) {
+                const body = new FormData();
+                appendExtraServiceFields(body);
+                body.append('quantity', String(staffingForm.quantity));
+                staffingForm.requested_genders.forEach((gender, index) => {
+                    body.append(`requested_genders[${index}]`, gender);
+                });
+                body.append('approval_letter', approvalLetterFile as File);
+                await axios.post(`/api/staffing-requests/${draftRequestId}/finalize`, body, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                });
+            } else {
+                const body = new FormData();
+                body.append('duty_type', staffingForm.duty_type);
+                body.append('quantity', String(staffingForm.quantity));
+                staffingForm.requested_genders.forEach((gender, index) => {
+                    body.append(`requested_genders[${index}]`, gender);
+                });
+
+                if (isExtraServiceRequest) {
+                    appendExtraServiceFields(body);
+                    body.append('approval_letter', approvalLetterFile as File);
+                } else if (staffingForm.duty_request.trim()) {
+                    body.append('duty_request', staffingForm.duty_request.trim());
+                }
+
+                await axios.post('/api/staffing-requests', body, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                });
+            }
+            setStaffingForm({ ...emptyStaffingForm, requested_genders: ['Male'] });
+            setApprovalLetterFile(null);
+            setDraftRequestId(null);
             showToast('Staffing request sent to WSPO.', 'success');
             fetchStaffingRequests();
         } catch (error: any) {
-            showToast(error.response?.data?.message || 'Could not send staffing request.', 'error');
+            const validation = error.response?.data?.errors;
+            const firstValidation = validation ? Object.values(validation).flat()[0] : null;
+            showToast(
+                (typeof firstValidation === 'string' ? firstValidation : null)
+                    || error.response?.data?.message
+                    || 'Could not send staffing request.',
+                'error'
+            );
         }
+    };
+
+    const handlePrintApprovalLetter = async () => {
+        if (!validateExtraServiceForm()) return;
+
+        setLetterSaving(true);
+        try {
+            if (draftRequestId) {
+                await axios.patch(`/api/staffing-requests/${draftRequestId}/draft`, buildExtraServiceJsonBody());
+            } else {
+                const body = new FormData();
+                body.append('duty_type', 'Request');
+                body.append('as_draft', '1');
+                body.append('quantity', String(staffingForm.quantity));
+                staffingForm.requested_genders.forEach((gender, index) => {
+                    body.append(`requested_genders[${index}]`, gender);
+                });
+                appendExtraServiceFields(body);
+                const response = await axios.post('/api/staffing-requests', body, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                });
+                const savedId = Number(response.data?.request?.id);
+                if (Number.isFinite(savedId)) {
+                    setDraftRequestId(savedId);
+                }
+            }
+            fetchStaffingRequests();
+            showToast('Draft saved. Print the letter, then attach the signed scan to send it to WSPO.', 'success');
+            printExtraServiceLetter();
+        } catch (error: any) {
+            const validation = error.response?.data?.errors;
+            const firstValidation = validation ? Object.values(validation).flat()[0] : null;
+            showToast(
+                (typeof firstValidation === 'string' ? firstValidation : null)
+                    || error.response?.data?.message
+                    || 'Could not save the Extra Service draft.',
+                'error'
+            );
+        } finally {
+            setLetterSaving(false);
+        }
+    };
+
+    const resumeDraftRequest = (request: any) => {
+        if (request.status !== 'Draft' || request.duty_type !== 'Request') return;
+        const quantity = Math.max(1, Number(request.quantity) || 1);
+        const genders = Array.isArray(request.requested_genders) && request.requested_genders.length === quantity
+            ? request.requested_genders
+            : Array.from({ length: quantity }, () => 'Male');
+        setStaffingForm({
+            duty_type: 'Request',
+            duty_request: '',
+            event_title: request.event_title || '',
+            duty_start_date: String(request.duty_start_date || '').slice(0, 10),
+            duty_end_date: String(request.duty_end_date || '').slice(0, 10),
+            hours_per_day: Number(request.hours_per_day) || 4,
+            reason: request.reason || request.duty_request || '',
+            quantity,
+            requested_genders: genders,
+        });
+        setDraftRequestId(request.id);
+        setApprovalLetterFile(null);
+        showToast('Draft loaded. Print again if needed, then attach the signed letter to submit.', 'success');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const updateStaffingRequest = async (id: number, status: string) => {
@@ -629,7 +835,12 @@ const ScheduleManagement = () => {
 
     return (
         <div className="max-w-7xl mx-auto space-y-8 font-sans p-4 sm:p-8">
-            
+            <SecureFileViewerModal
+                filePath={letterViewerPath}
+                title={letterViewerTitle}
+                onClose={() => setLetterViewerPath(null)}
+            />
+
             {/* DARK THEME HEADER - SCHEDULE MASTER */}
             <motion.div 
                 initial={{ opacity: 0, y: -20 }}
@@ -819,7 +1030,10 @@ const ScheduleManagement = () => {
                         <h2 className="text-lg font-semibold text-indigo-900 flex items-center gap-2 tracking-tight">
                             <Users className="w-5 h-5" /> Request Working Students
                         </h2>
-                        <p className="text-sm font-medium text-slate-500 mt-1">Submit an official request to WSPO to deploy new student workers to your department.</p>
+                        <p className="text-sm font-medium text-slate-500 mt-1">
+                            Submit an official request to WSPO to deploy student workers to your department.
+                            {isExtraServiceRequest ? ' Extra Service requests require a printed approval letter with wet signatures.' : ''}
+                        </p>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-4 gap-5 items-start">
@@ -827,12 +1041,19 @@ const ScheduleManagement = () => {
                             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Duty Type</label>
                             <select 
                                 value={staffingForm.duty_type} 
-                                onChange={e => setStaffingForm({...staffingForm, duty_type: e.target.value})} 
+                                onChange={e => {
+                                    const duty_type = e.target.value;
+                                    setStaffingForm({ ...staffingForm, duty_type });
+                                    if (duty_type !== 'Request') {
+                                        setApprovalLetterFile(null);
+                                        setDraftRequestId(null);
+                                    }
+                                }} 
                                 className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-600 shadow-sm"
                             >
-                                <option>Clerical</option>
-                                <option>Janitorial</option>
-                                <option>Request</option>
+                                <option value="Clerical">Clerical</option>
+                                <option value="Janitorial">Janitorial</option>
+                                <option value="Request">Extra Service / Special Request</option>
                             </select>
                         </div>
                         <div>
@@ -847,19 +1068,134 @@ const ScheduleManagement = () => {
                                 className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 shadow-sm" 
                             />
                         </div>
-                        {staffingForm.duty_type === 'Request' && (
-                            <div className="sm:col-span-2">
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Specific Duty Requirements</label>
-                                <input 
-                                    required 
-                                    value={staffingForm.duty_request} 
-                                    onChange={e => setStaffingForm({...staffingForm, duty_request: e.target.value})} 
-                                    placeholder="Describe the required assignment..." 
-                                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 shadow-sm" 
+                    </div>
+
+                    {isExtraServiceRequest && (
+                        <div className="grid grid-cols-1 gap-4 rounded-2xl border border-indigo-100 bg-white/70 p-4 sm:p-5">
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Event Title</label>
+                                <input
+                                    required
+                                    value={staffingForm.event_title}
+                                    onChange={e => setStaffingForm({ ...staffingForm, event_title: e.target.value })}
+                                    placeholder="e.g. University Foundation Day ushers"
+                                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 shadow-sm"
                                 />
                             </div>
-                        )}
-                    </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Period of Duty</label>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div>
+                                        <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Start date</label>
+                                        <input
+                                            required
+                                            type="date"
+                                            value={staffingForm.duty_start_date}
+                                            onChange={e => {
+                                                const duty_start_date = e.target.value;
+                                                setStaffingForm((current) => ({
+                                                    ...current,
+                                                    duty_start_date,
+                                                    duty_end_date: !current.duty_end_date || current.duty_end_date < duty_start_date
+                                                        ? duty_start_date
+                                                        : current.duty_end_date,
+                                                }));
+                                            }}
+                                            className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 shadow-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">End date</label>
+                                        <input
+                                            required
+                                            type="date"
+                                            min={staffingForm.duty_start_date || undefined}
+                                            value={staffingForm.duty_end_date}
+                                            onChange={e => setStaffingForm({ ...staffingForm, duty_end_date: e.target.value })}
+                                            className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 shadow-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Hours / day</label>
+                                        <input
+                                            required
+                                            type="number"
+                                            min={1}
+                                            max={12}
+                                            step={0.5}
+                                            value={staffingForm.hours_per_day}
+                                            onChange={e => setStaffingForm({
+                                                ...staffingForm,
+                                                hours_per_day: Math.min(12, Math.max(0.5, Number(e.target.value) || 0)),
+                                            })}
+                                            className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 shadow-sm"
+                                        />
+                                    </div>
+                                </div>
+                                {dutyPeriodLabel ? (
+                                    <p className="mt-2 text-xs font-medium text-indigo-700">On letter: {dutyPeriodLabel}</p>
+                                ) : null}
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Reason / Purpose</label>
+                                <textarea
+                                    required
+                                    rows={3}
+                                    value={staffingForm.reason}
+                                    onChange={e => setStaffingForm({ ...staffingForm, reason: e.target.value })}
+                                    placeholder="Purpose of the Extra Service request"
+                                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 shadow-sm resize-y"
+                                />
+                            </div>
+
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-t border-indigo-100 pt-4">
+                                <p className="text-xs font-medium text-slate-500 max-w-xl">
+                                    Printing saves a draft of this request. Collect wet signatures, then upload the signed scan and transmit to send it to WSPO.
+                                    {draftRequestId ? ` Draft #${draftRequestId} is linked to this form.` : ''}
+                                </p>
+                                <button
+                                    type="button"
+                                    disabled={letterSaving}
+                                    onClick={handlePrintApprovalLetter}
+                                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-indigo-200 text-indigo-800 font-bold text-sm rounded-xl hover:bg-indigo-50 shadow-sm shrink-0 disabled:opacity-60"
+                                >
+                                    <Printer className="w-4 h-4" /> {letterSaving ? 'Saving draft…' : 'Save & Print Approval Letter'}
+                                </button>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">
+                                    Attach Signed Approval Letter
+                                </label>
+                                <label className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl cursor-pointer hover:border-indigo-300 transition-colors">
+                                    <span className="inline-flex items-center gap-2 text-sm font-bold text-slate-700">
+                                        <Paperclip className="w-4 h-4 text-indigo-600" />
+                                        {approvalLetterFile ? approvalLetterFile.name : 'Choose PDF or image (max 4MB)'}
+                                    </span>
+                                    <input
+                                        type="file"
+                                        accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                                        className="sr-only"
+                                        onChange={(e) => setApprovalLetterFile(e.target.files?.[0] ?? null)}
+                                    />
+                                </label>
+                            </div>
+
+                            <WsaExtraServiceLetter
+                                data={{
+                                    date: letterDate,
+                                    department: supervisorDepartment,
+                                    supervisorName,
+                                    coordinatorName,
+                                    eventTitle: staffingForm.event_title,
+                                    reason: staffingForm.reason,
+                                    dutyPeriod: dutyPeriodLabel,
+                                    quantity: staffingForm.quantity,
+                                    genderSummary: genderSummary(staffingForm.requested_genders),
+                                }}
+                            />
+                        </div>
+                    )}
 
                     <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 border-b border-indigo-200/50 pb-2">Gender Allocation for requested slots</label>
@@ -951,13 +1287,45 @@ const ScheduleManagement = () => {
                                         <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                                             <div>
                                                 <h3 className="text-base font-semibold text-slate-900 tracking-tight">{request.department}</h3>
-                                                <p className="text-sm font-bold text-indigo-700 mt-0.5">{request.quantity} {request.duty_type} Worker{request.quantity !== 1 ? 's' : ''}</p>
+                                                <p className="text-sm font-bold text-indigo-700 mt-0.5">
+                                                    {request.quantity}{' '}
+                                                    {request.duty_type === 'Request' ? 'Extra Service' : request.duty_type}{' '}
+                                                    Worker{request.quantity !== 1 ? 's' : ''}
+                                                </p>
                                                 <p className="text-xs font-medium text-slate-500 mt-1">Requested by: <span className="font-bold text-slate-700">{request.requester?.name}</span></p>
+
+                                                {request.event_title && (
+                                                    <p className="text-sm font-semibold text-slate-800 mt-2 flex items-start gap-1.5">
+                                                        <FileText className="w-3.5 h-3.5 mt-0.5 text-indigo-600 shrink-0" />
+                                                        {request.event_title}
+                                                    </p>
+                                                )}
+
+                                                {request.duty_period && (
+                                                    <p className="text-xs font-medium text-slate-600 mt-1">Period: {request.duty_period}</p>
+                                                )}
                                                 
-                                                {request.duty_request && (
+                                                {(request.reason || request.duty_request) && (
                                                     <div className="mt-2 p-2.5 bg-slate-50 border border-slate-100 rounded-xl">
-                                                        <p className="text-xs text-slate-600 italic">"{request.duty_request}"</p>
+                                                        <p className="text-xs text-slate-600 italic">"{request.reason || request.duty_request}"</p>
                                                     </div>
+                                                )}
+
+                                                {request.approval_letter_path && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setLetterViewerTitle(
+                                                                request.event_title
+                                                                    ? `Extra Service letter · ${request.event_title}`
+                                                                    : 'Signed Extra Service letter',
+                                                            );
+                                                            setLetterViewerPath(request.approval_letter_path);
+                                                        }}
+                                                        className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 hover:text-indigo-900"
+                                                    >
+                                                        <Paperclip className="w-3.5 h-3.5" /> View signed approval letter
+                                                    </button>
                                                 )}
                                                 
                                                 {(request.gender_summary || genderSummary(request.requested_genders || [])) && (
@@ -967,6 +1335,7 @@ const ScheduleManagement = () => {
                                                 )}
                                             </div>
                                             <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border shadow-sm shrink-0 ${
+                                                request.status === 'Draft' ? 'bg-slate-100 text-slate-700 border-slate-200' :
                                                 request.status === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                                                 request.status === 'Declined' ? 'bg-red-50 text-red-700 border-red-200' :
                                                 'bg-emerald-50 text-emerald-700 border-emerald-200'
@@ -979,6 +1348,18 @@ const ScheduleManagement = () => {
                                             <div className="mb-4 p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
                                                 <p className="text-xs font-bold text-emerald-800 mb-1">Assigned Personnel:</p>
                                                 <p className="text-sm font-medium text-emerald-900">{assignedNames}</p>
+                                            </div>
+                                        )}
+
+                                        {currentUserRole === 'Supervisor' && request.status === 'Draft' && (
+                                            <div className="mt-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => resumeDraftRequest(request)}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-indigo-800 bg-indigo-50 border border-indigo-100 rounded-xl hover:bg-indigo-100"
+                                                >
+                                                    <FileText className="w-3.5 h-3.5" /> Resume draft to print / attach letter
+                                                </button>
                                             </div>
                                         )}
                                     </div>

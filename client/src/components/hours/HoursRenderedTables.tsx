@@ -1,7 +1,10 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Printer } from 'lucide-react';
+import { CAMPUS_LETTERHEAD, CAMPUS_OFFICERS } from '../../constants/campusDocuments';
 import { financialService } from '../../services/financialService';
+import { REALTIME_EVENT } from '../../utils/realtime';
 import { HoursActivityBoard } from './HoursActivityBoard';
+import { HourLimitApprovalsPanel } from './HourLimitApprovalsPanel';
 
 export interface HourStudentRow {
   user_id: number;
@@ -61,6 +64,7 @@ export interface HoursReport {
     secretary?: string;
     coordinator?: string;
   };
+  hourly_rate?: number;
 }
 
 export const hoursText = (value: number) => {
@@ -210,15 +214,15 @@ export function HoursSummarySheet({ report, rate }: { report: HoursReport | null
         style={{ backgroundColor: '#ffffff', color: '#000000' }}
       >
         <div className="mb-4 flex items-center justify-center gap-3">
-          <img src="/fcu.jpg" alt="Filamer Christian University" className="h-14 w-14 shrink-0 object-contain" />
+          <img src={CAMPUS_LETTERHEAD.logoSrc} alt="Filamer Christian University" className="h-14 w-14 shrink-0 object-contain" />
           <div className="text-center font-bold leading-tight">
-            <p className="text-[11px]">FILAMER CHRISTIAN UNIVERSITY, INC.</p>
-            <p className="text-[11px]">ROXAS AVENUE, ROXAS CITY</p>
-            <p className="text-[11px]">WORK-STUDY PROGRAM ORGANIZATION</p>
+            <p className="text-[11px]">{CAMPUS_LETTERHEAD.universityName}</p>
+            <p className="text-[11px]">{CAMPUS_LETTERHEAD.address.toUpperCase()}</p>
+            <p className="text-[11px]">{CAMPUS_LETTERHEAD.wspoOrgName.toUpperCase()}</p>
             <p className="mt-1 text-[12px]">SUMMARY OF DUTY HOURS</p>
             <p className="text-[11px]">FOR THE MONTH OF {dutyMonthLabel || '—'}</p>
           </div>
-          <img src="/logo.jpg" alt="Work Study Program Organization" className="h-14 w-14 shrink-0 object-contain" />
+          <img src={CAMPUS_LETTERHEAD.wspoLogoSrc} alt="Work Study Program Organization" className="h-14 w-14 shrink-0 object-contain" />
         </div>
 
         <table className="w-full border-collapse" style={{ borderCollapse: 'collapse' }}>
@@ -286,8 +290,8 @@ export function HoursSummarySheet({ report, rate }: { report: HoursReport | null
         <div className="hours-summary-signoff mt-10">
           <p className="text-[11px] font-bold text-left">Signed:</p>
           <div className="grid grid-cols-2 gap-10 mt-8">
-            <Signatory label="WSPO Secretary" name={report?.signatories?.secretary || ''} />
-            <Signatory label="WSPO Coordinator" name={report?.signatories?.coordinator || ''} />
+            <Signatory label={CAMPUS_OFFICERS.wspoSecretary.title} name={report?.signatories?.secretary || ''} />
+            <Signatory label={CAMPUS_OFFICERS.wspoCoordinator.shortTitle} name={report?.signatories?.coordinator || ''} />
           </div>
         </div>
       </div>
@@ -296,11 +300,15 @@ export function HoursSummarySheet({ report, rate }: { report: HoursReport | null
 }
 
 export function HoursRenderedSection({ readOnly }: { readOnly: boolean }) {
+  const canEditHourlyRate = localStorage.getItem('user_role') === 'Super Admin';
   const now = new Date();
   const [month, setMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
   const [rate, setRate] = useState(String(DEFAULT_HOURLY_RATE));
+  const [savedRate, setSavedRate] = useState(DEFAULT_HOURLY_RATE);
+  const [rateStatus, setRateStatus] = useState('');
   const [report, setReport] = useState<HoursReport | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const rateFocused = useRef(false);
 
   const period = useMemo(() => {
     const [year, mon] = month.split('-').map(Number);
@@ -313,17 +321,56 @@ export function HoursRenderedSection({ readOnly }: { readOnly: boolean }) {
 
   const hourlyRate = Number(rate) > 0 ? Number(rate) : 0;
 
+  const commitRate = async () => {
+    rateFocused.current = false;
+    if (!canEditHourlyRate) return;
+    const next = Number(rate);
+    if (!Number.isFinite(next) || next < 0) {
+      setRate(String(savedRate));
+      setRateStatus('');
+      return;
+    }
+    if (Math.abs(next - savedRate) < 0.001) {
+      setRate(String(savedRate));
+      setRateStatus('');
+      return;
+    }
+    setRateStatus('Saving...');
+    try {
+      const saved = await financialService.updateHourlyRate(next);
+      setSavedRate(saved.hourly_rate);
+      setRate(String(saved.hourly_rate));
+      setRateStatus('Saved');
+    } catch {
+      setRate(String(savedRate));
+      setRateStatus('Could not save the hourly rate.');
+    }
+  };
+
   useEffect(() => {
     let active = true;
-    financialService.getHoursReport(period.start, period.end)
-      .then((res) => {
-        if (active) setReport(res);
-      })
-      .catch(() => {
-        if (active) setReport(null);
-      });
+    const load = (silent = false) => {
+      financialService.getHoursReport(period.start, period.end)
+        .then((res) => {
+          if (!active) return;
+          setReport(res);
+          if (typeof res.hourly_rate === 'number' && Number.isFinite(res.hourly_rate) && !rateFocused.current) {
+            setSavedRate(res.hourly_rate);
+            setRate(String(res.hourly_rate));
+          }
+        })
+        .catch(() => {
+          if (active && !silent) setReport(null);
+        });
+    };
+    load();
+    const refresh = () => load(true);
+    const interval = setInterval(refresh, 5000);
+    window.addEventListener(REALTIME_EVENT, refresh);
     return () => {
       active = false;
+      clearInterval(interval);
+      window.removeEventListener(REALTIME_EVENT, refresh);
     };
   }, [period.start, period.end, reloadKey]);
 
@@ -352,9 +399,34 @@ export function HoursRenderedSection({ readOnly }: { readOnly: boolean }) {
                 min="0"
                 step="0.5"
                 value={rate}
-                onChange={(event) => setRate(event.target.value)}
-                className="mt-1 block w-28 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800"
+                readOnly={!canEditHourlyRate}
+                onFocus={() => {
+                  if (canEditHourlyRate) rateFocused.current = true;
+                }}
+                onChange={(event) => {
+                  if (!canEditHourlyRate) return;
+                  setRateStatus('');
+                  setRate(event.target.value);
+                }}
+                onBlur={() => {
+                  void commitRate();
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    (event.currentTarget as HTMLInputElement).blur();
+                  }
+                }}
+                title={canEditHourlyRate ? 'Campus hourly rate' : 'Only a Super Admin can change the hourly rate'}
+                className={`mt-1 block w-28 px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-bold ${
+                  canEditHourlyRate
+                    ? 'bg-white text-slate-800'
+                    : 'bg-slate-100 text-slate-500 cursor-not-allowed'
+                }`}
               />
+              <span className="mt-1 block text-[11px] font-medium normal-case tracking-normal text-slate-400">
+                {canEditHourlyRate ? rateStatus || 'Leave the field to save.' : 'Only a Super Admin can change this rate.'}
+              </span>
             </label>
           </div>
         </div>
@@ -368,6 +440,10 @@ export function HoursRenderedSection({ readOnly }: { readOnly: boolean }) {
             <p className="text-sm text-slate-300">{report.grand.student_count} student{report.grand.student_count === 1 ? '' : 's'} with hours this period</p>
           </div>
         )}
+        <HourLimitApprovalsPanel
+          readOnly={readOnly}
+          userRole={localStorage.getItem('user_role') || undefined}
+        />
         <HoursActivityBoard
           readOnly={readOnly}
           periodStart={period.start}

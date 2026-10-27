@@ -463,7 +463,8 @@ class ActivityBreakdown
     private function isOpenablePath(string $path): bool
     {
         return str_starts_with($path, 'requirements/')
-            || str_starts_with($path, 'application-documents/');
+            || str_starts_with($path, 'application-documents/')
+            || str_starts_with($path, 'staffing-approvals/');
     }
 
     private function step(string $title, string $detail): array

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Attendance;
 use App\Models\RenderedHourEntry;
 use App\Models\RenderedHourEvent;
+use App\Support\HourLimits;
 use App\Support\RenderedHours;
 use App\Support\WorkSchedule;
 use App\Support\SuperAdminAudit;
@@ -206,6 +207,11 @@ class AdvancedAttendanceController extends Controller
             return response()->json(['message' => $scheduleDenial], 403);
         }
 
+        $limitDenial = HourLimits::jsonDenial($user->id, $now);
+        if ($limitDenial) {
+            return $limitDenial;
+        }
+
         $isAnomaly = false;
         $anomalyReason = null;
 
@@ -224,7 +230,11 @@ class AdvancedAttendanceController extends Controller
 
         $this->notifyCodeOwner($validToken->generated_by, $user->name, $attendanceType, $method, false);
 
-        return response()->json(['message' => 'Verified entry approved!', 'attendance' => $attendance]);
+        return response()->json([
+            'message' => 'Verified entry approved!',
+            'attendance' => $attendance,
+            'hour_limits' => HourLimits::status($user->id, $now),
+        ]);
     }
 
     public function secureClockOut(Request $request, $id)
@@ -260,25 +270,46 @@ class AdvancedAttendanceController extends Controller
         $clockInTime = Carbon::parse($attendance->time_in);
         $totalMinutes = $clockInTime->diffInMinutes($clockOutTime);
         $computedHours = round($totalMinutes / 60, 2);
+        $fit = HourLimits::fitHours($user->id, $computedHours, $clockOutTime, (int) $attendance->id);
+        if ($fit['allowed'] <= 0) {
+            return response()->json([
+                'message' => $fit['denial'] ?? 'No hours remain under your weekly or monthly limit.',
+                'hour_limits' => HourLimits::status($user->id, $clockOutTime, (int) $attendance->id),
+            ], 403);
+        }
 
+        $credited = $fit['allowed'];
         $isAnomaly = $attendance->is_anomaly;
         $anomalyReason = $attendance->anomaly_reason;
         if ($computedHours > 8.00) {
             $isAnomaly = true;
             $anomalyReason = ($anomalyReason ? $anomalyReason . ' • ' : '') . 'Extended continuous shifts (Exceeded 8 hours).';
         }
+        if ($fit['capped'] && $fit['message']) {
+            $isAnomaly = true;
+            $anomalyReason = ($anomalyReason ? $anomalyReason . ' • ' : '') . $fit['message'];
+        }
 
         $attendance->update([
             'time_out' => $clockOutTime,
-            'computed_hours' => $computedHours,
-            'rendered_hours' => $computedHours,
+            'computed_hours' => $credited,
+            'rendered_hours' => $credited,
             'is_anomaly' => $isAnomaly,
             'anomaly_reason' => $anomalyReason,
         ]);
 
         $this->notifyCodeOwner($validToken->generated_by, $user->name, $dutyType, $method, true);
 
-        return response()->json(['message' => 'Verified exit logging saved.', 'hours_rendered' => $computedHours]);
+        $message = 'Verified exit logging saved.';
+        if ($fit['capped'] && $fit['message']) {
+            $message .= ' ' . $fit['message'];
+        }
+
+        return response()->json([
+            'message' => $message,
+            'hours_rendered' => $credited,
+            'hour_limits' => HourLimits::status($user->id, $clockOutTime),
+        ]);
     }
 
     public function getWorkHourSummary(Request $request)
@@ -299,6 +330,7 @@ class AdvancedAttendanceController extends Controller
         );
         $credited = max(0, $totalRendered - $dutyDeduction + $activityHours);
         $remainingHours = max(0, $targetHours - $credited);
+        $hourLimits = HourLimits::status($userId);
 
         return response()->json([
             'total_rendered' => round($credited, 2),
@@ -307,6 +339,7 @@ class AdvancedAttendanceController extends Controller
             'activity_hours' => round($activityHours, 2),
             'remaining_hours' => round($remainingHours, 2),
             'target_hours' => $targetHours,
+            'hour_limits' => $hourLimits,
             'history' => $records->filter(fn (Attendance $record) => $this->belongsInRecentLogs($record))->values(),
         ]);
     }
@@ -561,6 +594,20 @@ class AdvancedAttendanceController extends Controller
 
         $status = $event->statusAt($now);
         $delta = $event->deltaFor($status);
+        if ($delta > 0) {
+            $fit = HourLimits::fitHours($user->id, (float) $delta, $now);
+            if ($fit['allowed'] < (float) $delta) {
+                return response()->json([
+                    'message' => $fit['denial']
+                        ?? ('This activity would add '
+                            . HourLimits::hoursLabel((float) $delta)
+                            . ' hours, but only '
+                            . HourLimits::hoursLabel($fit['allowed'])
+                            . ' hours remain under your weekly or monthly limit.'),
+                    'hour_limits' => HourLimits::status($user->id, $now),
+                ], 403);
+            }
+        }
         $hours = number_format((float) $event->hours, 2);
         $message = $status === 'late'
             ? "Clock-in saved as late. No hours were added or deducted."
@@ -608,6 +655,7 @@ class AdvancedAttendanceController extends Controller
             'status' => $status,
             'hours_delta' => $delta,
             'attendance' => $attendance,
+            'hour_limits' => HourLimits::status($user->id, $now),
         ]);
     }
 

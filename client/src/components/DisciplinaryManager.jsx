@@ -32,7 +32,7 @@ const DisciplinaryManager = () => {
     const [students, setStudents] = useState([]);
     const emptyForm = () => ({
         student_id: '',
-        violation_type: 'Tardiness',
+        violation_type: 'Late',
         incident_date: new Date().toISOString().split('T')[0],
         description: '',
         penalty: '',
@@ -52,7 +52,7 @@ const DisciplinaryManager = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [section, setSection] = useState('offenses');
-    const [offenseCatalog, setOffenseCatalog] = useState({ minor: [], major: [] });
+    const [offenseCatalog, setOffenseCatalog] = useState({ minor: [], major: [], escalation_rules: [] });
 
     useEffect(() => {
         if (isAudit) {
@@ -68,7 +68,11 @@ const DisciplinaryManager = () => {
         const interval = setInterval(refresh, 5000);
         window.addEventListener(REALTIME_EVENT, refresh);
         getConductCatalog()
-            .then((res) => setOffenseCatalog({ minor: res.data.minor || [], major: res.data.major || [] }))
+            .then((res) => setOffenseCatalog({
+                minor: res.data.minor || [],
+                major: res.data.major || [],
+                escalation_rules: res.data.escalation_rules || [],
+            }))
             .catch(() => {});
         
         // Fetching Students safely
@@ -372,17 +376,40 @@ const DisciplinaryManager = () => {
                                 onChange={(e) => setFormData({ ...formData, violation_type: e.target.value })}
                             >
                                 <optgroup label="Minor offenses">
-                                    {(offenseCatalog.minor.length ? offenseCatalog.minor : [{ name: 'Tardiness' }]).map((offense) => (
+                                    {(offenseCatalog.minor.length ? offenseCatalog.minor : [{ name: 'Late' }]).map((offense) => (
                                         <option key={offense.name} value={offense.name}>{offense.name}</option>
                                     ))}
                                 </optgroup>
                                 <optgroup label="Major offenses">
-                                    {offenseCatalog.major.map((offense) => (
+                                    {(offenseCatalog.major.length ? offenseCatalog.major : [{ name: 'Absent' }, { name: 'AWOL' }]).map((offense) => (
                                         <option key={offense.name} value={offense.name}>{offense.name}</option>
                                     ))}
                                 </optgroup>
                             </select>
+                            {formData.violation_type === 'Late' && (
+                                <p className="text-[10px] text-slate-400 mt-1.5 font-medium">
+                                    Late is minor and depends on the supervisor. Report when warranted; the penalty is decided case by case.
+                                </p>
+                            )}
+                            {(formData.violation_type === 'Absent' || formData.violation_type === 'AWOL') && (
+                                <p className="text-[10px] text-slate-400 mt-1.5 font-medium">
+                                    Major offense. Automatic rules also apply: 3 consecutive Assembly &amp; General Cleaning absences → 1-semester suspension; 3 department replacements → suspension.
+                                </p>
+                            )}
                         </div>
+
+                        {offenseCatalog.escalation_rules?.length > 0 && (
+                            <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-3.5 py-3">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700 mb-1.5">Automatic escalation</p>
+                                <ul className="space-y-1">
+                                    {offenseCatalog.escalation_rules.map((rule) => (
+                                        <li key={rule.id} className="text-[11px] font-medium text-amber-900/80 leading-snug">
+                                            {rule.label}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
 
                         <div>
                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Incident Description</label>
@@ -444,6 +471,7 @@ const DisciplinaryManager = () => {
                                     <option value="2 weeks">2 weeks</option>
                                     <option value="3 weeks">3 weeks</option>
                                     <option value="1 month">1 month</option>
+                                    <option value="1 semester">1 semester</option>
                                 </select>
                             </div>
                             {formData.suspension_span === 'days' && (
@@ -460,6 +488,11 @@ const DisciplinaryManager = () => {
                                     ))}
                                 </select>
                             </div>
+                            )}
+                            {formData.suspension_span === '1 semester' && (
+                                <p className="text-[10px] text-slate-400 font-medium -mt-2">
+                                    Ends on the current semester end date when set; otherwise lasts the configured semester length.
+                                </p>
                             )}
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Why</label>
@@ -789,6 +822,7 @@ const DisciplinaryManager = () => {
                                                 <option value="2 weeks">2 weeks</option>
                                                 <option value="3 weeks">3 weeks</option>
                                                 <option value="1 month">1 month</option>
+                                                <option value="1 semester">1 semester</option>
                                             </select>
                                         </div>
                                         {decideData.suspension_span === 'days' && (

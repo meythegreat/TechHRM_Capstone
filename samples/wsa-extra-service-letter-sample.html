@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>WSA EXTRA SERVICE REQUEST — Sample</title>
+  <style>
+    @page { size: letter; margin: 0.5in; }
+    html, body { margin: 0; padding: 0; background: #e8eef5; color: #000; }
+    .esr-page {
+      width: 8.5in; min-height: 11in; max-width: 8.5in; margin: 24px auto; padding: 0.5in; background: #fff;
+      border: 1px solid #e2e8f0; box-shadow: 0 8px 24px rgba(15,23,42,.08);
+      box-sizing: border-box; font-family: "Times New Roman", Times, serif; font-size: 14px; line-height: 1.32;
+    }
+    @media print {
+      html, body { background: #fff; }
+      .sample-banner { display: none !important; }
+      .esr-page {
+        max-width: none; width: 100%; min-height: 0; margin: 0; padding: 0;
+        border: 0; box-shadow: none;
+      }
+    }
+    .esr-head { width: 100%; border-collapse: collapse; margin: 0 0 10px; }
+    .esr-head td { border: 1px solid #000; padding: 3px 6px; vertical-align: middle; }
+    .esr-seal { width: 74px; text-align: center; }
+    .esr-seal img { width: 64px; height: 64px; object-fit: contain; }
+    .esr-univ { text-align: center; font-size: 14.5px; line-height: 1.25; padding-top: 5px; padding-bottom: 5px; }
+    .esr-univ strong { font-size: 16px; font-weight: 900; letter-spacing: .02em; }
+    .esr-sheet { text-align: center; font-size: 13.5px; line-height: 1.2; }
+    .esr-label { font-size: 12.5px; width: 22%; }
+    .esr-office { font-size: 12.5px; line-height: 1.25; vertical-align: middle; width: 28%; }
+    .esr-office-gap { margin-top: 6px; }
+    .esr-page-cell { text-align: center; white-space: nowrap; width: 1px; font-size: 12.5px; }
+    .esr-date-row { display: flex; justify-content: flex-end; margin: 0 0 10px; gap: 8px; align-items: flex-end; font-size: 14px; }
+    .esr-date-row .esr-rule { min-width: 170px; }
+    .esr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; margin: 0 0 4px; }
+    .esr-field { margin-bottom: 10px; }
+    .esr-field strong { display: block; margin-bottom: 3px; font-size: 13px; }
+    .esr-rule { display: block; border-bottom: 1px solid #000; min-height: 1.3em; padding: 0 2px 1px; font-size: 14px; }
+    .esr-rule.multi {
+      min-height: 2.8em; border-bottom: none;
+      background-image: repeating-linear-gradient(transparent, transparent calc(1.2em - 1px), #000 calc(1.2em - 1px), #000 1.2em);
+      background-size: 100% 1.2em; white-space: pre-wrap; padding-bottom: 2px;
+    }
+    .esr-hint { font-size: 12px; font-style: italic; color: #333; margin: 3px 0 0; }
+    .esr-sig-block { margin-top: 14px; padding: 0; }
+    .esr-sig-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 12px; }
+    .esr-sig-row.single { grid-template-columns: 1fr; max-width: 58%; margin-left: auto; margin-right: auto; }
+    .esr-sig { text-align: center; }
+    .esr-sig-line { border-bottom: 1px solid #000; min-height: 22px; margin: 0 0.15in 3px; }
+    .esr-sig-name { font-weight: 700; font-size: 13.5px; }
+    .esr-sig-title { font-size: 12px; }
+    .esr-section-label { font-weight: 700; font-size: 12.5px; margin: 12px 0 0; text-align: center; text-transform: uppercase; letter-spacing: .03em; }
+    .sample-banner {
+      max-width: 8.5in; margin: 24px auto 0; padding: 10px 14px; background: #1e3a5f; color: #fff;
+      font-family: system-ui, sans-serif; font-size: 13px; border-radius: 8px; box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+  <div class="sample-banner">
+    <strong>Sample only</strong> — filled like a supervisor Extra Service request before wet signatures.
+  </div>
+
+  <div class="esr-page">
+    <table class="esr-head">
+      <tbody>
+        <tr>
+          <td class="esr-seal" rowspan="4">
+            <img src="./fcu-seal.jpg" alt="Filamer Christian University seal" />
+          </td>
+          <td class="esr-univ" colspan="4">
+            <strong>FILAMER CHRISTIAN UNIVERSITY, INC.</strong><br />
+            Roxas Avenue, Roxas City, Capiz, Philippines 5800
+          </td>
+        </tr>
+        <tr>
+          <td class="esr-label">Form Name:</td>
+          <td class="esr-sheet"><strong>WSA EXTRA SERVICE REQUEST</strong></td>
+          <td class="esr-office" rowspan="2" colspan="2">
+            <div>Effectivity:<br />October 1, 2025</div>
+            <div class="esr-office-gap">Issuing Office:<br />WORK STUDY PROGRAM OFFICE</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="esr-label">Form No:<br />FCU-EOMS-WP-001-F</td>
+          <td class="esr-sheet"><strong>EDUCATIONAL ORGANIZATION<br />MANAGEMENT SYSTEM</strong></td>
+        </tr>
+        <tr>
+          <td class="esr-label">Revision No. 1</td>
+          <td class="esr-sheet"><strong>ISO 21001:2025</strong></td>
+          <td class="esr-page-cell">Page No.</td>
+          <td class="esr-page-cell">1 of 1</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="esr-date-row">
+      <strong>Date:</strong>
+      <span class="esr-rule">October 23, 2026</span>
+    </div>
+
+    <div class="esr-grid">
+      <div>
+        <div class="esr-field">
+          <strong>Requesting Unit/Department:</strong>
+          <span class="esr-rule">Office of Student Affairs</span>
+        </div>
+        <div class="esr-field">
+          <strong>Requesting Supervisor/Head:</strong>
+          <span class="esr-rule">MARIA L. REYES</span>
+        </div>
+        <div class="esr-field">
+          <strong>Purpose of Request:</strong>
+          <span class="esr-rule multi">University Foundation Day ushers — Assist with guest reception, registration desk, and campus tour guidance during Foundation Week activities.</span>
+        </div>
+      </div>
+      <div>
+        <div class="esr-field">
+          <strong>(Name/s of WSA/s):</strong>
+          <span class="esr-rule multi"></span>
+          <p class="esr-hint">To be assigned by WSPO — 3 working students · 2 Female and 1 Male.</p>
+        </div>
+        <div class="esr-field">
+          <strong>Period of Duty (Date and Number of Hours/Day):</strong>
+          <span class="esr-rule multi">October 28–30, 2026 · 4 hours/day (8:00 AM – 12:00 NN)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="esr-sig-block">
+      <div class="esr-sig-row">
+        <div class="esr-sig">
+          <div class="esr-sig-line"></div>
+          <div class="esr-sig-name">MARIA L. REYES</div>
+          <div class="esr-sig-title">Requested by: Supervisor (Department)</div>
+          <div class="esr-sig-title">(Signature over Printed Name)</div>
+        </div>
+        <div class="esr-sig">
+          <div class="esr-sig-line"></div>
+          <div class="esr-sig-name">JUAN D. CRUZ</div>
+          <div class="esr-sig-title">Coordinator, Work Study Program</div>
+          <div class="esr-sig-title">Noted / Favorably Endorsed by</div>
+        </div>
+      </div>
+
+      <div class="esr-section-label">Noted — Committee Chair</div>
+      <div class="esr-sig-row single">
+        <div class="esr-sig">
+          <div class="esr-sig-line"></div>
+          <div class="esr-sig-name">PHOEBE F. SANTIAGO, LPT, MAEd, RGC</div>
+          <div class="esr-sig-title">Director, Guidance &amp; Counselling Center</div>
+        </div>
+      </div>
+
+      <div class="esr-section-label">Recommending Approval</div>
+      <div class="esr-sig-row">
+        <div class="esr-sig">
+          <div class="esr-sig-line"></div>
+          <div class="esr-sig-name">EXEQUIEL A. CALIMUTAN, MAT</div>
+          <div class="esr-sig-title">OIC, VP-Administration</div>
+        </div>
+        <div class="esr-sig">
+          <div class="esr-sig-line"></div>
+          <div class="esr-sig-name">ESTHER S. ARCEÑO, CPA, MPA</div>
+          <div class="esr-sig-title">VP-Finance</div>
+        </div>
+      </div>
+
+      <div class="esr-section-label">Approved</div>
+      <div class="esr-sig-row single">
+        <div class="esr-sig">
+          <div class="esr-sig-line"></div>
+          <div class="esr-sig-name">GEORGE O. CORTEL, MBA, Ph.D.</div>
+          <div class="esr-sig-title">University President</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

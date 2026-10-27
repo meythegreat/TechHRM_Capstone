@@ -8,6 +8,7 @@ use App\Models\Attendance;
 use App\Models\ActivityLog;
 use App\Models\DisciplinaryRecord;
 use App\Models\Schedule;
+use App\Support\HourLimits;
 use Carbon\Carbon;
 
 class DashboardController extends Controller
@@ -261,6 +262,7 @@ class DashboardController extends Controller
             'has_activity' => $hasActivity,
             'violations' => $openViolations->count(),
             'upcoming_schedules' => $upcomingSchedules,
+            'hour_limits' => HourLimits::status($user->id),
         ]);
     }
 

@@ -16,6 +16,8 @@ use App\Http\Controllers\FinancialController;
 use App\Http\Controllers\OfficeController;
 use App\Http\Controllers\HolidayController;
 use App\Http\Controllers\SemesterTermController;
+use App\Http\Controllers\HourLimitController;
+use App\Http\Controllers\ExtraHoursController;
 
 // =========================================================
 // PUBLIC ROUTES
@@ -109,6 +111,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/attendance/secure-clock-in', [\App\Http\Controllers\AdvancedAttendanceController::class, 'secureClockIn']);
     Route::put('/attendance/secure-clock-out/{id}', [\App\Http\Controllers\AdvancedAttendanceController::class, 'secureClockOut']);
     Route::get('/attendance/hours-summary', [\App\Http\Controllers\AdvancedAttendanceController::class, 'getWorkHourSummary']);
+    Route::get('/hour-limits', [HourLimitController::class, 'mine']);
+    Route::post('/hour-limits/request', [HourLimitController::class, 'requestExtension']);
 
     // =====================================================
     // SUPERVISOR / WSPO STAFF / SUPER ADMIN
@@ -136,6 +140,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/attendance/activity-qr', [\App\Http\Controllers\AdvancedAttendanceController::class, 'activityQr']);
         Route::get('/attendance/anomalies', [\App\Http\Controllers\AdvancedAttendanceController::class, 'getAnomalyLogs']);
         Route::patch('/attendance/{id}/approve', [AttendanceController::class, 'approve']);
+        Route::get('/hour-limits/approvals', [HourLimitController::class, 'index']);
+        Route::post('/hour-limits/grant', [HourLimitController::class, 'grant']);
+        Route::patch('/hour-limits/approvals/{approval}', [HourLimitController::class, 'decide']);
+        Route::get('/extra-hours', [ExtraHoursController::class, 'index']);
+        Route::get('/extra-hours/candidates', [ExtraHoursController::class, 'candidates']);
+        Route::get('/extra-hours/signatories', [ExtraHoursController::class, 'signatories']);
+        Route::get('/extra-hours/meta', [ExtraHoursController::class, 'meta']);
+        Route::patch('/extra-hours/{extraHoursRequest}', [ExtraHoursController::class, 'decide']);
 
         // =================================================
         // SCHEDULE MANAGEMENT
@@ -151,6 +163,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::patch('/schedules/{id}/resolve-request', [ScheduleController::class, 'resolveRequest']);
         Route::get('/staffing-requests', [\App\Http\Controllers\StaffingRequestController::class, 'index']);
+        Route::get('/staffing-requests/signatories', [\App\Http\Controllers\StaffingRequestController::class, 'signatories']);
 
         // =================================================
         // STUDENT VIEWING
@@ -237,6 +250,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware(['role:Supervisor'])->group(function () {
         Route::post('/staffing-requests', [\App\Http\Controllers\StaffingRequestController::class, 'store']);
+        Route::patch('/staffing-requests/{staffingRequest}/draft', [\App\Http\Controllers\StaffingRequestController::class, 'saveDraft']);
+        Route::post('/staffing-requests/{staffingRequest}/finalize', [\App\Http\Controllers\StaffingRequestController::class, 'finalize']);
+        Route::post('/extra-hours', [ExtraHoursController::class, 'store']);
+        Route::patch('/extra-hours/{extraHoursRequest}/draft', [ExtraHoursController::class, 'saveDraft']);
+        Route::post('/extra-hours/{extraHoursRequest}/finalize', [ExtraHoursController::class, 'finalize']);
+        Route::delete('/extra-hours/{extraHoursRequest}', [ExtraHoursController::class, 'destroy']);
     });
 
     // =====================================================
@@ -249,6 +268,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // ADMIN DASHBOARD
         // =================================================
 
+        Route::put('/financial/hourly-rate', [FinancialController::class, 'updateHourlyRate']);
         Route::get('/admin/dashboard-stats', [AdminController::class, 'getStats']);
         Route::get('/admin/enrolled-roster', [AdminController::class, 'enrolledRoster']);
         Route::post('/offices', [OfficeController::class, 'store']);

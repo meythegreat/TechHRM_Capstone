@@ -24,7 +24,13 @@ export function normalizeFilePath(filePath: string | null | undefined): string |
         return decodeURIComponent(storageMatch[1]);
     }
 
-    if (trimmed.startsWith('avatars/') || trimmed.startsWith('requirements/') || trimmed.startsWith('application-documents/')) {
+    if (
+        trimmed.startsWith('avatars/')
+        || trimmed.startsWith('requirements/')
+        || trimmed.startsWith('application-documents/')
+        || trimmed.startsWith('staffing-approvals/')
+        || trimmed.startsWith('extra-hours-approvals/')
+    ) {
         return trimmed;
     }
 
@@ -41,16 +47,69 @@ export function normalizeFilePath(filePath: string | null | undefined): string |
     return trimmed;
 }
 
-export async function openSecureFile(filePath: string): Promise<void> {
+export type SecureFileKind = 'image' | 'pdf' | 'other';
+
+export type SecureFilePayload = {
+    url: string;
+    mime: string;
+    kind: SecureFileKind;
+    blob: Blob;
+};
+
+async function rethrowSecureFileError(error: any): Promise<never> {
+    const data = error?.response?.data;
+    if (data instanceof Blob) {
+        try {
+            const text = await data.text();
+            const parsed = JSON.parse(text);
+            if (parsed?.message) {
+                const next = new Error(parsed.message);
+                (next as any).response = { data: parsed, status: error?.response?.status };
+                throw next;
+            }
+        } catch (parsedError) {
+            if (parsedError instanceof Error && (parsedError as any).response) {
+                throw parsedError;
+            }
+        }
+    }
+    throw error;
+}
+
+function kindForMime(mime: string, path: string): SecureFileKind {
+    if (mime.startsWith('image/') || /\.(jpe?g|png|gif|webp)$/i.test(path)) return 'image';
+    if (mime === 'application/pdf' || /\.pdf$/i.test(path)) return 'pdf';
+    return 'other';
+}
+
+/** Fetch a secured file as a blob URL for in-app preview. Caller must revoke `url`. */
+export async function fetchSecureFile(filePath: string): Promise<SecureFilePayload> {
     const path = normalizeFilePath(filePath);
-    if (!path) return;
+    if (!path) {
+        throw new Error('Invalid file path.');
+    }
 
-    const response = await axios.get('/api/secure-file', {
-        params: { path },
-        responseType: 'blob',
-    });
+    try {
+        const response = await axios.get('/api/secure-file', {
+            params: { path },
+            responseType: 'blob',
+        });
+        const blob: Blob = response.data;
+        const mime = blob.type || String(response.headers?.['content-type'] || 'application/octet-stream');
+        return {
+            url: URL.createObjectURL(blob),
+            mime,
+            kind: kindForMime(mime, path),
+            blob,
+        };
+    } catch (error: any) {
+        return rethrowSecureFileError(error);
+    }
+}
 
-    const objectUrl = URL.createObjectURL(response.data);
-    window.open(objectUrl, '_blank', 'noopener,noreferrer');
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+/** Opens a secured file in a new tab (legacy). Prefer in-app SecureFileViewerModal. */
+export async function openSecureFile(filePath: string): Promise<void> {
+    const payload = await fetchSecureFile(filePath);
+    window.open(payload.url, '_blank', 'noopener,noreferrer');
+    setTimeout(() => URL.revokeObjectURL(payload.url), 60_000);
 }

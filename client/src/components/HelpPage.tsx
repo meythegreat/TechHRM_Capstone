@@ -25,6 +25,7 @@ const HELP_TOPICS: HelpTopic[] = [
         steps: [
             'Click Dashboard in the left menu.',
             'Check your hours progress and how close you are to the required hours.',
+            'Review this week and this month against the 20/25 weekly and 100 monthly limits. Ask your supervisor for an Extra Hours letter if you need up to 25 hours/week.',
             'Look at your assigned office and supervisor names.',
             'Use the calendar to move between months and select a day to see your work or class lists. Days with classes or work are highlighted, and today\'s schedule stays at the top. Click the calendar header to collapse or expand it.',
             'Check Upcoming Shifts so you know when to report for duty.',
@@ -56,6 +57,7 @@ const HELP_TOPICS: HelpTopic[] = [
             'If you are already timed in, clock out first before starting another duty.',
             'Some special activities (like cleaning, devotionals, or assemblies) may use their own QR and add hours when you are on time.',
             'If you have no work schedule yet, follow the attendance rules set by WSPO.',
+            'You may work up to 20 hours per week by default. Past 20 hours needs administrator approval (up to 25). The monthly maximum is 100 hours.',
         ],
     },
     {
@@ -63,7 +65,7 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Hours Rendered',
         summary: 'See how many hours you have worked this month.',
         about:
-            'Hours Rendered shows your monthly duty summary. It includes your DTR hours, duty deductions, special or activity hours, and an estimated peso amount. This helps you track progress before the period closes.',
+            'Hours Rendered shows your monthly duty summary. It includes your DTR hours, duty deductions, special or activity hours, and an estimated peso amount. It also reflects weekly and monthly hour limits: 20 hours/week by default, up to 25 with administrator approval, and 100 hours/month maximum.',
         audience: ['Student'],
         steps: [
             'Click Hours Rendered in the left menu.',
@@ -71,11 +73,32 @@ const HELP_TOPICS: HelpTopic[] = [
             'Read the grand total and the estimated amount shown.',
             'Review the breakdown cells such as DTR hours, deductions, cleaning, and meetings.',
             'Scroll the activity hours list to see each activity and its status.',
+            'Check the week and month limit counters so you know how many hours you can still add.',
         ],
         tips: [
             'This page is view-only. You cannot change the numbers yourself.',
             'A common formula is: DTR hours minus deductions, plus approved activity hours.',
             'Tell your supervisor if a day or total looks wrong.',
+            'If you need more than 20 hours in a week, request an extension from your Dashboard before you hit the limit.',
+        ],
+    },
+    {
+        id: 'student-hour-limits',
+        title: 'Weekly and monthly hour limits',
+        summary: 'How many hours you may work each week and month.',
+        about:
+            'Working students may work up to 20 hours per week without special approval. With an approved Extra Hours letter, you may work up to 25 hours per week for the covered period. No student may exceed 100 hours in a calendar month. The system blocks new clock-ins and caps credited hours when these limits are reached.',
+        audience: ['Student'],
+        steps: [
+            'Open Dashboard to see your current week and month hour usage.',
+            'Work normally while you stay at or under 20 hours for the week.',
+            'If you need up to 25 hours/week, ask your supervisor to prepare an Extra Hours letter.',
+            'After WSPO records the signed letter, you may work up to 25 hours each week during the approved period, or until you reach 100 hours for the month.',
+        ],
+        tips: [
+            'Extra Hours is a wet-signed permission letter (different from Extra Service, which is for specific dates or events).',
+            'Monthly 100 hours is a hard maximum and cannot be extended.',
+            'Clock-out may credit fewer hours than your shift length if you are about to exceed a limit.',
         ],
     },
     {
@@ -205,13 +228,14 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Timesheets',
         summary: 'Review and manage student daily time records.',
         about:
-            'Timesheets shows student attendance logs. Supervisors and WSPO staff can review pending entries, accept or reject them, and print monthly DTRs. Super Admins can browse and filter records, but usually cannot approve or reject from this page.',
+            'Timesheets shows student attendance logs. Supervisors and WSPO staff can review pending entries, accept or reject them, print monthly DTRs, and process Extra Hours letters that raise the weekly cap from 20 to 25. Super Admins can browse and filter records, but usually cannot approve or reject from this page.',
         audience: ['Supervisor', 'WSPO Staff', 'Super Admin'],
         steps: [
             'Click Timesheets in the left menu.',
             'Use the date controls (previous, next, Today, or jump) to find the day you need.',
             'Filter or search by student, department, or office when available.',
             'For pending logs, click Accept if the time is correct, or Reject if it is not.',
+            'Review Extra Hours near the top. Supervisors Save & Print the letter, collect wet signatures, then upload the signed scan. WSPO records Approve 25 or Decline.',
             'Open a student monthly DTR when you need to review or print the full sheet.',
             'Use manual override only when your role allows it and the correction is necessary.',
             'WSPO or Super Admin users can also manage holidays and class breaks when that tool is shown.',
@@ -220,6 +244,7 @@ const HELP_TOPICS: HelpTopic[] = [
             'Supervisors usually handle students in their own department.',
             'WSPO staff usually handle students assigned to WSPO offices.',
             'Super Admin timesheet views are mostly read-only.',
+            'Students are limited to 20 hours/week unless you approve an extension. 100 hours/month is a hard stop.',
         ],
     },
     {
@@ -227,7 +252,7 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Schedules',
         summary: 'Manage work shifts, class schedules, and schedule requests.',
         about:
-            'Schedules (Schedule Master) is where work and class blocks are managed. WSPO coordinators or secretaries can set the semester, assign shifts, and process requests. Supervisors can view their department schedules and send staffing requests. Super Admins can review schedules with filters.',
+            'Schedules (Schedule Master) is where work and class blocks are managed. WSPO coordinators or secretaries can set the semester, assign shifts, and process requests. Supervisors can view their department schedules and send staffing requests, including Extra Service requests that require a system-generated approval letter with wet signatures. Super Admins can review schedules with filters.',
         audience: ['Supervisor', 'WSPO Staff', 'Super Admin'],
         steps: [
             'Click Schedules in the left menu.',
@@ -237,11 +262,13 @@ const HELP_TOPICS: HelpTopic[] = [
             'Edit or remove a schedule if the day or time needs correction.',
             'Review student edit requests and approve or reject them with a note.',
             'Supervisors can submit a staffing request when more student workers are needed.',
+            'For Extra Service / Special Request duty, use Save & Print Approval Letter (this stores a draft), collect wet signatures, then upload the signed scan and transmit to send it to WSPO.',
         ],
         tips: [
             'Assign and Add controls stay disabled until a semester is set.',
             'Not every WSPO office title can edit schedules—usually coordinator or secretary roles.',
             'Super Admin access on this page is mostly for reviewing, not editing.',
+            'Extra Service letters need signatures from the supervisor, WSPO Coordinator, Guidance Committee Chair, VP-Administration, VP-Finance, and the University President.',
         ],
     },
     {
@@ -282,6 +309,9 @@ const HELP_TOPICS: HelpTopic[] = [
             'Super Admins: search or filter by name, department, or offense to review history.',
         ],
         tips: [
+            'Offenses are Late (minor, supervisor-dependent), Absent (major), and AWOL (major).',
+            '3 consecutive Assembly & General Cleaning absences automatically suspend for 1 semester.',
+            '3 department replacements automatically suspend the student.',
             'Keep notes factual and easy to understand.',
             'Supervisor reports may wait for WSPO coordinator decision when the penalty is still Pending.',
             'Super Admin use of this page is mostly for monitoring.',
@@ -393,20 +423,23 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Hours Rendered',
         summary: 'Review monthly duty hours, rates, and activity records.',
         about:
-            'Staff Hours Rendered shows monthly student hour totals, year-level breakdowns, and activity details. WSPO staff can manage activities and attendance corrections. Super Admins can review the board in read-only mode.',
+            'Staff Hours Rendered shows monthly student hour totals, year-level breakdowns, activity details, and Extra Hours requests. Students may work 20 hours/week by default, up to 25 with a signed Extra Hours letter, and at most 100 hours/month. WSPO staff can manage activities and attendance corrections. Super Admins can review the board in read-only mode.',
         audience: ['WSPO Staff', 'Super Admin'],
         steps: [
             'Click Hours Rendered in the left menu.',
             'Pick the month you want to review.',
-            'Set or check the hourly rate if the page shows peso estimates.',
+            'Check the hourly rate used for peso estimates. Only a Super Admin can change it.',
+            'Review Extra Hours letters and approve or decline permission to work up to 25 hours/week for the covered period.',
             'Review the year-level breakdown and print a summary when needed.',
             'Expand activity rows to inspect details.',
             'When your role allows it, mark attendance, correct times, remove an activity, or mark unmarked students absent.',
         ],
         tips: [
-            'Super Admin access is read-only on this board.',
+            'Super Admin access is read-only on this board, except the hourly rate.',
+            'Only a Super Admin can change the hourly rate. Other roles see the saved rate.',
             'Activity tools may depend on your office permissions.',
             'Share hour reports only through approved channels.',
+            'Adding activity hours that would push a student past weekly or monthly limits is blocked.',
         ],
     },
     {

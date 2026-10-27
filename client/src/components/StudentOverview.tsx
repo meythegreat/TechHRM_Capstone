@@ -10,6 +10,7 @@ import {
     Award,
 } from 'lucide-react';
 import OrganizationScheduleCalendar from './OrganizationScheduleCalendar';
+import { type HourLimitStatus } from '../services/hourLimitService';
 
 interface DashboardData {
     total_hours_rendered: number;
@@ -20,6 +21,7 @@ interface DashboardData {
     performance_score: number;
     has_activity: boolean;
     violations: number;
+    hour_limits?: HourLimitStatus | null;
 }
 
 const emptyDashboard = (): DashboardData => ({
@@ -31,6 +33,7 @@ const emptyDashboard = (): DashboardData => ({
     performance_score: 0,
     has_activity: false,
     violations: 0,
+    hour_limits: null,
 });
 
 function greetingFor(date: Date) {
@@ -177,6 +180,13 @@ const StudentOverview = () => {
     const supervisorLabel = supervisorNames.length > 0 ? supervisorNames.join(', ') : 'Not assigned';
     const shifts = data?.upcoming_schedules ?? [];
     const violations = data?.violations ?? 0;
+    const limits = data?.hour_limits;
+    const weeklyPct = limits && limits.weekly_cap > 0
+        ? Math.min((limits.weekly_hours / limits.weekly_cap) * 100, 100)
+        : 0;
+    const monthlyPct = limits && limits.monthly_cap > 0
+        ? Math.min((limits.monthly_hours / limits.monthly_cap) * 100, 100)
+        : 0;
 
     return (
         <div className="space-y-5">
@@ -257,6 +267,54 @@ const StudentOverview = () => {
                             ? `${Number(data?.logged_hours ?? 0).toFixed(1)} logged, ${Number(data?.penalty_hours).toFixed(1)} penalty hours deducted.`
                             : 'Credited from your completed attendance logs.'}
                     </p>
+
+                    {limits && (
+                        <div className="mt-5 space-y-3 rounded-xl border border-slate-100 bg-slate-50/80 p-4">
+                            <div>
+                                <div className="mb-1.5 flex items-center justify-between text-xs font-medium text-slate-500">
+                                    <span>
+                                        This week
+                                        {limits.extension_approved ? ` (approved to ${limits.weekly_cap} hrs)` : ` (max ${limits.weekly_standard} hrs)`}
+                                    </span>
+                                    <span className="tabular-nums">{limits.weekly_hours.toFixed(1)} / {limits.weekly_cap}</span>
+                                </div>
+                                <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
+                                    <div
+                                        className={`h-full rounded-full ${weeklyPct >= 100 ? 'bg-rose-500' : weeklyPct >= 80 ? 'bg-amber-500' : 'bg-slate-700'}`}
+                                        style={{ width: `${weeklyPct}%` }}
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <div className="mb-1.5 flex items-center justify-between text-xs font-medium text-slate-500">
+                                    <span>This month (max {limits.monthly_cap} hrs)</span>
+                                    <span className="tabular-nums">{limits.monthly_hours.toFixed(1)} / {limits.monthly_cap}</span>
+                                </div>
+                                <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
+                                    <div
+                                        className={`h-full rounded-full ${monthlyPct >= 100 ? 'bg-rose-500' : monthlyPct >= 80 ? 'bg-amber-500' : 'bg-slate-700'}`}
+                                        style={{ width: `${monthlyPct}%` }}
+                                    />
+                                </div>
+                            </div>
+                            <p className="text-xs leading-relaxed text-slate-500">
+                                Standard weekly limit is {limits.weekly_standard} hours. With an approved Extra Hours letter, you may work up to {limits.weekly_extended} hours per week. Monthly maximum is {limits.monthly_cap} hours.
+                            </p>
+                            {limits.extra_hours_approved && (
+                                <p className="text-xs font-semibold text-emerald-700">
+                                    Extra Hours approved{limits.extra_hours_period_label ? ` for ${limits.extra_hours_period_label}` : ''}: up to {limits.weekly_cap} hrs/week.
+                                </p>
+                            )}
+                            {limits.extension_approved && !limits.extra_hours_approved && (
+                                <p className="text-xs font-semibold text-emerald-700">Extension approved for this week.</p>
+                            )}
+                            {!limits.extension_approved && limits.monthly_remaining > 0 && limits.weekly_remaining <= 2 && (
+                                <p className="text-xs font-semibold text-amber-700">
+                                    Ask your supervisor to submit a signed Extra Hours letter if you need up to {limits.weekly_extended} hrs/week.
+                                </p>
+                            )}
+                        </div>
+                    )}
                 </motion.section>
 
                 <div className="grid gap-4 sm:grid-cols-2 lg:col-span-2 lg:grid-cols-1">

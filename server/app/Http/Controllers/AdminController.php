@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\Attendance;
+use App\Models\CampusSetting;
 use App\Models\UserProfile; // <-- FIXED: Changed from Profile to UserProfile
 
 class AdminController extends Controller
@@ -18,7 +19,7 @@ class AdminController extends Controller
             + $this->signedInStudents($request->user())->count();
         $totalHoursRendered = Attendance::whereNotNull('time_out')->sum('rendered_hours');
 
-        $hourlyRate = 28; // Standard hourly rate equivalent
+        $hourlyRate = CampusSetting::hourlyRate();
         $estimatedEquivalentValue = $totalHoursRendered * $hourlyRate;
 
         // 2. Department Workforce Distribution

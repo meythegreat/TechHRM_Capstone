@@ -134,7 +134,11 @@ function App() {
       .then(response => {
         const role = response.data.role;
         setUserRole(role);
-        setAdminName(response.data.name);
+        if (role) localStorage.setItem('user_role', role);
+        if (response.data.name) {
+          setAdminName(response.data.name);
+          localStorage.setItem('user_name', response.data.name);
+        }
         setMustChangePassword(Boolean(response.data.must_change_password));
         
         if (response.data.profile_picture) {

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ApplicationDocument;
 use App\Models\Requirement;
+use App\Models\StaffingRequest;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -11,7 +12,13 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class SecureFileController extends Controller
 {
-    private const ALLOWED_PREFIXES = ['avatars/', 'requirements/', 'application-documents/'];
+    private const ALLOWED_PREFIXES = [
+        'avatars/',
+        'requirements/',
+        'application-documents/',
+        'staffing-approvals/',
+        'extra-hours-approvals/',
+    ];
 
     public function show(Request $request): BinaryFileResponse
     {
@@ -98,6 +105,34 @@ class SecureFileController extends Controller
             }
 
             if ($document->application->user_id === $user->id) {
+                return true;
+            }
+
+            return in_array($user->role, ['Super Admin', 'WSPO Staff'], true);
+        }
+
+        if (str_starts_with($path, 'staffing-approvals/')) {
+            $staffingRequest = StaffingRequest::where('approval_letter_path', $path)->first();
+
+            if (!$staffingRequest) {
+                return false;
+            }
+
+            if ((int) $staffingRequest->requested_by === (int) $user->id) {
+                return true;
+            }
+
+            return in_array($user->role, ['Super Admin', 'WSPO Staff'], true);
+        }
+
+        if (str_starts_with($path, 'extra-hours-approvals/')) {
+            $extraHours = \App\Models\ExtraHoursRequest::where('approval_letter_path', $path)->first();
+
+            if (!$extraHours) {
+                return false;
+            }
+
+            if ((int) $extraHours->requested_by === (int) $user->id) {
                 return true;
             }
 

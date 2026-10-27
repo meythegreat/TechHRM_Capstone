@@ -1,4 +1,5 @@
 import React from 'react';
+import { CAMPUS_LETTERHEAD } from '../constants/campusDocuments';
 
 interface AttendanceRecord {
     id: number;
@@ -228,13 +229,13 @@ const TimesheetPrintView: React.FC<TimesheetPrintViewProps> = ({
             }}
         >
             <div className="flex items-center justify-between gap-3 mb-1">
-                <img src="/fcu.jpg" alt="Filamer Christian University" className="dtr-logo w-[56px] h-[56px] object-contain shrink-0" />
+                <img src={CAMPUS_LETTERHEAD.logoSrc} alt="Filamer Christian University" className="dtr-logo w-[56px] h-[56px] object-contain shrink-0" />
                 <div className="text-center flex-1">
-                    <p className="font-bold text-[11px] leading-tight tracking-wide">FILAMER CHRISTIAN UNIVERSITY, INC.</p>
-                    <p className="font-bold text-[11px] leading-tight">Work Study Program Organization</p>
-                    <p className="font-bold text-[11px] leading-tight">Roxas City</p>
+                    <p className="font-bold text-[11px] leading-tight tracking-wide">{CAMPUS_LETTERHEAD.universityName}</p>
+                    <p className="font-bold text-[11px] leading-tight">{CAMPUS_LETTERHEAD.wspoOrgName}</p>
+                    <p className="font-bold text-[11px] leading-tight">{CAMPUS_LETTERHEAD.address}</p>
                 </div>
-                <img src="/logo.jpg" alt="Work Study Program Organization" className="dtr-logo w-[56px] h-[56px] object-contain shrink-0" />
+                <img src={CAMPUS_LETTERHEAD.wspoLogoSrc} alt="Work Study Program Organization" className="dtr-logo w-[56px] h-[56px] object-contain shrink-0" />
             </div>
 
             <table className="w-full border-collapse mb-1.5" style={{ borderCollapse: 'collapse' }}>

@@ -101,6 +101,15 @@ export const financialService = {
     return response.data;
   },
 
+  updateHourlyRate: async (hourly_rate: number) => {
+    const response = await axios.put(
+      `${API_BASE_URL}/financial/hourly-rate`,
+      { hourly_rate },
+      getAuthHeaders(),
+    );
+    return response.data as { message: string; hourly_rate: number };
+  },
+
   getHoursReport: async (period_start: string, period_end: string) => {
     const response = await axios.get(`${API_BASE_URL}/financial/hours-report`, {
       ...getAuthHeaders(),

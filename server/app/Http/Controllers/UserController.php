@@ -9,6 +9,7 @@ use App\Models\UserProfile;
 use App\Services\DepartmentAssignmentNotifier;
 use App\Services\StaffNotifier;
 use App\Support\AccountLogin;
+use App\Support\InfractionEscalation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -436,9 +437,11 @@ class UserController extends Controller
             'duty_type' => 'required|in:Clerical,Janitorial,Request',
             'duty_request' => 'required_if:duty_type,Request|nullable|string|max:1000',
         ]);
-        $student = User::where('role', 'Student')->findOrFail($id);
+        $student = User::where('role', 'Student')->with('profile')->findOrFail($id);
+        $previousOffice = trim((string) $student->profile?->assigned_office);
+        $office = trim($validated['department']);
         $student->profile()->updateOrCreate(['user_id' => $student->id], [
-            'assigned_office' => trim($validated['department']),
+            'assigned_office' => $office,
             'duty_type' => $validated['duty_type'],
             'duty_request' => $validated['duty_type'] === 'Request' ? trim($validated['duty_request']) : null,
         ]);
@@ -446,7 +449,6 @@ class UserController extends Controller
         $dutyLabel = $validated['duty_type'] === 'Request'
             ? trim((string) $validated['duty_request'])
             : $validated['duty_type'];
-        $office = trim($validated['department']);
 
         \App\Models\Notification::create([
             'user_id' => $student->id,
@@ -455,6 +457,13 @@ class UserController extends Controller
         ]);
 
         app(DepartmentAssignmentNotifier::class)->notify($student, $office, $dutyLabel);
+        app(InfractionEscalation::class)->recordDepartmentReplacement(
+            $student->id,
+            $previousOffice,
+            $office,
+            $request->user()?->id,
+            'assign_department'
+        );
 
         $coordinators = User::whereIn('role', ['WSPO Staff', 'Super Admin'])
             ->where('id', '!=', $request->user()->id)

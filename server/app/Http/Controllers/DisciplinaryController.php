@@ -8,6 +8,7 @@ use App\Models\StudentAward;
 use App\Models\StudentPerformanceReview;
 use App\Models\User;
 use App\Services\DepartmentAssignmentNotifier;
+use App\Support\InfractionEscalation;
 use App\Support\OffenseCatalog;
 use App\Support\SuperAdminAudit;
 use Carbon\Carbon;
@@ -217,6 +218,7 @@ class DisciplinaryController extends Controller
         return response()->json([
             'minor' => $grouped['minor'],
             'major' => $grouped['major'],
+            'escalation_rules' => OffenseCatalog::ESCALATION_RULES,
             'ratings' => OffenseCatalog::RATINGS,
             'school_year' => OffenseCatalog::currentSchoolYear(),
             'departments' => \App\Models\Office::names(),
@@ -357,7 +359,7 @@ class DisciplinaryController extends Controller
             'penalty' => 'required|in:Suspension,DTR Deduction,Dismissed',
             'penalty_hours' => 'exclude_unless:penalty,DTR Deduction|required|numeric|min:0.5',
             'resolution_remarks' => 'nullable|string',
-            'suspension_span' => 'exclude_unless:penalty,Suspension|required|in:days,2 weeks,3 weeks,1 month',
+            'suspension_span' => 'exclude_unless:penalty,Suspension|required|in:days,2 weeks,3 weeks,1 month,1 semester',
             'suspension_days' => 'exclude_unless:suspension_span,days|required|integer|min:1|max:7',
             'suspension_reason' => 'exclude_unless:penalty,Suspension|required|string|min:3',
         ]);
@@ -423,8 +425,22 @@ class DisciplinaryController extends Controller
             ],
             '2 weeks' => ['2 weeks', $start->copy()->addWeeks(2)],
             '3 weeks' => ['3 weeks', $start->copy()->addWeeks(3)],
+            '1 semester' => $this->semesterSuspensionWindow($start),
             default => ['1 month', $start->copy()->addMonth()],
         };
+    }
+
+    /** @return array{0: string, 1: Carbon} */
+    private function semesterSuspensionWindow(Carbon $start): array
+    {
+        $term = \App\Models\SemesterTerm::current();
+        if ($term && $term->ends_on && $term->ends_on->greaterThan($start)) {
+            return ['1 semester', $term->ends_on->copy()->endOfDay()];
+        }
+
+        $months = (int) ($term?->months ?: 5);
+
+        return ['1 semester', $start->copy()->addMonthsNoOverflow(max(1, $months))];
     }
 
     private function notifyStudentOfDecision(DisciplinaryRecord $record): void
@@ -513,6 +529,14 @@ class DisciplinaryController extends Controller
             $student->fresh(['profile']),
             $department,
             $student->profile?->duty_type
+        );
+
+        app(InfractionEscalation::class)->recordDepartmentReplacement(
+            $student->id,
+            $previous,
+            $department,
+            request()->user()?->id,
+            'performance_reassign'
         );
     }
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Attendance;
+use App\Support\HourLimits;
 use App\Support\WorkSchedule;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -37,6 +38,11 @@ class AttendanceController extends Controller
             return response()->json(['message' => $scheduleDenial], 403);
         }
 
+        $limitDenial = HourLimits::jsonDenial($user->id, $now);
+        if ($limitDenial) {
+            return $limitDenial;
+        }
+
         // 3. IF THEY PASS THE CHECK, SAVE THE ATTENDANCE
         $attendance = \App\Models\Attendance::create([
             'user_id' => $user->id,
@@ -46,7 +52,8 @@ class AttendanceController extends Controller
 
         return response()->json([
             'message' => 'Successfully clocked in! Have a great shift.',
-            'record' => $attendance
+            'record' => $attendance,
+            'hour_limits' => HourLimits::status($user->id, $now),
         ]);
     }
 
@@ -72,18 +79,31 @@ class AttendanceController extends Controller
         // Calculate hours and update
         $timeOut = \Carbon\Carbon::now();
         $timeIn = \Carbon\Carbon::parse($attendance->time_in);
-        $hours = $timeIn->diffInMinutes($timeOut) / 60;
+        $hours = round($timeIn->diffInMinutes($timeOut) / 60, 2);
+        $fit = HourLimits::fitHours($user->id, $hours, $timeOut, (int) $attendance->id);
+        if ($fit['allowed'] <= 0) {
+            return response()->json([
+                'message' => $fit['denial'] ?? 'No hours remain under your weekly or monthly limit.',
+                'hour_limits' => HourLimits::status($user->id, $timeOut, (int) $attendance->id),
+            ], 403);
+        }
 
         $attendance->update([
             'time_out' => $timeOut,
             'task_description' => $validated['task_description'],
-            'rendered_hours' => round($hours, 2)
+            'rendered_hours' => $fit['allowed'],
+            'computed_hours' => $fit['allowed'],
         ]);
 
-        // FIX: Return a structured JSON response with a 'message' key!
+        $message = 'Successfully clocked out!';
+        if ($fit['capped'] && $fit['message']) {
+            $message .= ' ' . $fit['message'];
+        }
+
         return response()->json([
-            'message' => 'Successfully clocked out!',
-            'data' => $attendance
+            'message' => $message,
+            'data' => $attendance,
+            'hour_limits' => HourLimits::status($user->id, $timeOut),
         ]);
     }
 
@@ -374,6 +394,28 @@ class AttendanceController extends Controller
         }
 
         $hours = round($timeIn->diffInMinutes($timeOut) / 60, 2);
+        $fit = HourLimits::fitHours((int) $student->id, $hours, $timeIn);
+        if ($fit['allowed'] <= 0) {
+            return response()->json([
+                'message' => $fit['denial'] ?? 'This entry would exceed the student\'s weekly or monthly hour limit.',
+                'hour_limits' => HourLimits::status((int) $student->id, $timeIn),
+            ], 422);
+        }
+        if ($fit['capped'] && $fit['allowed'] < $hours) {
+            return response()->json([
+                'message' => 'This entry is '
+                    . HourLimits::hoursLabel($hours)
+                    . ' hours, but only '
+                    . HourLimits::hoursLabel($fit['allowed'])
+                    . ' hours remain under the weekly/monthly limits'
+                    . (!$fit['denial'] && !HourLimits::approvedForWeek((int) $student->id, $timeIn)
+                        ? ' (approve an extension up to ' . HourLimits::hoursLabel(HourLimits::status((int) $student->id, $timeIn)['weekly_extended']) . ' hours/week first)'
+                        : '')
+                    . '.',
+                'hour_limits' => HourLimits::status((int) $student->id, $timeIn),
+            ], 422);
+        }
+
         $note = trim((string) ($validated['task_description'] ?? ''));
 
         $attendance = \App\Models\Attendance::create([
@@ -381,13 +423,13 @@ class AttendanceController extends Controller
             'attendance_type' => 'Regular',
             'time_in' => $timeIn,
             'time_out' => $timeOut,
-            'rendered_hours' => $hours,
-            'computed_hours' => $hours,
+            'rendered_hours' => $fit['allowed'],
+            'computed_hours' => $fit['allowed'],
             'work_type' => $student->profile?->duty_type ?: 'Manual Entry',
             'task_description' => $note !== '' ? $note : 'Manually entered by supervisor.',
             'status' => 'pending',
-            'is_anomaly' => $hours > 8,
-            'anomaly_reason' => $hours > 8 ? 'Extended continuous shifts (Exceeded 8 hours).' : null,
+            'is_anomaly' => $fit['allowed'] > 8,
+            'anomaly_reason' => $fit['allowed'] > 8 ? 'Extended continuous shifts (Exceeded 8 hours).' : null,
         ]);
 
         \App\Models\Notification::create([
@@ -399,6 +441,7 @@ class AttendanceController extends Controller
         return response()->json([
             'message' => 'Time in and time out saved on the DTR.',
             'record' => $attendance,
+            'hour_limits' => HourLimits::status((int) $student->id, $timeIn),
         ], 201);
     }
 
@@ -439,14 +482,24 @@ class AttendanceController extends Controller
         }
 
         $hours = round($timeIn->diffInMinutes($timeOut) / 60, 2);
+        $fit = HourLimits::fitHours((int) $attendance->user_id, $hours, $timeIn, (int) $attendance->id);
+        if ($fit['allowed'] <= 0 || ($fit['capped'] && $fit['allowed'] < $hours)) {
+            return response()->json([
+                'message' => $fit['denial']
+                    ?? ('These times would exceed the student\'s remaining weekly or monthly hours'
+                        . ' (' . HourLimits::hoursLabel($fit['allowed']) . ' hours left).'),
+                'hour_limits' => HourLimits::status((int) $attendance->user_id, $timeIn, (int) $attendance->id),
+            ], 422);
+        }
+
         $payload = [
             'time_in' => $timeIn,
             'time_out' => $timeOut,
-            'rendered_hours' => $hours,
-            'computed_hours' => $hours,
+            'rendered_hours' => $fit['allowed'],
+            'computed_hours' => $fit['allowed'],
             'status' => 'pending',
-            'is_anomaly' => $hours > 8,
-            'anomaly_reason' => $hours > 8 ? 'Extended continuous shifts (Exceeded 8 hours).' : null,
+            'is_anomaly' => $fit['allowed'] > 8,
+            'anomaly_reason' => $fit['allowed'] > 8 ? 'Extended continuous shifts (Exceeded 8 hours).' : null,
         ];
 
         if ($request->exists('task_description')) {
@@ -465,6 +518,7 @@ class AttendanceController extends Controller
         return response()->json([
             'message' => 'Time in and time out updated. The entry is pending acceptance again.',
             'record' => $attendance->fresh(),
+            'hour_limits' => HourLimits::status((int) $attendance->user_id, $timeIn),
         ]);
     }
 

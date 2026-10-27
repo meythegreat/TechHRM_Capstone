@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CampusSetting;
 use App\Models\DailyCleaningGroup;
 use App\Models\RenderedHourEntry;
 use App\Models\RenderedHourEvent;
 use App\Models\User;
+use App\Support\HourLimits;
+use App\Support\InfractionEscalation;
 use App\Support\RenderedHours;
 use App\Support\SuperAdminAudit;
 use Carbon\Carbon;
@@ -113,6 +116,7 @@ class RenderedHourController extends Controller
                 'grand_total' => 0,
             ],
             'activities' => $activities,
+            'hourly_rate' => CampusSetting::hourlyRate(),
         ]);
     }
 
@@ -137,6 +141,7 @@ class RenderedHourController extends Controller
                 'secretary' => $this->signatoryName('WSPO Secretary'),
                 'coordinator' => $this->signatoryName('WSPO Coordinator'),
             ],
+            'hourly_rate' => CampusSetting::hourlyRate(),
         ]);
     }
 
@@ -156,6 +161,7 @@ class RenderedHourController extends Controller
         SuperAdminAudit::denyMutation($request);
         $validated = $this->validateEvent($request);
         $studentIds = $this->rosterIds($request, $validated['kind']);
+        $this->assertSpecialRequestWithinLimits($validated, $studentIds);
 
         $event = DB::transaction(function () use ($request, $validated, $studentIds) {
             $event = RenderedHourEvent::create([
@@ -178,6 +184,7 @@ class RenderedHourController extends Controller
         SuperAdminAudit::denyMutation($request);
         $validated = $this->validateEvent($request, $event);
         $studentIds = $this->rosterIds($request, $validated['kind'], $event);
+        $this->assertSpecialRequestWithinLimits($validated, $studentIds);
 
         DB::transaction(function () use ($event, $validated, $studentIds) {
             $event->fill($this->attributes($validated));
@@ -567,6 +574,49 @@ class RenderedHourController extends Controller
                     ? 'Marked absent. The activity hours were deducted.'
                     : ($status === 'late' ? 'Clocked in after the on-time window. No hours were added or deducted.' : null),
             ]);
+        }
+
+        if (
+            $status === 'absent'
+            && in_array($event->kind, [RenderedHourEvent::GENERAL_CLEANING, RenderedHourEvent::ASSEMBLY], true)
+        ) {
+            app(InfractionEscalation::class)->checkConsecutiveActivityAbsences(
+                $userId,
+                request()->user()?->id
+            );
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @param  list<int>  $studentIds
+     */
+    private function assertSpecialRequestWithinLimits(array $validated, array $studentIds): void
+    {
+        if (($validated['kind'] ?? '') !== RenderedHourEvent::SPECIAL) {
+            return;
+        }
+        if (($validated['direction'] ?? 'add') !== 'add') {
+            return;
+        }
+
+        $hours = round((float) ($validated['hours'] ?? 0), 2);
+        if ($hours <= 0 || $studentIds === []) {
+            return;
+        }
+
+        $at = Carbon::parse($validated['event_date']);
+        foreach ($studentIds as $userId) {
+            $fit = HourLimits::fitHours((int) $userId, $hours, $at);
+            if ($fit['allowed'] < $hours) {
+                $student = User::query()->find($userId);
+                $name = $student?->name ?? 'A student';
+                abort(422, $name.' cannot receive '
+                    .HourLimits::hoursLabel($hours)
+                    .' added hours ('
+                    .HourLimits::hoursLabel($fit['allowed'])
+                    .' hours remain under the weekly or monthly limit).');
+            }
         }
     }
 

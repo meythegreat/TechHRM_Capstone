@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Attendance;
+use App\Models\CampusSetting;
 use App\Support\SuperAdminAudit;
 use App\Models\DisciplinaryRecord;
 use App\Models\FinancialRecord;
@@ -15,6 +16,29 @@ use Illuminate\Support\Facades\DB;
 class FinancialController extends Controller
 {
     private const VERIFIED_STATUSES = ['accepted', 'approved', 'Approved'];
+
+    public function updateHourlyRate(Request $request)
+    {
+        abort_unless(
+            $request->user()?->role === 'Super Admin',
+            403,
+            'Only a Super Admin can change the hourly rate.'
+        );
+
+        $validated = $request->validate([
+            'hourly_rate' => 'required|numeric|min:0|max:999999.99',
+        ]);
+
+        $setting = CampusSetting::current();
+        $setting->hourly_rate = round((float) $validated['hourly_rate'], 2);
+        $setting->updated_by = $request->user()->id;
+        $setting->save();
+
+        return response()->json([
+            'message' => 'Hourly rate updated.',
+            'hourly_rate' => round((float) $setting->hourly_rate, 2),
+        ]);
+    }
 
     public function index(Request $request)
     {
@@ -181,7 +205,7 @@ class FinancialController extends Controller
             $cycleStart = now()->startOfMonth();
             $cycleEnd = now()->endOfMonth();
             $hours = $this->verifiedHours($user->id, $cycleStart, $cycleEnd);
-            $rate = 28.0;
+            $rate = CampusSetting::hourlyRate();
             $current = [
                 'cycle_name' => $cycleStart->format('F Y') . ' preview',
                 'hours_rendered' => round($hours, 2),

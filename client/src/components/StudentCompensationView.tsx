@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { financialService } from '../services/financialService';
+import { hourLimitService, type HourLimitStatus } from '../services/hourLimitService';
 import { REALTIME_EVENT } from '../utils/realtime';
 import {
   DEFAULT_HOURLY_RATE,
@@ -37,6 +38,8 @@ export function StudentCompensationView() {
   const [month, setMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
   const [student, setStudent] = useState<HourStudentRow | null>(null);
   const [activities, setActivities] = useState<StudentActivity[]>([]);
+  const [hourlyRate, setHourlyRate] = useState(DEFAULT_HOURLY_RATE);
+  const [limits, setLimits] = useState<HourLimitStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
 
@@ -53,12 +56,18 @@ export function StudentCompensationView() {
     let active = true;
     const load = (silent = false) => {
       if (!silent) setLoading(true);
-      financialService
-        .getMyHours(period.start, period.end)
-        .then((res) => {
+      Promise.all([
+        financialService.getMyHours(period.start, period.end),
+        hourLimitService.getMine().catch(() => null),
+      ])
+        .then(([res, hourLimits]) => {
           if (!active) return;
           setStudent(res.student || null);
           setActivities(res.activities || []);
+          if (typeof res.hourly_rate === 'number' && Number.isFinite(res.hourly_rate)) {
+            setHourlyRate(res.hourly_rate);
+          }
+          if (hourLimits) setLimits(hourLimits);
           setFailed(false);
         })
         .catch(() => {
@@ -119,9 +128,17 @@ export function StudentCompensationView() {
         <div>
           <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Grand total hours</p>
           <p className="text-4xl font-semibold mt-1">{hoursText(student.grand_total)}</p>
-          <p className="text-sm text-emerald-300 mt-1">{pesoText(student.grand_total, DEFAULT_HOURLY_RATE)} at ₱{hoursText(DEFAULT_HOURLY_RATE)}/hr</p>
+          <p className="text-sm text-emerald-300 mt-1">{pesoText(student.grand_total, hourlyRate)} at ₱{hoursText(hourlyRate)}/hr</p>
         </div>
-        <p className="text-sm text-slate-300">{student.year_level ? `Year ${student.year_level}` : 'Year not set'}</p>
+        <div className="text-sm text-slate-300 text-right">
+          <p>{student.year_level ? `Year ${student.year_level}` : 'Year not set'}</p>
+          {limits && (
+            <p className="mt-2 text-xs text-slate-400 max-w-xs">
+              Limits: {limits.weekly_hours.toFixed(1)}/{limits.weekly_cap} hrs this week
+              {limits.extension_approved ? ' (extended)' : ''}, {limits.monthly_hours.toFixed(1)}/{limits.monthly_cap} hrs this month.
+            </p>
+          )}
+        </div>
       </div>
 
       <section className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">

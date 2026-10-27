@@ -1,3 +1,4 @@
+import { CAMPUS_LETTERHEAD, OFFICIAL_FORM_META } from '../../constants/campusDocuments';
 import { displayDate, safeImage, sheetName, type OfficialFormDetails, type OfficialIdentity } from './officialForm';
 
 type OfficialWspFormsProps = {
@@ -39,38 +40,57 @@ const Jobs = ({ selected, other }: { selected?: string; other?: string }) => {
     );
 };
 
-const FormHead = () => (
+type FormHeadProps = {
+    formNameLines: readonly string[];
+    formNo: string;
+    effectivity: string;
+    revisionNo?: string;
+};
+
+const FormHead = ({
+    formNameLines,
+    formNo,
+    effectivity,
+    revisionNo = '1',
+}: FormHeadProps) => (
     <table className="head">
         <tbody>
             <tr>
                 <td className="seal" rowSpan={4}>
-                    <img src="/fcu-seal.jpg" alt="Filamer Christian University seal" />
+                    <img src={CAMPUS_LETTERHEAD.sealSrc} alt="Filamer Christian University seal" />
                 </td>
                 <td className="univ" colSpan={4}>
-                    <strong>FILAMER CHRISTIAN UNIVERSITY INC.</strong>
+                    <strong>{CAMPUS_LETTERHEAD.universityName}</strong>
                     <br />
-                    Roxas Avenue, Roxas City, Capiz, Philippines
+                    {CAMPUS_LETTERHEAD.address}
                 </td>
             </tr>
             <tr>
                 <td className="label">Form Name:</td>
                 <td className="sheet">
-                    <strong>PERSONAL INFORMATION<br />SHEET</strong>
+                    <strong>
+                        {formNameLines.map((line, index) => (
+                            <span key={line}>
+                                {index > 0 ? <br /> : null}
+                                {line}
+                            </span>
+                        ))}
+                    </strong>
                 </td>
                 <td className="office" rowSpan={2} colSpan={2}>
-                    <div>Effectivity:<br />November 24, 2025</div>
-                    <div className="office-gap">Issuing Office:<br />WORK STUDY PROGRAM OFFICE</div>
+                    <div>Effectivity:<br />{effectivity}</div>
+                    <div className="office-gap">Issuing Office:<br />{CAMPUS_LETTERHEAD.issuingOffice}</div>
                 </td>
             </tr>
             <tr>
-                <td className="label">Form No:<br />FCU-EOMS-WP-012</td>
+                <td className="label">Form No:<br />{formNo}</td>
                 <td className="sheet">
                     <strong>EDUCATIONAL ORGANIZATION<br />MANAGEMENT SYSTEM</strong>
                 </td>
             </tr>
             <tr>
-                <td className="label">Revision No. 1</td>
-                <td className="sheet"><strong>ISO 21001:2025</strong></td>
+                <td className="label">Revision No. {revisionNo}</td>
+                <td className="sheet"><strong>{CAMPUS_LETTERHEAD.isoStandard}</strong></td>
                 <td className="page-cell">Page No.</td>
                 <td className="page-cell">1 of 1</td>
             </tr>
@@ -95,7 +115,7 @@ export function printOfficialForms() {
 
     const style = source.querySelector('style')?.textContent ?? '';
     const pages = Array.from(source.querySelectorAll('.fcu-page')).map((page) => page.outerHTML).join('');
-    const seal = `${window.location.origin}/fcu-seal.jpg`;
+    const seal = `${window.location.origin}${CAMPUS_LETTERHEAD.sealSrc}`;
     doc.open();
     doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>WSP forms</title><style>
         @page { size: 8.5in 13in; margin: 0.45in; }
@@ -103,7 +123,7 @@ export function printOfficialForms() {
         ${style}
         .fcu-preview .fcu-page, .fcu-page { max-width: none; margin: 0; padding: 0; border: 0; box-shadow: none; break-after: page; page-break-after: always; }
         .fcu-page:last-child { break-after: auto; page-break-after: auto; }
-    </style></head><body>${pages.replaceAll('src="/fcu-seal.jpg"', `src="${seal}"`)}</body></html>`);
+    </style></head><body>${pages.replaceAll(`src="${CAMPUS_LETTERHEAD.sealSrc}"`, `src="${seal}"`)}</body></html>`);
     doc.close();
 
     const finish = () => {
@@ -212,7 +232,12 @@ const OfficialWspForms = ({ identity, details }: OfficialWspFormsProps) => {
 
             {/* PAGE 1 */}
             <article className="fcu-page">
-                <FormHead />
+                <FormHead
+                    formNameLines={OFFICIAL_FORM_META.personalInformation.formNameLines}
+                    formNo={OFFICIAL_FORM_META.personalInformation.formNo}
+                    effectivity={OFFICIAL_FORM_META.personalInformation.effectivity}
+                    revisionNo={OFFICIAL_FORM_META.personalInformation.revisionNo}
+                />
                 <p className="banner">INFORMATION SHEET</p>
                 
                 <div className="intro">
@@ -365,7 +390,7 @@ const OfficialWspForms = ({ identity, details }: OfficialWspFormsProps) => {
                         <span className="addr">
                             address to <strong>MR. N-GEY C. FRANCO</strong><br />
                             WSP Coordinator<br />
-                            Filamer Christian University, Inc.
+                            {CAMPUS_LETTERHEAD.universityNamePlain}
                         </span>
                     </li>
                     <li>Certificate of Good Moral Character from the Principal or Guidance Counselor.{details.will_pass_good_moral === 'Yes' ? ' Will pass.' : details.will_pass_good_moral === 'No' ? ' Will not pass.' : ''}</li>
@@ -397,7 +422,7 @@ const OfficialWspForms = ({ identity, details }: OfficialWspFormsProps) => {
                 </div>
                 
                 <p className="cert">
-                    I hereby certify that all the foregoing information is true and correct and shall hold myself liable for any falsehood or misrepresentation in so far as my application for Work Study Program at Filamer Christian University, Inc. is concerned.
+                    I hereby certify that all the foregoing information is true and correct and shall hold myself liable for any falsehood or misrepresentation in so far as my application for Work Study Program at {CAMPUS_LETTERHEAD.universityNamePlain} is concerned.
                 </p>
                 
                 <div className="pair">
@@ -418,7 +443,12 @@ const OfficialWspForms = ({ identity, details }: OfficialWspFormsProps) => {
 
             {/* PAGE 3 */}
             <article className="fcu-page">
-                <FormHead />
+                <FormHead
+                    formNameLines={OFFICIAL_FORM_META.parentsConsent.formNameLines}
+                    formNo={OFFICIAL_FORM_META.parentsConsent.formNo}
+                    effectivity={OFFICIAL_FORM_META.parentsConsent.effectivity}
+                    revisionNo={OFFICIAL_FORM_META.parentsConsent.revisionNo}
+                />
                 
                 <p className="consent-title">PARENTS CONSENT</p>
                 <p className="consent-sub">FORM FOR PARENTS (GUARDIAN’S) PERMISSION AND AGREEMENT</p>
@@ -429,7 +459,7 @@ const OfficialWspForms = ({ identity, details }: OfficialWspFormsProps) => {
                     <p><strong>TO WHOM IT MAY CONCERN:</strong></p>
                     <p>
                         I hereby give my permission for my son/daughter, <Rule value={child} style={{ display: 'inline-block', width: '300px' }} />, 
-                        to join and be a member of the Work Study Program Organization of the Filamer Christian University, Inc.
+                        to join and be a member of the Work Study Program Organization of the {CAMPUS_LETTERHEAD.universityNamePlain}.
                     </p>
                     <p>
                         I also allow him/her to render duty hours during his/her vacant time, in accordance with the guidelines and schedule set by the Program.
