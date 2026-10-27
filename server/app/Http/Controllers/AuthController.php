@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use App\Models\User;
 use App\Models\Application;
@@ -95,21 +95,10 @@ class AuthController extends Controller
         }
 
         $temporaryPassword = Str::password(12, symbols: false);
-        $fromAddress = config('mail.from.address', 'techhrmwspo@gmail.com');
-        $fromName = config('mail.from.name', 'TechHRM WSPO');
 
-        try {
-            Mail::html($this->resetEmailBody($user, $temporaryPassword), function ($message) use ($email, $fromAddress, $fromName) {
-                $message->to($email)
-                    ->from($fromAddress, $fromName)
-                    ->subject('Your TechHRM temporary password');
-            });
-        } catch (\Throwable $e) {
-            report($e);
-
-            return response()->json([
-                'message' => 'Could not send the password reset email. Check the Gmail SMTP settings (MAIL_HOST, MAIL_USERNAME, MAIL_PASSWORD), then try again.',
-            ], 502);
+        $sendError = $this->sendPasswordResetEmail($email, $user, $temporaryPassword);
+        if ($sendError !== null) {
+            return response()->json(['message' => $sendError], 502);
         }
 
         $user->password = $temporaryPassword;
@@ -239,6 +228,46 @@ class AuthController extends Controller
             ->value('user_id');
 
         return $userId ? User::find($userId) : null;
+    }
+
+    /**
+     * Send the temporary password via Resend. Returns an error message on failure, or null on success.
+     */
+    private function sendPasswordResetEmail(string $email, User $user, string $temporaryPassword): ?string
+    {
+        $apiKey = config('services.resend.key');
+        if (!is_string($apiKey) || $apiKey === '') {
+            return 'Password reset email is not configured. Set RESEND_API_KEY in the server environment.';
+        }
+
+        $fromAddress = config('mail.from.address', 'beth.t@example.com');
+        $fromName = config('mail.from.name', 'TechHRM WSPO');
+        $from = sprintf('%s <%s>', $fromName, $fromAddress);
+
+        try {
+            $response = Http::withToken($apiKey)
+                ->timeout(20)
+                ->acceptJson()
+                ->asJson()
+                ->post('https://api.resend.com/emails', [
+                    'from' => $from,
+                    'to' => [$email],
+                    'subject' => 'Your TechHRM temporary password',
+                    'html' => $this->resetEmailBody($user, $temporaryPassword),
+                ]);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return 'Could not reach Resend to send the password reset email. Check network access, then try again.';
+        }
+
+        if ($response->successful()) {
+            return null;
+        }
+
+        report(new \RuntimeException('Resend password reset failed: '.$response->body()));
+
+        return 'Could not send the password reset email through Resend. Confirm RESEND_API_KEY and MAIL_FROM_ADDRESS, then try again.';
     }
 
     private function resetDestination(User $user, string $identifier): ?string
