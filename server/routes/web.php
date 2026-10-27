@@ -4,7 +4,11 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ProfileController;
 
 Route::get('/', function () {
-    return view('welcome');
+    return response()->json([
+        'app' => config('app.name', 'TechHRM'),
+        'status' => 'ok',
+        'message' => 'TechHRM API is running. Use the frontend at FRONTEND_URL.',
+    ]);
 });
 
 // --- 1. WORKING STUDENT ROUTES (Lowest Access) ---
