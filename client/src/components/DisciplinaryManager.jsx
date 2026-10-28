@@ -30,6 +30,7 @@ const DisciplinaryManager = () => {
     const [departments, setDepartments] = useState([]);
     const [records, setRecords] = useState([]);
     const [students, setStudents] = useState([]);
+    const [studentQuery, setStudentQuery] = useState('');
     const emptyForm = () => ({
         student_id: '',
         violation_type: 'Late',
@@ -76,7 +77,7 @@ const DisciplinaryManager = () => {
             .catch(() => {});
         
         // Fetching Students safely
-        axios.get('/api/users')
+        axios.get('/api/personnel')
             .then(res => {
                 const usersArray = Array.isArray(res.data) ? res.data : res.data?.data;
                 if (!Array.isArray(usersArray)) {
@@ -355,6 +356,15 @@ const DisciplinaryManager = () => {
                     <form onSubmit={handleIssue} className="space-y-5">
                         <div>
                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Student Worker</label>
+                            {isCoordinator && (
+                                <p className="mb-2 text-xs font-medium text-slate-500">Every registered working student is listed.</p>
+                            )}
+                            <input
+                                value={studentQuery}
+                                onChange={(event) => setStudentQuery(event.target.value)}
+                                placeholder="Search name, ID, or office"
+                                className="w-full mb-2 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-red-500"
+                            />
                             <select
                                 required
                                 className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-red-500 focus:bg-white outline-none transition-all appearance-none cursor-pointer"
@@ -362,7 +372,12 @@ const DisciplinaryManager = () => {
                                 onChange={(e) => setFormData({ ...formData, student_id: e.target.value })}
                             >
                                 <option value="" disabled>-- Select a student --</option>
-                                {students.map(s => (
+                                {students.filter((student) => {
+                                    const query = studentQuery.trim().toLowerCase();
+                                    if (!query) return true;
+                                    const haystack = `${student.name || ''} ${student.profile?.student_id_number || ''} ${student.profile?.assigned_office || ''}`.toLowerCase();
+                                    return haystack.includes(query);
+                                }).map(s => (
                                     <option key={s.id} value={s.id}>{withHomeDepartmentNote(`${s.name} (${s.profile?.student_id_number || 'No ID'})`, s.profile?.course, s.profile?.assigned_office, s.profile?.year_level)}</option>
                                 ))}
                             </select>

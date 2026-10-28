@@ -33,7 +33,9 @@ const errorMessage = (error: unknown, fallback: string) => {
 };
 
 const OfficeDirectory = () => {
-    const canEdit = localStorage.getItem('user_role') === 'Super Admin';
+    const role = localStorage.getItem('user_role');
+    const canEdit = role === 'Super Admin' || role === 'WSPO Staff';
+    const canDelete = role === 'Super Admin';
     const [offices, setOffices] = useState<OfficeRecord[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -192,9 +194,9 @@ const OfficeDirectory = () => {
                         Office Directory
                     </h1>
                     <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
-                        {canEdit 
-                            ? 'Manage the official list of university offices and departments used for student placement.'
-                            : 'View the official list of university offices used for student placement. Only Super Admins can modify this directory.'}
+                        {canEdit
+                            ? 'Add or edit the official list of university offices and departments used for student placement.'
+                            : 'View the official list of university offices used for student placement.'}
                     </p>
                 </div>
 
@@ -397,6 +399,7 @@ const OfficeDirectory = () => {
                                                                 >
                                                                     <Pencil className="w-5 h-5" />
                                                                 </button>
+                                                                {canDelete && (
                                                                 <button
                                                                     type="button"
                                                                     disabled={busyId === office.id || inUse}
@@ -406,6 +409,7 @@ const OfficeDirectory = () => {
                                                                 >
                                                                     <Trash2 className="w-5 h-5" />
                                                                 </button>
+                                                                )}
                                                             </>
                                                         )}
                                                     </div>

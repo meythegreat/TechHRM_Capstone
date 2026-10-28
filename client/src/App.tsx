@@ -47,6 +47,7 @@ const STAFF_PAGE_TITLES: Record<string, string> = {
 const STUDENT_PAGE_TITLES: Record<string, string> = {
   dashboard: 'Dashboard',
   attendance: 'Attendance / DTR',
+  'year-activities': 'Year Activities',
   hours: 'Hours Rendered',
   schedule: 'My Schedule',
   requirements: 'Requirements',

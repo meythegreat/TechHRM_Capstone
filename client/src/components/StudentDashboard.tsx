@@ -36,6 +36,7 @@ import StudentAttendanceTerminal from './StudentAttendanceTerminal';
 import { StudentCompensationView } from './StudentCompensationView';
 import ApplicationStatusTracker from './ApplicationStatusTracker';
 import HelpPage from './HelpPage';
+import { YearLeaderActivities } from './hours/YearLeaderActivities';
 
 interface ScheduleRecord {
     id: number;
@@ -108,6 +109,13 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [isSavingPassword, setIsSavingPassword] = useState(false);
     const [profileReady, setProfileReady] = useState(false);
+    const [yearLeader, setYearLeader] = useState(false);
+
+    useEffect(() => {
+        axios.get('/api/attendance/my-year-activities')
+            .then((response) => setYearLeader(Boolean(response.data.leader)))
+            .catch(() => setYearLeader(false));
+    }, []);
 
     useEffect(() => {
         if (!localStorage.getItem('auth_token')) return;
@@ -333,6 +341,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
     const studentNavItems = [
         { id: 'dashboard', label: 'Dashboard', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /> },
         { id: 'attendance', label: 'Attendance / DTR', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /> },
+        ...(yearLeader ? [{ id: 'year-activities', label: 'Year Activities', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-4-4h-1M9 20H4v-2a4 4 0 014-4h1m4-4a4 4 0 100-8 4 4 0 000 8zm6 2a3 3 0 100-6 3 3 0 000 6zM6 10a3 3 0 100-6 3 3 0 000 6z" /> }] : []),
         { id: 'hours', label: 'Hours Rendered', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 7h6m0 10v-3m-3 3v-6m-3 6v-9m6 13H6a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2z" /> },
         { id: 'schedule', label: 'My Schedule', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /> },
         { id: 'requirements', label: 'Requirements', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /> },
@@ -424,6 +433,8 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
 
                         {/* 2. ATTENDANCE LOG */}
                         {currentPath === 'attendance' && <StudentAttendanceTerminal />}
+
+                        {currentPath === 'year-activities' && <YearLeaderActivities />}
 
                         {/* 3. HOURS RENDERED */}
                         {currentPath === 'hours' && (

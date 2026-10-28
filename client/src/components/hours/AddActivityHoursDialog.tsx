@@ -8,14 +8,15 @@ interface StudentOption {
   student_id_number?: string | null;
   year_level?: number | null;
   year_label: string;
+  is_leader?: boolean;
 }
 
 const KINDS = [
   { id: 'special_request', label: 'Special request', hours: '', hint: 'Enter the hours of the event, then add or deduct them.' },
-  { id: 'daily_cleaning', label: 'Daily cleaning', hours: '1', hint: 'Choose a saved cleaning group. Groups can mix year levels and each student belongs to one group. Cleaning usually runs 5:00–7:00. A clock-in during the first hour after the official time in adds 1 hour. After that hour is late and adds nothing.' },
-  { id: 'general_cleaning', label: 'General cleaning', hours: '5', hint: '5 hours for the chosen year level. The QR adds those hours only during the first hour after the official time in.' },
-  { id: 'devotional', label: 'Devotional meeting', hours: '1', hint: '1 hour for every working student, added only if they scan within 1 hour of the official time in.' },
-  { id: 'meeting_assembly', label: 'Meeting assembly', hours: '5', hint: '5 hours per student, added only if they scan within 1 hour of the official time in.' },
+  { id: 'daily_cleaning', label: 'Daily cleaning', hours: '1', hint: 'Choose a group and one year level. The leader of that year can show the QR code and passcode. A clock-in during the first hour after the official time in adds 1 hour. After that hour is late and adds nothing.' },
+  { id: 'general_cleaning', label: 'General cleaning', hours: '5', hint: '5 hours for one year level inside the chosen group. Only that year level’s leader can open the attendance QR and passcode.' },
+  { id: 'devotional', label: 'Devotional meeting', hours: '1', hint: '1 hour for the chosen year level in the group, added only if they scan within 1 hour of the official time in.' },
+  { id: 'meeting_assembly', label: 'Meeting assembly', hours: '5', hint: '5 hours for the chosen year level in the group, added only if they scan within 1 hour of the official time in.' },
 ] as const;
 
 const today = () => {
@@ -110,8 +111,8 @@ export function AddActivityHoursDialog({
         event_date: form.event_date,
         hours: form.kind === 'special_request' ? Number(form.hours) : undefined,
         direction: form.kind === 'special_request' ? form.direction : undefined,
-        year_level: form.kind === 'general_cleaning' ? Number(form.year_level) : undefined,
-        group_id: form.kind === 'daily_cleaning' ? Number(form.group_id) : undefined,
+        year_level: form.kind === 'special_request' ? undefined : Number(form.year_level),
+        group_id: form.kind === 'special_request' ? undefined : Number(form.group_id),
         starts_at: form.kind === 'special_request' ? undefined : form.starts_at,
         notes: form.notes || undefined,
         user_ids: form.kind === 'special_request' ? form.user_ids : undefined,
@@ -170,10 +171,10 @@ export function AddActivityHoursDialog({
           </label>
         )}
 
-        {form.kind === 'daily_cleaning' && (
+        {form.kind !== 'special_request' && (
           <div className="space-y-3">
             <label className="block text-xs font-bold uppercase tracking-wide text-slate-500">
-              Cleaning group
+              Group
               <select required value={form.group_id} onChange={(input) => setForm({ ...form, group_id: input.target.value })} className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900">
                 <option value="">Choose a group</option>
                 {groups.map((group) => (
@@ -181,31 +182,30 @@ export function AddActivityHoursDialog({
                 ))}
               </select>
             </label>
+            <label className="block text-xs font-bold uppercase tracking-wide text-slate-500">
+              Year level
+              <select value={form.year_level} onChange={(input) => setForm({ ...form, year_level: input.target.value })} className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold">
+                <option value="1">1st Year</option>
+                <option value="2">2nd Year</option>
+                <option value="3">3rd Year</option>
+                <option value="4">4th Year</option>
+              </select>
+            </label>
             {groupsLoaded && groups.length === 0 ? (
-              <p className="text-sm text-slate-500">No cleaning groups yet. The coordinator can add them from Cleaning groups in the Attendance Hub.</p>
+              <p className="text-sm text-slate-500">No groups yet. The coordinator can add them from Groups in the Attendance Hub. Assign the year-level leader first, then the members.</p>
             ) : form.group_id && (
               <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
-                {(groups.find((group) => String(group.id) === String(form.group_id))?.students || []).map((student) => (
-                  <p key={student.id} className="px-3 py-2 text-sm">
-                    <span className="font-bold text-slate-900">{student.name}</span>
-                    <span className="text-slate-500"> · {student.student_id_number || 'No ID'} · {student.year_label}</span>
-                  </p>
-                ))}
+                {(groups.find((group) => String(group.id) === String(form.group_id))?.students || [])
+                  .filter((student) => String(student.year_level ?? '') === String(form.year_level))
+                  .map((student) => (
+                    <p key={student.id} className="px-3 py-2 text-sm">
+                      <span className="font-bold text-slate-900">{student.name}</span>
+                      <span className="text-slate-500"> · {student.student_id_number || 'No ID'} · {student.year_label}{student.is_leader ? ' · Leader' : ''}</span>
+                    </p>
+                  ))}
               </div>
             )}
           </div>
-        )}
-
-        {form.kind === 'general_cleaning' && (
-          <label className="block text-xs font-bold uppercase tracking-wide text-slate-500">
-            Year level
-            <select value={form.year_level} onChange={(input) => setForm({ ...form, year_level: input.target.value })} className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold">
-              <option value="1">1st Year</option>
-              <option value="2">2nd Year</option>
-              <option value="3">3rd Year</option>
-              <option value="4">4th Year</option>
-            </select>
-          </label>
         )}
 
         {form.kind === 'special_request' && (

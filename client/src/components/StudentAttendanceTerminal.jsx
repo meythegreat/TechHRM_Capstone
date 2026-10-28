@@ -448,7 +448,7 @@ const StudentAttendanceTerminal = () => {
 
                                 <p className="mb-5 text-sm font-medium text-slate-600">
                                     {todayShiftLabel
-                                        ? `Today’s work schedule: ${todayShiftLabel}. You can clock in from 30 minutes before it starts until it ends.`
+                                        ? `Today’s work schedule: ${todayShiftLabel}. You can clock in from 30 minutes before a shift starts until it ends.${todayShifts.length > 1 ? ' Each shift is recorded separately. Clock out of the current shift before you clock in for the next one.' : ''}`
                                         : 'No work schedule is assigned for today. Clock-in follows the shift set by the WSPO coordinator or secretary.'}
                                 </p>
 

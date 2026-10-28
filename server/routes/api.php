@@ -79,6 +79,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // =====================================================
 
     Route::post('/attendance/clock-in', [AttendanceController::class, 'clockIn']);
+    Route::get('/attendance/my-year-activities', [\App\Http\Controllers\RenderedHourController::class, 'leaderIndex']);
+    Route::get('/attendance/activity-qr', [\App\Http\Controllers\AdvancedAttendanceController::class, 'activityQr']);
+    Route::get('/attendance/activity-passcode', [\App\Http\Controllers\AdvancedAttendanceController::class, 'activityPasscode']);
 
     Route::post('/attendance/clock-out', [AttendanceController::class, 'clockOut']);
 
@@ -137,7 +140,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/attendance/generate-token', [\App\Http\Controllers\AdvancedAttendanceController::class, 'generateToken']);
         Route::get('/attendance/passcode', [\App\Http\Controllers\AdvancedAttendanceController::class, 'currentPasscode']);
         Route::get('/attendance/qr-code', [\App\Http\Controllers\AdvancedAttendanceController::class, 'currentQr']);
-        Route::get('/attendance/activity-qr', [\App\Http\Controllers\AdvancedAttendanceController::class, 'activityQr']);
         Route::get('/attendance/anomalies', [\App\Http\Controllers\AdvancedAttendanceController::class, 'getAnomalyLogs']);
         Route::patch('/attendance/{id}/approve', [AttendanceController::class, 'approve']);
         Route::get('/hour-limits/approvals', [HourLimitController::class, 'index']);
@@ -204,6 +206,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/logs/people', [ActivityLogController::class, 'people']);
         Route::get('/departments', fn () => \App\Models\Department::orderBy('name')->get(['id', 'name']));
         Route::get('/offices', [OfficeController::class, 'index']);
+        Route::post('/offices', [OfficeController::class, 'store']);
+        Route::put('/offices/{office}', [OfficeController::class, 'update']);
         Route::get('/offices/{office}/breakdown', [OfficeController::class, 'breakdown']);
 
         // Only WSPO coordinates student-to-department placement.
@@ -271,8 +275,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/financial/hourly-rate', [FinancialController::class, 'updateHourlyRate']);
         Route::get('/admin/dashboard-stats', [AdminController::class, 'getStats']);
         Route::get('/admin/enrolled-roster', [AdminController::class, 'enrolledRoster']);
-        Route::post('/offices', [OfficeController::class, 'store']);
-        Route::put('/offices/{office}', [OfficeController::class, 'update']);
         Route::delete('/offices/{office}', [OfficeController::class, 'destroy']);
 
         // =================================================

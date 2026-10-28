@@ -134,8 +134,8 @@ export function HoursActivityBoard({
         <div>
           <h2 className="text-xl font-semibold text-slate-900">Activity hours</h2>
           <p className="text-sm text-slate-500 mt-1 max-w-2xl">
-            Create these activities in the Attendance Hub. On time adds the activity hours. Late adds nothing and deducts nothing. Absent deducts the same hours.
-            Daily cleaning counts as 1 hour when the student clocks in during the first hour after the official time in. General cleaning and assembly are 5 hours. Devotional is 1 hour. Every activity stays on time for 1 hour after the official time in.
+            Create these activities in the Attendance Hub for a group and one year level. On time adds the activity hours. Late adds nothing and deducts nothing. Absent deducts the same hours.
+            The year-level leader can show that activity&apos;s QR code and passcode. Every activity stays on time for 1 hour after the official time in.
           </p>
         </div>
       </div>

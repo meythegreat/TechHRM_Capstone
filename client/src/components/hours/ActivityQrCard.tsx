@@ -21,6 +21,9 @@ const formatCountdown = (seconds: number) => `0:${String(seconds % 60).padStart(
 export function ActivityQrCard({ eventId }: { eventId: number }) {
   const [session, setSession] = useState<QrSession | null>(null);
   const [seconds, setSeconds] = useState(0);
+  const [passcode, setPasscode] = useState('');
+  const [passcodeSeconds, setPasscodeSeconds] = useState(0);
+  const [passcodeExpires, setPasscodeExpires] = useState('');
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -30,7 +33,22 @@ export function ActivityQrCard({ eventId }: { eventId: number }) {
     let cancelled = false;
     let refreshTimer: ReturnType<typeof setTimeout>;
 
+    const loadPasscode = async () => {
+      try {
+        const res = await axios.get('/api/attendance/activity-passcode', { params: { event_id: eventId } });
+        if (cancelled) return;
+        setPasscode(res.data.token_code || '');
+        setPasscodeExpires(res.data.expires_at || '');
+        setPasscodeSeconds(Number(res.data.seconds_remaining) || 0);
+      } catch (err) {
+        if (cancelled) return;
+        const message = axios.isAxiosError(err) ? err.response?.data?.message : '';
+        setError(message || 'Unable to show the passcode.');
+      }
+    };
+
     const load = async () => {
+      void loadPasscode();
       try {
         const res = await axios.get('/api/attendance/activity-qr', { params: { event_id: eventId } });
         if (cancelled) return;
@@ -47,7 +65,7 @@ export function ActivityQrCard({ eventId }: { eventId: number }) {
       }
     };
 
-    load();
+    void load();
     return () => {
       cancelled = true;
       clearTimeout(refreshTimer);
@@ -61,6 +79,14 @@ export function ActivityQrCard({ eventId }: { eventId: number }) {
     }, 1000);
     return () => clearInterval(timer);
   }, [session]);
+
+  useEffect(() => {
+    if (!passcodeExpires) return undefined;
+    const timer = setInterval(() => {
+      setPasscodeSeconds(Math.max(0, Math.ceil((new Date(passcodeExpires).getTime() - Date.now()) / 1000)));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [passcodeExpires]);
 
   useEffect(() => {
     if (!session?.payload) return undefined;
@@ -108,6 +134,11 @@ export function ActivityQrCard({ eventId }: { eventId: number }) {
         <p className="mt-2 text-center text-xs font-medium text-slate-500">
           Students scan this on the screen. It cannot be saved, copied, or downloaded, and a photo stops working when it refreshes.
         </p>
+        <div className="mt-4 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-center">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Passcode</p>
+          <p className="mt-1 font-mono text-2xl font-semibold tracking-[0.3em] text-slate-900">{passcode || '——'}</p>
+          <p className="mt-1 text-xs font-semibold text-slate-500">{passcode ? `Refreshes in ${formatCountdown(passcodeSeconds)}` : 'Preparing passcode…'}</p>
+        </div>
         <button
           type="button"
           onClick={() => setExpanded(true)}

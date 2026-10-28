@@ -27,6 +27,7 @@ class Attendance extends Model
         'anomaly_reason',
         'rendered_hour_event_id',
         'activity_hours',
+        'schedule_id',
     ];
 
     protected $casts = [
