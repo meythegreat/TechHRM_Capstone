@@ -1678,7 +1678,7 @@ const ScheduleManagement = () => {
                                             ? 'This updates the selected row only. The new time still cannot overlap another class or work shift on that day.'
                                             : entryKind === 'class'
                                                 ? 'Class hours stay separate from duty. A work shift cannot overlap a class already saved for this student. Clock-in still follows the work schedule only.'
-                                                : 'This is the student’s work schedule. It cannot overlap a class or another shift on the same day. Clock-in and clock-out are accepted only inside this shift.'}
+                                                : 'This is the student’s work schedule. It cannot overlap a class or another shift on the same day. Clock-in is accepted only inside this shift; clock-out is still allowed after it ends.'}
                                     </p>
                                 </div>
 

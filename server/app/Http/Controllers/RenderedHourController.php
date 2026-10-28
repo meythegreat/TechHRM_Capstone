@@ -120,18 +120,18 @@ class RenderedHourController extends Controller
         ]);
     }
 
-    /** Year-level leaders see only their own year, and only for their group. */
+    /** Group leaders see every activity for their group. Issued QR/passcodes work for all year levels. */
     public function leaderIndex(Request $request)
     {
         $user = $request->user()->loadMissing('profile');
         if ($user->role !== 'Student') {
-            return response()->json(['message' => 'Only a year-level leader can open this.'], 403);
+            return response()->json(['message' => 'Only a group leader can open this.'], 403);
         }
 
         $accounts = app(UserController::class);
         $membership = $accounts->leaderMembership($user);
         $year = (int) ($user->profile?->year_level ?? 0);
-        if (!$membership || $year < 1) {
+        if (!$membership) {
             return response()->json([
                 'leader' => false,
                 'year_level' => $year ?: null,
@@ -149,35 +149,18 @@ class RenderedHourController extends Controller
             ->with(['entries.student:id,name', 'entries.student.profile:id,user_id,student_id_number,year_level'])
             ->where('group_id', $membership->group_id)
             ->where('kind', '!=', RenderedHourEvent::SPECIAL)
-            ->where(function ($query) use ($year) {
-                $query->where('year_level', $year)->orWhereNull('year_level');
-            })
             ->whereDate('event_date', '>=', $start)
             ->whereDate('event_date', '<=', $end)
             ->orderBy('event_date')
             ->orderBy('title')
             ->get()
-            ->map(function (RenderedHourEvent $event) use ($year) {
-                $presented = $this->present($event);
-                $presented['entries'] = array_values(array_filter(
-                    $presented['entries'],
-                    fn (array $entry) => (int) ($entry['year_level'] ?? 0) === $year
-                ));
-                $presented['eligible_count'] = count($presented['entries']);
-                $presented['marked_count'] = count(array_filter(
-                    $presented['entries'],
-                    fn (array $entry) => !empty($entry['status'])
-                ));
-
-                return $presented;
-            })
-            ->filter(fn (array $event) => $event['year_level'] ? true : $event['entries'] !== [])
+            ->map(fn (RenderedHourEvent $event) => $this->present($event))
             ->values();
 
         return response()->json([
             'leader' => true,
-            'year_level' => $year,
-            'year_label' => RenderedHours::yearLabel($year),
+            'year_level' => $year ?: null,
+            'year_label' => RenderedHours::yearLabel($year ?: null),
             'group_name' => $group?->name,
             'events' => $events,
         ]);
@@ -459,13 +442,10 @@ class RenderedHourController extends Controller
 
         if ($kind !== RenderedHourEvent::SPECIAL) {
             $group = $this->cleaningGroup($request);
-            $year = (int) ($validated['year_level'] ?? 0);
-            if ($year < 1 || $year > 4) {
-                abort(422, 'Choose the year level for this activity.');
-            }
             $validated['group_id'] = $group->id;
             $validated['group_name'] = $group->name;
-            $validated['year_level'] = $year;
+            // One activity covers every year level in the group; QR/passcode is not year-scoped.
+            $validated['year_level'] = null;
             $this->assertGroupLeader($group);
         }
 
@@ -473,12 +453,11 @@ class RenderedHourController extends Controller
             $duplicate = RenderedHourEvent::query()
                 ->where('kind', RenderedHourEvent::DEVOTIONAL)
                 ->where('group_id', $validated['group_id'])
-                ->where('year_level', $validated['year_level'])
                 ->whereDate('event_date', $validated['event_date'])
                 ->when($existing, fn ($query) => $query->where('id', '!=', $existing->id))
                 ->exists();
             if ($duplicate) {
-                abort(422, 'That year level already has a devotional meeting in this group on that date.');
+                abort(422, 'This group already has a devotional meeting on that date.');
             }
         }
 
@@ -486,12 +465,11 @@ class RenderedHourController extends Controller
             $duplicate = RenderedHourEvent::query()
                 ->where('kind', RenderedHourEvent::GENERAL_CLEANING)
                 ->where('group_id', $validated['group_id'])
-                ->where('year_level', $validated['year_level'])
                 ->whereDate('event_date', $validated['event_date'])
                 ->when($existing, fn ($query) => $query->where('id', '!=', $existing->id))
                 ->exists();
             if ($duplicate) {
-                abort(422, 'That year level already has general cleaning in this group on that date.');
+                abort(422, 'This group already has general cleaning on that date.');
             }
         }
 
@@ -528,15 +506,13 @@ class RenderedHourController extends Controller
     {
         if ($kind !== RenderedHourEvent::SPECIAL) {
             $group = $this->cleaningGroup($request);
-            $year = (int) $request->input('year_level');
             $ids = $group->students
-                ->filter(fn (User $student) => (int) ($student->profile?->year_level ?? 0) === $year)
                 ->pluck('id')
                 ->map(fn ($id) => (int) $id)
                 ->unique()
                 ->values();
             if ($ids->isEmpty()) {
-                abort(422, 'That year level has no students in this group.');
+                abort(422, 'That group has no students.');
             }
         } else {
             $ids = collect($request->input('user_ids', []))

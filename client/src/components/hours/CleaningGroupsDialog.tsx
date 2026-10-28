@@ -219,7 +219,7 @@ export function CleaningGroupsDialog({ onClose }: { onClose: () => void }) {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h3 className="text-xl font-semibold text-slate-900">Groups</h3>
-            <p className="mt-1 text-sm text-slate-500">These groups are used for every activity. Only the WSPO coordinator can assign them. Choose one leader from any year level first, then add members by year. A group can mix years. The leader can open attendance, the QR code, and the passcode for their own year level only.</p>
+            <p className="mt-1 text-sm text-slate-500">These groups are used for every activity. Only the WSPO coordinator can assign them. Choose one leader from any year level first, then add members by year. A group can mix years. The leader can open attendance, the QR code, and the passcode that works for every year level in the group.</p>
           </div>
           <button type="button" onClick={startCreate} className="shrink-0 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-xl">New group</button>
         </div>

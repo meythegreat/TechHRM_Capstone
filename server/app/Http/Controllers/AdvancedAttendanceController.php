@@ -128,7 +128,7 @@ class AdvancedAttendanceController extends Controller
         $event = RenderedHourEvent::findOrFail($validated['event_id']);
         if (!$this->canIssueActivityCode($issuer, $event)) {
             return response()->json([
-                'message' => 'Only the WSPO coordinator, secretary, president, or this year level\'s leader can issue these QR codes.',
+                'message' => 'Only the WSPO coordinator, secretary, president, or this group\'s leader can issue these QR codes.',
             ], 403);
         }
         if (!$event->usesAttendance()) {
@@ -168,7 +168,7 @@ class AdvancedAttendanceController extends Controller
         $event = RenderedHourEvent::findOrFail($validated['event_id']);
         if (!$this->canIssueActivityCode($issuer, $event)) {
             return response()->json([
-                'message' => 'Only the WSPO coordinator, secretary, president, or this year level\'s leader can issue this passcode.',
+                'message' => 'Only the WSPO coordinator, secretary, president, or this group\'s leader can issue this passcode.',
             ], 403);
         }
         if (!$event->usesAttendance()) {
@@ -298,10 +298,7 @@ class AdvancedAttendanceController extends Controller
 
         $method = $request->input('method', 'passcode');
         $clockOutTime = Carbon::now();
-        $scheduleDenial = WorkSchedule::denialMessage($user->id, $clockOutTime, 'out');
-        if ($scheduleDenial) {
-            return response()->json(['message' => $scheduleDenial], 403);
-        }
+        // Clock-out stays allowed after the scheduled shift ends so students can still end an open session.
 
         $clockInTime = Carbon::parse($attendance->time_in);
         $totalMinutes = $clockInTime->diffInMinutes($clockOutTime);
@@ -593,16 +590,21 @@ class AdvancedAttendanceController extends Controller
             return response()->json(['message' => $suspension->suspensionNotice()], 403);
         }
 
-        $event = RenderedHourEvent::find($token->event_id);
-        if (!$event || !$event->usesAttendance()) {
+        $tokenEvent = RenderedHourEvent::find($token->event_id);
+        if (!$tokenEvent || !$tokenEvent->usesAttendance()) {
             return response()->json(['message' => 'This QR code is no longer linked to an activity.'], 422);
         }
 
         $now = Carbon::now();
-        if (!$now->isSameDay($event->event_date)) {
+        if (!$now->isSameDay($tokenEvent->event_date)) {
             return response()->json([
-                'message' => 'This QR code is for '.$event->event_date->toFormattedDateString().'.',
+                'message' => 'This QR code is for '.$tokenEvent->event_date->toFormattedDateString().'.',
             ], 422);
+        }
+
+        $event = $this->resolveActivityEventForStudent($tokenEvent, $user);
+        if (!$event) {
+            return response()->json(['message' => 'You are not assigned to this activity.'], 422);
         }
 
         $label = RenderedHourEvent::KINDS[$event->kind]['label'] ?? $event->kind;
@@ -616,11 +618,6 @@ class AdvancedAttendanceController extends Controller
                     ], 422);
                 }
             }
-        }
-
-        $allowed = $this->activityEligibleIds($event);
-        if (!in_array($user->id, $allowed, true)) {
-            return response()->json(['message' => 'You are not assigned to this activity.'], 422);
         }
 
         $existing = RenderedHourEntry::query()
@@ -700,11 +697,79 @@ class AdvancedAttendanceController extends Controller
     }
 
     /**
+     * Students on this event, plus siblings for the same group/date/kind (legacy year-scoped rows).
+     *
      * @return list<int>
      */
     private function activityEligibleIds(RenderedHourEvent $event): array
     {
-        return $event->assignedUserIds();
+        $ids = $event->assignedUserIds();
+        foreach ($this->siblingActivityEvents($event) as $sibling) {
+            if ((int) $sibling->id === (int) $event->id) {
+                continue;
+            }
+            $ids = array_merge($ids, $sibling->assignedUserIds());
+        }
+
+        return array_values(array_unique(array_map('intval', $ids)));
+    }
+
+    /**
+     * Prefer the event that already lists the student. Fall back to any sibling or the
+     * scanned event when the student belongs to the same cleaning group.
+     */
+    private function resolveActivityEventForStudent(RenderedHourEvent $event, \App\Models\User $user): ?RenderedHourEvent
+    {
+        if (in_array((int) $user->id, $event->assignedUserIds(), true)) {
+            return $event;
+        }
+
+        foreach ($this->siblingActivityEvents($event) as $sibling) {
+            if (in_array((int) $user->id, $sibling->assignedUserIds(), true)) {
+                return $sibling;
+            }
+        }
+
+        if ($event->group_id && $this->studentInGroup((int) $user->id, (int) $event->group_id)) {
+            return $event;
+        }
+
+        return null;
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, RenderedHourEvent>
+     */
+    private function siblingActivityEvents(RenderedHourEvent $event)
+    {
+        if (!$event->group_id) {
+            return collect([$event]);
+        }
+
+        return RenderedHourEvent::query()
+            ->where('kind', $event->kind)
+            ->where('group_id', $event->group_id)
+            ->whereDate('event_date', $event->event_date)
+            ->get();
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function siblingActivityEventIds(RenderedHourEvent $event): array
+    {
+        return $this->siblingActivityEvents($event)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    private function studentInGroup(int $userId, int $groupId): bool
+    {
+        return DB::table('daily_cleaning_group_members')
+            ->where('group_id', $groupId)
+            ->where('user_id', $userId)
+            ->exists();
     }
 
     private function canIssueActivityCode(\App\Models\User $issuer, RenderedHourEvent $event): bool
@@ -719,12 +784,16 @@ class AdvancedAttendanceController extends Controller
      */
     private function issueActivityToken(\App\Models\User $issuer, RenderedHourEvent $event, string $channel): array
     {
-        $issue = function () use ($issuer, $event, $channel) {
+        $siblingIds = $this->siblingActivityEventIds($event);
+        $lockKey = 'activity-'.$channel.':'.md5(implode(',', $siblingIds) ?: (string) $event->id);
+
+        $issue = function () use ($issuer, $event, $channel, $siblingIds) {
             $live = DailyToken::query()
-                ->where('event_id', $event->id)
+                ->whereIn('event_id', $siblingIds)
                 ->where('channel', $channel)
                 ->where('expires_at', '>', Carbon::now())
                 ->where('created_at', '>', Carbon::now()->subSeconds(self::ACCESS_TTL_SECONDS))
+                ->orderByDesc('id')
                 ->first();
 
             if ($live && $this->tokenIsCurrent($live) && $live->expires_at->getTimestamp() - Carbon::now()->getTimestamp() > 2) {
@@ -732,7 +801,7 @@ class AdvancedAttendanceController extends Controller
             }
 
             DailyToken::query()
-                ->where('event_id', $event->id)
+                ->whereIn('event_id', $siblingIds)
                 ->where('channel', $channel)
                 ->update(['expires_at' => Carbon::now()]);
 
@@ -750,7 +819,7 @@ class AdvancedAttendanceController extends Controller
         };
 
         try {
-            $token = Cache::lock('activity-'.$channel.':'.$event->id, 8)->block(5, $issue);
+            $token = Cache::lock($lockKey, 8)->block(5, $issue);
         } catch (LockTimeoutException) {
             $token = $issue();
         }

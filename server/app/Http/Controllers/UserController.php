@@ -312,18 +312,10 @@ class UserController extends Controller
             ->first();
     }
 
+    /** Group leader may issue the activity QR/passcode for every year level in that group. */
     public function isYearLeaderFor(User $user, \App\Models\RenderedHourEvent $event): bool
     {
         if ($user->role !== 'Student' || !$event->group_id) {
-            return false;
-        }
-
-        $year = (int) ($user->profile?->year_level ?? 0);
-        if ($year < 1 || $year > 4) {
-            return false;
-        }
-
-        if ($event->year_level && (int) $event->year_level !== $year) {
             return false;
         }
 
