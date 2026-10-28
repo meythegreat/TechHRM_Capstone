@@ -18,7 +18,9 @@ return [
     |
     */
 
-    'driver' => env('SESSION_DRIVER', 'database'),
+    // Prefer file for API deploys so a missing sessions table cannot 500 GET /.
+    // Set SESSION_DRIVER=database once the sessions migration has run.
+    'driver' => env('SESSION_DRIVER', 'file'),
 
     /*
     |--------------------------------------------------------------------------
