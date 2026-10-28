@@ -298,10 +298,7 @@ class AdvancedAttendanceController extends Controller
 
         $method = $request->input('method', 'passcode');
         $clockOutTime = Carbon::now();
-        $scheduleDenial = WorkSchedule::denialMessage($user->id, $clockOutTime, 'out');
-        if ($scheduleDenial) {
-            return response()->json(['message' => $scheduleDenial], 403);
-        }
+        // Clock-out stays allowed after the scheduled shift ends so students can still end an open session.
 
         $clockInTime = Carbon::parse($attendance->time_in);
         $totalMinutes = $clockInTime->diffInMinutes($clockOutTime);

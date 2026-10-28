@@ -10,8 +10,6 @@ class WorkSchedule
 {
     public const EARLY_MINUTES = 30;
 
-    public const LATE_OUT_MINUTES = 30;
-
     /**
      * @return array{0: Carbon, 1: Carbon, 2: Schedule}|null
      */
@@ -43,21 +41,23 @@ class WorkSchedule
 
     public static function denialMessage(int $userId, Carbon $moment, string $action): ?string
     {
+        // Clock-out is never schedule-gated; an open session can end after the shift window.
+        if ($action === 'out') {
+            return null;
+        }
+
         if (self::allows($userId, $moment, $action)) {
             return null;
         }
 
         $ranges = self::todayLabels($userId, $moment);
-        $verb = $action === 'out' ? 'Clock-out' : 'Clock-in';
         if ($ranges === []) {
-            return $verb.' follows your work schedule. You have no work shift assigned for '.$moment->format('l').'.';
+            return 'Clock-in follows your work schedule. You have no work shift assigned for '.$moment->format('l').'.';
         }
 
         $list = implode(', ', $ranges);
 
-        return $action === 'out'
-            ? "Clock-out is only accepted during your work schedule ({$list}), through ".self::LATE_OUT_MINUTES.' minutes after it ends.'
-            : "Clock-in is only accepted during your work schedule ({$list}), starting ".self::EARLY_MINUTES.' minutes before the shift.';
+        return "Clock-in is only accepted during your work schedule ({$list}), starting ".self::EARLY_MINUTES.' minutes before the shift.';
     }
 
     public static function matchingShift(int $userId, Carbon $moment, string $action): ?Schedule
@@ -110,8 +110,12 @@ class WorkSchedule
 
                 [$start, $end] = $bounds;
                 $opens = $action === 'out' ? $start->copy() : $start->copy()->subMinutes(self::EARLY_MINUTES);
-                $closes = $action === 'out' ? $end->copy()->addMinutes(self::LATE_OUT_MINUTES) : $end->copy();
-                if ($moment->betweenIncluded($opens, $closes)) {
+                // Clock-out remains valid after the scheduled end; clock-in still closes at shift end.
+                $closes = $action === 'out' ? null : $end->copy();
+                $inWindow = $closes
+                    ? $moment->betweenIncluded($opens, $closes)
+                    : $moment->greaterThanOrEqualTo($opens);
+                if ($inWindow) {
                     $found[$shift->id] = [$start->getTimestamp(), $shift];
                 }
             }
