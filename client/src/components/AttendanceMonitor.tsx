@@ -380,8 +380,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
         document.getElementById('manual-dtr-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     };
 
-    const selectedStudentInWspoOffice = isWspoOffice(dtrProfile.assigned_office);
-    const canEditDtr = canApprove || (canApproveWspoStudents && selectedStudentInWspoOffice);
+    const canEditDtr = canApprove || canApproveWspoStudents;
 
     const saveManualTimes = async () => {
         if (!canEditDtr || !selectedStudentId) return;
@@ -1136,7 +1135,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                     {canApprove
                                         ? 'Select a student to view their DTR, enter manual overrides, or generate official printouts.'
                                         : canApproveWspoStudents
-                                            ? 'View any working student DTR. Time changes are limited to students assigned to the WSPO office.'
+                                            ? 'View any working student DTR. Add or edit time in and time out even when no DTR is recorded yet.'
                                             : 'Select any working student and month to view or print their official WSPO DTR.'}
                                 </p>
                             </div>
@@ -1329,7 +1328,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                             </form>
                             <p className="mt-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
                                 <AlertCircle className="w-3 h-3" /> 
-                                {manualEditingId ? 'Updating replaces previous times and resets status to pending.' : 'Manual overrides are logged for audit purposes.'}
+                                {manualEditingId ? 'Updating replaces previous times and resets status to pending.' : 'Save adds this shift even when the student has no DTR for the date. Each shift is its own row.'}
                             </p>
                         </div>
                     )}
@@ -1354,7 +1353,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                         <td colSpan={canEditDtr ? 7 : 6} className="px-6 py-12 text-center text-slate-400">
                                             <div className="flex flex-col items-center">
                                                 <Calendar className="w-10 h-10 mb-3 opacity-20" />
-                                                <span className="font-bold text-slate-600">{selectedStudentId ? 'No DTR records found for this period.' : 'Choose a student to view their DTR.'}</span>
+                                                <span className="font-bold text-slate-600">{selectedStudentId ? (canEditDtr ? 'No DTR is recorded for this period. Use Manual Timesheet Override above to add time in and time out.' : 'No DTR records found for this period.') : 'Choose a student to view their DTR.'}</span>
                                             </div>
                                         </td>
                                     </tr>

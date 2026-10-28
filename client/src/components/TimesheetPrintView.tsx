@@ -31,11 +31,15 @@ interface TimesheetPrintViewProps {
     holidays?: { date: string; end_date?: string | null; name?: string; kind?: string | null; portion?: string | null }[];
 }
 
-interface DaySlots {
+interface ShiftLine {
     amIn?: Date;
     amOut?: Date;
     pmIn?: Date;
     pmOut?: Date;
+}
+
+interface DaySlots {
+    lines: ShiftLine[];
     remarks: string[];
 }
 
@@ -93,21 +97,20 @@ interface WorkWeek {
 
 const isMorning = (date: Date) => date.getHours() < 12 || (date.getHours() === 12 && date.getMinutes() === 0);
 
-const applyTime = (slots: DaySlots, date: Date, kind: 'in' | 'out') => {
-    const isAm = isMorning(date);
-    if (kind === 'in') {
-        if (isAm) {
-            if (!slots.amIn || date < slots.amIn) slots.amIn = date;
-        } else if (!slots.pmIn || date < slots.pmIn) {
-            slots.pmIn = date;
-        }
-        return;
+const lineForShift = (timeIn: Date, timeOut?: Date | null): ShiftLine => {
+    const line: ShiftLine = {};
+    if (isMorning(timeIn)) line.amIn = timeIn;
+    else line.pmIn = timeIn;
+    if (timeOut && !Number.isNaN(timeOut.getTime())) {
+        if (isMorning(timeOut)) line.amOut = timeOut;
+        else line.pmOut = timeOut;
     }
-    if (isAm) {
-        if (!slots.amOut || date > slots.amOut) slots.amOut = date;
-    } else if (!slots.pmOut || date > slots.pmOut) {
-        slots.pmOut = date;
-    }
+    return line;
+};
+
+const joinClocks = (dates: Array<Date | undefined>) => {
+    if (dates.length <= 1) return formatClock(dates[0]);
+    return dates.map((date) => formatClock(date) || ' ').join('\n');
 };
 
 const holidayDateKeys = (startValue: string, endValue?: string | null) => {
@@ -155,14 +158,16 @@ const TimesheetPrintView: React.FC<TimesheetPrintViewProps> = ({
     });
 
     const byDay: Record<number, DaySlots> = {};
-    history.forEach((record) => {
+    [...history]
+        .sort((left, right) => new Date(left.time_in).getTime() - new Date(right.time_in).getTime())
+        .forEach((record) => {
         if (!record.time_in) return;
         const timeIn = new Date(record.time_in);
         if (timeIn.getFullYear() !== year || timeIn.getMonth() !== month) return;
         const day = timeIn.getDate();
-        if (!byDay[day]) byDay[day] = { remarks: [] };
-        applyTime(byDay[day], timeIn, 'in');
-        if (record.time_out) applyTime(byDay[day], new Date(record.time_out), 'out');
+        if (!byDay[day]) byDay[day] = { lines: [], remarks: [] };
+        const timeOut = record.time_out ? new Date(record.time_out) : null;
+        byDay[day].lines.push(lineForShift(timeIn, timeOut));
         const remark = supervisorRemark(record);
         if (remark && !byDay[day].remarks.includes(remark)) byDay[day].remarks.push(remark);
     });
@@ -244,11 +249,11 @@ const TimesheetPrintView: React.FC<TimesheetPrintViewProps> = ({
                         <td style={{ ...cell, width: '22%' }}>Document Name:</td>
                         <td style={{ ...cell, width: '28%' }}>WSPO Daily Time Record</td>
                         <td style={{ ...cell, width: '22%' }}>Effectivity:</td>
-                        <td style={{ ...cell, width: '28%' }}>September 8, 2022</td>
+                        <td style={{ ...cell, width: '28%' }}>October 1, 2025</td>
                     </tr>
                     <tr>
-                        <td style={cell}>Document No:</td>
-                        <td style={cell}>WSPO – 2022 – 03</td>
+                        <td style={cell}>Form No:</td>
+                        <td style={cell}>EOMS-WP-004-F</td>
                         <td style={cell}>Issuing Office:</td>
                         <td style={cell}>WSPO</td>
                     </tr>
@@ -336,10 +341,10 @@ const TimesheetPrintView: React.FC<TimesheetPrintViewProps> = ({
                         return (
                             <tr key={day}>
                                 <td style={{ ...td, fontWeight: 700 }}>{day}</td>
-                                <td style={td}>{dayExists ? formatClock(slots?.amIn) : ''}</td>
-                                <td style={td}>{dayExists ? formatClock(slots?.amOut) : ''}</td>
-                                <td style={td}>{dayExists ? formatClock(slots?.pmIn) : ''}</td>
-                                <td style={td}>{dayExists ? formatClock(slots?.pmOut) : ''}</td>
+                                <td style={{ ...td, whiteSpace: 'pre-line', height: 'auto' }}>{dayExists ? joinClocks((slots?.lines ?? []).map((line) => line.amIn)) : ''}</td>
+                                <td style={{ ...td, whiteSpace: 'pre-line', height: 'auto' }}>{dayExists ? joinClocks((slots?.lines ?? []).map((line) => line.amOut)) : ''}</td>
+                                <td style={{ ...td, whiteSpace: 'pre-line', height: 'auto' }}>{dayExists ? joinClocks((slots?.lines ?? []).map((line) => line.pmIn)) : ''}</td>
+                                <td style={{ ...td, whiteSpace: 'pre-line', height: 'auto' }}>{dayExists ? joinClocks((slots?.lines ?? []).map((line) => line.pmOut)) : ''}</td>
                                 <td style={{ ...td, textAlign: 'left', fontSize: '8px', height: 'auto', minHeight: '13px', whiteSpace: 'normal', overflow: 'visible', textOverflow: 'clip', lineHeight: 1.15 }}>{dayExists ? remarks.join(', ') : ''}</td>
                             </tr>
                         );

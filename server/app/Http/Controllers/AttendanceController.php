@@ -22,7 +22,7 @@ class AttendanceController extends Controller
             ->first();
 
         if ($activeRecord) {
-            return response()->json(['message' => 'You are already clocked in!'], 422);
+            return response()->json(['message' => 'You are already clocked in. Clock out of this shift before starting the next one.'], 422);
         }
 
         $suspension = \App\Models\DisciplinaryRecord::activeSuspension($user->id);
@@ -43,10 +43,13 @@ class AttendanceController extends Controller
             return $limitDenial;
         }
 
+        $shift = WorkSchedule::matchingShift($user->id, $now, 'in');
+
         // 3. IF THEY PASS THE CHECK, SAVE THE ATTENDANCE
         $attendance = \App\Models\Attendance::create([
             'user_id' => $user->id,
             'time_in' => $now,
+            'schedule_id' => $shift?->id,
             'work_type' => $request->work_type ?? 'Unspecified',
         ]);
 
@@ -379,8 +382,7 @@ class AttendanceController extends Controller
         ]);
 
         $student = \App\Models\User::with('profile')->where('role', 'Student')->findOrFail($validated['user_id']);
-        $accounts = app(\App\Http\Controllers\UserController::class);
-        if (!$accounts->supervisorCanAccessStudent($supervisor, $student)) {
+        if (!$this->canEditStudentTimes($supervisor, $student)) {
             return response()->json(['message' => $this->dtrAccessMessage($supervisor)], 403);
         }
 
@@ -418,11 +420,14 @@ class AttendanceController extends Controller
 
         $note = trim((string) ($validated['task_description'] ?? ''));
 
+        $shift = $this->shiftForManual((int) $student->id, $timeIn);
+
         $attendance = \App\Models\Attendance::create([
             'user_id' => $student->id,
             'attendance_type' => 'Regular',
             'time_in' => $timeIn,
             'time_out' => $timeOut,
+            'schedule_id' => $shift?->id,
             'rendered_hours' => $fit['allowed'],
             'computed_hours' => $fit['allowed'],
             'work_type' => $student->profile?->duty_type ?: 'Manual Entry',
@@ -467,8 +472,7 @@ class AttendanceController extends Controller
             ], 403);
         }
 
-        $accounts = app(\App\Http\Controllers\UserController::class);
-        if (!$attendance->user || !$accounts->supervisorCanAccessStudent($supervisor, $attendance->user)) {
+        if (!$attendance->user || !$this->canEditStudentTimes($supervisor, $attendance->user)) {
             return response()->json(['message' => $this->dtrAccessMessage($supervisor)], 403);
         }
 
@@ -492,9 +496,12 @@ class AttendanceController extends Controller
             ], 422);
         }
 
+        $shift = $this->shiftForManual((int) $attendance->user_id, $timeIn);
+
         $payload = [
             'time_in' => $timeIn,
             'time_out' => $timeOut,
+            'schedule_id' => $shift?->id,
             'rendered_hours' => $fit['allowed'],
             'computed_hours' => $fit['allowed'],
             'status' => 'pending',
@@ -525,12 +532,33 @@ class AttendanceController extends Controller
     private function departmentSupervisor(Request $request): \App\Models\User|\Illuminate\Http\JsonResponse
     {
         $user = $request->user()->loadMissing('profile');
-        $accounts = app(\App\Http\Controllers\UserController::class);
-        if ($user->role !== 'Supervisor' && !$accounts->isWspoDepartmentSupervisor($user)) {
-            return response()->json(['message' => 'Only a department supervisor can enter time in and time out.'], 403);
+        if (!in_array($user->role, ['Supervisor', 'WSPO Staff'], true)) {
+            return response()->json(['message' => 'Only staff can enter time in and time out.'], 403);
         }
 
         return $user;
+    }
+
+    private function shiftForManual(int $userId, \Carbon\Carbon $timeIn): ?\App\Models\Schedule
+    {
+        $shift = null;
+        foreach (WorkSchedule::matchingShifts($userId, $timeIn, 'in') as $candidate) {
+            $bounds = WorkSchedule::bounds($candidate, $timeIn->copy()->startOfDay());
+            if ($bounds && $timeIn->greaterThanOrEqualTo($bounds[0]->copy()->subMinutes(WorkSchedule::EARLY_MINUTES))) {
+                $shift = $candidate;
+            }
+        }
+
+        return $shift;
+    }
+
+    private function canEditStudentTimes(\App\Models\User $actor, \App\Models\User $student): bool
+    {
+        if ($actor->role === 'WSPO Staff') {
+            return true;
+        }
+
+        return app(\App\Http\Controllers\UserController::class)->supervisorCanAccessStudent($actor, $student);
     }
 
     private function dtrAccessMessage(\App\Models\User $supervisor): string

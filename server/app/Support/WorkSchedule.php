@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\Attendance;
 use App\Models\Schedule;
 use Carbon\Carbon;
 
@@ -61,6 +62,39 @@ class WorkSchedule
 
     public static function matchingShift(int $userId, Carbon $moment, string $action): ?Schedule
     {
+        $matches = self::matchingShifts($userId, $moment, $action);
+        if ($matches === []) {
+            return null;
+        }
+
+        if ($action !== 'in') {
+            return $matches[0];
+        }
+
+        foreach ($matches as $shift) {
+            $alreadyRecorded = Attendance::query()
+                ->where('user_id', $userId)
+                ->where('schedule_id', $shift->id)
+                ->whereNull('rendered_hour_event_id')
+                ->whereDate('time_in', $moment->toDateString())
+                ->exists();
+            if (!$alreadyRecorded) {
+                return $shift;
+            }
+        }
+
+        return $matches[array_key_last($matches)];
+    }
+
+    /**
+     * Every work shift whose clock window contains this moment.
+     * A student can have more than one morning or afternoon shift.
+     *
+     * @return list<Schedule>
+     */
+    public static function matchingShifts(int $userId, Carbon $moment, string $action): array
+    {
+        $found = [];
         foreach ([$moment->copy(), $moment->copy()->subDay()] as $day) {
             $shifts = Schedule::query()
                 ->where('user_id', $userId)
@@ -78,12 +112,14 @@ class WorkSchedule
                 $opens = $action === 'out' ? $start->copy() : $start->copy()->subMinutes(self::EARLY_MINUTES);
                 $closes = $action === 'out' ? $end->copy()->addMinutes(self::LATE_OUT_MINUTES) : $end->copy();
                 if ($moment->betweenIncluded($opens, $closes)) {
-                    return $shift;
+                    $found[$shift->id] = [$start->getTimestamp(), $shift];
                 }
             }
         }
 
-        return null;
+        uasort($found, fn (array $left, array $right) => $left[0] <=> $right[0]);
+
+        return array_values(array_map(fn (array $row) => $row[1], $found));
     }
 
     /**

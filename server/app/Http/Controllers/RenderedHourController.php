@@ -120,6 +120,69 @@ class RenderedHourController extends Controller
         ]);
     }
 
+    /** Year-level leaders see only their own year, and only for their group. */
+    public function leaderIndex(Request $request)
+    {
+        $user = $request->user()->loadMissing('profile');
+        if ($user->role !== 'Student') {
+            return response()->json(['message' => 'Only a year-level leader can open this.'], 403);
+        }
+
+        $accounts = app(UserController::class);
+        $membership = $accounts->leaderMembership($user);
+        $year = (int) ($user->profile?->year_level ?? 0);
+        if (!$membership || $year < 1) {
+            return response()->json([
+                'leader' => false,
+                'year_level' => $year ?: null,
+                'year_label' => RenderedHours::yearLabel($year ?: null),
+                'group_name' => null,
+                'events' => [],
+            ]);
+        }
+
+        $group = \App\Models\DailyCleaningGroup::query()->find($membership->group_id);
+        $start = now()->subDays(30)->toDateString();
+        $end = now()->addDays(14)->toDateString();
+
+        $events = RenderedHourEvent::query()
+            ->with(['entries.student:id,name', 'entries.student.profile:id,user_id,student_id_number,year_level'])
+            ->where('group_id', $membership->group_id)
+            ->where('kind', '!=', RenderedHourEvent::SPECIAL)
+            ->where(function ($query) use ($year) {
+                $query->where('year_level', $year)->orWhereNull('year_level');
+            })
+            ->whereDate('event_date', '>=', $start)
+            ->whereDate('event_date', '<=', $end)
+            ->orderBy('event_date')
+            ->orderBy('title')
+            ->get()
+            ->map(function (RenderedHourEvent $event) use ($year) {
+                $presented = $this->present($event);
+                $presented['entries'] = array_values(array_filter(
+                    $presented['entries'],
+                    fn (array $entry) => (int) ($entry['year_level'] ?? 0) === $year
+                ));
+                $presented['eligible_count'] = count($presented['entries']);
+                $presented['marked_count'] = count(array_filter(
+                    $presented['entries'],
+                    fn (array $entry) => !empty($entry['status'])
+                ));
+
+                return $presented;
+            })
+            ->filter(fn (array $event) => $event['year_level'] ? true : $event['entries'] !== [])
+            ->values();
+
+        return response()->json([
+            'leader' => true,
+            'year_level' => $year,
+            'year_label' => RenderedHours::yearLabel($year),
+            'group_name' => $group?->name,
+            'events' => $events,
+        ]);
+    }
+
     public function report(Request $request)
     {
         $request->validate([
@@ -189,7 +252,7 @@ class RenderedHourController extends Controller
         DB::transaction(function () use ($event, $validated, $studentIds) {
             $event->fill($this->attributes($validated));
             $event->save();
-            if (in_array($event->kind, [RenderedHourEvent::SPECIAL, RenderedHourEvent::DAILY_CLEANING], true)) {
+            if ($event->kind === RenderedHourEvent::SPECIAL || $event->group_id) {
                 $this->syncRoster($event, $studentIds, true);
             } else {
                 $this->refreshDeltas($event);
@@ -394,40 +457,41 @@ class RenderedHourController extends Controller
             $validated['valid_until'] = $start->copy()->addMinutes($window)->format('H:i');
         }
 
-        if ($kind === RenderedHourEvent::DAILY_CLEANING) {
+        if ($kind !== RenderedHourEvent::SPECIAL) {
             $group = $this->cleaningGroup($request);
+            $year = (int) ($validated['year_level'] ?? 0);
+            if ($year < 1 || $year > 4) {
+                abort(422, 'Choose the year level for this activity.');
+            }
             $validated['group_id'] = $group->id;
             $validated['group_name'] = $group->name;
-        }
-
-        if ($kind === RenderedHourEvent::GENERAL_CLEANING && empty($validated['year_level'])) {
-            abort(422, 'Choose the year level for general cleaning.');
-        }
-
-        if ($kind !== RenderedHourEvent::GENERAL_CLEANING) {
-            $validated['year_level'] = $kind === RenderedHourEvent::DAILY_CLEANING ? null : ($validated['year_level'] ?? null);
+            $validated['year_level'] = $year;
+            $this->assertYearLeader($group, $year);
         }
 
         if ($kind === RenderedHourEvent::DEVOTIONAL) {
             $duplicate = RenderedHourEvent::query()
                 ->where('kind', RenderedHourEvent::DEVOTIONAL)
+                ->where('group_id', $validated['group_id'])
+                ->where('year_level', $validated['year_level'])
                 ->whereDate('event_date', $validated['event_date'])
                 ->when($existing, fn ($query) => $query->where('id', '!=', $existing->id))
                 ->exists();
             if ($duplicate) {
-                abort(422, 'A devotional meeting is already recorded on that date.');
+                abort(422, 'That year level already has a devotional meeting in this group on that date.');
             }
         }
 
         if ($kind === RenderedHourEvent::GENERAL_CLEANING) {
             $duplicate = RenderedHourEvent::query()
                 ->where('kind', RenderedHourEvent::GENERAL_CLEANING)
+                ->where('group_id', $validated['group_id'])
                 ->where('year_level', $validated['year_level'])
                 ->whereDate('event_date', $validated['event_date'])
                 ->when($existing, fn ($query) => $query->where('id', '!=', $existing->id))
                 ->exists();
             if ($duplicate) {
-                abort(422, 'That year level already has general cleaning on that date.');
+                abort(422, 'That year level already has general cleaning in this group on that date.');
             }
         }
 
@@ -436,15 +500,27 @@ class RenderedHourController extends Controller
 
     private function cleaningGroup(Request $request): DailyCleaningGroup
     {
-        $group = DailyCleaningGroup::query()->with('students')->find($request->input('group_id'));
+        $group = DailyCleaningGroup::query()->with('students.profile')->find($request->input('group_id'));
         if (!$group) {
-            abort(422, 'Choose a cleaning group.');
+            abort(422, 'Choose a group.');
         }
         if ($group->students->isEmpty()) {
-            abort(422, 'That cleaning group has no students.');
+            abort(422, 'That group has no students.');
         }
 
         return $group;
+    }
+
+    private function assertYearLeader(DailyCleaningGroup $group, int $year): void
+    {
+        $leader = $group->students->first(function (User $student) use ($year) {
+            return (bool) $student->pivot?->is_leader
+                && (int) ($student->profile?->year_level ?? 0) === $year;
+        });
+
+        if (!$leader) {
+            abort(422, 'Assign the '.RenderedHours::yearLabel($year).' leader or representative in this group before creating the activity.');
+        }
     }
 
     /**
@@ -453,12 +529,18 @@ class RenderedHourController extends Controller
      */
     private function rosterIds(Request $request, string $kind, ?RenderedHourEvent $existing = null): array
     {
-        if (!in_array($kind, [RenderedHourEvent::SPECIAL, RenderedHourEvent::DAILY_CLEANING], true)) {
-            return [];
-        }
-
-        if ($kind === RenderedHourEvent::DAILY_CLEANING) {
-            $ids = $this->cleaningGroup($request)->students->pluck('id')->map(fn ($id) => (int) $id)->unique()->values();
+        if ($kind !== RenderedHourEvent::SPECIAL) {
+            $group = $this->cleaningGroup($request);
+            $year = (int) $request->input('year_level');
+            $ids = $group->students
+                ->filter(fn (User $student) => (int) ($student->profile?->year_level ?? 0) === $year)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values();
+            if ($ids->isEmpty()) {
+                abort(422, 'That year level has no students in this group. Assign the leader first, then the members.');
+            }
         } else {
             $ids = collect($request->input('user_ids', []))
                 ->map(fn ($id) => (int) $id)
@@ -511,9 +593,9 @@ class RenderedHourController extends Controller
             'event_date' => $validated['event_date'],
             'hours' => $validated['hours'],
             'direction' => $validated['direction'],
-            'year_level' => $validated['kind'] === RenderedHourEvent::GENERAL_CLEANING ? ($validated['year_level'] ?? null) : null,
-            'group_name' => $validated['kind'] === RenderedHourEvent::DAILY_CLEANING ? ($validated['group_name'] ?? null) : null,
-            'group_id' => $validated['kind'] === RenderedHourEvent::DAILY_CLEANING ? ($validated['group_id'] ?? null) : null,
+            'year_level' => $validated['kind'] === RenderedHourEvent::SPECIAL ? null : ($validated['year_level'] ?? null),
+            'group_name' => $validated['kind'] === RenderedHourEvent::SPECIAL ? null : ($validated['group_name'] ?? null),
+            'group_id' => $validated['kind'] === RenderedHourEvent::SPECIAL ? null : ($validated['group_id'] ?? null),
             'starts_at' => $validated['starts_at'] ?? null,
             'valid_until' => $validated['valid_until'] ?? null,
             'notes' => $validated['notes'] ?? null,
@@ -633,16 +715,7 @@ class RenderedHourController extends Controller
      */
     private function eligibleIds(RenderedHourEvent $event): array
     {
-        if (in_array($event->kind, [RenderedHourEvent::SPECIAL, RenderedHourEvent::DAILY_CLEANING], true)) {
-            return $event->entries()->pluck('user_id')->map(fn ($id) => (int) $id)->all();
-        }
-
-        $query = User::query()->where('role', 'Student');
-        if ($event->kind === RenderedHourEvent::GENERAL_CLEANING) {
-            $query->whereHas('profile', fn ($profile) => $profile->where('year_level', $event->year_level));
-        }
-
-        return $query->pluck('id')->map(fn ($id) => (int) $id)->all();
+        return $event->assignedUserIds();
     }
 
     private function present(RenderedHourEvent $event): array

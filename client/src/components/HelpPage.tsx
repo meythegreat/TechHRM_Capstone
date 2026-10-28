@@ -41,7 +41,7 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Attendance / DTR',
         summary: 'Clock in and clock out for your duty.',
         about:
-            'Attendance / DTR is where you record your daily time. You can clock in and out using a supervisor passcode or a live QR code. You can also preview your DTR and check recent logs with statuses like Accepted, Rejected, Pending, or Timed in.',
+            'Attendance / DTR is where you record your daily time. You can clock in and out using a supervisor passcode or a live QR code. If you have more than one shift in the morning or afternoon, clock out of the current shift before the next one. Each shift is recorded on the DTR. You can also preview your DTR and check recent logs with statuses like Accepted, Rejected, Pending, or Timed in.',
         audience: ['Student'],
         steps: [
             'Click Attendance / DTR in the left menu.',
@@ -237,12 +237,12 @@ const HELP_TOPICS: HelpTopic[] = [
             'For pending logs, click Accept if the time is correct, or Reject if it is not.',
             'Review Extra Hours near the top. Supervisors Save & Print the letter, collect wet signatures, then upload the signed scan. WSPO records Approve 25 or Decline.',
             'Open a student monthly DTR when you need to review or print the full sheet.',
-            'Use manual override only when your role allows it and the correction is necessary.',
+            'Use Manual Timesheet Override to add or edit time in and time out, including a date that has no DTR yet. Each shift is saved as its own row.',
             'WSPO or Super Admin users can also manage holidays and class breaks when that tool is shown.',
         ],
         tips: [
             'Supervisors usually handle students in their own department.',
-            'WSPO staff usually handle students assigned to WSPO offices.',
+            'WSPO staff can add or edit DTR times for any working student, even when that day has no recorded time yet.',
             'Super Admin timesheet views are mostly read-only.',
             'Students are limited to 20 hours/week unless you approve an extension. 100 hours/month is a hard stop.',
         ],
@@ -284,7 +284,7 @@ const HELP_TOPICS: HelpTopic[] = [
             'Show the current code or QR to students who are ready to time in.',
             'Copy the passcode if you need to share it quickly, or expand the QR for easier scanning.',
             'Check the anomaly count if the page flags unusual attendance activity.',
-            'WSPO users with the right office access can add activities, manage cleaning groups, and show activity QR codes.',
+            'The WSPO coordinator assigns groups for every activity. Choose the year-level leader or representative first, then the members. That leader can open the QR code and passcode for their own year level only.',
             'Super Admins can browse the login and logout table and move through pages of records.',
         ],
         tips: [
@@ -298,7 +298,7 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Compliance',
         summary: 'Report, review, and resolve student infractions.',
         about:
-            'Compliance (Infraction Manager) tracks disciplinary cases. Supervisors can report infractions. WSPO staff can issue penalties, decide pending cases, and handle appeals. Super Admins can view and filter records but usually cannot file or resolve cases here.',
+            'Compliance (Infraction Manager) tracks disciplinary cases. Supervisors can report infractions for students in their departments. The WSPO coordinator can see and select every registered working student. WSPO staff can issue penalties, decide pending cases, and handle appeals. Super Admins can view and filter records but usually cannot file or resolve cases here.',
         audience: ['Supervisor', 'WSPO Staff', 'Super Admin'],
         steps: [
             'Click Compliance in the left menu.',
@@ -384,18 +384,18 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Offices',
         summary: 'View office assignments and manage the office list.',
         about:
-            'Offices (Office Directory) shows each office with student and supervisor counts. Clicking an office opens a breakdown of who is assigned there. Super Admins can add, edit, or delete offices. WSPO staff can view the directory.',
+            'Offices (Office Directory) shows each office with student and supervisor counts. Clicking an office opens a breakdown of who is assigned there. WSPO staff can add and edit offices. Super Admins can also delete an office that is not in use.',
         audience: ['WSPO Staff', 'Super Admin'],
         steps: [
             'Click Offices in the left menu.',
             'Search for an office by name.',
             'Click an office to see its supervisors, students, and related requests.',
-            'Super Admins can add a new office with a name and abbreviation.',
-            'Super Admins can edit an office inline, then save or cancel.',
+            'WSPO staff and Super Admins can add a new office with a name and abbreviation.',
+            'WSPO staff and Super Admins can edit an office inline, then save or cancel.',
             'Super Admins can delete an office only when it is not in use.',
         ],
         tips: [
-            'WSPO staff can view offices but cannot change the directory.',
+            'WSPO staff can add and edit offices. Deleting an office stays with the Super Admin.',
             'Do not delete an office that still has users assigned.',
         ],
     },

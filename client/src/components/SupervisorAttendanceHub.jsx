@@ -450,7 +450,7 @@ const SupervisorAttendanceHub = () => {
                                     Activity QR
                                 </h2>
                                 <p className="mt-1 text-sm text-slate-500">
-                                    Create daily cleaning, general cleaning, a devotional, an assembly, or a special request here, then show today&apos;s QR.
+                                    Create an activity for a group and year level, then show today&apos;s QR and passcode.
                                 </p>
                             </div>
                             <div className="flex flex-wrap gap-2 shrink-0">
@@ -460,7 +460,7 @@ const SupervisorAttendanceHub = () => {
                                         onClick={() => setGroupsOpen(true)}
                                         className="px-4 py-2.5 bg-white border border-slate-200 hover:border-blue-300 text-slate-800 text-sm font-bold rounded-xl inline-flex items-center gap-2"
                                     >
-                                        <Users className="w-4 h-4" /> Cleaning groups
+                                        <Users className="w-4 h-4" /> Groups
                                     </button>
                                 )}
                                 <button
@@ -491,7 +491,7 @@ const SupervisorAttendanceHub = () => {
                                     >
                                         {activityEvents.map((event) => (
                                             <option key={event.id} value={event.id}>
-                                                {event.title} · {event.hours} hrs
+                                                {event.title}{event.group_name ? ` · ${event.group_name}` : ''}{event.year_label ? ` · ${event.year_label}` : ''} · {event.hours} hrs
                                             </option>
                                         ))}
                                     </select>

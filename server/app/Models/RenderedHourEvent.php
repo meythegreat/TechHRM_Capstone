@@ -101,6 +101,27 @@ class RenderedHourEvent extends Model
      * On time adds the event hours. A late scan adds nothing and deducts nothing.
      * Absent deducts the same hours. Special requests apply the entered hours directly.
      */
+    /**
+     * Students who may be marked for this activity.
+     * Grouped activities use the roster saved with the event.
+     * Older activities that were not tied to a group keep their previous audience.
+     *
+     * @return list<int>
+     */
+    public function assignedUserIds(): array
+    {
+        if ($this->kind === self::SPECIAL || $this->kind === self::DAILY_CLEANING || $this->group_id) {
+            return $this->entries()->pluck('user_id')->map(fn ($id) => (int) $id)->all();
+        }
+
+        $query = User::query()->where('role', 'Student');
+        if ($this->kind === self::GENERAL_CLEANING && $this->year_level) {
+            $query->whereHas('profile', fn ($profile) => $profile->where('year_level', $this->year_level));
+        }
+
+        return $query->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
+
     public function deltaFor(?string $status): float
     {
         $hours = round((float) $this->hours, 2);

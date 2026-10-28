@@ -11,6 +11,7 @@ use App\Services\StaffNotifier;
 use App\Support\AccountLogin;
 use App\Support\InfractionEscalation;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -296,6 +297,41 @@ class UserController extends Controller
         }
 
         return false;
+    }
+
+    /** Year-level leader or representative assigned by the WSPO coordinator. */
+    public function leaderMembership(User $user): ?object
+    {
+        if ($user->role !== 'Student') {
+            return null;
+        }
+
+        return DB::table('daily_cleaning_group_members')
+            ->where('user_id', $user->id)
+            ->where('is_leader', true)
+            ->first();
+    }
+
+    public function isYearLeaderFor(User $user, \App\Models\RenderedHourEvent $event): bool
+    {
+        if ($user->role !== 'Student' || !$event->group_id) {
+            return false;
+        }
+
+        $year = (int) ($user->profile?->year_level ?? 0);
+        if ($year < 1 || $year > 4) {
+            return false;
+        }
+
+        if ($event->year_level && (int) $event->year_level !== $year) {
+            return false;
+        }
+
+        return DB::table('daily_cleaning_group_members')
+            ->where('group_id', $event->group_id)
+            ->where('user_id', $user->id)
+            ->where('is_leader', true)
+            ->exists();
     }
 
     /** Work schedules are assigned only by the WSPO coordinator or secretary. */
