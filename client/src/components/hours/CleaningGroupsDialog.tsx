@@ -132,7 +132,7 @@ export function CleaningGroupsDialog({ onClose }: { onClose: () => void }) {
       setNotice('Assign a leader or representative for at least one year level before adding members.');
       return;
     }
-    const leaderYears = new Set(leaderRows.map((row) => row.year_level));
+    const leaderYears = new Set<number>(leaderRows.map((row) => row.year_level));
     const missingLeader = memberIds.some((id) => {
       const student = students.find((person) => person.id === id);
       return !leaderYears.has(Number(student?.year_level));
