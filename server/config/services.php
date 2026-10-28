@@ -36,6 +36,8 @@ return [
     ],
 
     'n8n' => [
+        // Gmail delivery for password resets. Resend's onboarding sender only
+        // reaches the Resend account address, so every other recipient is sent here.
         'forgot_password_webhook' => env(
             'N8N_FORGOT_PASSWORD_WEBHOOK',
             'http://localhost:5678/webhook/techhrm/forgot-password'
