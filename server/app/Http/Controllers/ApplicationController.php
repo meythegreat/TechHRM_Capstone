@@ -598,8 +598,13 @@ class ApplicationController extends Controller
 
     private function storeApplicationDocuments(Request $request, Application $application): void
     {
-        $keys = $request->input('document_keys', []);
-        foreach ($request->file('documents', []) as $index => $file) {
+        $keys = array_values($request->input('document_keys', []));
+        $files = array_values(array_filter(
+            is_array($request->file('documents')) ? $request->file('documents') : [],
+            fn ($file) => $file instanceof \Illuminate\Http\UploadedFile && $file->isValid()
+        ));
+
+        foreach ($files as $index => $file) {
             $path = $file->store('application-documents', 'local');
 
             $application->documents()->create([

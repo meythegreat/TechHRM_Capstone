@@ -1,6 +1,4 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../../core/theme_controller.dart';
 import '../../core/json_util.dart';
@@ -498,85 +496,8 @@ class _AccountRecoveryDialogState extends State<_AccountRecoveryDialog> {
   }
 }
 
-class ApplyScreen extends StatefulWidget {
+class ApplyScreen extends StatelessWidget {
   const ApplyScreen({super.key});
-
-  @override
-  State<ApplyScreen> createState() => _ApplyScreenState();
-}
-
-class _ApplyScreenState extends State<ApplyScreen> {
-  final _fields = <String, TextEditingController>{
-    'first_name': TextEditingController(),
-    'middle_name': TextEditingController(),
-    'last_name': TextEditingController(),
-    'email': TextEditingController(),
-    'age': TextEditingController(),
-    'address': TextEditingController(),
-    'contact_number': TextEditingController(),
-    'course': TextEditingController(),
-    'student_id_number': TextEditingController(),
-    'preferred_department': TextEditingController(),
-    'reason_for_applying': TextEditingController(),
-  };
-  String _gender = 'Male';
-  String _year = '1st Year';
-  List<PlatformFile> _files = [];
-  bool _busy = false;
-
-  @override
-  void dispose() {
-    for (final controller in _fields.values) {
-      controller.dispose();
-    }
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (_files.length < 3 || _files.length > 5) {
-      toast(context, 'Attach 3 to 5 PDF or image documents.', error: true);
-      return;
-    }
-    setState(() => _busy = true);
-    try {
-      final api = context.read<AuthProvider>().api;
-      final files = <http.MultipartFile>[];
-      for (final file in _files) {
-        if (file.path == null) continue;
-        files.add(await http.MultipartFile.fromPath('documents[]', file.path!));
-      }
-      final data = await api.upload('/apply', fields: {
-        'first_name': _fields['first_name']!.text.trim(),
-        'middle_name': _fields['middle_name']!.text.trim(),
-        'last_name': _fields['last_name']!.text.trim(),
-        'email': _fields['email']!.text.trim(),
-        'age': _fields['age']!.text.trim(),
-        'gender': _gender,
-        'address': _fields['address']!.text.trim(),
-        'contact_number': _fields['contact_number']!.text.trim(),
-        'year_level': _year,
-        'course': _fields['course']!.text.trim(),
-        'student_id_number': _fields['student_id_number']!.text.trim(),
-        'preferred_department': _fields['preferred_department']!.text.trim(),
-        'reason_for_applying': _fields['reason_for_applying']!.text.trim(),
-      }, files: files);
-      if (!mounted) return;
-      final code = data is Map ? textOf(data['tracking_code'] ?? (data['data'] is Map ? data['data']['tracking_code'] : null), '') : '';
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Application submitted'),
-          content: Text(code.isEmpty ? 'Your application was received. Save the tracking code from your confirmation if one was issued.' : 'Tracking code: $code\n\nKeep this code with the email you used.'),
-          actions: [FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Done'))],
-        ),
-      );
-      if (mounted) Navigator.pop(context);
-    } catch (error) {
-      if (mounted) toast(context, errorText(error), error: true);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -584,66 +505,21 @@ class _ApplyScreenState extends State<ApplyScreen> {
       appBar: AppBar(title: const Text('Working student application'), backgroundColor: Colors.white, foregroundColor: kInk, surfaceTintColor: Colors.white),
       body: ListView(
         padding: const EdgeInsets.all(16),
-        children: [
-          for (final entry in {
-            'first_name': 'First name',
-            'middle_name': 'Middle name',
-            'last_name': 'Last name',
-            'email': 'Email',
-            'age': 'Age',
-            'contact_number': 'Contact number',
-            'address': 'Complete address',
-            'student_id_number': 'Student ID (optional)',
-            'course': 'Course (optional)',
-            'preferred_department': 'Preferred office (optional)',
-            'reason_for_applying': 'Why you are applying (optional)',
-          }.entries) ...[
-            TextField(controller: _fields[entry.key], decoration: InputDecoration(labelText: entry.value), maxLines: entry.key == 'reason_for_applying' || entry.key == 'address' ? 2 : 1),
-            const SizedBox(height: 10),
-          ],
-          DropdownButtonFormField<String>(
-            initialValue: _gender,
-            decoration: const InputDecoration(labelText: 'Gender'),
-            items: const ['Male', 'Female', 'Prefer not to say'].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
-            onChanged: (value) => setState(() => _gender = value ?? _gender),
+        children: const [
+          Text(
+            'Submit on the TechHRM website',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: kInk),
           ),
-          const SizedBox(height: 10),
-          DropdownButtonFormField<String>(
-            initialValue: _year,
-            decoration: const InputDecoration(labelText: 'Year level'),
-            items: const ['1st Year', '2nd Year', '3rd Year', '4th Year'].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
-            onChanged: (value) => setState(() => _year = value ?? _year),
+          SizedBox(height: 12),
+          Text(
+            'Work-Study applications now use the official personal information sheet and parents consent, with five required documents (application letter, report card or grades, birth certificate, 2 x 2 picture, and certificate of indigency).',
+            style: TextStyle(height: 1.45, fontWeight: FontWeight.w600, color: Color(0xFF475569)),
           ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: () async {
-              try {
-                final result = await FilePicker.pickFiles(type: FileType.any);
-                if (!context.mounted || result.isEmpty) return;
-                const allowed = {'pdf', 'jpg', 'jpeg', 'png'};
-                final picked = result.where((file) => allowed.contains((file.extension ?? '').toLowerCase())).toList();
-                final skipped = result.length - picked.length;
-                setState(() => _files = picked);
-                if (!context.mounted) return;
-                if (skipped > 0) {
-                  toast(context, 'Only PDF, JPG, and PNG files can be attached.', error: true);
-                } else if (picked.isEmpty) {
-                  toast(context, 'No documents were selected.', error: true);
-                }
-              } catch (error) {
-                if (context.mounted) toast(context, 'Could not open your files. $error', error: true);
-              }
-            },
-            icon: const Icon(Icons.attach_file),
-            label: Text(_files.isEmpty ? 'Attach 3 to 5 documents' : '${_files.length} file(s) selected'),
+          SizedBox(height: 12),
+          Text(
+            'Open the TechHRM website on a computer or phone browser, choose Apply, attach each required file, and save your tracking code after submission. You can still track that application from this app.',
+            style: TextStyle(height: 1.45, fontWeight: FontWeight.w600, color: Color(0xFF475569)),
           ),
-          if (_files.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            for (final file in _files)
-              Text(file.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-          ],
-          const SizedBox(height: 16),
-          FilledButton(onPressed: _busy ? null : _submit, child: Text(_busy ? 'Submitting…' : 'Submit application')),
         ],
       ),
     );

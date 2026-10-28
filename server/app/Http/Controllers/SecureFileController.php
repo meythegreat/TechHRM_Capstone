@@ -98,7 +98,11 @@ class SecureFileController extends Controller
         }
 
         if (str_starts_with($path, 'application-documents/')) {
-            $document = ApplicationDocument::with('application')->where('file_path', $path)->first();
+            // Archived (soft-deleted) applications still show in the Applications
+            // archive; keep their uploaded files readable for staff review.
+            $document = ApplicationDocument::with([
+                'application' => fn ($query) => $query->withTrashed(),
+            ])->where('file_path', $path)->first();
 
             if (!$document?->application) {
                 return false;
