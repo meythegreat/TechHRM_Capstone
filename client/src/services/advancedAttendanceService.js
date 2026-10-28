@@ -12,6 +12,12 @@ export const fetchLiveQr = async (type) =>
 export const fetchActivityQr = async (eventId) =>
     axios.get('/api/attendance/activity-qr', { params: { event_id: eventId } });
 
+export const fetchActivityPasscode = async (eventId) =>
+    axios.get('/api/attendance/activity-passcode', { params: { event_id: eventId } });
+
+export const fetchLeaderActivities = async () =>
+    axios.get('/api/attendance/leader-activities');
+
 export const fetchAnomalyLogs = async () => axios.get('/api/attendance/anomalies');
 
 export const submitSecureClockIn = async (tokenCode, method = 'passcode') =>

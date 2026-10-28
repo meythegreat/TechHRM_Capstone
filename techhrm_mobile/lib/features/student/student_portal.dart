@@ -97,9 +97,45 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
   Widget build(BuildContext context) {
     final api = context.read<AuthProvider>().api;
     return FetchView(
-      loader: () => api.get('/attendance/hours-summary'),
+      loader: () async {
+        final summary = await api.get('/attendance/hours-summary');
+        dynamic leader;
+        try {
+          leader = await api.get('/attendance/leader-activities');
+        } catch (_) {
+          leader = {'is_leader': false, 'events': []};
+        }
+        final events = asMaps(asMap(leader)['events']);
+        Map<String, dynamic> passcode = const {};
+        Map<String, dynamic> qr = const {};
+        if (events.isNotEmpty) {
+          final eventId = events.first['id'];
+          try {
+            passcode = asMap(await api.get('/attendance/activity-passcode', {'event_id': eventId}));
+          } catch (error) {
+            passcode = {'error': errorText(error)};
+          }
+          try {
+            qr = asMap(await api.get('/attendance/activity-qr', {'event_id': eventId}));
+          } catch (error) {
+            qr = {'error': errorText(error)};
+          }
+        }
+        return {
+          'summary': summary,
+          'leader': leader,
+          'passcode': passcode,
+          'qr': qr,
+        };
+      },
       builder: (context, data, reload) {
-        final summary = asMap(data);
+        final payload = asMap(data);
+        final summary = asMap(payload['summary']);
+        final leader = asMap(payload['leader']);
+        final leaderEvents = asMaps(leader['events']);
+        final isLeader = leader['is_leader'] == true;
+        final passcode = asMap(payload['passcode']);
+        final qr = asMap(payload['qr']);
         final history = asMaps(summary['history']);
         final dtr = history.where((row) {
           final label = '${row['attendance_type'] ?? ''} ${row['work_type'] ?? ''}'.toLowerCase();
@@ -120,6 +156,29 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
               const SizedBox(width: 10),
               StatCard(label: 'Remaining', value: numOf(summary['remaining_hours']).toStringAsFixed(1), icon: Icons.hourglass_bottom, color: Colors.orange.shade800),
             ]),
+            if (isLeader) ...[
+              const SizedBox(height: 16),
+              const SectionTitle('Cleaning group access'),
+              if (leaderEvents.isEmpty)
+                const EmptyNote('No daily cleaning activity is scheduled for your group today.')
+              else ...[
+                RecordCard(
+                  title: textOf(leaderEvents.first['title']),
+                  subtitle: '${numOf(leaderEvents.first['hours']).toStringAsFixed(0)} hrs · same on-time rules as Attendance Hub',
+                ),
+                RecordCard(
+                  title: 'Live passcode',
+                  subtitle: textOf(passcode['token_code'] ?? passcode['error']),
+                  trailing: passcode['seconds_remaining'] == null ? '' : '${passcode['seconds_remaining']}s',
+                ),
+                RecordCard(
+                  title: 'Live QR payload',
+                  subtitle: textOf(qr['payload'] ?? qr['error']),
+                  trailing: qr['seconds_remaining'] == null ? '' : '${qr['seconds_remaining']}s',
+                ),
+                const Text('Group mates enter this passcode or scan the QR code.'),
+              ],
+            ],
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(18),

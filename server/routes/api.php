@@ -111,6 +111,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/attendance/secure-clock-in', [\App\Http\Controllers\AdvancedAttendanceController::class, 'secureClockIn']);
     Route::put('/attendance/secure-clock-out/{id}', [\App\Http\Controllers\AdvancedAttendanceController::class, 'secureClockOut']);
     Route::get('/attendance/hours-summary', [\App\Http\Controllers\AdvancedAttendanceController::class, 'getWorkHourSummary']);
+    Route::get('/attendance/leader-activities', [\App\Http\Controllers\AdvancedAttendanceController::class, 'leaderActivities']);
+    Route::get('/attendance/activity-qr', [\App\Http\Controllers\AdvancedAttendanceController::class, 'activityQr']);
+    Route::get('/attendance/activity-passcode', [\App\Http\Controllers\AdvancedAttendanceController::class, 'activityPasscode']);
     Route::get('/hour-limits', [HourLimitController::class, 'mine']);
     Route::post('/hour-limits/request', [HourLimitController::class, 'requestExtension']);
 
@@ -137,7 +140,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/attendance/generate-token', [\App\Http\Controllers\AdvancedAttendanceController::class, 'generateToken']);
         Route::get('/attendance/passcode', [\App\Http\Controllers\AdvancedAttendanceController::class, 'currentPasscode']);
         Route::get('/attendance/qr-code', [\App\Http\Controllers\AdvancedAttendanceController::class, 'currentQr']);
-        Route::get('/attendance/activity-qr', [\App\Http\Controllers\AdvancedAttendanceController::class, 'activityQr']);
         Route::get('/attendance/anomalies', [\App\Http\Controllers\AdvancedAttendanceController::class, 'getAnomalyLogs']);
         Route::patch('/attendance/{id}/approve', [AttendanceController::class, 'approve']);
         Route::get('/hour-limits/approvals', [HourLimitController::class, 'index']);

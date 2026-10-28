@@ -279,7 +279,7 @@ const SupervisorAttendanceHub = () => {
                         Attendance Hub
                     </h1>
                     <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
-                        Daily clock-in can use a passcode or a QR code. Cleaning, devotional, and assembly attendance use a QR code issued by the WSPO coordinator, secretary, or president.
+                        Daily clock-in can use a passcode or a QR code. Cleaning, devotional, and assembly attendance use a passcode or QR issued by the WSPO coordinator, secretary, or president. Cleaning group leaders can also show codes for their group&apos;s daily cleaning.
                     </p>
                     <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">
                         Token scope: <span className="font-semibold text-slate-900">{supervisorDepartment}</span> students only
@@ -447,10 +447,10 @@ const SupervisorAttendanceHub = () => {
                             <div>
                                 <h2 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
                                     <QrCode className="w-5 h-5 text-blue-600" />
-                                    Activity QR
+                                    Activity access
                                 </h2>
                                 <p className="mt-1 text-sm text-slate-500">
-                                    Create daily cleaning, general cleaning, a devotional, an assembly, or a special request here, then show today&apos;s QR.
+                                    Create daily cleaning, general cleaning, a devotional, an assembly, or a special request here, then show today&apos;s passcode or QR. Cleaning group leaders can show codes for their own daily cleaning from Attendance / DTR.
                                 </p>
                             </div>
                             <div className="flex flex-wrap gap-2 shrink-0">
@@ -513,8 +513,8 @@ const SupervisorAttendanceHub = () => {
                             const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
                             const showsToday = event?.uses_attendance && event?.event_date === today;
                             setActivityNotice(showsToday
-                                ? 'Activity saved. Its QR is ready below.'
-                                : 'Activity saved. It appears in Hours Rendered. Today’s QR list updates when the activity date is today.');
+                                ? 'Activity saved. Its passcode and QR are ready below.'
+                                : 'Activity saved. It appears in Hours Rendered. Today’s access list updates when the activity date is today.');
                             loadActivityEvents(showsToday ? event.id : undefined);
                         }}
                     />

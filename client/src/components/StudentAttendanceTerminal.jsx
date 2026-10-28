@@ -25,6 +25,7 @@ import {
 } from '../services/advancedAttendanceService';
 import TimesheetPrintView from './TimesheetPrintView';
 import Toast from './Toast';
+import { ActivityQrCard } from './hours/ActivityQrCard';
 import { playAccessAcceptedSound, playAccessRejectedSound } from '../sounds';
 
 const padMonth = (n) => String(n).padStart(2, '0');
@@ -81,6 +82,9 @@ const StudentAttendanceTerminal = () => {
         duty_type: '',
         supervisors: [],
     });
+    const [leaderEvents, setLeaderEvents] = useState([]);
+    const [leaderEventId, setLeaderEventId] = useState('');
+    const [isLeader, setIsLeader] = useState(false);
     
     // Real-time clock state
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -139,6 +143,7 @@ const StudentAttendanceTerminal = () => {
     useEffect(() => {
         loadSummary();
         loadProfile();
+        loadLeaderActivities();
         axios.get('/api/my-schedule')
             .then((response) => setWorkSchedules(Array.isArray(response.data) ? response.data : []))
             .catch(() => setWorkSchedules([]));
@@ -154,6 +159,23 @@ const StudentAttendanceTerminal = () => {
             localStorage.removeItem('active_shift_segment');
         }
     }, []);
+
+    const loadLeaderActivities = async () => {
+        try {
+            const response = await axios.get('/api/attendance/leader-activities');
+            const rows = response.data?.events || [];
+            setIsLeader(Boolean(response.data?.is_leader));
+            setLeaderEvents(rows);
+            setLeaderEventId((current) => {
+                if (current && rows.some((event) => String(event.id) === String(current))) return current;
+                return rows[0] ? String(rows[0].id) : '';
+            });
+        } catch {
+            setIsLeader(false);
+            setLeaderEvents([]);
+            setLeaderEventId('');
+        }
+    };
 
     useEffect(() => {
         loadDtr();
@@ -394,6 +416,7 @@ const StudentAttendanceTerminal = () => {
                     </h1>
                     <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                         Use your department supervisor&apos;s passcode or QR code to clock in and clock out.
+                        {isLeader ? ' As a cleaning group leader, you can also show today’s daily cleaning passcode or QR below.' : ''}
                     </p>
                     <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">
                         Your department: <span className="font-semibold text-slate-900">{assignedDepartment}</span>
@@ -420,6 +443,41 @@ const StudentAttendanceTerminal = () => {
                     setSuccessMsg('');
                 }}
             />
+
+            {isLeader && (
+                <section className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] p-6 sm:p-8 space-y-4">
+                    <div>
+                        <h2 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
+                            <QrCode className="w-5 h-5 text-blue-600" />
+                            Cleaning group access
+                        </h2>
+                        <p className="mt-1 text-sm text-slate-500">
+                            Show the passcode or QR for your group&apos;s daily cleaning. The same on-time rules apply as in the Attendance Hub.
+                        </p>
+                    </div>
+                    {leaderEvents.length === 0 ? (
+                        <p className="text-sm text-slate-500">No daily cleaning activity is scheduled for your group today.</p>
+                    ) : (
+                        <div className="space-y-4">
+                            <label className="block text-xs font-bold uppercase tracking-wide text-slate-500">
+                                Today&apos;s cleaning activity
+                                <select
+                                    value={leaderEventId}
+                                    onChange={(event) => setLeaderEventId(event.target.value)}
+                                    className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800"
+                                >
+                                    {leaderEvents.map((event) => (
+                                        <option key={event.id} value={event.id}>
+                                            {event.title} · {event.hours} hrs
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                            {leaderEventId && <ActivityQrCard eventId={Number(leaderEventId)} />}
+                        </div>
+                    )}
+                </section>
+            )}
 
             <motion.div 
                 variants={containerVariants}

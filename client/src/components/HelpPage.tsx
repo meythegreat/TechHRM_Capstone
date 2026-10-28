@@ -55,7 +55,7 @@ const HELP_TOPICS: HelpTopic[] = [
         tips: [
             'You can usually clock in starting 30 minutes before your shift begins.',
             'If you are already timed in, clock out first before starting another duty.',
-            'Some special activities (like cleaning, devotionals, or assemblies) may use their own QR and add hours when you are on time.',
+            'Some special activities (like cleaning, devotionals, or assemblies) may use their own passcode or QR and add hours when you are on time. Daily cleaning adds 2 hours when you clock in on time. If you are the cleaning group leader, you can show that passcode or QR from Attendance / DTR.',
             'If you have no work schedule yet, follow the attendance rules set by WSPO.',
             'You may work up to 20 hours per week by default. Past 20 hours needs administrator approval (up to 25). The monthly maximum is 100 hours.',
         ],
@@ -284,7 +284,7 @@ const HELP_TOPICS: HelpTopic[] = [
             'Show the current code or QR to students who are ready to time in.',
             'Copy the passcode if you need to share it quickly, or expand the QR for easier scanning.',
             'Check the anomaly count if the page flags unusual attendance activity.',
-            'WSPO users with the right office access can add activities, manage cleaning groups, and show activity QR codes.',
+            'WSPO users with the right office access can add activities, manage cleaning groups, and show activity passcodes or QR codes. Cleaning group leaders can also show codes for their group’s daily cleaning from Attendance / DTR.',
             'Super Admins can browse the login and logout table and move through pages of records.',
         ],
         tips: [

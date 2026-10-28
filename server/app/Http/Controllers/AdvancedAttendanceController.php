@@ -117,45 +117,109 @@ class AdvancedAttendanceController extends Controller
         return $query->latest('time_in')->get();
     }
 
+    public function leaderActivities(Request $request)
+    {
+        $user = $request->user()->loadMissing('profile');
+        if ($user->role !== 'Student') {
+            return response()->json(['message' => 'Only cleaning group leaders can open this list.'], 403);
+        }
+
+        $groupIds = \App\Models\DailyCleaningGroup::query()
+            ->where('leader_id', $user->id)
+            ->pluck('id');
+
+        if ($groupIds->isEmpty()) {
+            return response()->json(['events' => [], 'is_leader' => false]);
+        }
+
+        $today = Carbon::now()->toDateString();
+        $events = RenderedHourEvent::query()
+            ->where('kind', RenderedHourEvent::DAILY_CLEANING)
+            ->whereIn('group_id', $groupIds)
+            ->whereDate('event_date', $today)
+            ->orderBy('title')
+            ->get()
+            ->filter(fn (RenderedHourEvent $event) => (bool) $event->officialStart())
+            ->map(fn (RenderedHourEvent $event) => [
+                'id' => $event->id,
+                'title' => $event->title,
+                'kind' => $event->kind,
+                'kind_label' => RenderedHourEvent::KINDS[$event->kind]['label'] ?? $event->kind,
+                'hours' => (float) $event->hours,
+                'group_name' => $event->group_name,
+                'starts_at' => $event->starts_at ? substr((string) $event->starts_at, 0, 5) : null,
+                'valid_until' => $event->valid_until ? substr((string) $event->valid_until, 0, 5) : null,
+                'uses_attendance' => true,
+            ])
+            ->values();
+
+        return response()->json([
+            'is_leader' => true,
+            'events' => $events,
+        ]);
+    }
+
     public function activityQr(Request $request)
+    {
+        return $this->activityAccess($request, 'qr');
+    }
+
+    public function activityPasscode(Request $request)
+    {
+        return $this->activityAccess($request, 'passcode');
+    }
+
+    private function activityAccess(Request $request, string $channel)
     {
         SuperAdminAudit::denyMutation($request);
         $issuer = $request->user()->loadMissing('profile');
-        if (!app(UserController::class)->canIssueActivityAttendance($issuer)) {
-            return response()->json([
-                'message' => 'Only the WSPO coordinator, secretary, and president can issue these QR codes.',
-            ], 403);
-        }
 
         $validated = $request->validate([
             'event_id' => 'required|integer|exists:rendered_hour_events,id',
         ]);
 
         $event = RenderedHourEvent::findOrFail($validated['event_id']);
-        if (!$event->usesAttendance()) {
-            return response()->json(['message' => 'Special requests do not use a QR code.'], 422);
-        }
-        if (!$event->officialStart()) {
-            return response()->json(['message' => 'Set the official time in before showing a QR code.'], 422);
+        $accounts = app(UserController::class);
+        if (!$accounts->canIssueActivityAttendance($issuer, $event)) {
+            return response()->json([
+                'message' => $issuer->role === 'Student'
+                    ? 'Only the assigned cleaning group leader can issue codes for this activity.'
+                    : 'Only the WSPO coordinator, secretary, and president can issue these codes.',
+            ], 403);
         }
 
-        $issued = $this->issueActivityToken($issuer, $event);
+        if (!$event->usesAttendance()) {
+            return response()->json(['message' => 'Special requests do not use attendance codes.'], 422);
+        }
+        if (!$event->officialStart()) {
+            return response()->json(['message' => 'Set the official time in before showing an attendance code.'], 422);
+        }
+
+        $issued = $this->issueActivityToken($issuer, $event, $channel);
         $token = $issued['token'];
         $label = RenderedHourEvent::KINDS[$event->kind]['label'] ?? $event->kind;
 
-        return response()->json([
-            'payload' => 'THRM1A|'.$token->token_code,
+        $payload = [
             'expires_at' => $token->expires_at,
             'seconds_remaining' => $issued['seconds_remaining'],
             'ttl_seconds' => self::ACCESS_TTL_SECONDS,
             'type' => $label,
+            'channel' => $channel,
             'event_id' => $event->id,
             'title' => $event->title,
             'hours' => (float) $event->hours,
             'starts_at' => substr((string) $event->starts_at, 0, 5),
             'valid_until' => $event->valid_until ? substr((string) $event->valid_until, 0, 5) : null,
             'window_minutes' => $event->windowMinutes(),
-        ]);
+        ];
+
+        if ($channel === 'qr') {
+            $payload['payload'] = 'THRM1A|'.$token->token_code;
+        } else {
+            $payload['token_code'] = $token->token_code;
+        }
+
+        return response()->json($payload);
     }
 
     public function secureClockIn(Request $request)
@@ -535,12 +599,24 @@ class AdvancedAttendanceController extends Controller
     private function clockInActivity(Request $request, DailyToken $token)
     {
         $method = $request->input('method', 'passcode');
-        if ($method !== 'qr' || $token->channel !== 'qr') {
-            return response()->json(['message' => 'This attendance is issued as a QR code only.'], 422);
+        $channel = $token->channel ?: 'qr';
+        if (!in_array($channel, ['qr', 'passcode'], true)) {
+            return response()->json(['message' => 'This attendance code is invalid.'], 422);
+        }
+        if ($method !== $channel) {
+            return response()->json([
+                'message' => $channel === 'qr'
+                    ? 'This is a QR code. Scan it with the camera.'
+                    : 'This is a passcode. Enter it in the passcode field.',
+            ], 422);
         }
 
         if (!$this->tokenIsCurrent($token)) {
-            return response()->json(['message' => 'This QR code has expired. Scan the code currently on the WSPO screen.'], 422);
+            return response()->json([
+                'message' => $channel === 'qr'
+                    ? 'This QR code has expired. Scan the code currently on screen.'
+                    : 'This passcode has expired. Ask for the current code.',
+            ], 422);
         }
 
         $user = $request->user()->load('profile');
@@ -555,13 +631,13 @@ class AdvancedAttendanceController extends Controller
 
         $event = RenderedHourEvent::find($token->event_id);
         if (!$event || !$event->usesAttendance()) {
-            return response()->json(['message' => 'This QR code is no longer linked to an activity.'], 422);
+            return response()->json(['message' => 'This attendance code is no longer linked to an activity.'], 422);
         }
 
         $now = Carbon::now();
         if (!$now->isSameDay($event->event_date)) {
             return response()->json([
-                'message' => 'This QR code is for '.$event->event_date->toFormattedDateString().'.',
+                'message' => 'This attendance code is for '.$event->event_date->toFormattedDateString().'.',
             ], 422);
         }
 
@@ -613,13 +689,14 @@ class AdvancedAttendanceController extends Controller
             ? "Clock-in saved as late. No hours were added or deducted."
             : "Clock-in accepted. {$hours} hours were added to your hours rendered.";
 
-        $attendance = DB::transaction(function () use ($user, $event, $token, $now, $status, $delta, $label, $message) {
+        $attendance = DB::transaction(function () use ($user, $event, $token, $now, $status, $delta, $label, $message, $channel) {
             $record = Attendance::create([
                 'user_id' => $user->id,
                 'time_in' => $now,
                 'time_out' => $now,
                 'attendance_type' => $label,
-                'check_in_method' => 'qr',
+                'check_in_method' => $channel,
+                'verification_code_used' => $channel === 'passcode' ? $token->token_code : null,
                 'code_owner_id' => $token->generated_by,
                 'work_type' => $label,
                 'rendered_hours' => 0,
@@ -647,7 +724,7 @@ class AdvancedAttendanceController extends Controller
             return $record;
         });
 
-        $this->notifyCodeOwner($token->generated_by, $user->name, $label, 'qr', false);
+        $this->notifyCodeOwner($token->generated_by, $user->name, $label, $channel, false);
 
         return response()->json([
             'message' => $message,
@@ -679,12 +756,13 @@ class AdvancedAttendanceController extends Controller
     /**
      * @return array{token: DailyToken, seconds_remaining: int}
      */
-    private function issueActivityToken(\App\Models\User $issuer, RenderedHourEvent $event): array
+    private function issueActivityToken(\App\Models\User $issuer, RenderedHourEvent $event, string $channel = 'qr'): array
     {
-        $issue = function () use ($issuer, $event) {
+        $channel = $channel === 'passcode' ? 'passcode' : 'qr';
+        $issue = function () use ($issuer, $event, $channel) {
             $live = DailyToken::query()
                 ->where('event_id', $event->id)
-                ->where('channel', 'qr')
+                ->where('channel', $channel)
                 ->where('expires_at', '>', Carbon::now())
                 ->where('created_at', '>', Carbon::now()->subSeconds(self::ACCESS_TTL_SECONDS))
                 ->first();
@@ -695,13 +773,15 @@ class AdvancedAttendanceController extends Controller
 
             DailyToken::query()
                 ->where('event_id', $event->id)
-                ->where('channel', 'qr')
+                ->where('channel', $channel)
                 ->update(['expires_at' => Carbon::now()]);
 
             return DailyToken::create([
-                'token_code' => strtoupper(bin2hex(random_bytes(16))),
+                'token_code' => $channel === 'qr'
+                    ? strtoupper(bin2hex(random_bytes(16)))
+                    : strtoupper(substr(bin2hex(random_bytes(4)), 0, 6)),
                 'type' => RenderedHourEvent::KINDS[$event->kind]['label'] ?? 'Activity',
-                'channel' => 'qr',
+                'channel' => $channel,
                 'description' => $event->title,
                 'event_id' => $event->id,
                 'generated_by' => $issuer->id,
@@ -710,7 +790,7 @@ class AdvancedAttendanceController extends Controller
         };
 
         try {
-            $token = Cache::lock('activity-qr:'.$event->id, 8)->block(5, $issue);
+            $token = Cache::lock('activity-'.$channel.':'.$event->id, 8)->block(5, $issue);
         } catch (LockTimeoutException) {
             $token = $issue();
         }

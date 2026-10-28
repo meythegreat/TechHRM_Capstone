@@ -14,7 +14,7 @@ class DailyCleaningGroupController extends Controller
     public function index()
     {
         $groups = DailyCleaningGroup::query()
-            ->with(['students.profile:id,user_id,student_id_number,year_level'])
+            ->with(['students.profile:id,user_id,student_id_number,year_level', 'leader.profile:id,user_id,student_id_number,year_level'])
             ->orderBy('name')
             ->get()
             ->map(fn (DailyCleaningGroup $group) => $this->present($group));
@@ -27,9 +27,13 @@ class DailyCleaningGroupController extends Controller
         $this->assertCoordinator($request);
         $name = $this->validatedName($request);
         $studentIds = $this->studentIds($request);
+        $leaderId = $this->leaderId($request, $studentIds);
 
-        $group = DB::transaction(function () use ($name, $studentIds) {
-            $group = DailyCleaningGroup::create(['name' => $name]);
+        $group = DB::transaction(function () use ($name, $studentIds, $leaderId) {
+            $group = DailyCleaningGroup::create([
+                'name' => $name,
+                'leader_id' => $leaderId,
+            ]);
             $this->syncStudents($group, $studentIds);
 
             return $group;
@@ -37,7 +41,7 @@ class DailyCleaningGroupController extends Controller
 
         return response()->json([
             'message' => 'Cleaning group saved.',
-            'group' => $this->present($group->load('students.profile')),
+            'group' => $this->present($group->load(['students.profile', 'leader.profile'])),
         ], 201);
     }
 
@@ -46,16 +50,18 @@ class DailyCleaningGroupController extends Controller
         $this->assertCoordinator($request);
         $name = $this->validatedName($request, $group);
         $studentIds = $this->studentIds($request);
+        $leaderId = $this->leaderId($request, $studentIds);
 
-        DB::transaction(function () use ($group, $name, $studentIds) {
+        DB::transaction(function () use ($group, $name, $studentIds, $leaderId) {
             $group->name = $name;
+            $group->leader_id = $leaderId;
             $group->save();
             $this->syncStudents($group, $studentIds);
         });
 
         return response()->json([
             'message' => 'Cleaning group updated.',
-            'group' => $this->present($group->load('students.profile')),
+            'group' => $this->present($group->load(['students.profile', 'leader.profile'])),
         ]);
     }
 
@@ -119,6 +125,27 @@ class DailyCleaningGroupController extends Controller
     /**
      * @param  list<int>  $studentIds
      */
+    private function leaderId(Request $request, array $studentIds): int
+    {
+        $validated = $request->validate([
+            'leader_id' => 'required|integer|exists:users,id',
+        ]);
+        $leaderId = (int) $validated['leader_id'];
+        if (!in_array($leaderId, $studentIds, true)) {
+            abort(422, 'The group leader must be one of the selected students.');
+        }
+
+        $leader = User::query()->where('role', 'Student')->where('id', $leaderId)->first();
+        if (!$leader) {
+            abort(422, 'The group leader must be a working student.');
+        }
+
+        return $leaderId;
+    }
+
+    /**
+     * @param  list<int>  $studentIds
+     */
     private function syncStudents(DailyCleaningGroup $group, array $studentIds): void
     {
         DB::table('daily_cleaning_group_members')
@@ -129,24 +156,31 @@ class DailyCleaningGroupController extends Controller
         $group->students()->sync($studentIds);
     }
 
+    private function presentStudent(User $student): array
+    {
+        return [
+            'id' => $student->id,
+            'name' => $student->name,
+            'student_id_number' => $student->profile?->student_id_number,
+            'year_level' => $student->profile?->year_level,
+            'year_label' => RenderedHours::yearLabel($student->profile?->year_level ? (int) $student->profile->year_level : null),
+        ];
+    }
+
     private function present(DailyCleaningGroup $group): array
     {
-        $group->loadMissing('students.profile');
+        $group->loadMissing(['students.profile', 'leader.profile']);
 
         return [
             'id' => $group->id,
             'name' => $group->name,
+            'leader_id' => $group->leader_id,
+            'leader' => $group->leader ? $this->presentStudent($group->leader) : null,
             'student_count' => $group->students->count(),
             'students' => $group->students
                 ->sortBy('name')
                 ->values()
-                ->map(fn (User $student) => [
-                    'id' => $student->id,
-                    'name' => $student->name,
-                    'student_id_number' => $student->profile?->student_id_number,
-                    'year_level' => $student->profile?->year_level,
-                    'year_label' => RenderedHours::yearLabel($student->profile?->year_level ? (int) $student->profile->year_level : null),
-                ]),
+                ->map(fn (User $student) => $this->presentStudent($student)),
         ];
     }
 }

@@ -12,10 +12,10 @@ interface StudentOption {
 
 const KINDS = [
   { id: 'special_request', label: 'Special request', hours: '', hint: 'Enter the hours of the event, then add or deduct them.' },
-  { id: 'daily_cleaning', label: 'Daily cleaning', hours: '1', hint: 'Choose a saved cleaning group. Groups can mix year levels and each student belongs to one group. Cleaning usually runs 5:00–7:00. A clock-in during the first hour after the official time in adds 1 hour. After that hour is late and adds nothing.' },
-  { id: 'general_cleaning', label: 'General cleaning', hours: '5', hint: '5 hours for the chosen year level. The QR adds those hours only during the first hour after the official time in.' },
-  { id: 'devotional', label: 'Devotional meeting', hours: '1', hint: '1 hour for every working student, added only if they scan within 1 hour of the official time in.' },
-  { id: 'meeting_assembly', label: 'Meeting assembly', hours: '5', hint: '5 hours per student, added only if they scan within 1 hour of the official time in.' },
+  { id: 'daily_cleaning', label: 'Daily cleaning', hours: '2', hint: 'Choose a saved cleaning group. Groups can mix year levels and each student belongs to one group. Cleaning usually runs 5:00–7:00. A clock-in during the first hour after the official time in adds 2 hours. After that hour is late and adds nothing. The group leader can show the passcode or QR.' },
+  { id: 'general_cleaning', label: 'General cleaning', hours: '5', hint: '5 hours for the chosen year level. The passcode or QR adds those hours only during the first hour after the official time in.' },
+  { id: 'devotional', label: 'Devotional meeting', hours: '1', hint: '1 hour for every working student, added only if they clock in within 1 hour of the official time in.' },
+  { id: 'meeting_assembly', label: 'Meeting assembly', hours: '5', hint: '5 hours per student, added only if they clock in within 1 hour of the official time in.' },
 ] as const;
 
 const today = () => {
@@ -28,7 +28,7 @@ const emptyForm = () => ({
   kind: 'daily_cleaning',
   title: 'Daily cleaning',
   event_date: today(),
-  hours: '1',
+  hours: '2',
   direction: 'add',
   year_level: '1',
   group_id: '',
@@ -51,7 +51,7 @@ export function AddActivityHoursDialog({
   onSaved: (event: { id: number; event_date?: string; uses_attendance?: boolean }) => void;
 }) {
   const [students, setStudents] = useState<StudentOption[]>([]);
-  const [groups, setGroups] = useState<{ id: number; name: string; students: StudentOption[] }[]>([]);
+  const [groups, setGroups] = useState<{ id: number; name: string; leader?: StudentOption | null; students: StudentOption[] }[]>([]);
   const [groupsLoaded, setGroupsLoaded] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -177,7 +177,7 @@ export function AddActivityHoursDialog({
               <select required value={form.group_id} onChange={(input) => setForm({ ...form, group_id: input.target.value })} className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900">
                 <option value="">Choose a group</option>
                 {groups.map((group) => (
-                  <option key={group.id} value={group.id}>{group.name} · {group.students.length} student{group.students.length === 1 ? '' : 's'}</option>
+                  <option key={group.id} value={group.id}>{group.name} · {group.students.length} student{group.students.length === 1 ? '' : 's'}{group.leader?.name ? ` · leader ${group.leader.name}` : ''}</option>
                 ))}
               </select>
             </label>
@@ -185,12 +185,16 @@ export function AddActivityHoursDialog({
               <p className="text-sm text-slate-500">No cleaning groups yet. The coordinator can add them from Cleaning groups in the Attendance Hub.</p>
             ) : form.group_id && (
               <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
-                {(groups.find((group) => String(group.id) === String(form.group_id))?.students || []).map((student) => (
-                  <p key={student.id} className="px-3 py-2 text-sm">
-                    <span className="font-bold text-slate-900">{student.name}</span>
-                    <span className="text-slate-500"> · {student.student_id_number || 'No ID'} · {student.year_label}</span>
-                  </p>
-                ))}
+                {(groups.find((group) => String(group.id) === String(form.group_id))?.students || []).map((student) => {
+                  const selected = groups.find((group) => String(group.id) === String(form.group_id));
+                  const isLeader = selected?.leader?.id === student.id;
+                  return (
+                    <p key={student.id} className="px-3 py-2 text-sm">
+                      <span className="font-bold text-slate-900">{student.name}</span>
+                      <span className="text-slate-500"> · {student.student_id_number || 'No ID'} · {student.year_label}{isLeader ? ' · leader' : ''}</span>
+                    </p>
+                  );
+                })}
               </div>
             )}
           </div>

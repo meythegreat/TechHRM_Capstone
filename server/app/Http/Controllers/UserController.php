@@ -275,27 +275,55 @@ class UserController extends Controller
     }
 
     /**
-     * Activity QR codes and time corrections are limited to the three WSPO positions.
+     * Activity QR codes, passcodes, and time corrections are limited to the three WSPO positions.
      * A blank position is the original coordinator account.
+     * Cleaning-group leaders may issue codes only for their group's daily cleaning activity.
      */
-    public function canIssueActivityAttendance(User $user): bool
+    public function canIssueActivityAttendance(User $user, ?\App\Models\RenderedHourEvent $event = null): bool
     {
-        if ($user->role !== 'WSPO Staff') {
+        if ($user->role === 'WSPO Staff') {
+            $position = trim((string) ($user->profile?->assigned_office ?? ''));
+            if ($position === '' || strcasecmp($position, 'WSPO') === 0) {
+                return true;
+            }
+
+            foreach (['WSPO Coordinator', 'WSPO Secretary', 'WSPO President'] as $allowed) {
+                if (strcasecmp($position, $allowed) === 0) {
+                    return true;
+                }
+            }
+
             return false;
         }
 
-        $position = trim((string) ($user->profile?->assigned_office ?? ''));
-        if ($position === '' || strcasecmp($position, 'WSPO') === 0) {
-            return true;
+        if (!$event || $user->role !== 'Student') {
+            return false;
         }
 
-        foreach (['WSPO Coordinator', 'WSPO Secretary', 'WSPO President'] as $allowed) {
-            if (strcasecmp($position, $allowed) === 0) {
-                return true;
-            }
+        return $this->isCleaningGroupLeaderForEvent($user, $event);
+    }
+
+    public function isCleaningGroupLeaderForEvent(User $user, \App\Models\RenderedHourEvent $event): bool
+    {
+        if ($event->kind !== \App\Models\RenderedHourEvent::DAILY_CLEANING || !$event->group_id) {
+            return false;
         }
 
-        return false;
+        return \App\Models\DailyCleaningGroup::query()
+            ->where('id', $event->group_id)
+            ->where('leader_id', $user->id)
+            ->exists();
+    }
+
+    public function isCleaningGroupLeader(User $user): bool
+    {
+        if ($user->role !== 'Student') {
+            return false;
+        }
+
+        return \App\Models\DailyCleaningGroup::query()
+            ->where('leader_id', $user->id)
+            ->exists();
     }
 
     /** Work schedules are assigned only by the WSPO coordinator or secretary. */

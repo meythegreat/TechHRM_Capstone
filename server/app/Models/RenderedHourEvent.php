@@ -21,7 +21,7 @@ class RenderedHourEvent extends Model
 
     public const KINDS = [
         self::SPECIAL => ['label' => 'Special request', 'hours' => null],
-        self::DAILY_CLEANING => ['label' => 'Daily cleaning', 'hours' => 1, 'window' => 60],
+        self::DAILY_CLEANING => ['label' => 'Daily cleaning', 'hours' => 2, 'window' => 60],
         self::GENERAL_CLEANING => ['label' => 'General cleaning', 'hours' => 5, 'window' => 60],
         self::DEVOTIONAL => ['label' => 'Devotional meeting', 'hours' => 1, 'window' => 60],
         self::ASSEMBLY => ['label' => 'Meeting assembly', 'hours' => 5, 'window' => 60],

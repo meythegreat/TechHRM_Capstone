@@ -76,7 +76,7 @@ export const financialService = {
     return response.data;
   },
 
-  saveCleaningGroup: async (payload: { name: string; user_ids: number[] }, id?: number) => {
+  saveCleaningGroup: async (payload: { name: string; user_ids: number[]; leader_id: number }, id?: number) => {
     const response = id
       ? await axios.put(`${API_BASE_URL}/financial/cleaning-groups/${id}`, payload, getAuthHeaders())
       : await axios.post(`${API_BASE_URL}/financial/cleaning-groups`, payload, getAuthHeaders());

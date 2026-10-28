@@ -135,7 +135,7 @@ export function HoursActivityBoard({
           <h2 className="text-xl font-semibold text-slate-900">Activity hours</h2>
           <p className="text-sm text-slate-500 mt-1 max-w-2xl">
             Create these activities in the Attendance Hub. On time adds the activity hours. Late adds nothing and deducts nothing. Absent deducts the same hours.
-            Daily cleaning counts as 1 hour when the student clocks in during the first hour after the official time in. General cleaning and assembly are 5 hours. Devotional is 1 hour. Every activity stays on time for 1 hour after the official time in.
+            Daily cleaning counts as 2 hours when the student clocks in during the first hour after the official time in. General cleaning and assembly are 5 hours. Devotional is 1 hour. Every activity stays on time for 1 hour after the official time in.
           </p>
         </div>
       </div>
@@ -204,7 +204,7 @@ export function HoursActivityBoard({
                     {item.uses_attendance && !readOnly && issuer && (
                       <div className="space-y-3">
                         <p className="text-sm text-slate-600">
-                          The QR code for this activity is issued in the Attendance Hub. If the scanner fails, correct the clock-in time below. That time decides whether the hours are added.
+                          The passcode and QR for this activity are issued in the Attendance Hub. Cleaning group leaders can also show them for their group. If the scanner fails, correct the clock-in time below. That time decides whether the hours are added.
                         </p>
                         <button type="button" onClick={() => markAbsent(item)} className="px-4 py-3 bg-white border border-slate-200 text-sm font-bold rounded-xl text-slate-700">Mark unmarked absent</button>
                       </div>
