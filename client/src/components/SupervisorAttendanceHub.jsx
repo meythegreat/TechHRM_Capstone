@@ -450,7 +450,7 @@ const SupervisorAttendanceHub = () => {
                                     Activity QR
                                 </h2>
                                 <p className="mt-1 text-sm text-slate-500">
-                                    Create an activity for a group and year level, then show today&apos;s QR and passcode.
+                                    Create an activity for a group, then show today&apos;s QR and passcode. One code works for every year level in that group.
                                 </p>
                             </div>
                             <div className="flex flex-wrap gap-2 shrink-0">

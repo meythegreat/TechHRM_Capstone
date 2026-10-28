@@ -284,7 +284,7 @@ const HELP_TOPICS: HelpTopic[] = [
             'Show the current code or QR to students who are ready to time in.',
             'Copy the passcode if you need to share it quickly, or expand the QR for easier scanning.',
             'Check the anomaly count if the page flags unusual attendance activity.',
-            'The WSPO coordinator assigns groups for every activity. Choose one leader from any year level first, then add members by year. A group can mix years. That leader can open the QR code and passcode for their own year level only.',
+            'The WSPO coordinator assigns groups for every activity. Choose one leader from any year level first, then add members by year. A group can mix years. That leader can open the QR code and passcode, which works for every year level in the group.',
             'Super Admins can browse the login and logout table and move through pages of records.',
         ],
         tips: [

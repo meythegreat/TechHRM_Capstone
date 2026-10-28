@@ -47,7 +47,7 @@ export function YearLeaderActivities() {
         setEvents(response.data.events || []);
       })
       .catch((err) => {
-        setError(err?.response?.data?.message || 'Could not load your year level activities.');
+        setError(err?.response?.data?.message || 'Could not load your group activities.');
       });
   }, []);
 
@@ -58,8 +58,8 @@ export function YearLeaderActivities() {
   if (!leader) {
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-6">
-        <h1 className="text-2xl font-semibold text-slate-900">Year activities</h1>
-        <p className="mt-2 text-sm text-slate-500">Only a year-level leader or representative can open attendance for their own year.</p>
+        <h1 className="text-2xl font-semibold text-slate-900">Group activities</h1>
+        <p className="mt-2 text-sm text-slate-500">Only a group leader can open attendance QR codes and passcodes for their group.</p>
       </div>
     );
   }
@@ -67,14 +67,14 @@ export function YearLeaderActivities() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Year activities</h1>
+        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Group activities</h1>
         <p className="mt-2 max-w-2xl text-sm text-slate-500">
-          You are the {yearLabel || 'year level'} leader{groupName ? ` for ${groupName}` : ''}. This page shows only your year level. Use the QR code or passcode so those students can record attendance.
+          You are the group leader{groupName ? ` for ${groupName}` : ''}{yearLabel ? ` (${yearLabel})` : ''}. Use the QR code or passcode so every year level in the group can record attendance.
         </p>
       </div>
       {events.length === 0 ? (
         <div className="bg-white rounded-2xl border border-dashed border-slate-300 px-6 py-8 text-sm text-slate-500">
-          No activities for your year level right now.
+          No activities for your group right now.
         </div>
       ) : events.map((item) => (
         <article key={item.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
@@ -104,7 +104,7 @@ export function YearLeaderActivities() {
                     </p>
                   </div>
                 ))}
-                {item.entries.length === 0 && <p className="py-3 text-sm text-slate-500">No students from your year level are on this activity.</p>}
+                {item.entries.length === 0 && <p className="py-3 text-sm text-slate-500">No students are on this activity yet.</p>}
               </div>
             </div>
           )}

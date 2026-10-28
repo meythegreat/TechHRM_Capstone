@@ -13,10 +13,10 @@ interface StudentOption {
 
 const KINDS = [
   { id: 'special_request', label: 'Special request', hours: '', hint: 'Enter the hours of the event, then add or deduct them.' },
-  { id: 'daily_cleaning', label: 'Daily cleaning', hours: '1', hint: 'Choose a group and one year level. The group has one leader from any year, and members can mix years. The leader can show the QR code and passcode for their own year level. A clock-in during the first hour after the official time in adds 1 hour. After that hour is late and adds nothing.' },
-  { id: 'general_cleaning', label: 'General cleaning', hours: '5', hint: '5 hours for one year level inside the chosen group. The group leader can open the attendance QR and passcode for their own year level.' },
-  { id: 'devotional', label: 'Devotional meeting', hours: '1', hint: '1 hour for the chosen year level in the group, added only if they scan within 1 hour of the official time in.' },
-  { id: 'meeting_assembly', label: 'Meeting assembly', hours: '5', hint: '5 hours for the chosen year level in the group, added only if they scan within 1 hour of the official time in.' },
+  { id: 'daily_cleaning', label: 'Daily cleaning', hours: '1', hint: 'Choose a group. Every year level in that group can use the same QR code and passcode. A clock-in during the first hour after the official time in adds 1 hour. After that hour is late and adds nothing.' },
+  { id: 'general_cleaning', label: 'General cleaning', hours: '5', hint: '5 hours for every year level in the chosen group. One QR code and passcode works for all of them.' },
+  { id: 'devotional', label: 'Devotional meeting', hours: '1', hint: '1 hour for every year level in the group, added only if they scan within 1 hour of the official time in. One QR/passcode works for all years.' },
+  { id: 'meeting_assembly', label: 'Meeting assembly', hours: '5', hint: '5 hours for every year level in the group, added only if they scan within 1 hour of the official time in. One QR/passcode works for all years.' },
 ] as const;
 
 const today = () => {
@@ -31,7 +31,6 @@ const emptyForm = () => ({
   event_date: today(),
   hours: '1',
   direction: 'add',
-  year_level: '1',
   group_id: '',
   starts_at: '05:00',
   notes: '',
@@ -111,7 +110,6 @@ export function AddActivityHoursDialog({
         event_date: form.event_date,
         hours: form.kind === 'special_request' ? Number(form.hours) : undefined,
         direction: form.kind === 'special_request' ? form.direction : undefined,
-        year_level: form.kind === 'special_request' ? undefined : Number(form.year_level),
         group_id: form.kind === 'special_request' ? undefined : Number(form.group_id),
         starts_at: form.kind === 'special_request' ? undefined : form.starts_at,
         notes: form.notes || undefined,
@@ -182,27 +180,16 @@ export function AddActivityHoursDialog({
                 ))}
               </select>
             </label>
-            <label className="block text-xs font-bold uppercase tracking-wide text-slate-500">
-              Year level
-              <select value={form.year_level} onChange={(input) => setForm({ ...form, year_level: input.target.value })} className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold">
-                <option value="1">1st Year</option>
-                <option value="2">2nd Year</option>
-                <option value="3">3rd Year</option>
-                <option value="4">4th Year</option>
-              </select>
-            </label>
             {groupsLoaded && groups.length === 0 ? (
-              <p className="text-sm text-slate-500">No groups yet. The coordinator can add them from Groups in the Attendance Hub. Assign the year-level leader first, then the members.</p>
+              <p className="text-sm text-slate-500">No groups yet. The coordinator can add them from Groups in the Attendance Hub. Assign one group leader, then the members.</p>
             ) : form.group_id && (
               <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
-                {(groups.find((group) => String(group.id) === String(form.group_id))?.students || [])
-                  .filter((student) => String(student.year_level ?? '') === String(form.year_level))
-                  .map((student) => (
-                    <p key={student.id} className="px-3 py-2 text-sm">
-                      <span className="font-bold text-slate-900">{student.name}</span>
-                      <span className="text-slate-500"> · {student.student_id_number || 'No ID'} · {student.year_label}{student.is_leader ? ' · Leader' : ''}</span>
-                    </p>
-                  ))}
+                {(groups.find((group) => String(group.id) === String(form.group_id))?.students || []).map((student) => (
+                  <p key={student.id} className="px-3 py-2 text-sm">
+                    <span className="font-bold text-slate-900">{student.name}</span>
+                    <span className="text-slate-500"> · {student.student_id_number || 'No ID'} · {student.year_label}{student.is_leader ? ' · Leader' : ''}</span>
+                  </p>
+                ))}
               </div>
             )}
           </div>
