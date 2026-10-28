@@ -13,8 +13,8 @@ interface StudentOption {
 
 const KINDS = [
   { id: 'special_request', label: 'Special request', hours: '', hint: 'Enter the hours of the event, then add or deduct them.' },
-  { id: 'daily_cleaning', label: 'Daily cleaning', hours: '1', hint: 'Choose a group and one year level. The leader of that year can show the QR code and passcode. A clock-in during the first hour after the official time in adds 1 hour. After that hour is late and adds nothing.' },
-  { id: 'general_cleaning', label: 'General cleaning', hours: '5', hint: '5 hours for one year level inside the chosen group. Only that year level’s leader can open the attendance QR and passcode.' },
+  { id: 'daily_cleaning', label: 'Daily cleaning', hours: '1', hint: 'Choose a group and one year level. The group has one leader from any year, and members can mix years. The leader can show the QR code and passcode for their own year level. A clock-in during the first hour after the official time in adds 1 hour. After that hour is late and adds nothing.' },
+  { id: 'general_cleaning', label: 'General cleaning', hours: '5', hint: '5 hours for one year level inside the chosen group. The group leader can open the attendance QR and passcode for their own year level.' },
   { id: 'devotional', label: 'Devotional meeting', hours: '1', hint: '1 hour for the chosen year level in the group, added only if they scan within 1 hour of the official time in.' },
   { id: 'meeting_assembly', label: 'Meeting assembly', hours: '5', hint: '5 hours for the chosen year level in the group, added only if they scan within 1 hour of the official time in.' },
 ] as const;

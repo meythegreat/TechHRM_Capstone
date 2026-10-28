@@ -19,14 +19,24 @@ interface CleaningGroup {
   students: StudentOption[];
 }
 
-const YEARS = [
-  { level: 1, label: '1st Year' },
-  { level: 2, label: '2nd Year' },
-  { level: 3, label: '3rd Year' },
-  { level: 4, label: '4th Year' },
+const YEAR_SECTIONS = [
+  { key: 1, label: '1st Year' },
+  { key: 2, label: '2nd Year' },
+  { key: 3, label: '3rd Year' },
+  { key: 4, label: '4th Year' },
 ] as const;
 
-const emptyLeaders = (): Record<number, number | ''> => ({ 1: '', 2: '', 3: '', 4: '' });
+const yearKey = (student: StudentOption) => {
+  const year = Number(student.year_level);
+  return year >= 1 && year <= 4 ? year : 0;
+};
+
+const matchesSearch = (student: StudentOption, term: string) => (
+  !term
+  || student.name.toLowerCase().includes(term)
+  || (student.student_id_number || '').toLowerCase().includes(term)
+  || student.year_label.toLowerCase().includes(term)
+);
 
 const apiError = (error: unknown, fallback: string) => {
   const data = (error as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } })?.response?.data;
@@ -39,7 +49,7 @@ export function CleaningGroupsDialog({ onClose }: { onClose: () => void }) {
   const [students, setStudents] = useState<StudentOption[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [name, setName] = useState('');
-  const [leaders, setLeaders] = useState<Record<number, number | ''>>(emptyLeaders);
+  const [leaderId, setLeaderId] = useState<number | null>(null);
   const [memberIds, setMemberIds] = useState<number[]>([]);
   const [search, setSearch] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
@@ -64,97 +74,106 @@ export function CleaningGroupsDialog({ onClose }: { onClose: () => void }) {
   }, []);
 
   const membership = useMemo(() => {
-    const map = new Map<number, string>();
+    const map = new Map<number, { name: string; leads: boolean }>();
     groups.forEach((group) => {
-      group.students.forEach((student) => map.set(student.id, group.name));
+      group.students.forEach((student) => {
+        map.set(student.id, { name: group.name, leads: Boolean(student.is_leader) });
+      });
     });
     return map;
   }, [groups]);
 
-  const matchesSearch = (student: StudentOption) => {
-    const term = search.trim().toLowerCase();
-    if (!term) return true;
-    return student.name.toLowerCase().includes(term)
-      || (student.student_id_number || '').toLowerCase().includes(term)
-      || student.year_label.toLowerCase().includes(term);
+  const eligibleStudents = useMemo(
+    () => students.filter((student) => yearKey(student) !== 0),
+    [students],
+  );
+
+  const term = search.trim().toLowerCase();
+  const visibleStudents = useMemo(
+    () => eligibleStudents.filter((student) => matchesSearch(student, term)),
+    [eligibleStudents, term],
+  );
+
+  const memberSections = useMemo(() => {
+    const pool = visibleStudents.filter((student) => student.id !== leaderId);
+    return YEAR_SECTIONS
+      .map((section) => ({
+        ...section,
+        students: pool.filter((student) => yearKey(student) === section.key),
+      }))
+      .filter((section) => section.students.length > 0);
+  }, [visibleStudents, leaderId]);
+
+  const resetEditor = () => {
+    setCreating(false);
+    setEditingId(null);
+    setName('');
+    setLeaderId(null);
+    setMemberIds([]);
+    setSearch('');
   };
 
   const startCreate = () => {
+    resetEditor();
     setCreating(true);
-    setEditingId(null);
-    setName('');
-    setLeaders(emptyLeaders());
-    setMemberIds([]);
     setNotice(null);
     setNoticeError(false);
   };
 
   const startEdit = (group: CleaningGroup) => {
-    const nextLeaders = emptyLeaders();
-    const members: number[] = [];
-    let skipped = 0;
-    group.students.forEach((student) => {
-      const year = Number(student.year_level);
-      if (year < 1 || year > 4) {
-        skipped += 1;
-        return;
-      }
-      if (student.is_leader) nextLeaders[year] = student.id;
-      else members.push(student.id);
-    });
+    const leaders = group.students.filter((student) => student.is_leader && yearKey(student) !== 0);
+    const soleLeader = leaders.length === 1 ? leaders[0].id : null;
+    const skipped = group.students.filter((student) => yearKey(student) === 0).length;
     setCreating(false);
     setEditingId(group.id);
     setName(group.name);
-    setLeaders(nextLeaders);
-    setMemberIds(members);
-    setNoticeError(skipped > 0);
-    setNotice(skipped > 0 ? 'Some students have no year level, so they are not in this editor. Set their year level before adding them back.' : null);
+    setLeaderId(soleLeader);
+    setMemberIds(group.students.filter((student) => student.id !== soleLeader && yearKey(student) !== 0).map((student) => student.id));
+    setSearch('');
+    setNoticeError(skipped > 0 || leaders.length > 1);
+    setNotice(skipped > 0
+      ? 'Some students have no year level, so they are not in this editor. Set their year level before adding them back.'
+      : leaders.length > 1
+        ? 'This group has more than one leader. Choose the single leader, then save.'
+        : null);
   };
 
-  const chooseLeader = (year: number, value: string) => {
-    const id = value ? Number(value) : '';
-    setLeaders((current) => ({ ...current, [year]: id }));
-    if (id) setMemberIds((current) => current.filter((memberId) => memberId !== id));
+  const chooseLeader = (id: number) => {
+    setLeaderId(id);
+    setMemberIds((current) => current.filter((memberId) => memberId !== id));
   };
 
   const toggleMember = (id: number) => {
+    if (id === leaderId) return;
     setMemberIds((current) => current.includes(id) ? current.filter((memberId) => memberId !== id) : [...current, id]);
+  };
+
+  const placementNote = (student: StudentOption) => {
+    const currentGroup = membership.get(student.id);
+    const staysHere = Boolean(editingId && groups.find((group) => group.id === editingId)?.students.some((member) => member.id === student.id));
+    if (!currentGroup || staysHere) return '';
+    return currentGroup.leads ? ` · leads ${currentGroup.name}` : ` · now in ${currentGroup.name}`;
   };
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
-    const leaderRows = YEARS.flatMap((year) => {
-      const userId = leaders[year.level];
-      return userId ? [{ year_level: year.level, user_id: Number(userId) }] : [];
-    });
-    if (leaderRows.length === 0) {
+    if (!leaderId) {
       setNoticeError(true);
-      setNotice('Assign a leader or representative for at least one year level before adding members.');
+      setNotice('Choose one leader before saving the group.');
       return;
     }
-    const leaderYears = new Set<number>(leaderRows.map((row) => row.year_level));
-    const missingLeader = memberIds.some((id) => {
-      const student = students.find((person) => person.id === id);
-      return !leaderYears.has(Number(student?.year_level));
-    });
-    if (missingLeader) {
-      setNoticeError(true);
-      setNotice('Assign the leader or representative for every year level that still has members.');
-      return;
-    }
-    const userIds = [...new Set([...leaderRows.map((row) => row.user_id), ...memberIds])];
     setSaving(true);
     setNotice(null);
     setNoticeError(false);
     try {
-      await financialService.saveCleaningGroup({ name: name.trim(), user_ids: userIds, leaders: leaderRows }, editingId ?? undefined);
+      await financialService.saveCleaningGroup({
+        name: name.trim(),
+        leader_user_id: leaderId,
+        user_ids: memberIds.filter((id) => id !== leaderId),
+      }, editingId ?? undefined);
       setNoticeError(false);
       setNotice(editingId ? 'Group updated.' : 'Group saved.');
-      setCreating(false);
-      setEditingId(null);
-      setName('');
-      setLeaders(emptyLeaders());
-      setMemberIds([]);
+      resetEditor();
       await load();
     } catch (error) {
       setNoticeError(true);
@@ -170,10 +189,7 @@ export function CleaningGroupsDialog({ onClose }: { onClose: () => void }) {
     setNoticeError(false);
     try {
       await financialService.deleteCleaningGroup(group.id);
-      if (editingId === group.id) {
-        setEditingId(null);
-        setCreating(false);
-      }
+      if (editingId === group.id) resetEditor();
       setNoticeError(false);
       setNotice('Group removed.');
       await load();
@@ -184,9 +200,18 @@ export function CleaningGroupsDialog({ onClose }: { onClose: () => void }) {
   };
 
   const editorOpen = creating || editingId !== null;
-  const editingGroup = groups.find((group) => group.id === editingId);
+  const leader = eligibleStudents.find((student) => student.id === leaderId) || null;
 
-  const studentsForYear = (year: number) => students.filter((student) => Number(student.year_level) === year && matchesSearch(student));
+  const groupSummary = (group: CleaningGroup) => {
+    const leaders = group.students.filter((student) => student.is_leader);
+    const leaderName = leaders.length === 1
+      ? `${leaders[0].name} (${leaders[0].year_label})`
+      : leaders.length > 1
+        ? leaders.map((student) => student.name).join(', ')
+        : 'No leader yet';
+    const memberCount = group.students.filter((student) => !student.is_leader).length;
+    return `Leader: ${leaderName} · ${memberCount} member${memberCount === 1 ? '' : 's'}`;
+  };
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] flex items-center justify-center p-4" {...bindPopup(onClose)}>
@@ -194,7 +219,7 @@ export function CleaningGroupsDialog({ onClose }: { onClose: () => void }) {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h3 className="text-xl font-semibold text-slate-900">Groups</h3>
-            <p className="mt-1 text-sm text-slate-500">These groups are used for every activity. Only the WSPO coordinator can assign them. Choose the leader or representative for a year level first, then add that year&apos;s members. A leader can open attendance, the QR code, and the passcode for their own year level only.</p>
+            <p className="mt-1 text-sm text-slate-500">These groups are used for every activity. Only the WSPO coordinator can assign them. Choose one leader from any year level first, then add members by year. A group can mix years. The leader can open attendance, the QR code, and the passcode for their own year level only.</p>
           </div>
           <button type="button" onClick={startCreate} className="shrink-0 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-xl">New group</button>
         </div>
@@ -205,20 +230,17 @@ export function CleaningGroupsDialog({ onClose }: { onClose: () => void }) {
           <p className="text-sm text-slate-500">No groups yet.</p>
         ) : (
           <div className="space-y-2">
-            {groups.map((group) => {
-              const leaderLine = group.students.filter((student) => student.is_leader).map((student) => `${student.name} (${student.year_label})`).join(', ');
-              return (
-                <div key={group.id} className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${editingId === group.id ? 'border-blue-300 bg-blue-50' : 'border-slate-200'}`}>
-                  <button type="button" onClick={() => startEdit(group)} className="min-w-0 flex-1 text-left">
-                    <p className="font-bold text-slate-900">{group.name}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{group.student_count} student{group.student_count === 1 ? '' : 's'}{leaderLine ? ` · Leaders: ${leaderLine}` : ' · No leaders assigned'}</p>
-                  </button>
-                  <button type="button" onClick={() => remove(group)} className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg" aria-label={`Remove ${group.name}`}>
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              );
-            })}
+            {groups.map((group) => (
+              <div key={group.id} className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${editingId === group.id ? 'border-blue-300 bg-blue-50' : 'border-slate-200'}`}>
+                <button type="button" onClick={() => startEdit(group)} className="min-w-0 flex-1 text-left">
+                  <p className="font-bold text-slate-900">{group.name}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{groupSummary(group)}</p>
+                </button>
+                <button type="button" onClick={() => remove(group)} className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg" aria-label={`Remove ${group.name}`}>
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
@@ -229,57 +251,59 @@ export function CleaningGroupsDialog({ onClose }: { onClose: () => void }) {
               Group name
               <input required value={name} onChange={(input) => setName(input.target.value)} placeholder="Group A" className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold" />
             </label>
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Year levels</p>
-              <input value={search} onChange={(input) => setSearch(input.target.value)} placeholder="Search name, ID, or year" className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold" />
-            </div>
-            {YEARS.map((year) => {
-              const leaderId = leaders[year.level];
-              const options = studentsForYear(year.level);
-              const members = options.filter((student) => student.id !== leaderId);
-              return (
-                <section key={year.level} className="rounded-2xl border border-slate-200 p-4 space-y-3">
-                  <h5 className="font-semibold text-slate-900">{year.label}</h5>
-                  <label className="block text-xs font-bold uppercase tracking-wide text-slate-500">
-                    Leader or representative
-                    <select value={leaderId} onChange={(input) => chooseLeader(year.level, input.target.value)} className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900">
-                      <option value="">Choose a leader first</option>
-                      {options.map((student) => {
-                        const currentGroup = membership.get(student.id);
-                        const inThisGroup = editingGroup?.students.some((member) => member.id === student.id);
-                        return (
-                          <option key={student.id} value={student.id}>
-                            {student.name} · {student.student_id_number || 'No ID'}{currentGroup && !inThisGroup ? ` · now in ${currentGroup}` : ''}
-                          </option>
-                        );
-                      })}
-                    </select>
+            <label className="block text-xs font-bold uppercase tracking-wide text-slate-500">
+              Search
+              <input value={search} onChange={(input) => setSearch(input.target.value)} placeholder="Search name, ID, or year" className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold" />
+            </label>
+
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Leader · one student, any year</p>
+              <p className="mt-1 text-sm text-slate-500">{leader ? `${leader.name} · ${leader.year_label}` : 'Select the leader first.'}</p>
+              <div className="mt-2 max-h-44 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
+                {visibleStudents.length === 0 ? (
+                  <p className="px-3 py-3 text-sm text-slate-500">No students match that search.</p>
+                ) : visibleStudents.map((student) => (
+                  <label key={student.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+                    <input type="radio" name="group-leader" checked={leaderId === student.id} onChange={() => chooseLeader(student.id)} />
+                    <span className="font-bold text-slate-900">{student.name}</span>
+                    <span className="text-slate-500">{student.student_id_number || 'No ID'} · {student.year_label}{placementNote(student)}</span>
                   </label>
-                  {leaderId ? (
-                    <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
-                      {members.length === 0 ? (
-                        <p className="px-3 py-2 text-sm text-slate-500">No other {year.label.toLowerCase()} students to add.</p>
-                      ) : members.map((student) => {
-                        const currentGroup = membership.get(student.id);
-                        const inThisGroup = editingGroup?.students.some((member) => member.id === student.id);
-                        return (
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Members by year level · {memberIds.length} selected</p>
+              <p className="mt-1 text-sm text-slate-500">Pick members from each year. Years can be mixed. The leader is not listed here.</p>
+              <div className="mt-2 space-y-3">
+                {memberSections.length === 0 ? (
+                  <p className="text-sm text-slate-500 border border-slate-200 rounded-xl px-3 py-3">No members match that search.</p>
+                ) : memberSections.map((section) => {
+                  const selected = section.students.filter((student) => memberIds.includes(student.id)).length;
+                  return (
+                    <div key={section.key} className="border border-slate-200 rounded-xl overflow-hidden">
+                      <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-3">
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-600">{section.label}</p>
+                        <p className="text-xs font-semibold text-slate-500">{selected} selected</p>
+                      </div>
+                      <div className="max-h-40 overflow-y-auto divide-y divide-slate-100">
+                        {section.students.map((student) => (
                           <label key={student.id} className="flex items-center gap-3 px-3 py-2 text-sm">
                             <input type="checkbox" checked={memberIds.includes(student.id)} onChange={() => toggleMember(student.id)} />
                             <span className="font-bold text-slate-900">{student.name}</span>
-                            <span className="text-slate-500">{student.student_id_number || 'No ID'}{currentGroup && !inThisGroup ? ` · now in ${currentGroup}` : ''}</span>
+                            <span className="text-slate-500">{student.student_id_number || 'No ID'}{placementNote(student)}</span>
                           </label>
-                        );
-                      })}
+                        ))}
+                      </div>
                     </div>
-                  ) : (
-                    <p className="text-sm text-slate-500">Assign the leader or representative first. Members of this year level can be added after that.</p>
-                  )}
-                </section>
-              );
-            })}
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="flex justify-end gap-3">
-              <button type="button" onClick={() => { setCreating(false); setEditingId(null); }} className="px-4 py-2.5 font-bold text-slate-500">Cancel</button>
-              <button type="submit" disabled={saving} className="px-5 py-2.5 bg-blue-600 text-white font-bold rounded-xl disabled:opacity-50">{saving ? 'Saving...' : 'Save group'}</button>
+              <button type="button" onClick={resetEditor} className="px-4 py-2.5 font-bold text-slate-500">Cancel</button>
+              <button type="submit" disabled={saving || !leaderId} className="px-5 py-2.5 bg-blue-600 text-white font-bold rounded-xl disabled:opacity-50">{saving ? 'Saving...' : 'Save group'}</button>
             </div>
           </form>
         )}

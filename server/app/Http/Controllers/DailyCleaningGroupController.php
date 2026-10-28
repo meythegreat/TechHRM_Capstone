@@ -98,21 +98,26 @@ class DailyCleaningGroupController extends Controller
     }
 
     /**
-     * Leaders are assigned per year level before the other members of that year.
+     * One leader from any year level, then members from any mix of years.
      *
      * @return array{0: list<int>, 1: list<int>}
      */
     private function membership(Request $request): array
     {
         $validated = $request->validate([
-            'user_ids' => 'required|array|min:1',
+            'leader_user_id' => 'required|integer|exists:users,id',
+            'user_ids' => 'present|array',
             'user_ids.*' => 'integer|exists:users,id',
-            'leaders' => 'required|array|min:1',
-            'leaders.*.year_level' => 'required|integer|min:1|max:4',
-            'leaders.*.user_id' => 'required|integer|exists:users,id',
+        ], [
+            'leader_user_id.required' => 'Choose one leader for the group.',
         ]);
 
-        $ids = collect($validated['user_ids'])->map(fn ($id) => (int) $id)->unique()->values();
+        $leaderId = (int) $validated['leader_user_id'];
+        $ids = collect($validated['user_ids'])
+            ->map(fn ($id) => (int) $id)
+            ->push($leaderId)
+            ->unique()
+            ->values();
         $students = User::query()
             ->with('profile:id,user_id,year_level')
             ->where('role', 'Student')
@@ -124,38 +129,14 @@ class DailyCleaningGroupController extends Controller
             abort(422, 'Every person in a group must be a working student.');
         }
 
-        $leaderByYear = [];
-        foreach ($validated['leaders'] as $leader) {
-            $year = (int) $leader['year_level'];
-            $leaderId = (int) $leader['user_id'];
-            if (isset($leaderByYear[$year])) {
-                abort(422, 'Each year level can have only one leader or representative.');
-            }
-
-            $student = $students->get($leaderId);
-            if (!$student) {
-                abort(422, 'Choose the leader before adding members of that year level.');
-            }
-
-            $studentYear = (int) ($student->profile?->year_level ?? 0);
-            if ($studentYear !== $year) {
-                abort(422, RenderedHours::yearLabel($year).' leader must be a student in that year level.');
-            }
-
-            $leaderByYear[$year] = $leaderId;
-        }
-
         foreach ($students as $student) {
             $year = (int) ($student->profile?->year_level ?? 0);
             if ($year < 1 || $year > 4) {
                 abort(422, $student->name.' needs a year level before joining a group.');
             }
-            if (!isset($leaderByYear[$year])) {
-                abort(422, 'Assign the '.RenderedHours::yearLabel($year).' leader or representative before adding members.');
-            }
         }
 
-        return [$ids->all(), array_values($leaderByYear)];
+        return [$ids->all(), [$leaderId]];
     }
 
     /**

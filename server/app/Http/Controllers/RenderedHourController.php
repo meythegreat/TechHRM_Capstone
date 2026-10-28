@@ -466,7 +466,7 @@ class RenderedHourController extends Controller
             $validated['group_id'] = $group->id;
             $validated['group_name'] = $group->name;
             $validated['year_level'] = $year;
-            $this->assertYearLeader($group, $year);
+            $this->assertGroupLeader($group);
         }
 
         if ($kind === RenderedHourEvent::DEVOTIONAL) {
@@ -511,15 +511,12 @@ class RenderedHourController extends Controller
         return $group;
     }
 
-    private function assertYearLeader(DailyCleaningGroup $group, int $year): void
+    private function assertGroupLeader(DailyCleaningGroup $group): void
     {
-        $leader = $group->students->first(function (User $student) use ($year) {
-            return (bool) $student->pivot?->is_leader
-                && (int) ($student->profile?->year_level ?? 0) === $year;
-        });
+        $leader = $group->students->first(fn (User $student) => (bool) $student->pivot?->is_leader);
 
         if (!$leader) {
-            abort(422, 'Assign the '.RenderedHours::yearLabel($year).' leader or representative in this group before creating the activity.');
+            abort(422, 'Assign one leader for this group before creating the activity.');
         }
     }
 
@@ -539,7 +536,7 @@ class RenderedHourController extends Controller
                 ->unique()
                 ->values();
             if ($ids->isEmpty()) {
-                abort(422, 'That year level has no students in this group. Assign the leader first, then the members.');
+                abort(422, 'That year level has no students in this group.');
             }
         } else {
             $ids = collect($request->input('user_ids', []))
