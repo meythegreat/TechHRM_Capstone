@@ -1,13 +1,12 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\ProfileController;
 
 Route::get('/', function () {
     return response()->json([
         'app' => config('app.name', 'TechHRM'),
         'status' => 'ok',
-        'message' => 'TechHRM API is running. Use the frontend at FRONTEND_URL.',
+        'message' => 'TechHRM API is running.',
     ]);
 });
 

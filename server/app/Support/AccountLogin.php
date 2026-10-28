@@ -37,8 +37,9 @@ class AccountLogin
         return User::query()
             ->when($ignoreUserId, fn ($query) => $query->where('id', '!=', $ignoreUserId))
             ->where(function ($query) use ($value) {
+                // Bind the empty fallback — Postgres treats "" as an identifier, not a string.
                 $query->whereRaw('LOWER(username) = ?', [$value])
-                    ->orWhereRaw('LOWER(COALESCE(email, "")) = ?', [$value]);
+                    ->orWhereRaw('LOWER(COALESCE(email, ?)) = ?', ['', $value]);
             })
             ->exists();
     }
