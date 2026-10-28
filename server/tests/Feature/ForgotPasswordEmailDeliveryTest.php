@@ -15,8 +15,6 @@ class ForgotPasswordEmailDeliveryTest extends TestCase
 {
     private const WEBHOOK = 'http://n8n.test/webhook/techhrm/forgot-password';
 
-    private const RESEND_SANDBOX_MESSAGE = 'You can only send testing emails to your own email address (owner@gmail.com). To send emails to other recipients, please verify a domain at resend.com/domains, and change the `from` address to an email using this domain.';
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -25,13 +23,11 @@ class ForgotPasswordEmailDeliveryTest extends TestCase
         $this->configureMail();
     }
 
-    public function test_addresses_rejected_by_resend_are_sent_through_gmail(): void
+    public function test_every_address_is_sent_through_n8n_and_not_resend(): void
     {
         Http::preventStrayRequests();
         Http::fake([
-            'https://api.resend.com/emails' => Http::response([
-                'message' => self::RESEND_SANDBOX_MESSAGE,
-            ], 403),
+            'https://api.resend.com/*' => Http::response(['id' => 'should-not-send'], 200),
             self::WEBHOOK => Http::response(['ok' => true], 200),
         ]);
 
@@ -61,15 +57,13 @@ class ForgotPasswordEmailDeliveryTest extends TestCase
             'student.one@school.edu',
             'other.person@yahoo.com',
         ], $recipients);
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'api.resend.com'));
     }
 
     public function test_application_email_is_delivered_when_the_account_email_is_missing(): void
     {
         Http::preventStrayRequests();
         Http::fake([
-            'https://api.resend.com/emails' => Http::response([
-                'message' => self::RESEND_SANDBOX_MESSAGE,
-            ], 403),
             self::WEBHOOK => Http::response(['ok' => true], 200),
         ]);
 
@@ -89,32 +83,10 @@ class ForgotPasswordEmailDeliveryTest extends TestCase
         });
     }
 
-    public function test_resend_still_sends_when_it_accepts_the_recipient(): void
+    public function test_password_is_unchanged_when_n8n_rejects_the_message(): void
     {
         Http::preventStrayRequests();
         Http::fake([
-            'https://api.resend.com/emails' => Http::response(['id' => 'email_1'], 200),
-            self::WEBHOOK => Http::response(['ok' => true], 500),
-        ]);
-
-        $owner = $this->makeUser('owner', 'owner@gmail.com');
-
-        $this->postJson('/api/forgot-password', ['username' => 'owner@gmail.com'])
-            ->assertOk();
-
-        $this->assertTrue($owner->fresh()->must_change_password);
-        Http::assertSent(fn ($request) => $request->url() === 'https://api.resend.com/emails'
-            && $request->data()['to'] === ['owner@gmail.com']);
-        Http::assertNotSent(fn ($request) => $request->url() === self::WEBHOOK);
-    }
-
-    public function test_password_is_unchanged_when_neither_sender_can_deliver(): void
-    {
-        Http::preventStrayRequests();
-        Http::fake([
-            'https://api.resend.com/emails' => Http::response([
-                'message' => self::RESEND_SANDBOX_MESSAGE,
-            ], 403),
             self::WEBHOOK => Http::response(['message' => 'Workflow is not active'], 404),
         ]);
 
@@ -124,7 +96,7 @@ class ForgotPasswordEmailDeliveryTest extends TestCase
         $this->postJson('/api/forgot-password', ['username' => 'student.two@school.edu'])
             ->assertStatus(502)
             ->assertJsonFragment([
-                'message' => 'Password reset could not be sent to this address. The Resend test sender only delivers to the Resend account email, and the Gmail backup did not send it either. The Gmail password reset webhook rejected the message: Workflow is not active',
+                'message' => 'The Gmail password reset webhook rejected the message: Workflow is not active',
             ]);
 
         $fresh = $user->fresh();
