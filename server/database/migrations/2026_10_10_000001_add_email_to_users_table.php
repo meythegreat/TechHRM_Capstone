@@ -9,9 +9,12 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('users', function (Blueprint $table) {
-            $table->string('email')->nullable()->unique()->after('username');
-        });
+        if (!Schema::hasColumn('users', 'email')) {
+            Schema::table('users', function (Blueprint $table) {
+                // No ->after(): Postgres rejects MySQL column positioning.
+                $table->string('email')->nullable()->unique();
+            });
+        }
 
         $users = DB::table('users')->whereNull('deleted_at')->get(['id', 'username']);
         foreach ($users as $user) {

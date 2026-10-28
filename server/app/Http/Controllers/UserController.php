@@ -501,7 +501,7 @@ class UserController extends Controller
         $validated['email'] = strtolower(trim($validated['email']));
         $this->assertStudentAccountProfile($request);
         $request->validate(['gender' => 'nullable|in:Male,Female']);
-        $validated['password'] = bcrypt($validated['password']);
+        // User model casts password to hashed — pass the plain value once.
         $this->ensureOfficeIsAllowed($request);
         $user = \App\Models\User::create($validated);
 
@@ -541,7 +541,8 @@ class UserController extends Controller
         ]);
 
         if ($request->filled('password')) {
-            $validated['password'] = bcrypt($request->password);
+            // User model casts password to hashed — pass the plain value once.
+            $validated['password'] = $request->password;
         }
 
         $request->validate(['gender' => 'nullable|in:Male,Female']);
