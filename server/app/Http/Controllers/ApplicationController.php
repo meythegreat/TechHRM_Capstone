@@ -479,9 +479,6 @@ class ApplicationController extends Controller
             'status' => $status,
             'tracking_code' => $application->tracking_code,
             'updated_at' => now()->toIso8601String(),
-            'subject' => $this->statusEmailSubject($status, $extra),
-            'message' => $this->statusEmailBody($application, $status, $extra),
-            'from_name' => config('mail.from.name', 'TechHRM WSPO'),
         ], $extra);
 
         try {
@@ -509,119 +506,6 @@ class ApplicationController extends Controller
         }
 
         return 'The application status webhook rejected the message (HTTP '.$response->status().').';
-    }
-
-    private function statusEmailSubject(string $status, array $extra): string
-    {
-        if (($extra['event'] ?? null) === 'application_submitted') {
-            return 'We received your TechHRM application';
-        }
-
-        return match ($status) {
-            'Pending' => 'Your TechHRM application is being reviewed',
-            'Interview' => 'Your TechHRM interview is scheduled',
-            'Training' => 'Your TechHRM application moved to training',
-            'For Result' => 'Your TechHRM application is awaiting a result',
-            'Approved' => 'Your TechHRM application was approved',
-            'Rejected' => 'Update on your TechHRM application',
-            default => 'Your TechHRM application was updated',
-        };
-    }
-
-    private function statusEmailBody(Application $application, string $status, array $extra): string
-    {
-        $name = htmlspecialchars($this->applicantName($application), ENT_QUOTES, 'UTF-8');
-        $code = htmlspecialchars((string) $application->tracking_code, ENT_QUOTES, 'UTF-8');
-        $contactEmail = htmlspecialchars((string) config('mail.contact_address', 'miguel102104@gmail.com'), ENT_QUOTES, 'UTF-8');
-        $intro = htmlspecialchars($this->statusEmailIntro($status, $extra), ENT_QUOTES, 'UTF-8');
-        $details = '';
-        foreach ($this->statusEmailDetails($status, $extra) as $label => $value) {
-            $safeLabel = htmlspecialchars($label, ENT_QUOTES, 'UTF-8');
-            $safeValue = htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
-            $details .= '<p style="margin:0 0 6px;color:#1D54D3;font-size:11px;font-weight:bold;letter-spacing:1.2px;">'.$safeLabel.'</p>';
-            $details .= '<p style="margin:0 0 18px;color:#102179;font-size:16px;font-weight:bold;">'.$safeValue.'</p>';
-        }
-
-        return <<<HTML
-<!DOCTYPE html>
-<html lang="en">
-<body style="margin:0;padding:0;background:#FFD500;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FFD500;padding:32px 12px;">
-    <tr>
-      <td align="center">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#FFFFFF;border-radius:18px;overflow:hidden;border:2px solid #000000;font-family:Arial,Helvetica,sans-serif;">
-          <tr>
-            <td style="background:#1D54D3;padding:28px 32px 22px;">
-              <p style="margin:0;color:#4AECED;font-size:11px;letter-spacing:1.8px;font-weight:bold;">FILAMER CHRISTIAN UNIVERSITY</p>
-              <h1 style="margin:10px 0 0;color:#FFD500;font-size:30px;line-height:1.1;">TechHRM</h1>
-              <p style="margin:8px 0 0;color:#FFFFFF;font-size:14px;">Work-Study Program Organization</p>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:32px;background:#FFFFFF;">
-              <p style="margin:0 0 14px;color:#102179;font-size:18px;font-weight:bold;">Hello {$name},</p>
-              <p style="margin:0 0 22px;color:#000000;font-size:15px;line-height:1.6;">{$intro}</p>
-              <p style="margin:0 0 6px;color:#1D54D3;font-size:11px;font-weight:bold;letter-spacing:1.2px;">TRACKING CODE</p>
-              <p style="margin:0 0 18px;color:#102179;font-size:16px;font-weight:bold;">{$code}</p>
-              {$details}
-              <p style="margin:0;color:#000000;font-size:13px;line-height:1.6;">Look up this code with your email on the TechHRM application tracker. If you did not apply, contact the Work-Study Program office.</p>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:18px 32px;background:#102179;">
-              <p style="margin:0;color:#FFD500;font-size:13px;font-weight:bold;">TechHRM WSPO</p>
-              <p style="margin:4px 0 0;color:#4AECED;font-size:13px;">{$contactEmail}</p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
-HTML;
-    }
-
-    private function statusEmailIntro(string $status, array $extra): string
-    {
-        if (($extra['event'] ?? null) === 'application_submitted') {
-            return 'We received your Work-Study application. Keep the tracking code below. You can use it with your email to follow each stage.';
-        }
-
-        return match ($status) {
-            'Pending' => 'Your application is being reviewed by the Work-Study office.',
-            'Interview' => 'Your application is in the interview stage. The schedule is below.',
-            'Training' => 'You have advanced to training. Follow the schedule and requirements from the Work-Study office.',
-            'For Result' => 'The required stages are complete. The final decision is still being evaluated.',
-            'Approved' => 'Your application was approved. The office will use the placement below and issue your sign-in details separately.',
-            'Rejected' => 'Your application was not approved. The tracker will show Not Approved.',
-            default => 'Your application status is now '.$status.'.',
-        };
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private function statusEmailDetails(string $status, array $extra): array
-    {
-        $details = [];
-        if ($status === 'Interview' && ! empty($extra['interview_date'])) {
-            $details['INTERVIEW'] = (string) $extra['interview_date'];
-        }
-        if ($status === 'Interview' && ! empty($extra['interview_remarks'])) {
-            $details['REMARKS'] = (string) $extra['interview_remarks'];
-        }
-        if ($status === 'Approved' && ! empty($extra['assigned_department'])) {
-            $details['OFFICE'] = (string) $extra['assigned_department'];
-        }
-        if ($status === 'Approved' && ! empty($extra['assigned_duty'])) {
-            $details['DUTY'] = (string) $extra['assigned_duty'];
-        }
-        if ($status === 'Rejected' && ! empty($extra['rejection_reason'])) {
-            $details['REASON'] = (string) $extra['rejection_reason'];
-        }
-
-        return $details;
     }
 
     private function recordStatus(Application $application, string $status, ?string $note = null): void

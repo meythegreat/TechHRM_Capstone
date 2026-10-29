@@ -65,11 +65,12 @@ class ApplicationStatusEmailTest extends TestCase
 
         $this->assertCount(2, $messages);
         $this->assertSame('ana.cruz@school.edu', $messages[0]['email']);
-        $this->assertSame('Your TechHRM application moved to training', $messages[0]['subject']);
-        $this->assertStringContainsString('WSPO-ANA01', $messages[0]['message']);
+        $this->assertSame('Ana Cruz', $messages[0]['applicant_name']);
+        $this->assertSame('Training', $messages[0]['status']);
+        $this->assertSame('WSPO-ANA01', $messages[0]['tracking_code']);
         $this->assertSame('ana.cruz@school.edu', $messages[1]['email']);
-        $this->assertSame('Update on your TechHRM application', $messages[1]['subject']);
-        $this->assertStringContainsString('Incomplete requirements.', $messages[1]['message']);
+        $this->assertSame('Rejected', $messages[1]['status']);
+        $this->assertSame('Incomplete requirements.', $messages[1]['rejection_reason']);
     }
 
     public function test_status_is_saved_when_the_webhook_rejects_the_email(): void
