@@ -2,14 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog; // Imported your new ActivityLog model!
+use App\Models\Application;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
-use App\Models\User;
-use App\Models\Application;
-use App\Models\ActivityLog; // Imported your new ActivityLog model!
 
 class AuthController extends Controller
 {
@@ -25,9 +25,9 @@ class AuthController extends Controller
         $user = $this->userForIdentifier($request->username)?->load('profile');
 
         // 3. Verify User and Password (Invalid login handling)
-        if (!$user || !Hash::check($request->password, $user->password)) {
+        if (! $user || ! Hash::check($request->password, $user->password)) {
             return response()->json([
-                'message' => 'Invalid username, email, or password.'
+                'message' => 'Invalid username, email, or password.',
             ], 401);
         }
 
@@ -80,7 +80,7 @@ class AuthController extends Controller
         $identifier = trim($request->username);
         $user = $this->userForIdentifier($identifier);
 
-        if (!$user) {
+        if (! $user) {
             return response()->json([
                 'message' => 'No account matches that username or email.',
             ], 404);
@@ -88,7 +88,7 @@ class AuthController extends Controller
 
         $email = $this->resetDestination($user, $identifier);
 
-        if (!$email) {
+        if (! $email) {
             return response()->json([
                 'message' => 'This account has no email address on file. Ask the Work-Study office to reset it.',
             ], 422);
@@ -130,7 +130,7 @@ class AuthController extends Controller
     public function logout(Request $request)
     {
         // Tell Intelephense exactly what model we are using
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = $request->user();
 
         if ($user) {
@@ -150,7 +150,7 @@ class AuthController extends Controller
         }
 
         return response()->json([
-            'message' => 'Logged out successfully'
+            'message' => 'Logged out successfully',
         ]);
     }
 
@@ -164,9 +164,9 @@ class AuthController extends Controller
         $user = $this->userForIdentifier($request->username);
 
         // 1. Check if user exists and password is correct
-        if (!$user || !\Illuminate\Support\Facades\Hash::check($request->password, $user->password)) {
+        if (! $user || ! Hash::check($request->password, $user->password)) {
             return response()->json([
-                'message' => 'Invalid username, email, or password.'
+                'message' => 'Invalid username, email, or password.',
             ], 401);
         }
 
@@ -186,7 +186,7 @@ class AuthController extends Controller
 
         return response()->json([
             'token' => $token,
-            'user' => $user
+            'user' => $user,
         ], 200);
     }
 
@@ -206,7 +206,7 @@ class AuthController extends Controller
         $visible = mb_substr($local, 0, 2);
         $hidden = str_repeat('*', max(mb_strlen($local) - mb_strlen($visible), 0));
 
-        return $visible . $hidden . '@' . $domain;
+        return $visible.$hidden.'@'.$domain;
     }
 
     private function userForIdentifier(string $identifier): ?User
@@ -218,7 +218,7 @@ class AuthController extends Controller
             ->orWhereRaw('LOWER(email) = ?', [$lower])
             ->first();
 
-        if ($user || !filter_var($identifier, FILTER_VALIDATE_EMAIL)) {
+        if ($user || ! filter_var($identifier, FILTER_VALIDATE_EMAIL)) {
             return $user;
         }
 
@@ -231,48 +231,46 @@ class AuthController extends Controller
     }
 
     /**
-     * Send the temporary password via Resend. Returns an error message on failure, or null on success.
+     * Send the temporary password through the n8n Gmail workflow.
+     * Returns an error message on failure, or null on success.
      */
     private function sendPasswordResetEmail(string $email, User $user, string $temporaryPassword): ?string
     {
-        $apiKey = config('services.resend.key');
-        if (!is_string($apiKey) || $apiKey === '') {
-            return 'Password reset email is not configured. Set RESEND_API_KEY in the server environment.';
+        $webhook = config('services.n8n.forgot_password_webhook');
+        if (! is_string($webhook) || trim($webhook) === '') {
+            return 'Gmail password reset is not configured. Set N8N_FORGOT_PASSWORD_WEBHOOK to the forgot-password workflow.';
         }
 
-        $fromAddress = config('mail.from.address', 'onboarding@resend.dev');
-        $fromName = config('mail.from.name', 'TechHRM WSPO');
-        $from = sprintf('%s <%s>', $fromName, $fromAddress);
-
         try {
-            $response = Http::withToken($apiKey)
-                ->timeout(20)
+            $response = Http::timeout(20)
                 ->acceptJson()
                 ->asJson()
-                ->post('https://api.resend.com/emails', [
-                    'from' => $from,
-                    'to' => [$email],
+                ->post($webhook, [
+                    'email' => $email,
                     'subject' => 'Your TechHRM temporary password',
-                    'html' => $this->resetEmailBody($user, $temporaryPassword),
+                    'message' => $this->resetEmailBody($user, $temporaryPassword),
+                    'from_name' => config('mail.from.name', 'TechHRM WSPO'),
                 ]);
         } catch (\Throwable $e) {
             report($e);
 
-            return 'Could not reach Resend to send the password reset email. Check network access, then try again.';
+            return 'Could not reach the Gmail password reset webhook. Confirm n8n is running and N8N_FORGOT_PASSWORD_WEBHOOK is correct.';
         }
 
         if ($response->successful()) {
             return null;
         }
 
-        report(new \RuntimeException('Resend password reset failed: '.$response->body()));
+        $message = data_get($response->json(), 'message');
+        report(new \RuntimeException(
+            'Forgot-password webhook failed with HTTP '.$response->status().': '.(is_string($message) && $message !== '' ? $message : 'no message')
+        ));
 
-        $resendMessage = data_get($response->json(), 'message');
-        if (is_string($resendMessage) && $resendMessage !== '') {
-            return 'Could not send the password reset email: '.$resendMessage;
+        if (is_string($message) && $message !== '') {
+            return 'The Gmail password reset webhook rejected the message: '.$message;
         }
 
-        return 'Could not send the password reset email through Resend. Confirm RESEND_API_KEY and MAIL_FROM_ADDRESS (use onboarding@resend.dev until a domain is verified), then try again.';
+        return 'The Gmail password reset webhook rejected the message (HTTP '.$response->status().').';
     }
 
     private function resetDestination(User $user, string $identifier): ?string
@@ -370,12 +368,12 @@ HTML;
 
         $application = Application::where('user_id', $user->id)->latest()->first();
 
-        if (!$application || $application->status === 'Approved') {
+        if (! $application || $application->status === 'Approved') {
             return null;
         }
 
         return response()->json([
-            'message' => "Your application is currently {$application->status}. Please wait for WSPO confirmation before accessing the portal."
+            'message' => "Your application is currently {$application->status}. Please wait for WSPO confirmation before accessing the portal.",
         ], 403);
     }
 }

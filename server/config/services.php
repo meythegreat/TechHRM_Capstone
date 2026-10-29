@@ -36,6 +36,7 @@ return [
     ],
 
     'n8n' => [
+        // Forgot-password mail is sent here. Resend is not used for resets.
         'forgot_password_webhook' => env(
             'N8N_FORGOT_PASSWORD_WEBHOOK',
             'http://localhost:5678/webhook/techhrm/forgot-password'
