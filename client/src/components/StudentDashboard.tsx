@@ -414,7 +414,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                     </div>
                 </header>
 
-                <main className="flex-1 overflow-y-auto p-4 sm:p-0 relative custom-scrollbar print:overflow-visible print:h-auto print:p-0">
+                <main className="install-clearance flex-1 overflow-y-auto p-4 sm:p-0 relative custom-scrollbar print:overflow-visible print:h-auto print:p-0">
                     <div className="max-w-6xl mx-auto space-y-6 sm:p-8">
                         
                         <Toast

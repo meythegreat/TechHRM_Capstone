@@ -522,3 +522,11 @@
 @media (prefers-reduced-motion: reduce) {
   .corner-popup { animation: none; }
 }
+
+/* Keeps the last controls in a scroll area above the install bar while it is open. */
+html[data-pwa-install='open'] .install-clearance {
+  box-sizing: border-box;
+  max-height: 100dvh;
+  overflow-y: auto;
+  padding-bottom: calc(6.5rem + env(safe-area-inset-bottom));
+}

@@ -5,6 +5,7 @@ import { defineConfig, type Plugin, type ProxyOptions } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { generate } from 'selfsigned'
+import { pwaPlugin } from './pwa/plugin.ts'
 
 const require = createRequire(import.meta.url)
 const QRCode = require('qrcode') as {
@@ -132,7 +133,7 @@ export default defineConfig(async ({ command }) => {
   // HTTPS certs are only needed for local `vite` / phone testing — skip on production builds.
   const https = command === 'serve' ? await devCertificate() : undefined
   return {
-    plugins: [react(), tailwindcss(), lanPhonePlugin()],
+    plugins: [react(), tailwindcss(), lanPhonePlugin(), pwaPlugin()],
     // Keep React and React DOM singletons when dependencies such as
     // Framer Motion are optimized by Vite. Without this, Vite can resolve a
     // second React copy from the repository root and crash at runtime.

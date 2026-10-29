@@ -6,9 +6,11 @@ import axios from 'axios'
 import './index.css'
 import { scheduleThemeSync } from './theme'
 import { armSounds } from './sounds'
+import { registerServiceWorker } from './registerServiceWorker'
 
 scheduleThemeSync()
 armSounds()
+registerServiceWorker()
 
 // In dev, Vite proxies /api to Laravel (see vite.config.ts) — avoids CORS issues.
 // In production, set VITE_API_URL to the Render API (e.g. https://techhrm-capstone.onrender.com).

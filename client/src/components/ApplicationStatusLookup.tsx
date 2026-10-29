@@ -72,7 +72,7 @@ const ApplicationStatusLookup = ({ onBackToLogin, onNavigateToApply }: Applicati
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans selection:bg-indigo-200 selection:text-indigo-900 relative overflow-x-hidden flex flex-col">
+        <div className="install-clearance min-h-screen bg-slate-50 font-sans selection:bg-indigo-200 selection:text-indigo-900 relative overflow-x-hidden flex flex-col">
             
             {/* Minimal Top Nav */}
             <div className="bg-white/80 backdrop-blur-md border-b border-slate-200/80 shadow-sm relative z-40 shrink-0 sticky top-0">

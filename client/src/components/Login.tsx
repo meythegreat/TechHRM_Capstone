@@ -188,7 +188,7 @@ const Login = ({ onLoginSuccess, onNavigateToApply, onNavigateToTrack }: LoginPr
             </motion.div>
 
             {/* --- RIGHT SIDE: Login Form --- */}
-            <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 md:p-16 bg-white relative z-20 overflow-y-auto min-h-screen">
+            <div className="install-clearance w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 md:p-16 bg-white relative z-20 overflow-y-auto min-h-screen">
                 
                 {/* Subtle Right Side Texture */}
                 <div className="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] opacity-30 pointer-events-none"></div>

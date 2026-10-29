@@ -63,6 +63,7 @@ import AdminAnalyticsDashboard from './components/AdminAnalyticsDashboard';
 import StaffProfileSettings from './components/StaffProfileSettings';
 import OfficeDirectory from './components/OfficeDirectory';
 import HelpPage from './components/HelpPage';
+import InstallAppPrompt from './components/InstallAppPrompt';
 
 class PageErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
@@ -266,6 +267,8 @@ function App() {
         };
 
   return (
+    <>
+    <InstallAppPrompt />
     <AnimatePresence mode="wait" initial={false}>
     <motion.div key={screen} {...shellMotion} className={screen === 'session' ? 'h-screen print:h-auto' : 'min-h-screen'}>
     {isVerifying ? (
@@ -362,7 +365,7 @@ function App() {
         </header>
 
         {/* MAIN CONTENT AREA */}
-        <main className="flex-1 overflow-y-auto relative custom-scrollbar print:overflow-visible print:h-auto">
+        <main className="install-clearance flex-1 overflow-y-auto relative custom-scrollbar print:overflow-visible print:h-auto">
           {/* Subtle background texture for the entire admin area */}
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-[0.02] pointer-events-none -z-10 print:hidden"></div>
           
@@ -418,6 +421,7 @@ function App() {
     <Toast message={passwordToast} type="success" onClose={() => setPasswordToast(null)} />
     </motion.div>
     </AnimatePresence>
+    </>
   );
 
 }

@@ -24,7 +24,7 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans selection:bg-indigo-200 selection:text-indigo-900 relative overflow-x-hidden flex flex-col">
+        <div className="install-clearance min-h-screen bg-slate-50 font-sans selection:bg-indigo-200 selection:text-indigo-900 relative overflow-x-hidden flex flex-col">
             <div className="bg-white/80 backdrop-blur-md border-b border-slate-200/80 shadow-sm relative z-40 shrink-0 sticky top-0">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
