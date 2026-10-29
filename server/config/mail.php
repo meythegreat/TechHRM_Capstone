@@ -116,8 +116,9 @@ return [
     ],
 
     /*
-    | Contact address shown in outbound email footers. Separate from MAIL_FROM_ADDRESS
-    | because Resend cannot send from an @gmail.com address without a verified domain.
+    | Gmail address that owns the n8n SMTP credential. Shown in reset-email footers
+    | and sent to n8n as the From address. Gmail rejects a From that does not match
+    | the authenticated mailbox.
     */
     'contact_address' => env('MAIL_CONTACT_ADDRESS', 'miguel102104@gmail.com'),
 

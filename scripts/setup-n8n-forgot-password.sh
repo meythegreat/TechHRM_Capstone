@@ -46,10 +46,14 @@ fi
 
 echo
 echo "Required in the n8n UI (http://localhost:5678):"
-echo "  1. Open workflow: TechHRM Forgot Password"
-echo "  2. On Send Gmail, connect Gmail OAuth for techhrmwspo@gmail.com"
-echo "  3. Save, keep the workflow Active, restart n8n if the webhook 404s"
-echo "  4. Laravel env: N8N_FORGOT_PASSWORD_WEBHOOK=http://localhost:5678/webhook/techhrm/forgot-password"
+echo "  1. Credentials -> SMTP. Host smtp.gmail.com, port 465, SSL/TLS on."
+echo "  2. User is the Gmail in MAIL_CONTACT_ADDRESS. Password is that account's app password."
+echo "     Enter the app password only in n8n. Do not put it in Laravel, Render, or git."
+echo "  3. Open workflow: TechHRM Forgot Password. On Send Gmail SMTP, select that credential."
+echo "  4. Save, keep the workflow Active, restart n8n if the webhook 404s."
+echo "  5. Laravel env: N8N_FORGOT_PASSWORD_WEBHOOK=http://localhost:5678/webhook/techhrm/forgot-password"
+echo "     On Render, deploy render.yaml (New > Blueprint), then set the API to"
+echo "     https://<techhrm-n8n host>/webhook/techhrm/forgot-password"
 echo
 echo "Smoke-test:"
 echo "  curl -s -X POST http://localhost:5678/webhook/techhrm/forgot-password \\"

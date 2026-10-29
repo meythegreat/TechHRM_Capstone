@@ -1,0 +1,84 @@
+# TechHRM n8n on Render, using Render Postgres for workflow data.
+# Free web services and free Postgres match Render's n8n blueprint:
+# https://render.com/docs/deploy-n8n
+#
+# Deploy: Render Dashboard → New → Blueprint → connect this repo → Deploy Blueprint.
+# A free web service sleeps after 15 minutes. A free database expires after 30 days.
+# Upgrade the web service to 1c-2g (or larger) and the database to a paid plan
+# before the database expires. n8n on the free web plan can be slow to wake.
+#
+# After the first deploy:
+# 1. Open the techhrm-n8n URL and create the n8n owner account.
+# 2. Add an SMTP credential: host smtp.gmail.com, port 465, SSL/TLS on.
+#    User is MAIL_CONTACT_ADDRESS. Password is that Gmail account's app password.
+#    Save the app password only in n8n.
+# 3. Import n8n/forgot-password.workflow.json, select that credential on
+#    Send Gmail SMTP, and activate the workflow.
+# 4. On the Laravel API service set:
+#    N8N_FORGOT_PASSWORD_WEBHOOK=https://<techhrm-n8n host>/webhook/techhrm/forgot-password
+
+services:
+  - type: web
+    plan: free
+    runtime: image
+    name: techhrm-n8n
+    image:
+      url: docker.io/n8nio/n8n:latest
+    healthCheckPath: /healthz
+    envVars:
+      # Encrypts credentials stored in n8n. Do not change this after the first deploy.
+      - key: N8N_ENCRYPTION_KEY
+        generateValue: true
+
+      # n8n listens on 5678. Render routes public HTTPS to this port.
+      - key: PORT
+        value: "5678"
+      - key: N8N_PORT
+        value: "5678"
+      - key: N8N_PROTOCOL
+        value: https
+      - key: N8N_PROXY_HOPS
+        value: "1"
+      - key: N8N_HOST
+        fromService:
+          name: techhrm-n8n
+          type: web
+          envVarKey: RENDER_EXTERNAL_HOSTNAME
+      - key: WEBHOOK_URL
+        fromService:
+          name: techhrm-n8n
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: N8N_EDITOR_BASE_URL
+        fromService:
+          name: techhrm-n8n
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+
+      - key: DB_TYPE
+        value: postgresdb
+      - key: DB_POSTGRESDB_DATABASE
+        fromDatabase:
+          name: techhrm-n8n-db
+          property: database
+      - key: DB_POSTGRESDB_HOST
+        fromDatabase:
+          name: techhrm-n8n-db
+          property: host
+      - key: DB_POSTGRESDB_PORT
+        fromDatabase:
+          name: techhrm-n8n-db
+          property: port
+      - key: DB_POSTGRESDB_USER
+        fromDatabase:
+          name: techhrm-n8n-db
+          property: user
+      - key: DB_POSTGRESDB_PASSWORD
+        fromDatabase:
+          name: techhrm-n8n-db
+          property: password
+
+databases:
+  - name: techhrm-n8n-db
+    plan: free
+    databaseName: n8n

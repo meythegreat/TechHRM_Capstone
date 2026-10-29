@@ -231,48 +231,51 @@ class AuthController extends Controller
     }
 
     /**
-     * Send the temporary password via Resend. Returns an error message on failure, or null on success.
+     * Send the temporary password through the n8n Gmail workflow.
+     * Returns an error message on failure, or null on success.
+     * The password is changed only after n8n accepts the send.
      */
     private function sendPasswordResetEmail(string $email, User $user, string $temporaryPassword): ?string
     {
-        $apiKey = config('services.resend.key');
-        if (!is_string($apiKey) || $apiKey === '') {
-            return 'Password reset email is not configured. Set RESEND_API_KEY in the server environment.';
+        $webhookUrl = config('services.n8n.forgot_password_webhook');
+        if (!is_string($webhookUrl) || $webhookUrl === '') {
+            return 'Password reset email is not configured. Set N8N_FORGOT_PASSWORD_WEBHOOK in the server environment.';
         }
 
-        $fromAddress = config('mail.from.address', 'onboarding@resend.dev');
-        $fromName = config('mail.from.name', 'TechHRM WSPO');
-        $from = sprintf('%s <%s>', $fromName, $fromAddress);
+        $payload = [
+            'event' => 'forgot_password',
+            'name' => $user->name,
+            'username' => $user->username,
+            'email' => $email,
+            'from_email' => (string) config('mail.contact_address', 'miguel102104@gmail.com'),
+            'from_name' => (string) config('mail.from.name', 'TechHRM WSPO'),
+            'subject' => 'Your TechHRM temporary password',
+            'message' => $this->resetEmailBody($user, $temporaryPassword),
+        ];
 
         try {
-            $response = Http::withToken($apiKey)
-                ->timeout(20)
+            $response = Http::timeout(60)
                 ->acceptJson()
                 ->asJson()
-                ->post('https://api.resend.com/emails', [
-                    'from' => $from,
-                    'to' => [$email],
-                    'subject' => 'Your TechHRM temporary password',
-                    'html' => $this->resetEmailBody($user, $temporaryPassword),
-                ]);
+                ->post($webhookUrl, $payload);
         } catch (\Throwable $e) {
             report($e);
 
-            return 'Could not reach Resend to send the password reset email. Check network access, then try again.';
+            return 'Could not reach n8n to send the password reset email. Confirm N8N_FORGOT_PASSWORD_WEBHOOK, then try again.';
         }
 
         if ($response->successful()) {
             return null;
         }
 
-        report(new \RuntimeException('Resend password reset failed: '.$response->body()));
+        report(new \RuntimeException('n8n password reset failed: '.$response->body()));
 
-        $resendMessage = data_get($response->json(), 'message');
-        if (is_string($resendMessage) && $resendMessage !== '') {
-            return 'Could not send the password reset email: '.$resendMessage;
+        $n8nMessage = data_get($response->json(), 'message');
+        if (is_string($n8nMessage) && $n8nMessage !== '') {
+            return 'Could not send the password reset email: '.$n8nMessage;
         }
 
-        return 'Could not send the password reset email through Resend. Confirm RESEND_API_KEY and MAIL_FROM_ADDRESS (use onboarding@resend.dev until a domain is verified), then try again.';
+        return 'n8n did not send the password reset email. Activate the forgot-password workflow and connect the Gmail SMTP credential in n8n.';
     }
 
     private function resetDestination(User $user, string $identifier): ?string
