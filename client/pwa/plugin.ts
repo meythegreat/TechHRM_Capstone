@@ -30,10 +30,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
-  const url = new URL(event.request.url);
-  if (url.origin !== self.location.origin) return;
-  if (url.pathname === '/api' || url.pathname.startsWith('/api/') || url.pathname.startsWith('/sanctum')) return;
+  if (event.request.mode !== 'navigate') return;
   event.respondWith(fetch(event.request));
 });
 `

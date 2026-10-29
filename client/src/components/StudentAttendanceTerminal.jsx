@@ -42,6 +42,42 @@ const monthBounds = (yearMonth) => {
     return { start, end };
 };
 
+const installedApp = () => window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+
+const cameraErrorMessage = (err) => {
+    const name = err?.name || '';
+    const text = String(err?.message || err || '');
+    const denied = name === 'NotAllowedError' || name === 'PermissionDeniedError' || /not allowed|permission/i.test(text);
+    if (denied && installedApp() && /iPad|iPhone|iPod/.test(navigator.userAgent)) {
+        return 'This installed app cannot use the camera yet. Open Settings, tap TechHRM, turn Camera on, then come back and tap Turn on camera.';
+    }
+    if (denied && installedApp()) {
+        return 'This installed app cannot use the camera yet. Open Settings, then Apps, TechHRM, Permissions, and allow Camera. Then tap Turn on camera.';
+    }
+    if (denied) {
+        return 'Camera permission was blocked. Allow the camera for this site, then tap Turn on camera again.';
+    }
+    if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        return 'No camera was found on this device. Use the passcode instead.';
+    }
+    if (name === 'NotReadableError' || name === 'TrackStartError' || name === 'AbortError') {
+        return 'The camera is busy in another app. Close that app, then tap Turn on camera again.';
+    }
+    return 'The camera could not start. Allow camera access for TechHRM, or use the passcode instead.';
+};
+
+let qrDetector;
+const barcodeDetector = () => {
+    if (qrDetector !== undefined) return qrDetector;
+    try {
+        qrDetector = 'BarcodeDetector' in window ? new window.BarcodeDetector({ formats: ['qr_code'] }) : null;
+    } catch {
+        qrDetector = null;
+    }
+    return qrDetector;
+};
+
 const StudentAttendanceTerminal = () => {
     const [summary, setSummary] = useState({
         total_rendered: 0,
@@ -56,7 +92,9 @@ const StudentAttendanceTerminal = () => {
     const repeatGuard = useRef({ code: '', quietFrames: 0 });
     const actionRef = useRef(null);
     const activityActionRef = useRef(null);
-    const scannerRef = useRef(null);
+    const streamRef = useRef(null);
+    const scanTimerRef = useRef(0);
+    const fileDecoderRef = useRef(null);
     const [cameraLive, setCameraLive] = useState(false);
     const [cameraStarting, setCameraStarting] = useState(false);
     const insecureCamera = typeof window !== 'undefined' && !window.isSecureContext;
@@ -279,92 +317,136 @@ const StudentAttendanceTerminal = () => {
     actionRef.current = activeShift ? clockOutWith : clockInWith;
     activityActionRef.current = openActivity ? timeOutActivity : null;
 
+    const stopCamera = () => {
+        window.clearTimeout(scanTimerRef.current);
+        scanTimerRef.current = 0;
+        const stream = streamRef.current;
+        streamRef.current = null;
+        stream?.getTracks().forEach((track) => track.stop());
+        document.querySelectorAll('[data-qr-video]').forEach((video) => {
+            video.pause();
+            video.srcObject = null;
+        });
+    };
+    const stopCameraRef = useRef(stopCamera);
+    stopCameraRef.current = stopCamera;
+
     useEffect(() => {
         setCameraLive(false);
         return () => {
             scanBusy.current = false;
             repeatGuard.current = { code: '', quietFrames: 0 };
-            const scanner = scannerRef.current;
-            scannerRef.current = null;
-            if (scanner?.isScanning) {
-                scanner.stop().catch(() => {});
-            }
+            stopCameraRef.current();
         };
     }, [checkInMethod, activityMethod, activeShift, openActivity]);
 
-    const startCamera = async (elementId = 'student-qr-reader') => {
+    const acceptScan = (decoded) => {
+        if (scanBusy.current) return;
+        const raw = String(decoded || '').trim();
+        const activity = raw.startsWith('THRM1A|');
+        if (!activity && !raw.startsWith('THRM1|')) return;
+        const code = raw.slice(activity ? 7 : 6).trim();
+        if (code.length < 16) return;
+        if (repeatGuard.current.code === code) return;
+        repeatGuard.current = { code, quietFrames: 0 };
+        scanBusy.current = true;
+        if (activity) {
+            if (activityActionRef.current) {
+                activityActionRef.current(code, 'qr');
+            } else {
+                clockInWith(code, 'qr');
+            }
+            return;
+        }
+        actionRef.current?.(code, 'qr');
+    };
+
+    const readQrFrame = async (video) => {
+        const detector = barcodeDetector();
+        if (detector) {
+            try {
+                const codes = await detector.detect(video);
+                return codes?.[0]?.rawValue || '';
+            } catch {
+                // This phone's detector cannot read the live video. Fall through.
+            }
+        }
+        if (!video.videoWidth || !video.videoHeight) return '';
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d', { willReadFrequently: true })?.drawImage(video, 0, 0);
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+        if (!blob) return '';
+        if (!fileDecoderRef.current) {
+            fileDecoderRef.current = new Html5Qrcode('student-qr-file-decoder');
+        }
+        try {
+            return await fileDecoderRef.current.scanFile(new File([blob], 'frame.jpg', { type: 'image/jpeg' }), false);
+        } catch {
+            return '';
+        }
+    };
+
+    const startCamera = (elementId = 'student-qr-reader') => {
+        const targetId = typeof elementId === 'string' ? elementId : 'student-qr-reader';
         if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
             setErrorMsg(`The browser will not ask for the camera on http://${window.location.host}. Open https://${window.location.host}, accept the certificate warning, then tap Turn on camera.`);
             return;
         }
 
+        const video = document.querySelector(`#${targetId} [data-qr-video]`);
+        if (!video) {
+            setErrorMsg('The camera view is not on screen. Choose Scan QR, then tap Turn on camera.');
+            return;
+        }
+
+        stopCamera();
         setCameraStarting(true);
         setErrorMsg('');
-        try {
-            const previous = scannerRef.current;
-            scannerRef.current = null;
-            if (previous?.isScanning) {
-                await previous.stop().catch(() => {});
-            }
-            let stream;
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-            } catch {
-                stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-            }
-            stream.getTracks().forEach((track) => track.stop());
-            await new Promise((resolve) => setTimeout(resolve, 300));
+        // Ask for the camera in this tap. A second request, or one made after a delay,
+        // is blocked in the installed app because the tap is no longer active.
+        const pending = navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: { facingMode: { ideal: 'environment' } },
+        }).catch(() => navigator.mediaDevices.getUserMedia({ audio: false, video: true }));
 
-            const scanner = new Html5Qrcode(elementId);
-            scannerRef.current = scanner;
-            await scanner.start(
-                { facingMode: 'environment' },
-                { fps: 8, qrbox: { width: 220, height: 220 } },
-                (decoded) => {
-                    if (scanBusy.current) return;
-                    const raw = String(decoded || '').trim();
-                    const activity = raw.startsWith('THRM1A|');
-                    if (!activity && !raw.startsWith('THRM1|')) return;
-                    const code = raw.slice(activity ? 7 : 6).trim();
-                    if (code.length < 16) return;
-                    if (repeatGuard.current.code === code) {
-                        repeatGuard.current.quietFrames = 0;
-                        return;
-                    }
-                    repeatGuard.current.quietFrames = 0;
-                    scanBusy.current = true;
-                    if (activity) {
-                        if (activityActionRef.current) {
-                            activityActionRef.current(code, 'qr');
-                        } else {
-                            clockInWith(code, 'qr');
-                        }
-                        return;
-                    }
-                    actionRef.current?.(code, 'qr');
-                },
-                () => {
-                    if (scanBusy.current || !repeatGuard.current.code) return;
-                    repeatGuard.current.quietFrames += 1;
-                    if (repeatGuard.current.quietFrames >= 10) {
-                        repeatGuard.current = { code: '', quietFrames: 0 };
-                    }
-                }
-            );
+        pending.then((stream) => {
+            streamRef.current = stream;
+            video.srcObject = stream;
+            video.muted = true;
+            video.setAttribute('playsinline', 'true');
+            video.setAttribute('webkit-playsinline', 'true');
+            return Promise.resolve(video.play()).catch(() => {});
+        }).then(() => {
             setCameraLive(true);
-        } catch (err) {
+            const scan = () => {
+                scanTimerRef.current = window.setTimeout(async () => {
+                    if (!streamRef.current) return;
+                    try {
+                        const raw = await readQrFrame(video);
+                        if (raw) acceptScan(raw);
+                        else if (repeatGuard.current.code) {
+                            repeatGuard.current.quietFrames += 1;
+                            if (repeatGuard.current.quietFrames >= 4) {
+                                repeatGuard.current = { code: '', quietFrames: 0 };
+                            }
+                        }
+                    } catch {
+                        // One missed frame should not turn the camera off.
+                    }
+                    if (streamRef.current) scan();
+                }, 280);
+            };
+            scan();
+        }).catch((err) => {
             console.error('QR scanner failed', err);
-            const name = err?.name || '';
-            if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
-                setErrorMsg('Camera permission was blocked. Allow the camera for this site in the browser settings, then tap Turn on camera again.');
-            } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
-                setErrorMsg('No camera was found on this device. Use the passcode instead.');
-            } else {
-                setErrorMsg('The camera could not start. Allow camera access, or use the passcode instead.');
-            }
-        } finally {
+            stopCamera();
+            setCameraLive(false);
+            setErrorMsg(cameraErrorMessage(err));
+        }).finally(() => {
             setCameraStarting(false);
-        }
+        });
     };
 
     const loadProfile = async () => {
@@ -424,6 +506,7 @@ const StudentAttendanceTerminal = () => {
 
     return (
         <>
+        <div id="student-qr-file-decoder" className="hidden" aria-hidden="true" />
         <div className="max-w-5xl mx-auto space-y-8 font-sans">
             
             {/* Header with Live Clock */}
@@ -570,7 +653,9 @@ const StudentAttendanceTerminal = () => {
                                                     {cameraStarting ? 'Asking for the camera…' : 'Turn on camera'}
                                                 </button>
                                             )}
-                                            <div id="student-activity-qr-reader" className="overflow-hidden rounded-2xl border border-emerald-100 bg-slate-900 min-h-[240px]" />
+                                            <div id="student-activity-qr-reader" className="overflow-hidden rounded-2xl border border-emerald-100 bg-slate-900">
+                                                <video data-qr-video playsInline muted autoPlay className="block h-[240px] w-full object-cover" />
+                                            </div>
                                             <p className="text-xs font-medium text-emerald-800 text-center flex items-center justify-center gap-1.5">
                                                 <QrCode className="w-3.5 h-3.5" />
                                                 Scan the live activity QR to time out. Hours are added only after this scan.
@@ -671,14 +756,16 @@ const StudentAttendanceTerminal = () => {
                                             {!cameraLive && (
                                                 <button
                                                     type="button"
-                                                    onClick={startCamera}
+                                                    onClick={() => startCamera('student-qr-reader')}
                                                     disabled={cameraStarting}
                                                     className="w-full py-3.5 bg-slate-900 hover:bg-blue-600 text-white font-bold rounded-xl transition-all disabled:opacity-50"
                                                 >
                                                     {cameraStarting ? 'Asking for the camera…' : 'Turn on camera'}
                                                 </button>
                                             )}
-                                            <div id="student-qr-reader" className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 min-h-[240px]" />
+                                            <div id="student-qr-reader" className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-900">
+                                                <video data-qr-video playsInline muted autoPlay className="block h-[240px] w-full object-cover" />
+                                            </div>
                                             <p className="text-xs font-medium text-slate-500 text-center flex items-center justify-center gap-1.5">
                                                 <QrCode className="w-3.5 h-3.5" />
                                                 Point the camera at the QR. Daily clock-in starts a shift. Cleaning, devotional, and assembly QR codes clock you in. Time out with that same code. Hours are added only when you time out.
@@ -786,14 +873,16 @@ const StudentAttendanceTerminal = () => {
                                                 {!cameraLive && (
                                                     <button
                                                         type="button"
-                                                        onClick={startCamera}
+                                                        onClick={() => startCamera('student-clockout-qr-reader')}
                                                         disabled={cameraStarting}
                                                         className="w-full py-3.5 bg-slate-900 hover:bg-red-600 text-white font-bold rounded-xl transition-all disabled:opacity-50"
                                                     >
                                                         {cameraStarting ? 'Asking for the camera…' : 'Turn on camera'}
                                                     </button>
                                                 )}
-                                                <div id="student-qr-reader" className="overflow-hidden rounded-2xl border border-emerald-100 bg-slate-900 min-h-[240px]" />
+                                                <div id="student-clockout-qr-reader" className="overflow-hidden rounded-2xl border border-emerald-100 bg-slate-900">
+                                                    <video data-qr-video playsInline muted autoPlay className="block h-[240px] w-full object-cover" />
+                                                </div>
                                                 <p className="text-xs font-medium text-emerald-800 text-center flex items-center justify-center gap-1.5">
                                                     <QrCode className="w-3.5 h-3.5" />
                                                     Scan the live QR on your supervisor&apos;s screen to clock out. It changes every 30 seconds.
