@@ -3,18 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
-use App\Support\AccountLogin;
-use App\Support\SuperAdminAudit;
 use App\Models\Application;
 use App\Models\ApplicationStatusEvent;
 use App\Models\Notification;
+use App\Models\Office;
 use App\Models\User;
 use App\Models\UserProfile;
 use App\Services\DepartmentAssignmentNotifier;
 use App\Services\StaffNotifier;
+use App\Support\AccountLogin;
+use App\Support\SuperAdminAudit;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -115,7 +116,7 @@ class ApplicationController extends Controller
             ->where('user_id', $request->user()->id)
             ->first();
 
-        if (!$application) {
+        if (! $application) {
             return response()->json(null, 404);
         }
 
@@ -138,7 +139,7 @@ class ApplicationController extends Controller
         $emailMatches = $application
             && strcasecmp((string) $application->email, trim($validated['email'])) === 0;
 
-        if (!$emailMatches) {
+        if (! $emailMatches) {
             return response()->json([
                 'message' => 'No application matches that email and tracking code.',
             ], 404);
@@ -188,22 +189,31 @@ class ApplicationController extends Controller
             $reason = trim((string) $request->input('rejection_reason'));
             $application->update(['status' => 'Rejected']);
             $this->recordStatus($application, 'Rejected', $reason);
-            $this->notifyN8nApplicationStatus($application, 'Rejected', [
+            $sendError = $this->notifyN8nApplicationStatus($application, 'Rejected', [
                 'rejection_reason' => $reason,
             ]);
 
-            return response()->json(['message' => 'Applicant declined. A rejection email has been sent, and their tracker now shows Not Approved.']);
+            $message = 'Applicant declined, and their tracker now shows Not Approved.';
+            $message .= $sendError
+                ? ' The status email was not sent: '.$sendError
+                : ' A rejection email has been sent.';
+
+            return response()->json(['message' => $message]);
         }
 
         $application->update([
-            'status' => $request->status
+            'status' => $request->status,
         ]);
 
         $this->recordStatus($application, $request->status);
-        $this->notifyN8nApplicationStatus($application, $request->status);
+        $sendError = $this->notifyN8nApplicationStatus($application, $request->status);
+        $message = 'Workflow status updated to '.$request->status.'.';
+        if ($sendError) {
+            $message .= ' The status email was not sent: '.$sendError;
+        }
 
         return response()->json([
-            'message' => 'Workflow status updated to ' . $request->status
+            'message' => $message,
         ]);
     }
 
@@ -254,9 +264,9 @@ class ApplicationController extends Controller
             $application->id
         );
 
-        $tempPassword = 'FCU-' . strtoupper(Str::random(5)) . '!' . random_int(0, 9);
+        $tempPassword = 'FCU-'.strtoupper(Str::random(5)).'!'.random_int(0, 9);
         $loginEmail = strtolower(trim($validated['email']));
-        $loginUsername = ($applicant && !filter_var($applicant->username, FILTER_VALIDATE_EMAIL))
+        $loginUsername = ($applicant && ! filter_var($applicant->username, FILTER_VALIDATE_EMAIL))
             ? $applicant->username
             : AccountLogin::generateUsername($validated['first_name'], $validated['last_name']);
         $middleInitial = $this->middleInitial($validated['middle_name'] ?? null);
@@ -267,7 +277,7 @@ class ApplicationController extends Controller
             $validated['last_name']
         );
         $office = trim($validated['assigned_department']);
-        if (!in_array($office, \App\Models\Office::names(), true)) {
+        if (! in_array($office, Office::names(), true)) {
             return response()->json(['message' => 'Choose an office from the current university office list.'], 422);
         }
         $dutyRequest = $validated['duty_type'] === 'Request' ? trim((string) ($validated['duty_request'] ?? '')) : null;
@@ -291,7 +301,7 @@ class ApplicationController extends Controller
                 'status' => 'Approved',
             ]);
 
-            if (!$applicant) {
+            if (! $applicant) {
                 $applicant = User::create([
                     'name' => $studentName,
                     'username' => $loginUsername,
@@ -335,15 +345,20 @@ class ApplicationController extends Controller
         $application->refresh();
         $this->recordStatus($application, 'Approved');
         $this->recordStatus($application, 'Assigned', "{$office} · {$dutyLabel}");
-        $this->notifyN8nApplicationStatus($application, 'Approved', [
+        $sendError = $this->notifyN8nApplicationStatus($application, 'Approved', [
             'assigned_department' => $office,
             'assigned_duty' => $dutyLabel,
         ]);
 
         app(DepartmentAssignmentNotifier::class)->notify($applicant, $office, $dutyLabel);
 
+        $message = 'Student successfully matched and placed!';
+        if ($sendError) {
+            $message .= ' The status email was not sent: '.$sendError;
+        }
+
         return response()->json([
-            'message' => 'Student successfully matched and placed!',
+            'message' => $message,
             'credentials' => [
                 'name' => $studentName,
                 'username' => $applicant->username,
@@ -353,7 +368,7 @@ class ApplicationController extends Controller
         ]);
     }
 
-        // COORDINATOR: Schedule Interview
+    // COORDINATOR: Schedule Interview
     public function scheduleInterview(Request $request, $id)
     {
         SuperAdminAudit::denyMutation($request);
@@ -367,23 +382,28 @@ class ApplicationController extends Controller
         $application->update([
             'interview_date' => $validated['interview_date'],
             'interview_remarks' => $validated['interview_remarks'],
-            'status' => 'Interview' // Automatically move to Interview status
+            'status' => 'Interview', // Automatically move to Interview status
         ]);
 
         $interviewLabel = $application->interview_date
             ?->timezone(config('app.timezone'))
             ->format('M j, Y g:i A');
-        $note = 'Interview scheduled for ' . $interviewLabel;
-        if (!empty($validated['interview_remarks'])) {
-            $note .= '. ' . $validated['interview_remarks'];
+        $note = 'Interview scheduled for '.$interviewLabel;
+        if (! empty($validated['interview_remarks'])) {
+            $note .= '. '.$validated['interview_remarks'];
         }
         $this->recordStatus($application, 'Interview', $note);
-        $this->notifyN8nApplicationStatus($application, 'Interview', [
+        $sendError = $this->notifyN8nApplicationStatus($application, 'Interview', [
             'interview_date' => $interviewLabel,
             'interview_remarks' => $application->interview_remarks,
         ]);
 
-        return response()->json(['message' => 'Interview scheduled successfully!']);
+        $message = 'Interview scheduled successfully!';
+        if ($sendError) {
+            $message .= ' The status email was not sent: '.$sendError;
+        }
+
+        return response()->json(['message' => $message]);
     }
 
     // 5. AUTOMATED MATCHING ENGINE (Feature #4)
@@ -422,35 +442,70 @@ class ApplicationController extends Controller
                 $suggestions[] = [
                     'department' => $opening['department'],
                     'position' => $opening['position'],
-                    'match_score' => round($score) . '%',
-                    'matched_days' => $matchedDays
+                    'match_score' => round($score).'%',
+                    'matched_days' => $matchedDays,
                 ];
             }
         }
 
         // Sort suggestions from highest score to lowest
-        usort($suggestions, fn($a, $b) => (int)$b['match_score'] <=> (int)$a['match_score']);
+        usort($suggestions, fn ($a, $b) => (int) $b['match_score'] <=> (int) $a['match_score']);
 
         return response()->json(['suggestions' => $suggestions]);
     }
 
-    private function notifyN8nApplicationStatus(Application $application, string $status, array $extra = []): void
+    /**
+     * Email the applicant through the n8n Gmail workflow.
+     * Returns an error message when the email was not sent.
+     */
+    private function notifyN8nApplicationStatus(Application $application, string $status, array $extra = []): ?string
     {
+        $email = is_string($application->email) ? trim($application->email) : '';
+        if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return 'This application has no email address on file.';
+        }
+
+        $webhook = config('services.n8n.application_status_webhook');
+        if (! is_string($webhook) || trim($webhook) === '') {
+            return 'Set N8N_APPLICATION_STATUS_WEBHOOK to the application-status workflow.';
+        }
+
+        unset($extra['digital_forms']);
         $payload = array_merge([
             'event' => 'application_status_updated',
             'application_id' => $application->id,
             'applicant_name' => $this->applicantName($application),
-            'email' => $application->email,
+            'email' => $email,
             'status' => $status,
             'tracking_code' => $application->tracking_code,
             'updated_at' => now()->toIso8601String(),
         ], $extra);
 
         try {
-            Http::timeout(5)->asJson()->post('http://localhost:5678/webhook/techhrm/application-submitted', $payload);
+            $response = Http::timeout(20)
+                ->acceptJson()
+                ->asJson()
+                ->post($webhook, $payload);
         } catch (\Throwable $exception) {
             report($exception);
+
+            return 'Could not reach the application status webhook.';
         }
+
+        if ($response->successful()) {
+            return null;
+        }
+
+        $webhookMessage = data_get($response->json(), 'message');
+        report(new \RuntimeException(
+            'Application status webhook failed with HTTP '.$response->status().': '.(is_string($webhookMessage) && $webhookMessage !== '' ? $webhookMessage : 'no message')
+        ));
+
+        if (is_string($webhookMessage) && $webhookMessage !== '') {
+            return $webhookMessage;
+        }
+
+        return 'The application status webhook rejected the message (HTTP '.$response->status().').';
     }
 
     private function recordStatus(Application $application, string $status, ?string $note = null): void
@@ -460,6 +515,7 @@ class ApplicationController extends Controller
             if ($note && $latest->note !== $note) {
                 $latest->update(['note' => $note, 'occurred_at' => now()]);
             }
+
             return;
         }
 
@@ -473,7 +529,7 @@ class ApplicationController extends Controller
     private function makeTrackingCode(): string
     {
         do {
-            $code = 'WSPO-' . strtoupper(Str::random(6));
+            $code = 'WSPO-'.strtoupper(Str::random(6));
         } while (Application::where('tracking_code', $code)->exists());
 
         return $code;
@@ -482,8 +538,8 @@ class ApplicationController extends Controller
     private function applicantName(Application $application): string
     {
         return trim(
-            $application->first_name . ' ' .
-                ($application->middle_name ? $application->middle_name . ' ' : '') .
+            $application->first_name.' '.
+                ($application->middle_name ? $application->middle_name.' ' : '').
                 $application->last_name
         );
     }
@@ -557,7 +613,7 @@ class ApplicationController extends Controller
                 $applicant->forceDelete();
             }
 
-            if (!$application->trashed()) {
+            if (! $application->trashed()) {
                 $application->delete();
             }
         });
@@ -601,7 +657,7 @@ class ApplicationController extends Controller
         $keys = array_values($request->input('document_keys', []));
         $files = array_values(array_filter(
             is_array($request->file('documents')) ? $request->file('documents') : [],
-            fn ($file) => $file instanceof \Illuminate\Http\UploadedFile && $file->isValid()
+            fn ($file) => $file instanceof UploadedFile && $file->isValid()
         ));
 
         foreach ($files as $index => $file) {
@@ -646,14 +702,14 @@ class ApplicationController extends Controller
         }
 
         $picture = $request->file('documents')[array_search('id_picture', $keys, true)] ?? null;
-        if (!$picture || !str_starts_with((string) $picture->getMimeType(), 'image/')) {
+        if (! $picture || ! str_starts_with((string) $picture->getMimeType(), 'image/')) {
             throw ValidationException::withMessages([
                 'documents' => 'The 2 x 2 I.D. picture must be a JPG or PNG image.',
             ]);
         }
 
         $details = json_decode($validated['form_details'], true);
-        if (!is_array($details)) {
+        if (! is_array($details)) {
             throw ValidationException::withMessages([
                 'form_details' => 'Complete the official information sheet.',
             ]);
@@ -773,7 +829,7 @@ class ApplicationController extends Controller
                 }
             }
         }
-        if (!str_starts_with((string) ($details['photo'] ?? ''), 'data:image/')) {
+        if (! str_starts_with((string) ($details['photo'] ?? ''), 'data:image/')) {
             throw ValidationException::withMessages(['form_details' => 'The 2 x 2 photo must be an image.']);
         }
 
@@ -882,7 +938,7 @@ class ApplicationController extends Controller
     {
         $initial = $this->middleInitial($middleName);
 
-        return trim(preg_replace('/\s+/u', ' ', trim($firstName . ' ' . ($initial !== '' ? $initial . ' ' : '') . $lastName)) ?? '');
+        return trim(preg_replace('/\s+/u', ' ', trim($firstName.' '.($initial !== '' ? $initial.' ' : '').$lastName)) ?? '');
     }
 
     private function middleInitial(?string $middleName): string
@@ -895,7 +951,7 @@ class ApplicationController extends Controller
         $middleName = rtrim($middleName, '.');
         $letter = mb_substr($middleName, 0, 1);
 
-        return $letter === '' ? '' : mb_strtoupper($letter) . '.';
+        return $letter === '' ? '' : mb_strtoupper($letter).'.';
     }
 
     private function numericYearLevel(mixed $yearLevel): ?int
