@@ -9,6 +9,7 @@ use App\Models\Notification;
 use App\Models\Office;
 use App\Models\User;
 use App\Models\UserProfile;
+use App\Services\CompletedApplicationForm;
 use App\Services\DepartmentAssignmentNotifier;
 use App\Services\StaffNotifier;
 use App\Support\AccountLogin;
@@ -480,6 +481,15 @@ class ApplicationController extends Controller
             'tracking_code' => $application->tracking_code,
             'updated_at' => now()->toIso8601String(),
         ], $extra);
+
+        if ($status === 'Pending') {
+            $form = app(CompletedApplicationForm::class);
+            $payload['attachment'] = [
+                'filename' => $form->filename($application),
+                'mimeType' => 'application/pdf',
+                'data' => base64_encode($form->pdf($application)),
+            ];
+        }
 
         try {
             $response = Http::timeout(20)

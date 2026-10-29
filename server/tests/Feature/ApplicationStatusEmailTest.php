@@ -71,6 +71,59 @@ class ApplicationStatusEmailTest extends TestCase
         $this->assertSame('ana.cruz@school.edu', $messages[1]['email']);
         $this->assertSame('Rejected', $messages[1]['status']);
         $this->assertSame('Incomplete requirements.', $messages[1]['rejection_reason']);
+        $this->assertArrayNotHasKey('attachment', $messages[0]);
+        $this->assertArrayNotHasKey('attachment', $messages[1]);
+    }
+
+    public function test_the_first_email_attaches_the_completed_form(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake([
+            self::WEBHOOK => Http::response(['ok' => true], 200),
+        ]);
+
+        $staff = User::create([
+            'name' => 'WSPO Coordinator',
+            'username' => 'wspo.staff',
+            'password' => 'password',
+            'role' => 'WSPO Staff',
+        ]);
+        $application = Application::create([
+            'first_name' => 'Ana',
+            'middle_name' => 'M',
+            'last_name' => 'Cruz',
+            'age' => 19,
+            'email' => 'ana.cruz@school.edu',
+            'course' => 'BS Information Technology',
+            'year_level' => '1st Year',
+            'status' => 'Interview',
+            'tracking_code' => 'WSPO-ANA01',
+            'form_details' => [
+                'religion' => 'Christian',
+                'sex' => 'Female',
+                'home_address' => 'Roxas City',
+                'consent_child_name' => 'Ana M. Cruz',
+            ],
+        ]);
+
+        Sanctum::actingAs($staff);
+
+        $this->putJson('/api/applications/'.$application->id.'/status', [
+            'status' => 'Pending',
+        ])->assertOk();
+
+        Http::assertSent(function ($request) {
+            if ($request->url() !== self::WEBHOOK) {
+                return false;
+            }
+            $attachment = $request->data()['attachment'] ?? null;
+            $pdf = is_array($attachment) ? base64_decode((string) ($attachment['data'] ?? ''), true) : false;
+
+            return ($attachment['filename'] ?? '') === 'WSPO-ANA01-completed-forms.pdf'
+                && ($attachment['mimeType'] ?? '') === 'application/pdf'
+                && is_string($pdf)
+                && str_starts_with($pdf, '%PDF');
+        });
     }
 
     public function test_status_is_saved_when_the_webhook_rejects_the_email(): void
@@ -138,7 +191,12 @@ class ApplicationStatusEmailTest extends TestCase
             $table->string('first_name')->nullable();
             $table->string('middle_name')->nullable();
             $table->string('last_name')->nullable();
+            $table->integer('age')->nullable();
+            $table->string('address')->nullable();
+            $table->string('course')->nullable();
+            $table->string('year_level')->nullable();
             $table->string('email')->nullable();
+            $table->json('form_details')->nullable();
             $table->string('status')->nullable();
             $table->string('tracking_code', 16)->nullable();
             $table->timestamps();
