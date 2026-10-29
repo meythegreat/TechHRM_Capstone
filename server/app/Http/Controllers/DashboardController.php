@@ -102,15 +102,16 @@ class DashboardController extends Controller
             ->get()
             ->map(function (Attendance $record) {
                 $clockedOut = $record->time_out !== null;
+                $activity = $record->rendered_hour_event_id !== null;
 
                 return [
                     'id' => 'attendance-'.$record->id.'-'.($clockedOut ? 'out' : 'in'),
                     'student_name' => $record->user?->name ?? 'Student',
                     'profile_picture' => $record->user?->profile_picture,
-                    'action' => $clockedOut ? 'Clocked Out' : 'Clocked In',
+                    'action' => $clockedOut ? ($activity ? 'Timed Out' : 'Clocked Out') : 'Clocked In',
                     'description' => $clockedOut
-                        ? 'clocked out of their shift.'
-                        : 'clocked in for their shift.',
+                        ? ($activity ? 'timed out of an activity.' : 'clocked out of their shift.')
+                        : ($activity ? 'clocked in for an activity.' : 'clocked in for their shift.'),
                     'office' => $record->user?->profile?->assigned_office,
                     'created_at' => $record->updated_at,
                 ];

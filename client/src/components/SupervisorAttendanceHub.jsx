@@ -279,7 +279,7 @@ const SupervisorAttendanceHub = () => {
                         Attendance Hub
                     </h1>
                     <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
-                        Daily clock-in can use a passcode or a QR code. Cleaning, devotional, and assembly attendance use a QR code issued by the WSPO coordinator, secretary, or president.
+                        Daily clock-in can use a passcode or a QR code. Cleaning, devotional, and assembly attendance use their own code. Students time out the same way they clocked in, and the hours are added only then.
                     </p>
                     <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">
                         Token scope: <span className="font-semibold text-slate-900">{supervisorDepartment}</span> students only

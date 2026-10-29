@@ -19,6 +19,7 @@ interface StudentActivity {
 }
 
 const statusLabel: Record<string, string> = {
+  timed_in: 'Timed in',
   on_time: 'On time',
   late: 'Late',
   absent: 'Absent',
@@ -158,7 +159,7 @@ export function StudentCompensationView() {
       <section className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100">
           <h3 className="text-lg font-semibold text-slate-900">Activity hours</h3>
-          <p className="text-sm text-slate-500 mt-1">On time adds the activity hours. Late adds nothing. Absent deducts the same hours.</p>
+          <p className="text-sm text-slate-500 mt-1">Hours are added only when you time out, and only if the clock-in was on time. Late adds nothing. Absent deducts the same hours.</p>
         </div>
         {activities.length === 0 ? (
           <p className="px-6 py-8 text-sm text-slate-500">No activity hours in this month.</p>

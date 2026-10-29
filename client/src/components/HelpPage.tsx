@@ -55,7 +55,7 @@ const HELP_TOPICS: HelpTopic[] = [
         tips: [
             'You can usually clock in starting 30 minutes before your shift begins.',
             'If you are already timed in, clock out first before starting another duty.',
-            'Some special activities (like cleaning, devotionals, or assemblies) may use their own QR and add hours when you are on time.',
+            'Cleaning, devotionals, and assemblies use their own passcode or QR. Clock in, then time out the same way. Hours are added only when you time out, and only if the clock-in was on time.',
             'If you have no work schedule yet, follow the attendance rules set by WSPO.',
             'You may work up to 20 hours per week by default. Past 20 hours needs administrator approval (up to 25). The monthly maximum is 100 hours.',
         ],

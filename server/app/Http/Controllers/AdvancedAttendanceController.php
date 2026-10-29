@@ -207,6 +207,7 @@ class AdvancedAttendanceController extends Controller
 
         $activeRecord = Attendance::where('user_id', $user->id)
             ->whereNull('time_out')
+            ->whereNull('rendered_hour_event_id')
             ->first();
 
         $suspension = \App\Models\DisciplinaryRecord::activeSuspension($user->id);
@@ -289,6 +290,10 @@ class AdvancedAttendanceController extends Controller
             return response()->json(['message' => 'Shift segment already terminated.'], 422);
         }
 
+        if ($attendance->rendered_hour_event_id) {
+            return $this->clockOutActivity($request, $attendance);
+        }
+
         $studentDepartment = trim((string) ($user->profile?->assigned_office ?? ''));
         $dutyType = $attendance->attendance_type ?: ($attendance->work_type ?: 'Regular');
         $validToken = $this->authenticateToken($request, $dutyType, $studentDepartment);
@@ -364,6 +369,9 @@ class AdvancedAttendanceController extends Controller
         $credited = max(0, $totalRendered - $dutyDeduction + $activityHours);
         $remainingHours = max(0, $targetHours - $credited);
         $hourLimits = HourLimits::status($userId);
+        $openActivity = $records->first(
+            fn (Attendance $record) => $record->time_out === null && $record->rendered_hour_event_id
+        );
 
         return response()->json([
             'total_rendered' => round($credited, 2),
@@ -373,6 +381,7 @@ class AdvancedAttendanceController extends Controller
             'remaining_hours' => round($remainingHours, 2),
             'target_hours' => $targetHours,
             'hour_limits' => $hourLimits,
+            'open_activity' => $openActivity,
             'history' => $records->filter(fn (Attendance $record) => $this->belongsInRecentLogs($record))->values(),
         ]);
     }
@@ -385,7 +394,7 @@ class AdvancedAttendanceController extends Controller
     /** Regular shift logs, plus meeting activity clock-ins such as devotionals and assemblies. */
     private function belongsInRecentLogs(Attendance $record): bool
     {
-        if ($record->rendered_hour_event_id === null) {
+        if ($record->rendered_hour_event_id === null || $record->time_out === null) {
             return true;
         }
 
@@ -596,15 +605,33 @@ class AdvancedAttendanceController extends Controller
         }
 
         $now = Carbon::now();
+        $event = $this->resolveActivityEventForStudent($tokenEvent, $user);
+        if (!$event) {
+            return response()->json(['message' => 'You are not assigned to this activity.'], 422);
+        }
+
+        $openActivity = Attendance::query()
+            ->where('user_id', $user->id)
+            ->whereNull('time_out')
+            ->whereNotNull('rendered_hour_event_id')
+            ->first();
+        if ($openActivity) {
+            $sameActivity = in_array((int) $openActivity->rendered_hour_event_id, $this->siblingActivityEventIds($event), true);
+            if ($sameActivity) {
+                return $this->clockOutActivity($request, $openActivity, $token);
+            }
+
+            $openLabel = $openActivity->attendance_type ?: 'this activity';
+
+            return response()->json([
+                'message' => "Time out of {$openLabel} before clocking in for another activity.",
+            ], 422);
+        }
+
         if (!$now->isSameDay($tokenEvent->event_date)) {
             return response()->json([
                 'message' => 'This QR code is for '.$tokenEvent->event_date->toFormattedDateString().'.',
             ], 422);
-        }
-
-        $event = $this->resolveActivityEventForStudent($tokenEvent, $user);
-        if (!$event) {
-            return response()->json(['message' => 'You are not assigned to this activity.'], 422);
         }
 
         $label = RenderedHourEvent::KINDS[$event->kind]['label'] ?? $event->kind;
@@ -625,59 +652,39 @@ class AdvancedAttendanceController extends Controller
             ->where('user_id', $user->id)
             ->whereNotNull('status')
             ->first();
-        if ($existing) {
+        if ($existing && $existing->status !== RenderedHourEntry::TIMED_IN) {
             return response()->json(['message' => 'You already clocked in for this activity.'], 422);
         }
 
-        $status = $event->statusAt($now);
-        $delta = $event->deltaFor($status);
-        if ($delta > 0) {
-            $fit = HourLimits::fitHours($user->id, (float) $delta, $now);
-            if ($fit['allowed'] < (float) $delta) {
-                return response()->json([
-                    'message' => $fit['denial']
-                        ?? ('This activity would add '
-                            . HourLimits::hoursLabel((float) $delta)
-                            . ' hours, but only '
-                            . HourLimits::hoursLabel($fit['allowed'])
-                            . ' hours remain under your weekly or monthly limit.'),
-                    'hour_limits' => HourLimits::status($user->id, $now),
-                ], 403);
-            }
-        }
+        $provisional = $event->statusAt($now);
         $hours = number_format((float) $event->hours, 2);
-        $message = $status === 'late'
-            ? "Clock-in saved as late. No hours were added or deducted."
-            : "Clock-in accepted. {$hours} hours were added to your hours rendered.";
+        $message = $provisional === 'late'
+            ? 'Clock-in saved as late. Time out when you leave. No hours will be added.'
+            : "Clock-in accepted. Time out with this activity's passcode or QR code to receive {$hours} hours.";
 
-        $attendance = DB::transaction(function () use ($user, $event, $token, $now, $status, $delta, $label, $message, $method) {
+        $attendance = DB::transaction(function () use ($user, $event, $token, $now, $label, $message, $method) {
             $record = Attendance::create([
                 'user_id' => $user->id,
                 'time_in' => $now,
-                'time_out' => $now,
                 'attendance_type' => $label,
                 'check_in_method' => $method,
                 'code_owner_id' => $token->generated_by,
                 'work_type' => $label,
                 'rendered_hours' => 0,
                 'computed_hours' => 0,
-                'activity_hours' => $delta,
+                'activity_hours' => 0,
                 'rendered_hour_event_id' => $event->id,
-                'status' => 'accepted',
+                'status' => 'pending',
                 'task_description' => $message,
-                'is_anomaly' => $status === 'late',
-                'anomaly_reason' => $status === 'late'
-                    ? 'Clocked in after the on-time window. No hours were added or deducted.'
-                    : null,
             ]);
 
             $entry = RenderedHourEntry::firstOrNew([
                 'event_id' => $event->id,
                 'user_id' => $user->id,
             ]);
-            $entry->status = $status;
+            $entry->status = RenderedHourEntry::TIMED_IN;
             $entry->scanned_at = $now;
-            $entry->hours_delta = $delta;
+            $entry->hours_delta = 0;
             $entry->attendance_id = $record->id;
             $entry->save();
 
@@ -689,10 +696,122 @@ class AdvancedAttendanceController extends Controller
         return response()->json([
             'message' => $message,
             'activity' => true,
-            'status' => $status,
-            'hours_delta' => $delta,
+            'timed_in' => true,
+            'status' => RenderedHourEntry::TIMED_IN,
+            'hours_delta' => 0,
             'attendance' => $attendance,
             'hour_limits' => HourLimits::status($user->id, $now),
+        ]);
+    }
+
+    /**
+     * Close an open activity session. The fixed activity credit is applied here,
+     * and only when the original clock-in was inside the on-time window.
+     */
+    private function clockOutActivity(Request $request, Attendance $attendance, ?DailyToken $token = null)
+    {
+        $method = $request->input('method', 'passcode');
+        if (!$token) {
+            $token = $this->matchedToken((string) $request->token_code);
+            if (!$token?->event_id) {
+                return response()->json([
+                    'message' => "Use this activity's passcode or QR code to time out.",
+                ], 422);
+            }
+            if ($token->channel !== $method) {
+                return response()->json([
+                    'message' => $token->channel === 'qr'
+                        ? 'This is a QR code. Scan the live code instead of typing it.'
+                        : 'This is a passcode. Enter it in the passcode field.',
+                ], 422);
+            }
+            if (!$this->tokenIsCurrent($token)) {
+                return response()->json([
+                    'message' => 'This code has expired. Use the code currently on the activity screen.',
+                ], 422);
+            }
+        }
+
+        $event = RenderedHourEvent::find($attendance->rendered_hour_event_id);
+        $tokenEvent = $token->event_id ? RenderedHourEvent::find($token->event_id) : null;
+        $allowedIds = $tokenEvent ? $this->siblingActivityEventIds($tokenEvent) : [];
+        if (!$event || !in_array((int) $event->id, $allowedIds, true)) {
+            return response()->json([
+                'message' => "Use this activity's passcode or QR code to time out.",
+            ], 422);
+        }
+
+        $entry = RenderedHourEntry::query()
+            ->where('event_id', $event->id)
+            ->where('user_id', $attendance->user_id)
+            ->first();
+        if ($entry && $entry->status === 'absent') {
+            return response()->json(['message' => 'This activity was marked absent, so it cannot be timed out.'], 422);
+        }
+        if ($entry && $entry->status && $entry->status !== RenderedHourEntry::TIMED_IN) {
+            return response()->json(['message' => 'You already finished this activity.'], 422);
+        }
+
+        $clockIn = Carbon::parse($attendance->time_in);
+        $status = $event->statusAt($clockIn);
+        $delta = $event->deltaFor($status);
+        $now = Carbon::now();
+        if ($delta > 0) {
+            $fit = HourLimits::fitHours((int) $attendance->user_id, (float) $delta, $clockIn);
+            if ($fit['allowed'] < (float) $delta) {
+                return response()->json([
+                    'message' => $fit['denial']
+                        ?? ('This activity would add '
+                            . HourLimits::hoursLabel((float) $delta)
+                            . ' hours, but only '
+                            . HourLimits::hoursLabel($fit['allowed'])
+                            . ' hours remain under your weekly or monthly limit.'),
+                    'hour_limits' => HourLimits::status((int) $attendance->user_id, $clockIn),
+                ], 403);
+            }
+        }
+
+        $hours = number_format((float) $event->hours, 2);
+        $label = RenderedHourEvent::KINDS[$event->kind]['label'] ?? $event->kind;
+        $message = $status === 'late'
+            ? 'Timed out. No hours were added or deducted.'
+            : "Timed out. {$hours} hours were added to your hours rendered.";
+
+        DB::transaction(function () use ($attendance, $event, $entry, $now, $status, $delta, $message) {
+            $attendance->update([
+                'time_out' => $now,
+                'activity_hours' => $delta,
+                'status' => 'accepted',
+                'task_description' => $message,
+                'is_anomaly' => $status === 'late',
+                'anomaly_reason' => $status === 'late'
+                    ? 'Clocked in after the on-time window. No hours were added or deducted.'
+                    : null,
+            ]);
+
+            $row = $entry ?: new RenderedHourEntry([
+                'event_id' => $event->id,
+                'user_id' => $attendance->user_id,
+            ]);
+            $row->status = $status;
+            $row->scanned_at = $row->scanned_at ?: $attendance->time_in;
+            $row->hours_delta = $delta;
+            $row->attendance_id = $attendance->id;
+            $row->save();
+        });
+
+        $user = $request->user();
+        $this->notifyCodeOwner($token->generated_by, $user->name, $label, $method, true);
+
+        return response()->json([
+            'message' => $message,
+            'activity' => true,
+            'timed_out' => true,
+            'status' => $status,
+            'hours_delta' => $delta,
+            'hours_rendered' => $delta,
+            'attendance' => $attendance->fresh(),
+            'hour_limits' => HourLimits::status((int) $attendance->user_id, $now),
         ]);
     }
 

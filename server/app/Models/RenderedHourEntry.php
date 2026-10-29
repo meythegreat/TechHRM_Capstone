@@ -7,6 +7,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class RenderedHourEntry extends Model
 {
+    /** Clocked in for an activity. Hours stay at zero until the student times out. */
+    public const TIMED_IN = 'timed_in';
+
     protected $fillable = [
         'event_id',
         'user_id',

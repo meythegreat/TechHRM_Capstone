@@ -317,8 +317,16 @@ class RenderedHourController extends Controller
         $student = User::query()->findOrFail($validated['user_id']);
         $status = $event->statusAt($clockIn);
         $issuer = $request->user();
+        $existing = RenderedHourEntry::query()
+            ->where('event_id', $event->id)
+            ->where('user_id', $student->id)
+            ->first();
+        $existingAttendance = $existing?->attendance_id
+            ? \App\Models\Attendance::find($existing->attendance_id)
+            : null;
+        $closed = (bool) ($existingAttendance && $existingAttendance->time_out);
 
-        DB::transaction(function () use ($event, $student, $status, $clockIn, $issuer) {
+        DB::transaction(function () use ($event, $student, $status, $clockIn, $issuer, $closed) {
             $entry = RenderedHourEntry::firstOrNew([
                 'event_id' => $event->id,
                 'user_id' => $student->id,
@@ -327,11 +335,11 @@ class RenderedHourController extends Controller
                 ? \App\Models\Attendance::find($entry->attendance_id)
                 : null;
 
-            $delta = $event->deltaFor($status);
+            $delta = $closed ? $event->deltaFor($status) : 0;
             $payload = [
                 'user_id' => $student->id,
                 'time_in' => $clockIn,
-                'time_out' => $clockIn,
+                'time_out' => $closed ? $attendance->time_out : null,
                 'attendance_type' => RenderedHourEvent::KINDS[$event->kind]['label'] ?? $event->kind,
                 'check_in_method' => 'qr',
                 'code_owner_id' => $issuer->id,
@@ -340,10 +348,12 @@ class RenderedHourController extends Controller
                 'computed_hours' => 0,
                 'activity_hours' => $delta,
                 'rendered_hour_event_id' => $event->id,
-                'status' => 'accepted',
-                'task_description' => 'Time corrected by WSPO staff.',
-                'is_anomaly' => $status === 'late',
-                'anomaly_reason' => $status === 'late'
+                'status' => $closed ? 'accepted' : 'pending',
+                'task_description' => $closed
+                    ? 'Time corrected by WSPO staff.'
+                    : 'Clock-in time corrected by WSPO staff. Hours are added when the student times out.',
+                'is_anomaly' => $closed && $status === 'late',
+                'anomaly_reason' => $closed && $status === 'late'
                     ? 'Clocked in after the on-time window. No hours were added or deducted.'
                     : null,
             ];
@@ -354,7 +364,7 @@ class RenderedHourController extends Controller
                 $attendance = \App\Models\Attendance::create($payload);
             }
 
-            $entry->status = $status;
+            $entry->status = $closed ? $status : RenderedHourEntry::TIMED_IN;
             $entry->scanned_at = $clockIn;
             $entry->hours_delta = $delta;
             $entry->attendance_id = $attendance->id;
@@ -362,9 +372,15 @@ class RenderedHourController extends Controller
         });
 
         $hours = number_format((float) $event->hours, 2);
-        $message = $status === 'late'
-            ? "{$student->name} is late. No hours were added or deducted."
-            : "{$student->name} is on time. {$hours} hours were added.";
+        if (!$closed) {
+            $message = $status === 'late'
+                ? "{$student->name} is late. Timing out will not add hours."
+                : "{$student->name}'s clock-in was saved. {$hours} hours are added when they time out.";
+        } else {
+            $message = $status === 'late'
+                ? "{$student->name} is late. No hours were added or deducted."
+                : "{$student->name} is on time. {$hours} hours were added.";
+        }
 
         return response()->json([
             'message' => $message,
@@ -622,13 +638,19 @@ class RenderedHourController extends Controller
         $entry->save();
 
         if ($entry->attendance_id) {
-            \App\Models\Attendance::whereKey($entry->attendance_id)->update([
+            $attendance = \App\Models\Attendance::find($entry->attendance_id);
+            $update = [
                 'activity_hours' => $entry->hours_delta,
                 'is_anomaly' => $status !== 'on_time',
                 'anomaly_reason' => $status === 'absent'
                     ? 'Marked absent. The activity hours were deducted.'
                     : ($status === 'late' ? 'Clocked in after the on-time window. No hours were added or deducted.' : null),
-            ]);
+            ];
+            if ($status === 'absent' && $attendance && !$attendance->time_out) {
+                $update['time_out'] = now();
+                $update['status'] = 'accepted';
+            }
+            \App\Models\Attendance::whereKey($entry->attendance_id)->update($update);
         }
 
         if (

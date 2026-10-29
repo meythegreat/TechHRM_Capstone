@@ -69,11 +69,32 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
 
         foreach ([$yearOne, $yearTwo, $yearFour] as $student) {
             Sanctum::actingAs($student);
-            $this->postJson('/api/attendance/secure-clock-in', [
+            $clockIn = $this->postJson('/api/attendance/secure-clock-in', [
                 'token_code' => $code,
                 'method' => 'passcode',
             ])->assertOk()
-                ->assertJsonPath('activity', true);
+                ->assertJsonPath('activity', true)
+                ->assertJsonPath('status', 'timed_in')
+                ->assertJsonPath('hours_delta', 0);
+
+            $this->assertDatabaseHas('rendered_hour_entries', [
+                'event_id' => $eventId,
+                'user_id' => $student->id,
+                'status' => 'timed_in',
+            ]);
+            $this->assertDatabaseHas('attendances', [
+                'id' => $clockIn->json('attendance.id'),
+                'user_id' => $student->id,
+                'time_out' => null,
+            ]);
+
+            $this->putJson('/api/attendance/secure-clock-out/'.$clockIn->json('attendance.id'), [
+                'token_code' => $code,
+                'method' => 'passcode',
+            ])->assertOk()
+                ->assertJsonPath('timed_out', true)
+                ->assertJsonPath('status', 'on_time')
+                ->assertJsonPath('hours_delta', 1);
 
             $this->assertDatabaseHas('rendered_hour_entries', [
                 'event_id' => $eventId,
@@ -127,11 +148,20 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
         $this->assertStringStartsWith('THRM1A|', $payload);
 
         Sanctum::actingAs($yearTwo);
-        $this->postJson('/api/attendance/secure-clock-in', [
+        $clockIn = $this->postJson('/api/attendance/secure-clock-in', [
             'token_code' => $payload,
             'method' => 'qr',
         ])->assertOk()
-            ->assertJsonPath('activity', true);
+            ->assertJsonPath('activity', true)
+            ->assertJsonPath('status', 'timed_in')
+            ->assertJsonPath('hours_delta', 0);
+
+        $this->putJson('/api/attendance/secure-clock-out/'.$clockIn->json('attendance.id'), [
+            'token_code' => $payload,
+            'method' => 'qr',
+        ])->assertOk()
+            ->assertJsonPath('status', 'on_time')
+            ->assertJsonPath('hours_delta', 5);
 
         $this->assertDatabaseHas('rendered_hour_entries', [
             'event_id' => $eventYearTwo->id,
@@ -169,11 +199,107 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
             ->json('token_code');
 
         Sanctum::actingAs($yearOne);
+        $clockIn = $this->postJson('/api/attendance/secure-clock-in', [
+            'token_code' => $passcode,
+            'method' => 'passcode',
+        ])->assertOk()
+            ->assertJsonPath('activity', true)
+            ->assertJsonPath('hours_delta', 0);
+
         $this->postJson('/api/attendance/secure-clock-in', [
             'token_code' => $passcode,
             'method' => 'passcode',
         ])->assertOk()
-            ->assertJsonPath('activity', true);
+            ->assertJsonPath('timed_out', true)
+            ->assertJsonPath('status', 'on_time')
+            ->assertJsonPath('hours_delta', 5);
+
+        $this->assertNotNull($clockIn->json('attendance.id'));
+    }
+
+    public function test_late_activity_clock_in_adds_nothing_when_timing_out(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-28 07:15:00'));
+        $staff = $this->makeUser('WSPO Staff', 'WSPO Coordinator');
+        $student = $this->makeStudent('Late Student', 1, '2026-3001');
+        $group = DailyCleaningGroup::create(['name' => 'Late']);
+        $this->attachMembers($group, [$student->id], $student->id);
+
+        Sanctum::actingAs($staff);
+        $eventId = (int) $this->postJson('/api/financial/hour-events', [
+            'kind' => 'daily_cleaning',
+            'title' => 'Daily cleaning',
+            'event_date' => '2026-10-28',
+            'group_id' => $group->id,
+            'starts_at' => '05:00',
+        ])->assertCreated()->json('event.id');
+
+        $code = $this->getJson('/api/attendance/activity-passcode?event_id='.$eventId)
+            ->assertOk()
+            ->json('token_code');
+
+        Sanctum::actingAs($student);
+        $clockIn = $this->postJson('/api/attendance/secure-clock-in', [
+            'token_code' => $code,
+            'method' => 'passcode',
+        ])->assertOk()
+            ->assertJsonPath('status', 'timed_in')
+            ->assertJsonPath('hours_delta', 0);
+
+        $this->putJson('/api/attendance/secure-clock-out/'.$clockIn->json('attendance.id'), [
+            'token_code' => $code,
+            'method' => 'passcode',
+        ])->assertOk()
+            ->assertJsonPath('status', 'late')
+            ->assertJsonPath('hours_delta', 0);
+
+        $this->assertDatabaseHas('rendered_hour_entries', [
+            'event_id' => $eventId,
+            'user_id' => $student->id,
+            'status' => 'late',
+        ]);
+    }
+
+    public function test_devotional_hours_are_credited_when_timing_out_after_the_window(): void
+    {
+        $staff = $this->makeUser('WSPO Staff', 'WSPO Coordinator');
+        $student = $this->makeStudent('Devotional Student', 2, '2026-4001');
+        $group = DailyCleaningGroup::create(['name' => 'Chapel']);
+        $this->attachMembers($group, [$student->id], $student->id);
+
+        Carbon::setTestNow(Carbon::parse('2026-10-28 05:20:00'));
+        Sanctum::actingAs($staff);
+        $eventId = (int) $this->postJson('/api/financial/hour-events', [
+            'kind' => 'devotional',
+            'title' => 'Devotional meeting',
+            'event_date' => '2026-10-28',
+            'group_id' => $group->id,
+            'starts_at' => '05:00',
+        ])->assertCreated()->json('event.id');
+        $code = $this->getJson('/api/attendance/activity-passcode?event_id='.$eventId)
+            ->assertOk()
+            ->json('token_code');
+
+        Sanctum::actingAs($student);
+        $clockIn = $this->postJson('/api/attendance/secure-clock-in', [
+            'token_code' => $code,
+            'method' => 'passcode',
+        ])->assertOk()
+            ->assertJsonPath('hours_delta', 0);
+
+        Carbon::setTestNow(Carbon::parse('2026-10-28 07:00:00'));
+        Sanctum::actingAs($staff);
+        $passcode = $this->getJson('/api/attendance/activity-passcode?event_id='.$eventId)
+            ->assertOk()
+            ->json('token_code');
+
+        Sanctum::actingAs($student);
+        $this->putJson('/api/attendance/secure-clock-out/'.$clockIn->json('attendance.id'), [
+            'token_code' => $passcode,
+            'method' => 'passcode',
+        ])->assertOk()
+            ->assertJsonPath('status', 'on_time')
+            ->assertJsonPath('hours_delta', 1);
     }
 
     private function makeUser(string $role, ?string $office = null): User
