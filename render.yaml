@@ -1,11 +1,13 @@
 # TechHRM n8n on Render, using Render Postgres for workflow data.
-# Free web services and free Postgres match Render's n8n blueprint:
 # https://render.com/docs/deploy-n8n
 #
-# Deploy: Render Dashboard → New → Blueprint → connect this repo → Deploy Blueprint.
-# A free web service sleeps after 15 minutes. A free database expires after 30 days.
-# Upgrade the web service to 1c-2g (or larger) and the database to a paid plan
-# before the database expires. n8n on the free web plan can be slow to wake.
+# The web service stays on the free plan. The database is the smallest paid
+# plan because a workspace can have only one free Postgres database, and
+# TechHRM already uses that one. Do not delete the existing free database.
+#
+# A free web service sleeps after 15 minutes, so the first reset after idle
+# can take a while. Upgrade techhrm-n8n to 1c-2g or larger when you want it
+# to stay awake.
 #
 # After the first deploy:
 # 1. Open the techhrm-n8n URL and create the n8n owner account.
@@ -80,5 +82,5 @@ services:
 
 databases:
   - name: techhrm-n8n-db
-    plan: free
+    plan: 0.1c-256mb
     databaseName: n8n
