@@ -131,7 +131,7 @@ class RenderedHourEvent extends Model
 
         return match ($status) {
             'on_time' => $hours,
-            'late' => 0.0,
+            'late', RenderedHourEntry::TIMED_IN => 0.0,
             'absent' => -$hours,
             default => 0.0,
         };

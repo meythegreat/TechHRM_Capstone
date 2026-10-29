@@ -27,6 +27,7 @@ interface LeaderEvent {
 const statusLabel: Record<string, string> = {
   on_time: 'On time',
   late: 'Late',
+  timed_in: 'Timed in',
   absent: 'Absent',
 };
 
@@ -69,7 +70,7 @@ export function YearLeaderActivities() {
       <div>
         <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Group activities</h1>
         <p className="mt-2 max-w-2xl text-sm text-slate-500">
-          You are the group leader{groupName ? ` for ${groupName}` : ''}{yearLabel ? ` (${yearLabel})` : ''}. Use the QR code or passcode so every year level in the group can record attendance.
+          You are the group leader{groupName ? ` for ${groupName}` : ''}{yearLabel ? ` (${yearLabel})` : ''}. Use the QR code or passcode so every year level in the group can clock in and time out. Hours are added only when a student times out.
         </p>
       </div>
       {events.length === 0 ? (

@@ -19,6 +19,7 @@ class AttendanceController extends Controller
         // 1. PREVENT DOUBLE CLOCK-INS
         $activeRecord = \App\Models\Attendance::where('user_id', $user->id)
             ->whereNull('time_out')
+            ->whereNull('rendered_hour_event_id')
             ->first();
 
         if ($activeRecord) {
@@ -72,6 +73,7 @@ class AttendanceController extends Controller
         // Find the active attendance record
         $attendance = \App\Models\Attendance::where('user_id', $user->id)
             ->whereNull('time_out')
+            ->whereNull('rendered_hour_event_id')
             ->latest('time_in')
             ->first();
 
@@ -607,6 +609,7 @@ class AttendanceController extends Controller
     private function manualTimesOverlap(int $userId, \Carbon\Carbon $start, \Carbon\Carbon $end, ?int $ignoreId = null): bool
     {
         return \App\Models\Attendance::where('user_id', $userId)
+            ->whereNull('rendered_hour_event_id')
             ->when($ignoreId, fn ($query) => $query->where('id', '!=', $ignoreId))
             ->where('time_in', '<', $end)
             ->where(function ($query) use ($start) {

@@ -108,7 +108,7 @@ export function ActivityQrCard({ eventId }: { eventId: number }) {
     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
       <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Live QR</p>
       <p className="text-sm text-slate-600 mt-1">
-        Students scan this code. On time adds {Number(session?.hours ?? 0).toFixed(2)} hours. After {session?.valid_until || 'the window'}, a scan is late and changes nothing.
+        Students clock in with this code, then time out with the next code the same way. {Number(session?.hours ?? 0).toFixed(2)} hours are added only at time out, and only if the clock-in was on time. After {session?.valid_until || 'the window'}, a clock-in is late and adds nothing.
       </p>
       {error && <p className="mt-3 text-sm font-semibold text-rose-700">{error}</p>}
       <div

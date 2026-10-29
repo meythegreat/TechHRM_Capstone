@@ -13,10 +13,10 @@ interface StudentOption {
 
 const KINDS = [
   { id: 'special_request', label: 'Special request', hours: '', hint: 'Enter the hours of the event, then add or deduct them.' },
-  { id: 'daily_cleaning', label: 'Daily cleaning', hours: '1', hint: 'Choose a group. Every year level in that group can use the same QR code and passcode. A clock-in during the first hour after the official time in adds 1 hour. After that hour is late and adds nothing.' },
-  { id: 'general_cleaning', label: 'General cleaning', hours: '5', hint: '5 hours for every year level in the chosen group. One QR code and passcode works for all of them.' },
-  { id: 'devotional', label: 'Devotional meeting', hours: '1', hint: '1 hour for every year level in the group, added only if they scan within 1 hour of the official time in. One QR/passcode works for all years.' },
-  { id: 'meeting_assembly', label: 'Meeting assembly', hours: '5', hint: '5 hours for every year level in the group, added only if they scan within 1 hour of the official time in. One QR/passcode works for all years.' },
+  { id: 'daily_cleaning', label: 'Daily cleaning', hours: '1', hint: 'Choose a group. Every year level in that group can use the same QR code and passcode. Students clock in, then time out the same way. 1 hour is added only when they time out, and only if the clock-in was within the first hour after the official time in. A later clock-in is late and adds nothing.' },
+  { id: 'general_cleaning', label: 'General cleaning', hours: '5', hint: '5 hours for every year level in the chosen group. One QR code and passcode works for all of them. Hours are added only when the student times out, and only if the clock-in was on time.' },
+  { id: 'devotional', label: 'Devotional meeting', hours: '1', hint: '1 hour for every year level in the group. Students clock in, then time out with the same QR or passcode. The hour is added only at time out, and only if they clocked in within 1 hour of the official time in.' },
+  { id: 'meeting_assembly', label: 'Meeting assembly', hours: '5', hint: '5 hours for every year level in the group. Students clock in, then time out with the same QR or passcode. Hours are added only at time out, and only if they clocked in within 1 hour of the official time in.' },
 ] as const;
 
 const today = () => {

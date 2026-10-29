@@ -55,11 +55,15 @@ const StudentAttendanceTerminal = () => {
     const scanBusy = useRef(false);
     const repeatGuard = useRef({ code: '', quietFrames: 0 });
     const actionRef = useRef(null);
+    const activityActionRef = useRef(null);
     const scannerRef = useRef(null);
     const [cameraLive, setCameraLive] = useState(false);
     const [cameraStarting, setCameraStarting] = useState(false);
     const insecureCamera = typeof window !== 'undefined' && !window.isSecureContext;
     const [activeShift, setActiveShift] = useState(null);
+    const [openActivity, setOpenActivity] = useState(null);
+    const [activityToken, setActivityToken] = useState('');
+    const [activityMethod, setActivityMethod] = useState('passcode');
     const [errorMsg, setErrorMsg] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -163,7 +167,12 @@ const StudentAttendanceTerminal = () => {
         try {
             const res = await fetchWorkHourSummary();
             setSummary(res.data);
-            const openShift = res.data.history?.find((log) => !log.time_out && !log.rendered_hour_event_id);
+            const history = Array.isArray(res.data.history) ? res.data.history : [];
+            const openShift = history.find((log) => !log.time_out && !log.rendered_hour_event_id);
+            const activity = res.data.open_activity
+                || history.find((log) => !log.time_out && log.rendered_hour_event_id)
+                || null;
+            setOpenActivity(activity);
             if (openShift) {
                 setActiveShift(openShift);
                 localStorage.setItem('active_shift_segment', JSON.stringify(openShift));
@@ -237,7 +246,38 @@ const StudentAttendanceTerminal = () => {
         await clockOutWith(tokenInput.trim().toUpperCase(), 'passcode');
     };
 
+    const timeOutActivity = async (code, method) => {
+        if (!openActivity) return;
+        setErrorMsg('');
+        setSuccessMsg('');
+        setIsLoading(true);
+
+        try {
+            const res = await submitSecureClockOut(openActivity.id, code, method);
+            playAccessAcceptedSound();
+            setSuccessMsg(res.data?.message || 'Activity timed out.');
+            setActivityToken('');
+            await loadSummary();
+            await loadDtr();
+        } catch (err) {
+            if (method === 'qr') {
+                repeatGuard.current = { code, quietFrames: 0 };
+            }
+            scanBusy.current = false;
+            playAccessRejectedSound();
+            setErrorMsg(err.response?.data?.message || 'Failed to verify token and time out.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleActivityTimeOut = async (e) => {
+        e.preventDefault();
+        await timeOutActivity(activityToken.trim().toUpperCase(), 'passcode');
+    };
+
     actionRef.current = activeShift ? clockOutWith : clockInWith;
+    activityActionRef.current = openActivity ? timeOutActivity : null;
 
     useEffect(() => {
         setCameraLive(false);
@@ -250,9 +290,9 @@ const StudentAttendanceTerminal = () => {
                 scanner.stop().catch(() => {});
             }
         };
-    }, [checkInMethod, activeShift]);
+    }, [checkInMethod, activityMethod, activeShift, openActivity]);
 
-    const startCamera = async () => {
+    const startCamera = async (elementId = 'student-qr-reader') => {
         if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
             setErrorMsg(`The browser will not ask for the camera on http://${window.location.host}. Open https://${window.location.host}, accept the certificate warning, then tap Turn on camera.`);
             return;
@@ -261,6 +301,11 @@ const StudentAttendanceTerminal = () => {
         setCameraStarting(true);
         setErrorMsg('');
         try {
+            const previous = scannerRef.current;
+            scannerRef.current = null;
+            if (previous?.isScanning) {
+                await previous.stop().catch(() => {});
+            }
             let stream;
             try {
                 stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
@@ -270,7 +315,7 @@ const StudentAttendanceTerminal = () => {
             stream.getTracks().forEach((track) => track.stop());
             await new Promise((resolve) => setTimeout(resolve, 300));
 
-            const scanner = new Html5Qrcode('student-qr-reader');
+            const scanner = new Html5Qrcode(elementId);
             scannerRef.current = scanner;
             await scanner.start(
                 { facingMode: 'environment' },
@@ -289,7 +334,11 @@ const StudentAttendanceTerminal = () => {
                     repeatGuard.current.quietFrames = 0;
                     scanBusy.current = true;
                     if (activity) {
-                        clockInWith(code, 'qr');
+                        if (activityActionRef.current) {
+                            activityActionRef.current(code, 'qr');
+                        } else {
+                            clockInWith(code, 'qr');
+                        }
                         return;
                     }
                     actionRef.current?.(code, 'qr');
@@ -428,7 +477,110 @@ const StudentAttendanceTerminal = () => {
                 className="grid grid-cols-1 lg:grid-cols-3 gap-8"
             >
                 {/* --- LEFT COLUMN: ACTION TERMINAL --- */}
-                <motion.div variants={itemVariants} className="lg:col-span-1">
+                <motion.div variants={itemVariants} className="lg:col-span-1 space-y-6">
+                    {openActivity && (
+                        <div className="bg-emerald-50 rounded-2xl border border-emerald-200 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-8">
+                            <div className="flex flex-col items-center text-center">
+                                <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 mb-4">
+                                    <Timer className="w-8 h-8" />
+                                </div>
+                                <h2 className="text-2xl font-semibold text-emerald-900">Activity in progress</h2>
+                                <p className="text-sm font-bold text-emerald-700 mt-1 uppercase tracking-wider">
+                                    {openActivity.work_type || openActivity.attendance_type || 'Activity'}
+                                </p>
+                                <p className="mt-3 text-sm font-medium text-emerald-800">
+                                    Time out the same way you clocked in. The activity hours are added only when you time out.
+                                </p>
+                                <div className="mt-6 w-full p-4 bg-white/60 rounded-2xl border border-emerald-100">
+                                    <p className="text-xs font-bold text-emerald-600 uppercase mb-1">Time In</p>
+                                    <p className="text-xl font-semibold text-emerald-900 font-mono">
+                                        {openActivity.time_in ? new Date(openActivity.time_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                                    </p>
+                                </div>
+                                <form onSubmit={handleActivityTimeOut} className="w-full mt-6 space-y-4 text-left">
+                                    <div>
+                                        <label className="block text-xs font-bold text-emerald-800 uppercase tracking-wider mb-2">Time-out method</label>
+                                        <div className="grid grid-cols-2 gap-2 p-1 bg-white/70 rounded-xl">
+                                            <button
+                                                type="button"
+                                                onClick={() => setActivityMethod('passcode')}
+                                                className={`py-2.5 rounded-lg text-sm font-bold transition-all ${activityMethod === 'passcode' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+                                            >
+                                                Passcode
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setActivityMethod('qr')}
+                                                className={`py-2.5 rounded-lg text-sm font-bold transition-all ${activityMethod === 'qr' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+                                            >
+                                                Scan QR
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {activityMethod === 'passcode' ? (
+                                        <>
+                                            <div>
+                                                <label className="block text-xs font-bold text-emerald-800 uppercase tracking-wider mb-2">Verification Token</label>
+                                                <div className="relative">
+                                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                                        <KeyRound className="h-5 w-5 text-slate-400" />
+                                                    </div>
+                                                    <input
+                                                        type="text"
+                                                        required
+                                                        value={activityToken}
+                                                        onChange={(e) => setActivityToken(e.target.value.toUpperCase())}
+                                                        placeholder="Enter activity token..."
+                                                        className="block w-full pl-11 pr-4 py-3 bg-white border border-emerald-100 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-red-500 outline-none transition-all placeholder:text-slate-400 placeholder:font-medium uppercase tracking-widest"
+                                                    />
+                                                </div>
+                                                <p className="mt-2 text-xs font-medium text-emerald-800">
+                                                    The passcode changes every 30 seconds. Use the one currently on the activity screen.
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="submit"
+                                                disabled={isLoading || !activityToken}
+                                                className="w-full py-4 bg-linear-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold rounded-xl shadow-lg shadow-red-500/25 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                {isLoading ? (
+                                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                ) : (
+                                                    <>
+                                                        <LogOut className="w-5 h-5" />
+                                                        Time out
+                                                    </>
+                                                )}
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {insecureCamera && (
+                                                <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                                                    This page is open over http, so the phone will not ask for the camera. Open https://{window.location.host}, accept the certificate warning, then turn the camera on.
+                                                </p>
+                                            )}
+                                            {!cameraLive && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => startCamera('student-activity-qr-reader')}
+                                                    disabled={cameraStarting}
+                                                    className="w-full py-3.5 bg-slate-900 hover:bg-red-600 text-white font-bold rounded-xl transition-all disabled:opacity-50"
+                                                >
+                                                    {cameraStarting ? 'Asking for the camera…' : 'Turn on camera'}
+                                                </button>
+                                            )}
+                                            <div id="student-activity-qr-reader" className="overflow-hidden rounded-2xl border border-emerald-100 bg-slate-900 min-h-[240px]" />
+                                            <p className="text-xs font-medium text-emerald-800 text-center flex items-center justify-center gap-1.5">
+                                                <QrCode className="w-3.5 h-3.5" />
+                                                Scan the live activity QR to time out. Hours are added only after this scan.
+                                            </p>
+                                        </div>
+                                    )}
+                                </form>
+                            </div>
+                        </div>
+                    )}
                     <AnimatePresence mode="wait">
                         {!activeShift ? (
                             /* CLOCK IN FORM */
@@ -529,7 +681,7 @@ const StudentAttendanceTerminal = () => {
                                             <div id="student-qr-reader" className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 min-h-[240px]" />
                                             <p className="text-xs font-medium text-slate-500 text-center flex items-center justify-center gap-1.5">
                                                 <QrCode className="w-3.5 h-3.5" />
-                                                Point the camera at the QR. Daily clock-in starts a shift. Cleaning, devotional, and assembly QR codes add hours rendered when you are on time.
+                                                Point the camera at the QR. Daily clock-in starts a shift. Cleaning, devotional, and assembly QR codes clock you in. Time out with that same code. Hours are added only when you time out.
                                             </p>
                                             {isLoading && (
                                                 <div className="flex justify-center">

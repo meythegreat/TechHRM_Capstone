@@ -48,6 +48,7 @@ const apiError = (error: unknown, fallback: string) => {
 const statusLabel: Record<string, string> = {
   on_time: 'On time',
   late: 'Late',
+  timed_in: 'Timed in',
   absent: 'Absent',
   applied: 'Applied',
 };
@@ -134,7 +135,7 @@ export function HoursActivityBoard({
         <div>
           <h2 className="text-xl font-semibold text-slate-900">Activity hours</h2>
           <p className="text-sm text-slate-500 mt-1 max-w-2xl">
-            Create these activities in the Attendance Hub for a group. On time adds the activity hours. Late adds nothing and deducts nothing. Absent deducts the same hours.
+            Create these activities in the Attendance Hub for a group. Students clock in, then time out the same way they clocked in. Hours are added only when they time out, and only if that clock-in was on time. Late adds nothing and deducts nothing. Absent deducts the same hours.
             The group leader can show that activity&apos;s QR code and passcode, which works for every year level in the group. Every activity stays on time for 1 hour after the official time in.
           </p>
         </div>
@@ -204,7 +205,7 @@ export function HoursActivityBoard({
                     {item.uses_attendance && !readOnly && issuer && (
                       <div className="space-y-3">
                         <p className="text-sm text-slate-600">
-                          The QR code for this activity is issued in the Attendance Hub. If the scanner fails, correct the clock-in time below. That time decides whether the hours are added.
+                          The QR code for this activity is issued in the Attendance Hub. If the scanner fails, correct the clock-in time below. Hours are added only when the student times out, and only if that clock-in was on time.
                         </p>
                         <button type="button" onClick={() => markAbsent(item)} className="px-4 py-3 bg-white border border-slate-200 text-sm font-bold rounded-xl text-slate-700">Mark unmarked absent</button>
                       </div>
