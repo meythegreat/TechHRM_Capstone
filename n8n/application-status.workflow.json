@@ -1,0 +1,80 @@
+{
+  "name": "TechHRM Application Status",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "techhrm/application-submitted",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "techhrm-application-webhook",
+      "name": "Application Status Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "techhrm-application-submitted"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json || {};\nconst body = (raw.body && typeof raw.body === 'object') ? raw.body : raw;\nconst email = String(body.email || '').trim();\nif (!email) {\n  throw new Error('Application status webhook is missing email. Laravel must POST JSON with an email field.');\n}\nconst message = body.message || '';\nif (!message) {\n  throw new Error('Application status webhook is missing message HTML.');\n}\nreturn [{\n  json: {\n    email,\n    subject: body.subject || 'Your TechHRM application update',\n    message,\n    from_name: body.from_name || 'TechHRM WSPO',\n  },\n}];"
+      },
+      "id": "techhrm-application-normalize",
+      "name": "Normalize Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.message }}",
+        "options": {
+          "senderName": "={{ $json.from_name }}",
+          "appendAttribution": false
+        }
+      },
+      "id": "techhrm-application-gmail",
+      "name": "Send Gmail",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [720, 300],
+      "notesInFlow": true,
+      "notes": "Use the same Gmail OAuth credential as TechHRM Forgot Password (techhrmwspo@gmail.com), then activate this workflow."
+    }
+  ],
+  "connections": {
+    "Application Status Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Payload": {
+      "main": [
+        [
+          {
+            "node": "Send Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
