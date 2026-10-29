@@ -32,6 +32,7 @@ import AuditPager, { pageSlice } from './AuditPager';
 import ComboFilter from './ComboFilter';
 import WsaExtraServiceLetter, { printExtraServiceLetter } from './staffing/WsaExtraServiceLetter';
 import SecureFileViewerModal from './SecureFileViewerModal';
+import { workShiftDutyOptions } from '../constants/workShiftDutyTypes';
 
 const HOUR_OPTIONS = Array.from({ length: 12 }, (_, index) => String(index + 1));
 const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0'));
@@ -1756,9 +1757,9 @@ const ScheduleManagement = () => {
                                             onChange={e => setFormData({...formData, duty_type: e.target.value})} 
                                             className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all appearance-none cursor-pointer"
                                         >
-                                            {['Clerical Work', 'Library Assistant', 'Lab Assistant', 'Cleaning', 'Event Setup', formData.duty_type]
-                                                .filter((duty, index, list) => duty && list.indexOf(duty) === index)
-                                                .map((duty) => <option key={duty}>{duty}</option>)}
+                                            {workShiftDutyOptions(formData.duty_type).map((duty) => (
+                                                <option key={duty} value={duty}>{duty}</option>
+                                            ))}
                                         </select>
                                 </div>
                                 )}
