@@ -25,7 +25,15 @@
         "sendTo": "={{ $json.body.email }}",
         "subject": "TechHRM Application Received",
         "message": "=<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>TechHRM Application Received</title>\n</head>\n\n<body style=\"margin: 0; padding: 0; background-color: #FFD500; font-family: Arial, Helvetica, sans-serif; color: #000000;\">\n\n    <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\"\n           style=\"background-color: #FFD500; padding: 35px 12px;\">\n        <tr>\n            <td align=\"center\">\n\n                <table role=\"presentation\" width=\"600\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\"\n                       style=\"width: 100%; max-width: 600px; background-color: #FFFFFF; border: 2px solid #102179; border-radius: 16px; overflow: hidden;\">\n\n                    <tr>\n                        <td align=\"center\" style=\"background-color: #102179; padding: 32px 24px 28px;\">\n\n                            <table role=\"presentation\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\">\n                                <tr>\n                                    <td align=\"center\"\n                                        style=\"width: 96px; height: 96px; border-radius: 50%; background-color: #FFFFFF; border: 5px solid #4AECED;\">\n                                        <img src=\"https://raw.githubusercontent.com/meythegreat/TechHRM_Capstone/main/client/public/logo.jpg\"\n                                             width=\"96\"\n                                             height=\"96\"\n                                             alt=\"Work Study Program Organization\"\n                                             style=\"display: block; width: 96px; height: 96px; border-radius: 50%; border: 0; outline: none; text-decoration: none;\">\n                                    </td>\n                                </tr>\n                            </table>\n\n                            <h1 style=\"margin: 18px 0 6px; font-size: 28px; line-height: 1.3; font-weight: 800; color: #FFFFFF; letter-spacing: 1px;\">\n                                TechHRM\n                            </h1>\n\n                            <p style=\"margin: 0; font-size: 13px; line-height: 1.6; color: #4AECED; letter-spacing: 1.5px; text-transform: uppercase;\">\n                                Work-Study Program\n                            </p>\n\n                            <table role=\"presentation\" width=\"90\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\"\n                                   style=\"margin-top: 20px;\">\n                                <tr>\n                                    <td height=\"4\" style=\"background-color: #FFD500; border-radius: 4px;\"></td>\n                                </tr>\n                            </table>\n\n                        </td>\n                    </tr>\n\n                    <tr>\n                        <td height=\"5\" style=\"background-color: #CC1E1B; font-size: 0; line-height: 0;\">\n                            &nbsp;\n                        </td>\n                    </tr>\n\n                    <tr>\n                        <td style=\"padding: 35px 32px 20px;\">\n\n                            <p style=\"margin: 0 0 18px; font-size: 16px; line-height: 1.7;\">\n                                Dear <strong style=\"color: #102179;\">{{ $json.body.applicant_name }}</strong>,\n                            </p>\n\n                            <h2 style=\"margin: 0 0 16px; font-size: 23px; line-height: 1.4; color: #102179;\">\n                                Application Successfully Received!\n                            </h2>\n\n                            <p style=\"margin: 0 0 16px; font-size: 15px; line-height: 1.8; color: #333333;\">\n                                Thank you for applying to the <strong>TechHRM Work-Study Program</strong> at Filamer Christian University.\n                            </p>\n\n                            <p style=\"margin: 0 0 24px; font-size: 15px; line-height: 1.8; color: #333333;\">\n                                We are pleased to confirm that your application and submitted documents have been successfully received. Your application will now proceed to the appropriate evaluation process.\n                            </p>\n\n                            <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\"\n                                   style=\"background-color: #F4F7FF; border: 1px solid #D6DFF8; border-left: 5px solid #FFD500; border-radius: 8px;\">\n                                <tr>\n                                    <td style=\"padding: 22px 20px;\">\n\n                                        <p style=\"margin: 0 0 12px; font-size: 12px; font-weight: 700; color: #102179; text-transform: uppercase; letter-spacing: 1.2px;\">\n                                            Current Application Status\n                                        </p>\n\n                                        <table role=\"presentation\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\">\n                                            <tr>\n                                                <td style=\"background-color: #FFF0B3; border: 1px solid #FFD500; border-radius: 20px; padding: 9px 18px;\">\n\n                                                    <span style=\"font-size: 14px; font-weight: 800; color: #102179; letter-spacing: 1px;\">\n                                                        &#9679;&nbsp; PENDING\n                                                    </span>\n\n                                                </td>\n                                            </tr>\n                                        </table>\n\n                                        <p style=\"margin: 15px 0 0; font-size: 13px; line-height: 1.7; color: #444444;\">\n                                            Your application is awaiting evaluation. Please wait for another notification regarding any changes to your application status.\n                                        </p>\n\n                                    </td>\n                                </tr>\n                            </table>\n\n                            <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\"\n                                   style=\"margin-top: 26px; background-color: #102179; border-radius: 10px;\">\n                                <tr>\n                                    <td align=\"center\" style=\"padding: 23px 18px;\">\n\n                                        <p style=\"margin: 0 0 8px; font-size: 12px; font-weight: 700; color: #4AECED; letter-spacing: 1.5px; text-transform: uppercase;\">\n                                            Your Application Tracking Code\n                                        </p>\n\n                                        <p style=\"margin: 0 0 12px; font-size: 23px; line-height: 1.5; font-weight: 800; color: #FFD500; letter-spacing: 2px; overflow-wrap: anywhere;\">\n                                            {{ $json.body.tracking_code }}\n                                        </p>\n\n                                        <p style=\"margin: 0; font-size: 12px; line-height: 1.7; color: #FFFFFF;\">\n                                            Keep this code safe. You can use it to track your application status whenever you need to.\n                                        </p>\n\n                                    </td>\n                                </tr>\n                            </table>\n\n                            <p style=\"margin: 25px 0 16px; font-size: 14px; line-height: 1.8; color: #333333;\">\n                                We appreciate your interest in becoming part of the TechHRM Work-Study Program. Please keep an eye on your email for future updates and announcements regarding your application.\n                            </p>\n\n                            <p style=\"margin: 0 0 6px; font-size: 14px; line-height: 1.7; color: #333333;\">\n                                Thank you, and we wish you the best in your application!\n                            </p>\n\n                            <p style=\"margin: 25px 0 4px; font-size: 14px; color: #333333;\">\n                                Sincerely,\n                            </p>\n\n                            <p style=\"margin: 0; font-size: 16px; font-weight: 800; color: #102179;\">\n                                TechHRM\n                            </p>\n\n                            <p style=\"margin: 3px 0; font-size: 13px; color: #555555;\">\n                                Work-Study Program\n                            </p>\n\n                            <p style=\"margin: 3px 0 0; font-size: 13px; font-weight: 700; color: #102179;\">\n                                Filamer Christian University\n                            </p>\n\n                        </td>\n                    </tr>\n\n                    <tr>\n                        <td align=\"center\" style=\"padding: 22px 24px; background-color: #F0F3FA; border-top: 1px solid #D6DFF8;\">\n\n                            <p style=\"margin: 0 0 7px; font-size: 12px; font-weight: 700; color: #102179;\">\n                                TECHHRM | WORK-STUDY PROGRAM\n                            </p>\n\n                            <p style=\"margin: 0; font-size: 11px; line-height: 1.7; color: #666666;\">\n                                Filamer Christian University<br>\n                                This is an automated notification. Please keep this email for your records.\n                            </p>\n\n                            <table role=\"presentation\" width=\"60\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\"\n                                   style=\"margin-top: 15px;\">\n                                <tr>\n                                    <td height=\"3\" style=\"background-color: #CC1E1B;\"></td>\n                                    <td height=\"3\" style=\"background-color: #FFD500;\"></td>\n                                    <td height=\"3\" style=\"background-color: #102179;\"></td>\n                                </tr>\n                            </table>\n\n                        </td>\n                    </tr>\n\n                </table>\n\n                <p style=\"max-width: 560px; margin: 18px auto 0; text-align: center; font-size: 11px; line-height: 1.6; color: #102179;\">\n                    &copy; TechHRM Work-Study Program | Filamer Christian University\n                </p>\n\n            </td>\n        </tr>\n    </table>\n\n</body>\n</html>\n",
-        "options": {}
+        "options": {
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {
+                "property": "data"
+              }
+            ]
+          }
+        }
       },
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.2,
@@ -287,6 +295,19 @@
       "id": "95e756d8-28d3-4ddb-8a6b-2819e53f503a",
       "name": "Send a message5",
       "webhookId": "665ceef2-caf5-4533-8060-be59fd8b8dde"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst raw = item.json || {};\nconst body = (raw.body && typeof raw.body === 'object') ? raw.body : raw;\nconst attachment = body.attachment;\nif (!attachment || !attachment.data) {\n  return [{ json: item.json }];\n}\nreturn [{\n  json: item.json,\n  binary: {\n    data: {\n      data: String(attachment.data),\n      mimeType: String(attachment.mimeType || 'application/pdf'),\n      fileName: String(attachment.filename || 'completed-forms.pdf'),\n      fileExtension: 'pdf',\n    },\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        112
+      ],
+      "id": "techhrm-attach-completed-form",
+      "name": "Attach completed form"
     }
   ],
   "connections": {
@@ -305,7 +326,7 @@
       "main": [
         [
           {
-            "node": "Send a message",
+            "node": "Attach completed form",
             "type": "main",
             "index": 0
           }
@@ -341,6 +362,17 @@
         [
           {
             "node": "Send a message5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach completed form": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
             "type": "main",
             "index": 0
           }
