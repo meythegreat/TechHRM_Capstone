@@ -11,6 +11,7 @@ use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\SecureFileController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\RequirementController;
 use App\Http\Controllers\FinancialController;
 use App\Http\Controllers\OfficeController;
@@ -67,6 +68,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // =====================================================
     // NOTIFICATIONS (ALL AUTHENTICATED USERS)
     // =====================================================
+
+    Route::get('/push/vapid-public-key', [PushSubscriptionController::class, 'publicKey']);
+    Route::post('/push/subscribe', [PushSubscriptionController::class, 'store']);
+    Route::delete('/push/subscribe', [PushSubscriptionController::class, 'destroy']);
 
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::patch('/notifications/read-all', [NotificationController::class, 'markAllRead']);

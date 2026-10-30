@@ -64,6 +64,8 @@ import StaffProfileSettings from './components/StaffProfileSettings';
 import OfficeDirectory from './components/OfficeDirectory';
 import HelpPage from './components/HelpPage';
 import InstallAppPrompt from './components/InstallAppPrompt';
+import PhoneNotificationPrompt from './components/PhoneNotificationPrompt';
+import { unsubscribePhoneNotifications } from './phoneNotifications';
 
 class PageErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
@@ -236,6 +238,7 @@ function App() {
 
   const handleLogout = async () => {
     try {
+      await unsubscribePhoneNotifications();
       await axios.post('/api/logout');
     } catch (error) {
       console.error('Logout failed', error);
@@ -269,6 +272,7 @@ function App() {
   return (
     <>
     <InstallAppPrompt />
+    <PhoneNotificationPrompt enabled={hasToken} />
     <AnimatePresence mode="wait" initial={false}>
     <motion.div key={screen} {...shellMotion} className={screen === 'session' ? 'h-screen print:h-auto' : 'min-h-screen'}>
     {isVerifying ? (

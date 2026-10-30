@@ -21,6 +21,37 @@ function cacheKey(files: string[]) {
   return hash.toString(16)
 }
 
+function phoneNotificationHandlers() {
+  return `
+self.addEventListener('push', (event) => {
+  let payload = { title: 'TechHRM', message: 'You have a new notification.', url: '/' };
+  try {
+    if (event.data) payload = Object.assign(payload, event.data.json());
+  } catch (error) {}
+  event.waitUntil(self.registration.showNotification(payload.title || 'TechHRM', {
+    body: payload.message || '',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    data: { url: payload.url || '/' },
+  }));
+});
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data && event.notification.data.url ? event.notification.data.url : '/', self.location.origin).href;
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of windows) {
+      if (client.url.startsWith(self.location.origin) && 'focus' in client) {
+        await client.focus();
+        return;
+      }
+    }
+    await self.clients.openWindow(target);
+  })());
+});
+`
+}
+
 function devWorkerSource() {
   return `/* TechHRM dev worker: makes the site installable without caching Vite modules. */
 self.addEventListener('install', (event) => {
@@ -33,6 +64,7 @@ self.addEventListener('fetch', (event) => {
   if (event.request.mode !== 'navigate') return;
   event.respondWith(fetch(event.request));
 });
+${phoneNotificationHandlers()}
 `
 }
 
@@ -99,6 +131,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(networkFirst(event.request));
   }
 });
+${phoneNotificationHandlers()}
 `
 }
 

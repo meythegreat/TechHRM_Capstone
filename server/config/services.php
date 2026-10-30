@@ -35,6 +35,12 @@ return [
         ],
     ],
 
+    'webpush' => [
+        'subject' => env('VAPID_SUBJECT', 'https://techhrm-capstone.onrender.com'),
+        'public_key' => env('VAPID_PUBLIC_KEY'),
+        'private_key' => env('VAPID_PRIVATE_KEY'),
+    ],
+
     'n8n' => [
         // Forgot-password mail is sent here. Resend is not used for resets.
         'forgot_password_webhook' => env(
