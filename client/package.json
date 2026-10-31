@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "node --experimental-strip-types --test tests/workShiftDutyTypes.test.ts"
+    "test": "node --experimental-strip-types --test tests/workShiftDutyTypes.test.ts tests/soundsPrime.test.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.0",
