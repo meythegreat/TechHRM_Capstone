@@ -25,6 +25,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
     const dropdownRef = useRef<HTMLDivElement>(null);
     const seenIds = useRef<Set<number> | null>(null);
     const signatureRef = useRef('');
+    const openedAt = useRef(0);
 
     const userRole = localStorage.getItem('user_role') || 'User'; 
 
@@ -33,19 +34,36 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
             const res = await axios.get('/api/notifications');
             const rows: Notification[] = Array.isArray(res.data) ? res.data : [];
             const signature = rows.map((row) => `${row.id}:${row.is_read}`).join(',');
-            const fresh = seenIds.current
-                ? rows.filter((row) => !seenIds.current?.has(row.id) && !row.is_read)
-                : [];
+            // First successful load only seeds the baseline. Existing unread must not chime on open.
+            const isBaseline = seenIds.current === null;
+            const sessionOpenedAt = openedAt.current;
+            const fresh = isBaseline
+                ? []
+                : rows.filter((row) => {
+                    if (seenIds.current?.has(row.id) || row.is_read) return false;
+                    const createdAt = Date.parse(row.created_at);
+                    // Skip backlog that already existed when this tab/PWA opened,
+                    // even if an earlier empty poll left seenIds incomplete.
+                    if (sessionOpenedAt > 0 && Number.isFinite(createdAt) && createdAt < sessionOpenedAt - 5000) {
+                        return false;
+                    }
+                    return true;
+                });
+
+            // Claim ids before side effects so overlapping polls cannot re-ding the same batch.
+            seenIds.current = new Set([
+                ...(seenIds.current ?? []),
+                ...rows.map((row) => row.id),
+            ]);
 
             if (fresh.length > 0) {
                 setLiveNotice(fresh[0]);
                 playNotificationSound();
             }
-            if (signatureRef.current && signatureRef.current !== signature) {
+            if (!isBaseline && signatureRef.current && signatureRef.current !== signature) {
                 emitRealtimeRefresh();
             }
 
-            seenIds.current = new Set(rows.map((row) => row.id));
             signatureRef.current = signature;
             setNotifications(rows);
         } catch (error) {
@@ -54,6 +72,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
     };
 
     useEffect(() => {
+        openedAt.current = Date.now();
         fetchNotifications();
         const interval = setInterval(fetchNotifications, 5000);
         const onVisible = () => {

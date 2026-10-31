@@ -1,8 +1,10 @@
 const SAMPLE_RATE = 22050;
+const NOTICE_COOLDOWN_MS = 1200;
 
 let audioContext: AudioContext | null = null;
 let armed = false;
 let phase: 'idle' | 'priming' | 'ready' = 'idle';
+let lastNoticeAt = 0;
 
 type Clip = HTMLAudioElement;
 
@@ -66,12 +68,19 @@ function playbackVolume() {
   return isPhone() ? 1 : 0.16;
 }
 
+/**
+ * Unlock each clip without an audible chime.
+ * iOS/Safari ignore HTMLAudioElement.volume, so a quiet prime still rings —
+ * mute during the unlock play instead.
+ */
 function primeClip(el: Clip) {
   el.dataset.mode = 'prime';
-  el.volume = 0.001;
+  el.muted = true;
+  el.volume = 0;
   const task = el.play();
   const settle = (ok: boolean) => {
     if (el.dataset.mode === 'play') {
+      el.muted = false;
       el.volume = playbackVolume();
       return ok;
     }
@@ -81,6 +90,7 @@ function primeClip(el: Clip) {
     } catch {
       /* not loaded yet */
     }
+    el.muted = false;
     el.volume = playbackVolume();
     return ok;
   };
@@ -106,7 +116,7 @@ function onGesture() {
   });
 }
 
-/** Phones only allow sound after a tap. The first tap starts playback so later chimes are allowed. */
+/** Phones only allow sound after a tap. The first tap starts muted playback so later chimes are allowed. */
 export function armSounds() {
   if (armed || typeof window === 'undefined') return;
   armed = true;
@@ -125,8 +135,8 @@ export function armSounds() {
 function playClip(el: Clip): Promise<boolean> {
   try {
     el.dataset.mode = 'play';
-    el.volume = playbackVolume();
     el.muted = false;
+    el.volume = playbackVolume();
     if (el.readyState > 0) el.currentTime = 0;
     const task = el.play();
     if (!task) return Promise.resolve(!el.paused);
@@ -166,6 +176,11 @@ function playSound(clip: Clip, tones: Tone[]) {
 }
 
 export function playNotificationSound() {
+  const now = Date.now();
+  if (now - lastNoticeAt < NOTICE_COOLDOWN_MS) {
+    return Promise.resolve(false);
+  }
+  lastNoticeAt = now;
   return playSound(noticeClip, noticeTones);
 }
 
