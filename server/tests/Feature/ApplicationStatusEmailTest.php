@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Application;
 use App\Models\User;
+use App\Services\CompletedApplicationForm;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
@@ -101,8 +102,15 @@ class ApplicationStatusEmailTest extends TestCase
             'form_details' => [
                 'religion' => 'Christian',
                 'sex' => 'Female',
+                'civil_status' => 'Single',
                 'home_address' => 'Roxas City',
-                'consent_child_name' => 'Ana M. Cruz',
+                'date_of_birth' => '2007-03-01',
+                'parent_status' => 'Living',
+                'parent_occupation' => 'Farmer',
+                'has_scholarship' => 'No',
+                'is_4ps' => 'Yes',
+                'medical_conditions' => ['None'],
+                'consent_child_name' => 'Cruz, Ana M',
             ],
         ]);
 
@@ -124,6 +132,17 @@ class ApplicationStatusEmailTest extends TestCase
                 && is_string($pdf)
                 && str_starts_with($pdf, '%PDF');
         });
+
+        $html = app(CompletedApplicationForm::class)->html($application->fresh());
+        $this->assertStringContainsString('PERSONAL INFORMATION', $html);
+        $this->assertStringContainsString('INFORMATION SHEET', $html);
+        $this->assertStringContainsString('FCU-EOMS-WP-012', $html);
+        $this->assertStringContainsString('Cruz, Ana M', $html);
+        $this->assertStringContainsString('March 1, 2007', $html);
+        $this->assertStringContainsString('PARENTS CONSENT', $html);
+        $this->assertStringContainsString('FORM FOR PARENTS (GUARDIAN’S) PERMISSION AND AGREEMENT', $html);
+        $this->assertStringContainsString('Father’s Name &amp; Signature', $html);
+        $this->assertStringNotContainsString('Completed application form', $html);
     }
 
     public function test_status_is_saved_when_the_webhook_rejects_the_email(): void

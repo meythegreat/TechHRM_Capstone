@@ -32,7 +32,11 @@ class ApplicationDocumentSubmissionTest extends TestCase
         $response = $this->post('/api/apply', $payload);
 
         $response->assertCreated()
-            ->assertJsonStructure(['tracking_code', 'tracker']);
+            ->assertJsonStructure(['tracking_code', 'tracker', 'form_pdf' => ['filename', 'data']]);
+
+        $pdf = base64_decode((string) $response->json('form_pdf.data'), true);
+        $this->assertIsString($pdf);
+        $this->assertStringStartsWith('%PDF', $pdf);
 
         $application = Application::with('documents')->first();
         $this->assertNotNull($application);
@@ -135,7 +139,7 @@ class ApplicationDocumentSubmissionTest extends TestCase
                 'tel_number' => '',
                 'date_of_birth' => '2006-01-15',
                 'place_of_birth' => 'Roxas City',
-                'height' => '5\'6"',
+                'height' => '5\'6',
                 'weight' => '55',
                 'sex' => 'Male',
                 'parent_name' => 'Pedro Cruz',

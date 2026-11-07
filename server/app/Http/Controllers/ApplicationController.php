@@ -54,11 +54,10 @@ class ApplicationController extends Controller
 
         $this->deliverOfficialForms($application, null);
 
-        return response()->json([
-            'message' => 'Application submitted. Both forms were sent to the WSPO coordinator. A username and password are issued only after placement is finalized.',
-            'tracking_code' => $application->tracking_code,
-            'tracker' => $this->presentTracker($application),
-        ], 201);
+        return $this->submittedApplicationResponse(
+            $application,
+            'Application submitted. Both forms were sent to the WSPO coordinator. A username and password are issued only after placement is finalized.'
+        );
     }
 
     // 1. STUDENT: Submit Application
@@ -84,11 +83,26 @@ class ApplicationController extends Controller
 
         $this->deliverOfficialForms($application, $request->user());
 
-        return response()->json([
-            'message' => 'Application submitted. Both forms were sent to the WSPO coordinator.',
+        return $this->submittedApplicationResponse(
+            $application,
+            'Application submitted. Both forms were sent to the WSPO coordinator.',
+            ['data' => $application->load('documents')]
+        );
+    }
+
+    private function submittedApplicationResponse(Application $application, string $message, array $extra = [])
+    {
+        $form = app(CompletedApplicationForm::class);
+
+        return response()->json(array_merge([
+            'message' => $message,
             'tracking_code' => $application->tracking_code,
-            'data' => $application->load('documents'),
-        ], 201);
+            'tracker' => $this->presentTracker($application),
+            'form_pdf' => [
+                'filename' => $form->filename($application),
+                'data' => base64_encode($form->pdf($application)),
+            ],
+        ], $extra), 201);
     }
 
     // COORDINATOR: Official personal information sheet and parents consent.
@@ -693,7 +707,7 @@ class ApplicationController extends Controller
             'age' => 'required|integer|min:16',
             'gender' => 'required|string|in:Male,Female',
             'address' => 'required|string|max:500',
-            'contact_number' => 'required|string|max:50',
+            'contact_number' => ['required', 'regex:/^\d{7,11}$/'],
             'year_level' => 'required|string|max:50',
             'course' => 'required|string|max:255',
             'form_details' => 'required|string',
@@ -727,24 +741,25 @@ class ApplicationController extends Controller
 
         $detailsValidator = Validator::make($details, [
             'religion' => 'required|string|max:100',
+            'religion_other' => 'nullable|string|max:100',
             'civil_status' => 'required|in:Single,Married,Widowed,Separated',
-            'tel_number' => 'nullable|string|max:50',
+            'tel_number' => ['nullable', 'regex:/^\d{0,11}$/'],
             'date_of_birth' => 'required|date|before:today',
             'place_of_birth' => 'required|string|max:255',
-            'height' => 'required|string|max:50',
-            'weight' => 'required|string|max:50',
+            'height' => ['required', 'regex:/^\d\'\d{1,2}$/'],
+            'weight' => ['required', 'regex:/^\d{1,3}$/'],
             'sex' => 'required|in:Male,Female',
             'parent_name' => 'required|string|max:255',
             'parent_status' => 'required|in:Living,Deceased',
-            'parent_tel' => 'required|string|max:50',
+            'parent_tel' => ['required', 'regex:/^\d{7,11}$/'],
             'parent_occupation' => 'required|in:Farmer,Fisherman,Retired,Private Employee,Unemployed,Others',
             'parent_occupation_other' => 'nullable|string|max:100',
-            'parent_income' => 'required|string|max:100',
+            'parent_income' => ['required', 'regex:/^\d{1,9}$/'],
             'guardian_name' => 'nullable|string|max:255',
-            'guardian_tel' => 'nullable|string|max:50',
+            'guardian_tel' => ['nullable', 'regex:/^\d{0,11}$/'],
             'guardian_occupation' => 'nullable|string|max:100',
             'guardian_occupation_other' => 'nullable|string|max:100',
-            'guardian_income' => 'nullable|string|max:100',
+            'guardian_income' => ['nullable', 'regex:/^\d{0,9}$/'],
             'sibling_employed_at_fcu' => 'required|in:Yes,No',
             'employed_sibling_count' => 'nullable|integer|min:1|max:12',
             'employed_siblings' => 'nullable|array|max:12',
@@ -752,7 +767,7 @@ class ApplicationController extends Controller
             'has_non_working_siblings' => 'required|in:Yes,No',
             'siblings' => 'nullable|array|max:6',
             'siblings.*.name' => 'nullable|string|max:255',
-            'siblings.*.age' => 'nullable|string|max:10',
+            'siblings.*.age' => ['nullable', 'regex:/^\d{0,3}$/'],
             'siblings.*.school_or_work' => 'nullable|string|max:255',
             'technical_qualification' => 'required|string|max:1000',
             'work_experience' => 'required|string|max:1000',
@@ -774,10 +789,18 @@ class ApplicationController extends Controller
             'photo' => 'required|string|max:1500000',
             'email' => 'required|email|max:255',
             'home_address' => 'required|string|max:500',
-            'cell_number' => 'required|string|max:50',
+            'cell_number' => ['required', 'regex:/^\d{7,11}$/'],
         ]);
         $detailsValidator->validate();
         $details = $detailsValidator->validated();
+
+        if ($details['religion'] === 'Others') {
+            $otherReligion = trim((string) ($details['religion_other'] ?? ''));
+            if ($otherReligion === '') {
+                throw ValidationException::withMessages(['form_details' => 'Specify the religion.']);
+            }
+            $details['religion'] = $otherReligion;
+        }
 
         if ($details['parent_occupation'] === 'Others' && trim((string) ($details['parent_occupation_other'] ?? '')) === '') {
             throw ValidationException::withMessages(['form_details' => 'Specify the parent occupation.']);

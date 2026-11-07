@@ -1,6 +1,19 @@
 export const YEAR_LEVELS = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
 export const SEX_OPTIONS = ['Male', 'Female'];
 export const CIVIL_STATUSES = ['Single', 'Married', 'Widowed', 'Separated'];
+export const RELIGIONS = [
+    'Roman Catholic',
+    'Iglesia ni Cristo',
+    'Islam',
+    'Protestant',
+    'Baptist',
+    'Born Again Christian',
+    'Seventh-day Adventist',
+    'Iglesia Filipina Independiente',
+    'Jehovah\'s Witnesses',
+    'Buddhism',
+    'Others',
+];
 export const OCCUPATIONS = ['Farmer', 'Fisherman', 'Retired', 'Private Employee', 'Unemployed', 'Others'];
 export const MEDICAL_CONDITIONS = [
     'None',
@@ -58,6 +71,7 @@ export type SiblingRow = {
 
 export type OfficialFormDetails = {
     religion: string;
+    religion_other: string;
     civil_status: string;
     tel_number: string;
     date_of_birth: string;
@@ -129,6 +143,7 @@ export const emptySibling = (): SiblingRow => ({ name: '', age: '', school_or_wo
 
 export const emptyDetails = (): OfficialFormDetails => ({
     religion: '',
+    religion_other: '',
     civil_status: '',
     tel_number: '',
     date_of_birth: '',
@@ -185,6 +200,20 @@ export const emptyDetails = (): OfficialFormDetails => ({
     home_address: '',
     cell_number: '',
 });
+
+export const groupedAmount = (amount?: string | null) => {
+    const digits = String(amount ?? '').replace(/\D/g, '');
+    return digits === '' ? '' : Number(digits).toLocaleString('en-US');
+};
+
+export const pesos = (amount?: string | null) => {
+    const grouped = groupedAmount(amount);
+    return grouped === '' ? '' : `₱${grouped}`;
+};
+
+export const sheetReligion = (details: Pick<OfficialFormDetails, 'religion' | 'religion_other'>) => (
+    details.religion === 'Others' ? details.religion_other.trim() : details.religion.trim()
+);
 
 export const sheetName = (identity: Pick<OfficialIdentity, 'first_name' | 'middle_name' | 'last_name'>) => {
     const given = [identity.first_name, identity.middle_name].map((part) => part.trim()).filter(Boolean).join(' ');
@@ -246,6 +275,7 @@ export function buildApplicationPayload(
     payload.append('form_details', JSON.stringify({
         ...details,
         email: details.email.trim(),
+        religion: sheetReligion(details),
         home_address: details.home_address.trim(),
         cell_number: details.cell_number.trim(),
         employed_sibling_count: details.sibling_employed_at_fcu === 'Yes' ? Number(details.employed_sibling_count) : null,

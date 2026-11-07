@@ -47,10 +47,11 @@ return [
             'N8N_FORGOT_PASSWORD_WEBHOOK',
             'http://localhost:5678/webhook/techhrm/forgot-password'
         ),
-        // Application submission and status emails. Same Gmail workflow host as password reset.
+        // Application submission and status emails. Same local n8n host as password reset.
+        // On Render, set N8N_APPLICATION_STATUS_WEBHOOK to the public n8n URL.
         'application_status_webhook' => env(
             'N8N_APPLICATION_STATUS_WEBHOOK',
-            'https://techhrm-n8n.onrender.com/webhook/techhrm/application-submitted'
+            'http://localhost:5678/webhook/techhrm/application-submitted'
         ),
     ],
 

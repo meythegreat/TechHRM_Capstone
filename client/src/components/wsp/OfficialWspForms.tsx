@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { CAMPUS_LETTERHEAD, OFFICIAL_FORM_META } from '../../constants/campusDocuments';
-import { displayDate, safeImage, sheetName, type OfficialFormDetails, type OfficialIdentity } from './officialForm';
+import { displayDate, pesos, safeImage, sheetName, sheetReligion, type OfficialFormDetails, type OfficialIdentity } from './officialForm';
 
 type OfficialWspFormsProps = {
     identity: OfficialIdentity;
@@ -265,7 +265,7 @@ const OfficialWspForms = ({ identity, details }: OfficialWspFormsProps) => {
                     <span>1. Name</span>
                     <Rule value={sheetName(identity)} className="rule-name" />
                     <span>Religion</span>
-                    <Rule value={details.religion} className="rule-mid" />
+                    <Rule value={sheetReligion(details)} className="rule-mid" />
                 </div>
                 <div className="hint">
                     <span className="hint-last">(Last name</span>
@@ -305,7 +305,7 @@ const OfficialWspForms = ({ identity, details }: OfficialWspFormsProps) => {
                 </div>
                 <Jobs selected={details.parent_occupation} other={details.parent_occupation_other} />
                 <div className="line">
-                    <span>Approximate Monthly Income</span><Rule value={details.parent_income} className="rule-mid" />
+                    <span>Approximate Monthly Income</span><Rule value={pesos(details.parent_income)} className="rule-mid" />
                 </div>
 
                 <div className="line" style={{ marginTop: '12px' }}>
@@ -317,7 +317,7 @@ const OfficialWspForms = ({ identity, details }: OfficialWspFormsProps) => {
                 </div>
                 <Jobs selected={details.parent_status === 'Deceased' ? details.guardian_occupation : ''} other={details.guardian_occupation_other} />
                 <div className="line">
-                    <span>Approximate Monthly Income</span><Rule value={details.parent_status === 'Deceased' ? details.guardian_income : ''} className="rule-mid" />
+                    <span>Approximate Monthly Income</span><Rule value={details.parent_status === 'Deceased' ? pesos(details.guardian_income) : ''} className="rule-mid" />
                 </div>
 
                 <p className="q">3. Do you have any brother or sister employed as a work student at FCU?</p>
