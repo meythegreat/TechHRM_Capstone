@@ -313,13 +313,15 @@ const ScheduleManagement = () => {
         const kind = schedule.kind === 'class' ? 'class' : 'work';
         setEditingId(schedule.id);
         setEntryKind(kind);
+        const storedSubject = (schedule.subject || '').trim();
+        const dutyName = (schedule.duty_type || '').trim();
         setFormData(createScheduleForm(String(schedule.user_id), [createScheduleSlot({
             kind,
             days: weekdays.includes(schedule.day) ? [schedule.day] : ['Monday'],
             startTime: times.startTime,
             endTime: times.endTime,
             duty_type: kind === 'work' ? (schedule.duty_type || 'Clerical Work') : 'Clerical Work',
-            subject: schedule.subject || (kind === 'class' ? schedule.duty_type : '') || '',
+            subject: storedSubject || (kind === 'class' && dutyName !== '' && dutyName !== 'Class' ? dutyName : ''),
             room: schedule.room || '',
             instructor: schedule.instructor || (kind === 'class' ? schedule.supervisor : '') || '',
         })]));
@@ -784,11 +786,6 @@ const ScheduleManagement = () => {
             }
             if (!slot.startTime || !slot.endTime) {
                 showToast(`Enter a start and end time for ${label.toLowerCase()}.`, 'error');
-                setIsSubmitting(false);
-                return;
-            }
-            if (slot.kind === 'class' && !slot.subject.trim()) {
-                showToast(`Enter a subject for ${label.toLowerCase()}.`, 'error');
                 setIsSubmitting(false);
                 return;
             }
@@ -1794,7 +1791,7 @@ const ScheduleManagement = () => {
                                     <p className={`text-[11px] font-medium leading-relaxed ${entryKind === 'class' ? 'text-violet-800' : 'text-blue-800'}`}>
                                         {editingId
                                             ? 'This updates the selected row only. The new time still cannot overlap another class or work shift on that day.'
-                                            : 'Add every class and work shift for this student before you save. Use Add another, then set each block to class or work. Each block can use different days and times. Times cannot overlap on the same day. Clock-in follows work shifts only.'}
+                                            : 'Add every class and work shift for this student before you save. A class only needs a start and end time. The class name, room, and instructor are optional. Use Add another, then set each block to class or work. Times cannot overlap on the same day. Clock-in follows work shifts only.'}
                                     </p>
                                 </div>
 
@@ -1887,8 +1884,8 @@ const ScheduleManagement = () => {
                                                 {isClass ? (
                                                     <div className="space-y-5">
                                                         <div>
-                                                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Subject</label>
-                                                            <input required value={slot.subject} onChange={e => updateSlot(slot.key, { subject: e.target.value })} placeholder="e.g. CS 301 Data Structures" className={`${fieldClass} placeholder:text-slate-400 placeholder:font-medium`} />
+                                                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Subject <span className="font-medium normal-case tracking-normal text-slate-400">(optional)</span></label>
+                                                            <input value={slot.subject} onChange={e => updateSlot(slot.key, { subject: e.target.value })} placeholder="e.g. CS 301 Data Structures" className={`${fieldClass} placeholder:text-slate-400 placeholder:font-medium`} />
                                                         </div>
                                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                                             <div>

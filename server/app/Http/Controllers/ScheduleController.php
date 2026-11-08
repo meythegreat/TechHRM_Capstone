@@ -120,11 +120,6 @@ class ScheduleController extends Controller
 
         foreach ($entries as $index => $entry) {
             $blockKind = $this->entryKind($entry, $kind);
-            if ($blockKind === 'class' && trim((string) ($entry['subject'] ?? '')) === '') {
-                return response()->json([
-                    'message' => $this->entryLabel($blockKind, $index, count($entries)).' needs a subject.',
-                ], 422);
-            }
             if ($blockKind !== 'class' && trim((string) ($entry['duty_type'] ?? '')) === '') {
                 return response()->json([
                     'message' => $this->entryLabel($blockKind, $index, count($entries)).' needs a duty type.',
@@ -183,7 +178,7 @@ class ScheduleController extends Controller
                         'day' => $day,
                         'time' => $entry['time'],
                         'duty_type' => $blockKind === 'class' ? ($subject !== '' ? $subject : 'Class') : $entry['duty_type'],
-                        'subject' => $blockKind === 'class' ? $subject : null,
+                        'subject' => $blockKind === 'class' && $subject !== '' ? $subject : null,
                         'room' => $blockKind === 'class' && $room !== '' ? $room : null,
                         'instructor' => $blockKind === 'class' && $instructor !== '' ? $instructor : null,
                         'department' => $department,
@@ -247,7 +242,7 @@ class ScheduleController extends Controller
             'day' => 'required|string|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
             'time' => 'required|string',
             'duty_type' => $kind === 'class' ? 'nullable|string|max:120' : 'required|string|max:120',
-            'subject' => $kind === 'class' ? 'required|string|max:160' : 'nullable|string|max:160',
+            'subject' => 'nullable|string|max:160',
             'room' => 'nullable|string|max:120',
             'instructor' => 'nullable|string|max:120',
         ]);
@@ -278,7 +273,7 @@ class ScheduleController extends Controller
             'day' => $validated['day'],
             'time' => $validated['time'],
             'duty_type' => $kind === 'class' ? ($subject !== '' ? $subject : 'Class') : $validated['duty_type'],
-            'subject' => $kind === 'class' ? $subject : null,
+            'subject' => $kind === 'class' && $subject !== '' ? $subject : null,
             'room' => $kind === 'class' && $room !== '' ? $room : null,
             'instructor' => $kind === 'class' && $instructor !== '' ? $instructor : null,
             'department' => $department,
@@ -403,7 +398,7 @@ class ScheduleController extends Controller
             'time' => 'required|string',
             'kind' => 'nullable|in:work,class',
             'duty_type' => 'required_unless:kind,class|nullable|string|max:120',
-            'subject' => 'required_if:kind,class|nullable|string|max:160',
+            'subject' => 'nullable|string|max:160',
             'room' => 'nullable|string|max:120',
             'instructor' => 'nullable|string|max:120',
         ]);

@@ -274,6 +274,34 @@ class AssignJanitorialShiftTest extends TestCase
         ])->assertNotFound();
     }
 
+    public function test_class_schedule_can_be_saved_without_a_subject(): void
+    {
+        [, $student] = $this->actingWspoWithStudent();
+
+        $response = $this->postJson('/api/schedules', [
+            'user_id' => $student->id,
+            'kind' => 'class',
+            'days' => ['Tuesday'],
+            'time' => '10:00 - 11:30',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('message', 'Class schedule saved.')
+            ->assertJsonPath('schedules.0.kind', 'class')
+            ->assertJsonPath('schedules.0.subject', null)
+            ->assertJsonPath('schedules.0.duty_type', 'Class')
+            ->assertJsonPath('schedules.0.time', '10:00 - 11:30');
+
+        $this->assertDatabaseHas('schedules', [
+            'user_id' => $student->id,
+            'kind' => 'class',
+            'day' => 'Tuesday',
+            'time' => '10:00 - 11:30',
+            'duty_type' => 'Class',
+            'subject' => null,
+        ]);
+    }
+
     public function test_overlapping_shifts_in_one_save_are_rejected(): void
     {
         [, $student] = $this->actingWspoWithStudent();

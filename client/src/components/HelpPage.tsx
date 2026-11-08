@@ -258,7 +258,7 @@ const HELP_TOPICS: HelpTopic[] = [
             'Click Schedules in the left menu.',
             'Make sure a semester is set before adding or assigning schedules.',
             'Use filters (name, day, department, date/time) to find the right records.',
-            'Add a class or assign a work shift when your role allows it. You can stack several classes and work shifts for the same student, then save them together.',
+            'Add a class or assign a work shift when your role allows it. You can stack several classes and work shifts for the same student, then save them together. A class only needs a start and end time. The class name is optional.',
             'Edit or remove a schedule if the day or time needs correction.',
             'Review student edit requests and approve or reject them with a note.',
             'Supervisors can submit a staffing request when more student workers are needed.',
