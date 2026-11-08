@@ -305,13 +305,16 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
         ]);
     }
 
-    public function test_group_leader_cannot_manually_set_activity_timeout(): void
+    public function test_group_leader_can_manually_set_activity_time_in_and_timeout(): void
     {
         $staff = $this->makeUser('WSPO Staff', 'WSPO Coordinator');
         $leader = $this->makeStudent('Timeout Leader', 2, '2026-5002');
         $student = $this->makeStudent('Timeout Member', 1, '2026-5003');
-        $group = DailyCleaningGroup::create(['name' => 'Leader Block']);
+        $outsider = $this->makeStudent('Other Group Member', 1, '2026-5005');
+        $group = DailyCleaningGroup::create(['name' => 'Leader Allow']);
+        $otherGroup = DailyCleaningGroup::create(['name' => 'Other Group']);
         $this->attachMembers($group, [$leader->id, $student->id], $leader->id);
+        $this->attachMembers($otherGroup, [$outsider->id], $outsider->id);
 
         Sanctum::actingAs($staff);
         $eventId = (int) $this->postJson('/api/financial/hour-events', [
@@ -322,16 +325,33 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
             'starts_at' => '05:00',
         ])->assertCreated()->json('event.id');
 
-        $this->patchJson('/api/financial/hour-events/'.$eventId.'/time', [
+        Carbon::setTestNow(Carbon::parse('2026-10-28 06:00:00'));
+        Sanctum::actingAs($leader);
+        $timedIn = $this->patchJson('/api/financial/hour-events/'.$eventId.'/time', [
             'user_id' => $student->id,
             'time' => '05:10',
         ])->assertOk();
+        $timedInEntry = collect($timedIn->json('event.entries'))->firstWhere('user_id', $student->id);
+        $this->assertSame('timed_in', $timedInEntry['status'] ?? null);
+        $this->assertSame('05:10', $timedInEntry['time_in'] ?? null);
 
-        Carbon::setTestNow(Carbon::parse('2026-10-28 06:00:00'));
-        Sanctum::actingAs($leader);
-        $this->patchJson('/api/financial/hour-events/'.$eventId.'/timeout', [
+        $timedOut = $this->patchJson('/api/financial/hour-events/'.$eventId.'/timeout', [
             'user_id' => $student->id,
             'time' => '05:45',
+        ])->assertOk();
+        $timedOutEntry = collect($timedOut->json('event.entries'))->firstWhere('user_id', $student->id);
+        $this->assertSame('on_time', $timedOutEntry['status'] ?? null);
+        $this->assertSame(1, (int) ($timedOutEntry['hours_delta'] ?? 0));
+        $this->assertSame('05:45', $timedOutEntry['time_out'] ?? null);
+
+        Sanctum::actingAs($outsider);
+        $this->patchJson('/api/financial/hour-events/'.$eventId.'/time', [
+            'user_id' => $student->id,
+            'time' => '05:12',
+        ])->assertForbidden();
+        $this->patchJson('/api/financial/hour-events/'.$eventId.'/timeout', [
+            'user_id' => $student->id,
+            'time' => '05:50',
         ])->assertForbidden();
     }
 

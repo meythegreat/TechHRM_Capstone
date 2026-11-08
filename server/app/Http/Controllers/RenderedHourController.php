@@ -295,7 +295,7 @@ class RenderedHourController extends Controller
     public function correctTime(Request $request, RenderedHourEvent $event)
     {
         SuperAdminAudit::denyMutation($request);
-        $this->assertActivityIssuer($request);
+        $this->assertActivityTimeEditor($request, $event);
         if (!$event->usesAttendance()) {
             abort(422, 'Special requests do not use attendance.');
         }
@@ -350,8 +350,8 @@ class RenderedHourController extends Controller
                 'rendered_hour_event_id' => $event->id,
                 'status' => $closed ? 'accepted' : 'pending',
                 'task_description' => $closed
-                    ? 'Time corrected by WSPO staff.'
-                    : 'Clock-in time corrected by WSPO staff. Hours are added when the student times out.',
+                    ? 'Time corrected by WSPO staff or the group leader.'
+                    : 'Clock-in time corrected by WSPO staff or the group leader. Hours are added when the student times out.',
                 'is_anomaly' => $closed && $status === 'late',
                 'anomaly_reason' => $closed && $status === 'late'
                     ? 'Clocked in after the on-time window. No hours were added or deducted.'
@@ -388,11 +388,11 @@ class RenderedHourController extends Controller
         ]);
     }
 
-    /** WSPO staff closes or corrects an activity time-out without the QR/passcode. */
+    /** WSPO staff or the group leader closes or corrects an activity time-out without the QR/passcode. */
     public function correctTimeout(Request $request, RenderedHourEvent $event)
     {
         SuperAdminAudit::denyMutation($request);
-        $this->assertActivityIssuer($request);
+        $this->assertActivityTimeEditor($request, $event);
         if (!$event->usesAttendance()) {
             abort(422, 'Special requests do not use attendance.');
         }
@@ -457,7 +457,7 @@ class RenderedHourController extends Controller
                 'time_out' => $clockOut,
                 'activity_hours' => $delta,
                 'status' => 'accepted',
-                'task_description' => 'Time out corrected by WSPO staff. '.$message,
+                'task_description' => 'Time out corrected by WSPO staff or the group leader. '.$message,
                 'is_anomaly' => $status === 'late',
                 'anomaly_reason' => $status === 'late'
                     ? 'Clocked in after the on-time window. No hours were added or deducted.'
@@ -792,6 +792,18 @@ class RenderedHourController extends Controller
         if (!app(UserController::class)->canIssueActivityAttendance($user)) {
             abort(403, 'Only the WSPO coordinator, secretary, and president can change this attendance.');
         }
+    }
+
+    /** Clock-in / time-out corrections: WSPO issuer roles, or the leader of this activity's group. */
+    private function assertActivityTimeEditor(Request $request, RenderedHourEvent $event): void
+    {
+        $user = $request->user()->loadMissing('profile');
+        $accounts = app(UserController::class);
+        if ($accounts->canIssueActivityAttendance($user) || $accounts->isYearLeaderFor($user, $event)) {
+            return;
+        }
+
+        abort(403, 'Only WSPO staff or this group\'s leader can change this attendance time.');
     }
 
     /**

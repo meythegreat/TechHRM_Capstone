@@ -276,8 +276,9 @@ class UserController extends Controller
     }
 
     /**
-     * Activity QR codes and time corrections are limited to the three WSPO positions.
+     * WSPO activity issuer roles (coordinator / secretary / president).
      * A blank position is the original coordinator account.
+     * Group leaders may also correct times for their own group's activities.
      */
     public function canIssueActivityAttendance(User $user): bool
     {

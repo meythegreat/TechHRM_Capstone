@@ -87,6 +87,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/attendance/my-year-activities', [\App\Http\Controllers\RenderedHourController::class, 'leaderIndex']);
     Route::get('/attendance/activity-qr', [\App\Http\Controllers\AdvancedAttendanceController::class, 'activityQr']);
     Route::get('/attendance/activity-passcode', [\App\Http\Controllers\AdvancedAttendanceController::class, 'activityPasscode']);
+    // WSPO staff or the group's leader may correct activity clock-in / time-out.
+    Route::patch('/financial/hour-events/{event}/time', [\App\Http\Controllers\RenderedHourController::class, 'correctTime']);
+    Route::patch('/financial/hour-events/{event}/timeout', [\App\Http\Controllers\RenderedHourController::class, 'correctTimeout']);
 
     Route::post('/attendance/clock-out', [AttendanceController::class, 'clockOut']);
 
@@ -242,8 +245,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/financial/hour-events/{event}/marks', [\App\Http\Controllers\RenderedHourController::class, 'mark']);
         Route::post('/financial/hour-events/{event}/scan', [\App\Http\Controllers\RenderedHourController::class, 'scan']);
         Route::post('/financial/hour-events/{event}/mark-absent', [\App\Http\Controllers\RenderedHourController::class, 'markRemainingAbsent']);
-        Route::patch('/financial/hour-events/{event}/time', [\App\Http\Controllers\RenderedHourController::class, 'correctTime']);
-        Route::patch('/financial/hour-events/{event}/timeout', [\App\Http\Controllers\RenderedHourController::class, 'correctTimeout']);
         Route::post('/financial/compute-period', [FinancialController::class, 'computePeriod']);
         Route::put('/financial/records/{id}/adjustments', [FinancialController::class, 'updateAdjustments']);
         Route::delete('/financial/records/{id}', [FinancialController::class, 'destroy']);
