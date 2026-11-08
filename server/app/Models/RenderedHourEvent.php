@@ -37,6 +37,7 @@ class RenderedHourEvent extends Model
         'group_name',
         'group_id',
         'starts_at',
+        'ends_at',
         'valid_until',
         'notes',
         'created_by',
@@ -75,6 +76,16 @@ class RenderedHourEvent extends Model
         }
 
         return Carbon::parse($this->event_date->toDateString().' '.substr((string) $this->starts_at, 0, 5));
+    }
+
+    /** Official activity end used for recorded time-out. */
+    public function officialEnd(): ?Carbon
+    {
+        if (!$this->ends_at || !$this->event_date) {
+            return null;
+        }
+
+        return Carbon::parse($this->event_date->toDateString().' '.substr((string) $this->ends_at, 0, 5));
     }
 
     /** On time through one hour after the official time in. A later clock-in is late. */

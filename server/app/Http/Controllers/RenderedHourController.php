@@ -429,7 +429,12 @@ class RenderedHourController extends Controller
         if ($clockOut->lessThanOrEqualTo($clockIn)) {
             abort(422, 'Time out must be after the clock-in time.');
         }
-        if ($clockOut->greaterThan(now())) {
+        $officialEnd = $event->officialEnd();
+        if ($officialEnd && $clockOut->greaterThan($officialEnd)) {
+            abort(422, 'Time out cannot be after the activity end time ('.$officialEnd->format('H:i').').');
+        }
+        // Manual timeout may use the activity end even before wall-clock reaches it.
+        if (!$officialEnd && $clockOut->greaterThan(now())) {
             abort(422, 'The corrected time cannot be in the future.');
         }
 
@@ -515,6 +520,7 @@ class RenderedHourController extends Controller
             'group_name' => 'nullable|string|max:80',
             'group_id' => 'nullable|integer|exists:daily_cleaning_groups,id',
             'starts_at' => 'nullable|date_format:H:i',
+            'ends_at' => 'nullable|date_format:H:i',
             'valid_until' => 'nullable|date_format:H:i',
             'notes' => 'nullable|string|max:1000',
             'user_ids' => 'nullable|array',
@@ -530,6 +536,7 @@ class RenderedHourController extends Controller
             $validated['year_level'] = null;
             $validated['group_name'] = null;
             $validated['starts_at'] = null;
+            $validated['ends_at'] = null;
             $validated['valid_until'] = null;
         } else {
             $validated['hours'] = $fixed;
@@ -543,6 +550,14 @@ class RenderedHourController extends Controller
             $start = Carbon::createFromFormat('H:i', $validated['starts_at']);
             $window = (int) (RenderedHourEvent::KINDS[$kind]['window'] ?? 60);
             $validated['valid_until'] = $start->copy()->addMinutes($window)->format('H:i');
+            if (empty($validated['ends_at'])) {
+                $minutes = max(60, (int) round(((float) $validated['hours']) * 60));
+                $validated['ends_at'] = $start->copy()->addMinutes($minutes)->format('H:i');
+            }
+            $end = Carbon::createFromFormat('H:i', $validated['ends_at']);
+            if ($end->lessThanOrEqualTo($start)) {
+                abort(422, 'The activity end time must be after the official time in.');
+            }
         }
 
         if ($kind !== RenderedHourEvent::SPECIAL) {
@@ -675,6 +690,7 @@ class RenderedHourController extends Controller
             'group_name' => $validated['kind'] === RenderedHourEvent::SPECIAL ? null : ($validated['group_name'] ?? null),
             'group_id' => $validated['kind'] === RenderedHourEvent::SPECIAL ? null : ($validated['group_id'] ?? null),
             'starts_at' => $validated['starts_at'] ?? null,
+            'ends_at' => $validated['ends_at'] ?? null,
             'valid_until' => $validated['valid_until'] ?? null,
             'notes' => $validated['notes'] ?? null,
         ];
@@ -831,7 +847,9 @@ class RenderedHourController extends Controller
             'year_level' => $event->year_level,
             'year_label' => $event->year_level ? RenderedHours::yearLabel((int) $event->year_level) : null,
             'group_name' => $event->group_name,
+            'group_id' => $event->group_id ? (int) $event->group_id : null,
             'starts_at' => $event->starts_at ? substr((string) $event->starts_at, 0, 5) : null,
+            'ends_at' => $event->ends_at ? substr((string) $event->ends_at, 0, 5) : null,
             'window_minutes' => $event->windowMinutes(),
             'valid_until' => $event->valid_until ? substr((string) $event->valid_until, 0, 5) : null,
             'notes' => $event->notes,

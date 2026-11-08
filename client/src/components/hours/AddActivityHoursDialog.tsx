@@ -11,18 +11,42 @@ interface StudentOption {
   is_leader?: boolean;
 }
 
+export interface EditableHourEvent {
+  id: number;
+  kind: string;
+  title: string;
+  event_date: string;
+  hours?: number;
+  direction?: string | null;
+  group_id?: number | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  notes?: string | null;
+  uses_attendance?: boolean;
+  entries?: { user_id: number }[];
+}
+
 const KINDS = [
   { id: 'special_request', label: 'Special request', hours: '', hint: 'Enter the hours of the event, then add or deduct them.' },
-  { id: 'daily_cleaning', label: 'Daily cleaning', hours: '1', hint: 'Choose a group. Every year level in that group can use the same QR code and passcode. Students clock in, then time out the same way. 1 hour is added only when they time out, and only if the clock-in was within the first hour after the official time in. A later clock-in is late and adds nothing.' },
-  { id: 'general_cleaning', label: 'General cleaning', hours: '5', hint: '5 hours for every year level in the chosen group. One QR code and passcode works for all of them. Hours are added only when the student times out, and only if the clock-in was on time.' },
-  { id: 'devotional', label: 'Devotional meeting', hours: '1', hint: '1 hour for every year level in the group. Students clock in, then time out with the same QR or passcode. The hour is added only at time out, and only if they clocked in within 1 hour of the official time in.' },
-  { id: 'meeting_assembly', label: 'Meeting assembly', hours: '5', hint: '5 hours for every year level in the group. Students clock in, then time out with the same QR or passcode. Hours are added only at time out, and only if they clocked in within 1 hour of the official time in.' },
+  { id: 'daily_cleaning', label: 'Daily cleaning', hours: '1', hint: 'Choose a group. Every year level in that group can use the same QR code and passcode. Students clock in, then time out the same way. 1 hour is added only when they time out, and only if the clock-in was within the first hour after the official time in. A later clock-in is late and adds nothing. Set the activity end time so recorded time-out follows that end.' },
+  { id: 'general_cleaning', label: 'General cleaning', hours: '5', hint: '5 hours for every year level in the chosen group. One QR code and passcode works for all of them. Hours are added only when the student times out, and only if the clock-in was on time. Set the activity end time so recorded time-out follows that end.' },
+  { id: 'devotional', label: 'Devotional meeting', hours: '1', hint: '1 hour for every year level in the group. Students clock in, then time out with the same QR or passcode. The hour is added only at time out, and only if they clocked in within 1 hour of the official time in. Set the activity end time so recorded time-out follows that end.' },
+  { id: 'meeting_assembly', label: 'Meeting assembly', hours: '5', hint: '5 hours for every year level in the group. Students clock in, then time out with the same QR or passcode. Hours are added only at time out, and only if they clocked in within 1 hour of the official time in. Set the activity end time so recorded time-out follows that end.' },
 ] as const;
 
 const today = () => {
   const now = new Date();
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
   return local.toISOString().slice(0, 10);
+};
+
+const addHours = (time: string, hours: number) => {
+  const [hourText, minuteText] = time.split(':');
+  const start = Number(hourText) * 60 + Number(minuteText || 0);
+  const end = start + Math.max(60, Math.round(hours * 60));
+  const hh = String(Math.floor(end / 60) % 24).padStart(2, '0');
+  const mm = String(end % 60).padStart(2, '0');
+  return `${hh}:${mm}`;
 };
 
 const emptyForm = () => ({
@@ -33,9 +57,27 @@ const emptyForm = () => ({
   direction: 'add',
   group_id: '',
   starts_at: '05:00',
+  ends_at: '06:00',
   notes: '',
   user_ids: [] as number[],
 });
+
+const formFromEvent = (event: EditableHourEvent) => {
+  const starts = event.starts_at || '05:00';
+  const hours = Number(event.hours || 1);
+  return {
+    kind: event.kind,
+    title: event.title,
+    event_date: event.event_date,
+    hours: String(event.hours ?? ''),
+    direction: event.direction || 'add',
+    group_id: event.group_id ? String(event.group_id) : '',
+    starts_at: starts,
+    ends_at: event.ends_at || addHours(starts, hours || 1),
+    notes: event.notes || '',
+    user_ids: (event.entries || []).map((entry) => entry.user_id),
+  };
+};
 
 const apiError = (error: unknown, fallback: string) => {
   const data = (error as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } })?.response?.data;
@@ -46,14 +88,17 @@ const apiError = (error: unknown, fallback: string) => {
 export function AddActivityHoursDialog({
   onClose,
   onSaved,
+  event,
 }: {
   onClose: () => void;
   onSaved: (event: { id: number; event_date?: string; uses_attendance?: boolean }) => void;
+  event?: EditableHourEvent | null;
 }) {
+  const editing = Boolean(event?.id);
   const [students, setStudents] = useState<StudentOption[]>([]);
   const [groups, setGroups] = useState<{ id: number; name: string; students: StudentOption[] }[]>([]);
   const [groupsLoaded, setGroupsLoaded] = useState(false);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(() => (event ? formFromEvent(event) : emptyForm()));
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -80,14 +125,19 @@ export function AddActivityHoursDialog({
 
   const setKind = (kind: string) => {
     const meta = KINDS.find((item) => item.id === kind) || KINDS[0];
-    setForm((current) => ({
-      ...current,
-      kind,
-      title: meta.label,
-      hours: meta.hours,
-      starts_at: kind === 'daily_cleaning' ? '05:00' : current.starts_at,
-      user_ids: kind === 'special_request' || kind === 'daily_cleaning' ? current.user_ids : [],
-    }));
+    setForm((current) => {
+      const startsAt = kind === 'daily_cleaning' ? '05:00' : current.starts_at;
+      const hoursValue = meta.hours ? Number(meta.hours) : Number(current.hours || 1);
+      return {
+        ...current,
+        kind,
+        title: meta.label,
+        hours: meta.hours,
+        starts_at: startsAt,
+        ends_at: meta.hours ? addHours(startsAt, hoursValue) : current.ends_at,
+        user_ids: kind === 'special_request' || kind === 'daily_cleaning' ? current.user_ids : [],
+      };
+    });
   };
 
   const toggleStudent = (id: number) => {
@@ -99,8 +149,8 @@ export function AddActivityHoursDialog({
     }));
   };
 
-  const save = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const save = async (submit: React.FormEvent) => {
+    submit.preventDefault();
     setSaving(true);
     setNotice(null);
     try {
@@ -112,12 +162,13 @@ export function AddActivityHoursDialog({
         direction: form.kind === 'special_request' ? form.direction : undefined,
         group_id: form.kind === 'special_request' ? undefined : Number(form.group_id),
         starts_at: form.kind === 'special_request' ? undefined : form.starts_at,
+        ends_at: form.kind === 'special_request' ? undefined : form.ends_at,
         notes: form.notes || undefined,
         user_ids: form.kind === 'special_request' ? form.user_ids : undefined,
-      });
-      onSaved(res.event || { id: 0, event_date: form.event_date, uses_attendance: form.kind !== 'special_request' });
+      }, event?.id);
+      onSaved(res.event || { id: event?.id || 0, event_date: form.event_date, uses_attendance: form.kind !== 'special_request' });
     } catch (error) {
-      setNotice(apiError(error, 'Could not save that activity.'));
+      setNotice(apiError(error, editing ? 'Could not update that activity.' : 'Could not save that activity.'));
     } finally {
       setSaving(false);
     }
@@ -126,11 +177,11 @@ export function AddActivityHoursDialog({
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] flex items-center justify-center p-4" {...bindPopup(onClose)}>
       <form onSubmit={save} className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 sm:p-8 space-y-5">
-        <h3 className="text-xl font-semibold text-slate-900">Add activity hours</h3>
+        <h3 className="text-xl font-semibold text-slate-900">{editing ? 'Edit activity hours' : 'Add activity hours'}</h3>
         {notice && <div className="bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold rounded-2xl px-5 py-3">{notice}</div>}
         <label className="block text-xs font-bold uppercase tracking-wide text-slate-500">
           Activity
-          <select value={form.kind} onChange={(input) => setKind(input.target.value)} className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900">
+          <select value={form.kind} onChange={(input) => setKind(input.target.value)} disabled={editing} className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 disabled:opacity-70">
             {KINDS.map((kind) => <option key={kind.id} value={kind.id}>{kind.label}{kind.hours ? ` · ${kind.hours} hrs` : ''}</option>)}
           </select>
         </label>
@@ -163,10 +214,30 @@ export function AddActivityHoursDialog({
         )}
 
         {form.kind !== 'special_request' && (
-          <label className="block text-xs font-bold uppercase tracking-wide text-slate-500">
-            Official time in
-            <input required type="time" value={form.starts_at} onChange={(input) => setForm({ ...form, starts_at: input.target.value })} className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold" />
-          </label>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <label className="block text-xs font-bold uppercase tracking-wide text-slate-500">
+              Official time in
+              <input
+                required
+                type="time"
+                value={form.starts_at}
+                onChange={(input) => {
+                  const startsAt = input.target.value;
+                  const hoursValue = Number(form.hours || 1);
+                  setForm((current) => ({
+                    ...current,
+                    starts_at: startsAt,
+                    ends_at: current.ends_at && current.ends_at > startsAt ? current.ends_at : addHours(startsAt, hoursValue || 1),
+                  }));
+                }}
+                className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+              />
+            </label>
+            <label className="block text-xs font-bold uppercase tracking-wide text-slate-500">
+              Activity end / time out
+              <input required type="time" value={form.ends_at} onChange={(input) => setForm({ ...form, ends_at: input.target.value })} className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold" />
+            </label>
+          </div>
         )}
 
         {form.kind !== 'special_request' && (
@@ -215,7 +286,7 @@ export function AddActivityHoursDialog({
 
         <div className="flex justify-end gap-3 pt-2">
           <button type="button" onClick={onClose} className="px-4 py-2.5 font-bold text-slate-500">Cancel</button>
-          <button type="submit" disabled={saving} className="px-5 py-2.5 bg-blue-600 text-white font-bold rounded-xl disabled:opacity-50">{saving ? 'Saving...' : 'Save activity'}</button>
+          <button type="submit" disabled={saving} className="px-5 py-2.5 bg-blue-600 text-white font-bold rounded-xl disabled:opacity-50">{saving ? 'Saving...' : editing ? 'Save changes' : 'Save activity'}</button>
         </div>
       </form>
     </div>

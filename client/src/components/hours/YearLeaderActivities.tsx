@@ -21,6 +21,7 @@ interface LeaderEvent {
   year_label?: string | null;
   group_name?: string | null;
   starts_at?: string | null;
+  ends_at?: string | null;
   valid_until?: string | null;
   hours: number;
   uses_attendance: boolean;
@@ -83,9 +84,9 @@ export function YearLeaderActivities() {
 
   const correctTimeout = async (item: LeaderEvent, userId: number) => {
     const saved = item.entries.find((entry) => entry.user_id === userId)?.time_out || '';
-    const time = timeOutDrafts[userId] || saved;
+    const time = timeOutDrafts[userId] || saved || item.ends_at || '';
     if (!time) {
-      setNotice('Enter the time-out first.');
+      setNotice('Enter the time-out first, or ask WSPO to set an activity end time.');
       return;
     }
     try {
@@ -132,6 +133,7 @@ export function YearLeaderActivities() {
               {item.group_name ? ` · ${item.group_name}` : ''}
               {item.year_label ? ` · ${item.year_label}` : ''}
               {item.starts_at ? ` · time in ${item.starts_at}` : ''}
+              {item.ends_at ? ` · ends ${item.ends_at}` : ''}
               {item.valid_until ? ` · on time until ${item.valid_until}` : ''}
               {' · '}{item.event_date}
               {' · '}{Number(item.hours).toFixed(2)} hrs
@@ -142,7 +144,7 @@ export function YearLeaderActivities() {
               {item.uses_attendance && <ActivityQrCard eventId={item.id} />}
               {item.uses_attendance && (
                 <p className="text-sm text-slate-600">
-                  If a student cannot scan, enter their clock-in and time-out here. Hours are added only at time out, and only if that clock-in was on time.
+                  If a student cannot scan, enter their clock-in and time-out here. Time out defaults to the activity end{item.ends_at ? ` (${item.ends_at})` : ''}. Hours are added only at time out, and only if that clock-in was on time.
                 </p>
               )}
               <div className="divide-y divide-slate-100">
@@ -168,7 +170,7 @@ export function YearLeaderActivities() {
                         <button type="button" onClick={() => correctTime(item, entry.user_id)} className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border bg-white text-slate-700 border-slate-200">Save time in</button>
                         <input
                           type="time"
-                          value={timeOutDrafts[entry.user_id] ?? entry.time_out ?? ''}
+                          value={timeOutDrafts[entry.user_id] ?? entry.time_out ?? item.ends_at ?? ''}
                           onChange={(input) => setTimeOutDrafts((current) => ({ ...current, [entry.user_id]: input.target.value }))}
                           className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold"
                           aria-label={`Time-out for ${entry.name}`}

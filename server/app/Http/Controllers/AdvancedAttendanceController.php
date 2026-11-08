@@ -773,13 +773,16 @@ class AdvancedAttendanceController extends Controller
 
         $hours = number_format((float) $event->hours, 2);
         $label = RenderedHourEvent::KINDS[$event->kind]['label'] ?? $event->kind;
+        $officialEnd = $event->officialEnd();
+        // Recorded time-out follows the activity end time when one is set.
+        $clockOutTime = ($officialEnd && $officialEnd->greaterThan($clockIn)) ? $officialEnd : $now;
         $message = $status === 'late'
             ? 'Timed out. No hours were added or deducted.'
             : "Timed out. {$hours} hours were added to your hours rendered.";
 
-        DB::transaction(function () use ($attendance, $event, $entry, $now, $status, $delta, $message) {
+        DB::transaction(function () use ($attendance, $event, $entry, $clockOutTime, $status, $delta, $message) {
             $attendance->update([
-                'time_out' => $now,
+                'time_out' => $clockOutTime,
                 'activity_hours' => $delta,
                 'status' => 'accepted',
                 'task_description' => $message,
@@ -811,7 +814,7 @@ class AdvancedAttendanceController extends Controller
             'hours_delta' => $delta,
             'hours_rendered' => $delta,
             'attendance' => $attendance->fresh(),
-            'hour_limits' => HourLimits::status((int) $attendance->user_id, $now),
+            'hour_limits' => HourLimits::status((int) $attendance->user_id, $clockOutTime),
         ]);
     }
 

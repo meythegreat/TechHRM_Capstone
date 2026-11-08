@@ -394,6 +394,124 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
             ->assertJsonFragment(['message' => 'This activity was marked absent, so it cannot be timed out.']);
     }
 
+    public function test_activity_can_be_edited_with_start_and_end_times(): void
+    {
+        $staff = $this->makeUser('WSPO Staff', 'WSPO Coordinator');
+        $student = $this->makeStudent('Edit Student', 1, '2026-6001');
+        $group = DailyCleaningGroup::create(['name' => 'Edit Group']);
+        $this->attachMembers($group, [$student->id], $student->id);
+
+        Sanctum::actingAs($staff);
+        $eventId = (int) $this->postJson('/api/financial/hour-events', [
+            'kind' => 'meeting_assembly',
+            'title' => 'Meeting assembly',
+            'event_date' => '2026-10-28',
+            'group_id' => $group->id,
+            'starts_at' => '08:00',
+            'ends_at' => '12:00',
+        ])->assertCreated()
+            ->assertJsonPath('event.starts_at', '08:00')
+            ->assertJsonPath('event.ends_at', '12:00')
+            ->json('event.id');
+
+        $this->putJson('/api/financial/hour-events/'.$eventId, [
+            'kind' => 'meeting_assembly',
+            'title' => 'Afternoon assembly',
+            'event_date' => '2026-10-28',
+            'group_id' => $group->id,
+            'starts_at' => '13:00',
+            'ends_at' => '17:00',
+        ])->assertOk()
+            ->assertJsonPath('event.title', 'Afternoon assembly')
+            ->assertJsonPath('event.starts_at', '13:00')
+            ->assertJsonPath('event.ends_at', '17:00')
+            ->assertJsonPath('event.valid_until', '14:00');
+    }
+
+    public function test_manual_timeout_may_use_activity_end_before_wall_clock(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-28 14:00:00'));
+        $staff = $this->makeUser('WSPO Staff', 'WSPO Coordinator');
+        $student = $this->makeStudent('End Time Student', 2, '2026-6002');
+        $group = DailyCleaningGroup::create(['name' => 'End Time']);
+        $this->attachMembers($group, [$student->id], $student->id);
+
+        Sanctum::actingAs($staff);
+        $eventId = (int) $this->postJson('/api/financial/hour-events', [
+            'kind' => 'meeting_assembly',
+            'title' => 'Meeting assembly',
+            'event_date' => '2026-10-28',
+            'group_id' => $group->id,
+            'starts_at' => '13:00',
+            'ends_at' => '17:00',
+        ])->assertCreated()->json('event.id');
+
+        $this->patchJson('/api/financial/hour-events/'.$eventId.'/time', [
+            'user_id' => $student->id,
+            'time' => '13:10',
+        ])->assertOk();
+
+        $this->patchJson('/api/financial/hour-events/'.$eventId.'/timeout', [
+            'user_id' => $student->id,
+            'time' => '17:00',
+        ])->assertOk()
+            ->assertJsonPath('event.entries.0.time_out', '17:00')
+            ->assertJsonPath('event.entries.0.status', 'on_time')
+            ->assertJsonPath('event.entries.0.hours_delta', 5);
+
+        $this->patchJson('/api/financial/hour-events/'.$eventId.'/timeout', [
+            'user_id' => $student->id,
+            'time' => '17:30',
+        ])->assertStatus(422);
+    }
+
+    public function test_qr_timeout_records_activity_end_time(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-28 13:20:00'));
+        $staff = $this->makeUser('WSPO Staff', 'WSPO Coordinator');
+        $student = $this->makeStudent('Qr End Student', 1, '2026-6003');
+        $group = DailyCleaningGroup::create(['name' => 'Qr End']);
+        $this->attachMembers($group, [$student->id], $student->id);
+
+        Sanctum::actingAs($staff);
+        $eventId = (int) $this->postJson('/api/financial/hour-events', [
+            'kind' => 'meeting_assembly',
+            'title' => 'Meeting assembly',
+            'event_date' => '2026-10-28',
+            'group_id' => $group->id,
+            'starts_at' => '13:00',
+            'ends_at' => '17:00',
+        ])->assertCreated()->json('event.id');
+        $code = $this->getJson('/api/attendance/activity-passcode?event_id='.$eventId)
+            ->assertOk()
+            ->json('token_code');
+
+        Sanctum::actingAs($student);
+        $clockIn = $this->postJson('/api/attendance/secure-clock-in', [
+            'token_code' => $code,
+            'method' => 'passcode',
+        ])->assertOk();
+
+        Carbon::setTestNow(Carbon::parse('2026-10-28 14:20:00'));
+        Sanctum::actingAs($staff);
+        $code = $this->getJson('/api/attendance/activity-passcode?event_id='.$eventId)
+            ->assertOk()
+            ->json('token_code');
+
+        Sanctum::actingAs($student);
+        $this->putJson('/api/attendance/secure-clock-out/'.$clockIn->json('attendance.id'), [
+            'token_code' => $code,
+            'method' => 'passcode',
+        ])->assertOk()
+            ->assertJsonPath('status', 'on_time')
+            ->assertJsonPath('hours_delta', 5);
+
+        $this->assertDatabaseHas('attendances', [
+            'id' => $clockIn->json('attendance.id'),
+            'time_out' => '2026-10-28 17:00:00',
+        ]);
+    }
+
     public function test_devotional_hours_are_credited_when_timing_out_after_the_window(): void
     {
         $staff = $this->makeUser('WSPO Staff', 'WSPO Coordinator');
@@ -557,6 +675,7 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
             $table->string('group_name')->nullable();
             $table->foreignId('group_id')->nullable()->constrained('daily_cleaning_groups')->nullOnDelete();
             $table->time('starts_at')->nullable();
+            $table->time('ends_at')->nullable();
             $table->time('valid_until')->nullable();
             $table->text('notes')->nullable();
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();

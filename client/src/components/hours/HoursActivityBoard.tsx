@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 import { financialService } from '../../services/financialService';
+import { AddActivityHoursDialog, type EditableHourEvent } from './AddActivityHoursDialog';
 
 interface HourEntry {
   user_id: number;
@@ -25,7 +26,9 @@ interface HourEvent {
   year_level?: number | null;
   year_label?: string | null;
   group_name?: string | null;
+  group_id?: number | null;
   starts_at?: string | null;
+  ends_at?: string | null;
   window_minutes?: number;
   valid_until?: string | null;
   notes?: string | null;
@@ -72,6 +75,7 @@ export function HoursActivityBoard({
   const [rosterSearch, setRosterSearch] = useState('');
   const [timeInDrafts, setTimeInDrafts] = useState<Record<number, string>>({});
   const [timeOutDrafts, setTimeOutDrafts] = useState<Record<number, string>>({});
+  const [editing, setEditing] = useState<EditableHourEvent | null>(null);
   const issuer = canIssueActivity();
 
   const load = async () => {
@@ -124,9 +128,9 @@ export function HoursActivityBoard({
 
   const correctTimeout = async (item: HourEvent, userId: number) => {
     const saved = item.entries.find((entry) => entry.user_id === userId)?.time_out || '';
-    const time = timeOutDrafts[userId] || saved;
+    const time = timeOutDrafts[userId] || saved || item.ends_at || '';
     if (!time) {
-      setNotice('Enter the time-out first.');
+      setNotice('Enter the time-out first, or set an activity end time.');
       return;
     }
     try {
@@ -195,11 +199,32 @@ export function HoursActivityBoard({
                       {item.year_label ? ` · ${item.year_label}` : ''}
                       {item.direction ? ` · ${item.direction === 'deduct' ? 'Deduct' : 'Add'} ${item.hours} hrs` : ` · ${item.hours} hrs`}
                       {item.starts_at ? ` · time in ${item.starts_at}` : ''}
+                      {item.ends_at ? ` · ends ${item.ends_at}` : ''}
                       {item.valid_until ? ` · on time until ${item.valid_until}` : ''}
                       {' · '}{item.event_date}
                     </p>
                   </div>
                   <span className="text-xs font-bold text-slate-500">{item.marked_count}/{item.eligible_count} marked</span>
+                  {!readOnly && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(click) => {
+                        click.stopPropagation();
+                        setEditing(item);
+                      }}
+                      onKeyDown={(key) => {
+                        if (key.key === 'Enter') {
+                          key.stopPropagation();
+                          setEditing(item);
+                        }
+                      }}
+                      className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+                      aria-label={`Edit ${item.title}`}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </span>
+                  )}
                   {!readOnly && (
                     <span
                       role="button"
@@ -226,7 +251,7 @@ export function HoursActivityBoard({
                     {item.uses_attendance && !readOnly && issuer && (
                       <div className="space-y-3">
                         <p className="text-sm text-slate-600">
-                          The QR code for this activity is issued in the Attendance Hub. If the scanner fails, correct the clock-in and time-out below. Hours are added only at time out, and only if that clock-in was on time.
+                          The QR code for this activity is issued in the Attendance Hub. If the scanner fails, correct the clock-in and time-out below. Time out defaults to the activity end time{item.ends_at ? ` (${item.ends_at})` : ''}. Hours are added only at time out, and only if that clock-in was on time.
                         </p>
                         <button type="button" onClick={() => markAbsent(item)} className="px-4 py-3 bg-white border border-slate-200 text-sm font-bold rounded-xl text-slate-700">Mark unmarked absent</button>
                       </div>
@@ -261,7 +286,7 @@ export function HoursActivityBoard({
                               <button type="button" onClick={() => correctTime(item, entry.user_id)} className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border bg-white text-slate-700 border-slate-200">Save time in</button>
                               <input
                                 type="time"
-                                value={timeOutDrafts[entry.user_id] ?? entry.time_out ?? ''}
+                                value={timeOutDrafts[entry.user_id] ?? entry.time_out ?? item.ends_at ?? ''}
                                 onChange={(input) => setTimeOutDrafts((current) => ({ ...current, [entry.user_id]: input.target.value }))}
                                 className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold"
                                 aria-label={`Time-out for ${entry.name}`}
@@ -288,6 +313,18 @@ export function HoursActivityBoard({
         </div>
       )}
 
+      {editing && (
+        <AddActivityHoursDialog
+          event={editing}
+          onClose={() => setEditing(null)}
+          onSaved={async () => {
+            setEditing(null);
+            setNotice('Activity updated.');
+            await load();
+            onChanged();
+          }}
+        />
+      )}
     </section>
   );
 }
