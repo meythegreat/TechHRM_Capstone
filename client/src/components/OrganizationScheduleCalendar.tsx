@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Clock, GraduationCap, Briefcase, Flag } from 'lucide-react';
 import { REALTIME_EVENT } from '../utils/realtime';
+import { compareSchedules, formatShiftEnd, formatShiftStart, happensNow, shiftWindow } from '../utils/scheduleTime';
 import UserAvatar from './UserAvatar';
 import ComboFilter from './ComboFilter';
 
@@ -15,6 +16,7 @@ interface OrgSchedule {
     room?: string | null;
     instructor?: string | null;
     department?: string | null;
+    assigned_office?: string | null;
     student_name: string;
     profile_picture?: string | null;
 }
@@ -75,23 +77,6 @@ function clockMinutes(value: string) {
     return Number(match[1]) * 60 + Number(match[2]);
 }
 
-function shiftWindow(time: string): [number, number] | null {
-    const matches = [...String(time || '').matchAll(/(\d{1,2}):(\d{2})\s*(am|pm)?/gi)];
-    if (matches.length < 2) return null;
-    const toMinutes = (match: RegExpMatchArray) => {
-        let hour = Number(match[1]);
-        const minute = Number(match[2]);
-        const meridiem = match[3]?.toLowerCase();
-        if (meridiem === 'pm' && hour < 12) hour += 12;
-        if (meridiem === 'am' && hour === 12) hour = 0;
-        return hour * 60 + minute;
-    };
-    let start = toMinutes(matches[0]);
-    let end = toMinutes(matches[1]);
-    if (end <= start) end += 24 * 60;
-    return [start, end];
-}
-
 function scheduleBlocked(date: Date, shift: OrgSchedule, holidays: HolidaySpan[]) {
     const key = dateKey(date);
     const window = shiftWindow(shift.time);
@@ -121,17 +106,6 @@ function insideSemester(date: Date, semester: SemesterWindow | null) {
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-function startMinutes(time: string) {
-    const match = String(time || '').match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
-    if (!match) return 24 * 60;
-    let hour = Number(match[1]);
-    const minute = Number(match[2]);
-    const meridiem = match[3]?.toLowerCase();
-    if (meridiem === 'pm' && hour < 12) hour += 12;
-    if (meridiem === 'am' && hour === 12) hour = 0;
-    return hour * 60 + minute;
-}
-
 function sameDay(left: Date, right: Date) {
     return left.getFullYear() === right.getFullYear()
         && left.getMonth() === right.getMonth()
@@ -160,84 +134,91 @@ function isClassShift(shift: OrgSchedule) {
     return shift.kind === 'class';
 }
 
-function ScheduleGroup({
-    title,
-    shifts,
-    tone,
+function shiftOffice(shift: OrgSchedule) {
+    return (shift.assigned_office || shift.department || '').trim();
+}
+
+const CATEGORIES: Array<{ id: 'all' | 'work' | 'class' | 'holiday' | 'break'; label: string }> = [
+    { id: 'all', label: 'All' },
+    { id: 'work', label: 'Work' },
+    { id: 'class', label: 'Class' },
+    { id: 'holiday', label: 'Holiday' },
+    { id: 'break', label: 'Break' },
+];
+
+function ScheduleCard({
+    shift,
     personal = false,
-    highlight = false,
+    active = false,
+    hideTime = false,
 }: {
-    title: string;
-    shifts: OrgSchedule[];
-    tone: 'work' | 'class';
+    shift: OrgSchedule;
     personal?: boolean;
-    highlight?: boolean;
+    active?: boolean;
+    hideTime?: boolean;
 }) {
-    const isClass = tone === 'class';
+    const isClass = isClassShift(shift);
+    const office = shiftOffice(shift);
+    const details = [
+        !hideTime ? `${formatShiftStart(shift.time)}${formatShiftEnd(shift.time) ? ` – ${formatShiftEnd(shift.time)}` : ''}` : '',
+        (!personal || !isClass) && office ? office : '',
+        shift.room || '',
+        shift.instructor || '',
+    ].filter(Boolean);
+
     return (
-        <section className={`border-b border-slate-100 last:border-b-0 ${
-            highlight
-                ? isClass
-                    ? 'bg-violet-50/40 ring-1 ring-inset ring-violet-200'
-                    : 'bg-blue-50/40 ring-1 ring-inset ring-blue-200'
-                : ''
-        }`}>
-            <div className={`flex items-center gap-2 px-6 py-3 text-xs font-semibold uppercase tracking-wide ${isClass ? 'bg-violet-50/70 text-violet-700' : 'bg-blue-50/70 text-blue-700'}`}>
-                {isClass ? <GraduationCap className="h-3.5 w-3.5" /> : <Briefcase className="h-3.5 w-3.5" />}
-                {title}
-                {highlight && (
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold normal-case tracking-wide text-white ${isClass ? 'bg-violet-600' : 'bg-blue-600'}`}>
-                        This day
-                    </span>
-                )}
-                <span className="ml-auto tabular-nums">{shifts.length}</span>
-            </div>
-            {shifts.length === 0 ? (
-                <p className="px-6 py-4 text-sm text-slate-500">No {title.toLowerCase()} schedules.</p>
-            ) : (
-                <ul className="divide-y divide-slate-100">
-                    {shifts.map((shift) => (
-                        <li
-                            key={shift.id}
-                            className={`flex items-start gap-3 px-6 py-3.5 ${
-                                highlight
-                                    ? isClass
-                                        ? 'border-l-4 border-l-violet-500 bg-violet-50/50'
-                                        : 'border-l-4 border-l-blue-500 bg-blue-50/50'
-                                    : ''
-                            }`}
-                        >
-                            {!personal && (
-                                <UserAvatar name={shift.student_name} picture={shift.profile_picture} className="h-9 w-9 rounded-full bg-slate-100 text-xs text-slate-600" />
-                            )}
-                            {personal && isClass && (
-                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
-                                    <GraduationCap className="h-4 w-4" />
-                                </div>
-                            )}
-                            {personal && !isClass && (
-                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
-                                    <Briefcase className="h-4 w-4" />
-                                </div>
-                            )}
-                            <div className="min-w-0 flex-1">
-                                {!personal && <p className="truncate text-sm font-semibold text-slate-900">{shift.student_name}</p>}
-                                <p className={`truncate text-sm ${personal ? 'font-semibold text-slate-900' : 'mt-0.5 text-slate-700'}`}>
-                                    {scheduleTitle(shift)}
-                                </p>
-                                <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
-                                    <Clock className="h-3.5 w-3.5" />
-                                    {shift.time}
-                                    {(!personal || !isClass) && shift.department ? ` · ${shift.department}` : ''}
-                                    {shift.room ? ` · ${shift.room}` : ''}
-                                    {shift.instructor ? ` · ${shift.instructor}` : ''}
-                                </p>
-                            </div>
-                        </li>
-                    ))}
-                </ul>
+        <article
+            className={`flex min-w-0 items-start gap-3 rounded-2xl border px-3.5 py-3 transition-shadow ${
+                isClass ? 'border-violet-200' : 'border-blue-200'
+            } ${
+                active
+                    ? isClass
+                        ? 'bg-violet-50 shadow-[0_10px_24px_-16px_rgba(109,40,217,0.9)] ring-2 ring-violet-500'
+                        : 'bg-blue-50 shadow-[0_10px_24px_-16px_rgba(37,99,235,0.9)] ring-2 ring-blue-500'
+                    : 'bg-white'
+            }`}
+            aria-current={active ? 'true' : undefined}
+        >
+            {!personal && (
+                <UserAvatar name={shift.student_name} picture={shift.profile_picture} className="h-9 w-9 rounded-full bg-slate-100 text-xs text-slate-600" />
             )}
-        </section>
+            {personal && (
+                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${isClass ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>
+                    {isClass ? <GraduationCap className="h-4 w-4" /> : <Briefcase className="h-4 w-4" />}
+                </div>
+            )}
+            <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                        {!personal && <p className="truncate text-sm font-semibold text-slate-900">{shift.student_name}</p>}
+                        <p className={`truncate text-sm ${personal ? 'font-semibold text-slate-900' : 'text-slate-700'}`}>
+                            {scheduleTitle(shift)}
+                        </p>
+                    </div>
+                    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                        active
+                            ? 'bg-emerald-600 text-white'
+                            : isClass
+                                ? 'bg-violet-100 text-violet-700'
+                                : 'bg-blue-100 text-blue-700'
+                    }`}>
+                        {active && (
+                            <span className="relative flex h-1.5 w-1.5" aria-hidden="true">
+                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-80" />
+                                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" />
+                            </span>
+                        )}
+                        {active ? (isClass ? 'Class now' : 'Work now') : isClass ? 'Class' : 'Work'}
+                    </span>
+                </div>
+                {details.length > 0 && (
+                    <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
+                        {!hideTime && <Clock className="h-3.5 w-3.5 shrink-0" />}
+                        <span className="truncate">{details.join(' · ')}</span>
+                    </p>
+                )}
+            </div>
+        </article>
     );
 }
 
@@ -258,7 +239,9 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
     const [selected, setSelected] = useState(() => new Date());
     const [office, setOffice] = useState('');
     const [places, setPlaces] = useState<string[]>([]);
+    const [scope, setScope] = useState<'organization' | 'office'>('organization');
     const [category, setCategory] = useState<'all' | 'work' | 'class' | 'holiday' | 'break'>('all');
+    const [clock, setClock] = useState(() => new Date());
     const [isExpanded, setIsExpanded] = useState(() => {
         if (typeof window === 'undefined') return true;
         const key = personal ? 'techhrm-calendar-expanded-personal' : 'techhrm-calendar-expanded-org';
@@ -293,10 +276,12 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
                             room: (shift.room as string | null) ?? null,
                             instructor: (shift.instructor as string | null) ?? (shift.supervisor as string | null) ?? null,
                             department: (shift.department as string | null) ?? null,
+                            assigned_office: (shift.assigned_office as string | null) ?? (shift.department as string | null) ?? null,
                             student_name: studentName,
                             profile_picture: avatar,
                         })));
                         setPlaces([]);
+                        setScope('organization');
                     } else {
                         console.error('Failed to load personal schedules', mineResult.reason);
                         setSchedules([]);
@@ -324,11 +309,13 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
                         const response = scheduleResult.value;
                         setSchedules(Array.isArray(response.data?.schedules) ? response.data.schedules : []);
                         setPlaces(Array.isArray(response.data?.offices) ? response.data.offices.filter((name: unknown) => typeof name === 'string' && name.trim() !== '') : []);
+                        setScope(response.data?.scope === 'office' ? 'office' : 'organization');
                         const nextSemester = response.data?.semester;
                         setSemester(nextSemester?.starts_on && nextSemester?.ends_on ? nextSemester : null);
                     } else {
                         console.error('Failed to load organization schedules', scheduleResult.reason);
                         setSchedules([]);
+                        setScope('organization');
                     }
                     if (holidayResult.status === 'fulfilled') {
                         setHolidays(Array.isArray(holidayResult.value.data) ? holidayResult.value.data : []);
@@ -349,24 +336,26 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
         };
         load();
         const interval = setInterval(load, 15000);
+        const clockTimer = setInterval(() => setClock(new Date()), 30000);
         window.addEventListener(REALTIME_EVENT, load);
         return () => {
             active = false;
             clearInterval(interval);
+            clearInterval(clockTimer);
             window.removeEventListener(REALTIME_EVENT, load);
         };
     }, [personal]);
 
     const offices = useMemo(() => {
         const fromSchedules = schedules
-            .map((shift) => (shift.department || '').trim())
+            .map((shift) => shiftOffice(shift))
             .filter((name) => name !== '');
         return [...new Set([...places, ...fromSchedules])].sort((left, right) => left.localeCompare(right));
     }, [places, schedules]);
 
     const officeSchedules = useMemo(() => {
         if (!office) return schedules;
-        return schedules.filter((shift) => (shift.department || '').trim() === office);
+        return schedules.filter((shift) => shiftOffice(shift) === office);
     }, [schedules, office]);
 
     const showWork = category === 'all' || category === 'work';
@@ -388,12 +377,12 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
             const bucket = grouped.get(shift.day);
             if (bucket) bucket.push(shift);
         });
-        grouped.forEach((bucket) => bucket.sort((left, right) => startMinutes(left.time) - startMinutes(right.time) || left.student_name.localeCompare(right.student_name)));
+        grouped.forEach((bucket) => bucket.sort(compareSchedules));
         return grouped;
     }, [visible]);
 
     const cells = monthCells(cursor);
-    const today = new Date();
+    const today = clock;
     const selectedName = selected.toLocaleDateString('en-US', { weekday: 'long' });
     const selectedInSemester = insideSemester(selected, semester);
     const weekdayShifts = selectedInSemester ? (byWeekday.get(selectedName) ?? []) : [];
@@ -411,11 +400,15 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
     const todayShifts = todayWeekdayShifts.filter((shift) => !scheduleBlocked(today, shift, holidays));
     const todayWork = todayShifts.filter((shift) => !isClassShift(shift));
     const todayClasses = todayShifts.filter((shift) => isClassShift(shift));
-    const todayHasWork = showWork && todayWork.length > 0;
-    const todayHasClass = showClass && todayClasses.length > 0;
+    const todayAgenda = [...(showWork ? todayWork : []), ...(showClass ? todayClasses : [])].sort(compareSchedules);
+    const selectedAgenda = [...(showWork ? selectedWork : []), ...(showClass ? selectedClass : [])].sort(compareSchedules);
+    const nowMinutes = today.getHours() * 60 + today.getMinutes();
+    const isLive = (shift: OrgSchedule) => happensNow(shift.time, nowMinutes);
+    const liveShifts = todayAgenda.filter(isLive);
     const showTodayPanel = personal && (showWork || showClass);
-    const highlightClasses = personal && selectedClass.length > 0;
-    const highlightWork = personal && selectedWork.length > 0 && selectedClass.length === 0;
+    const officeScoped = !personal && scope === 'office';
+    const calendarTitle = personal ? 'My schedule' : officeScoped ? 'Office schedule' : 'Organization schedule';
+    const clockLabel = today.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
     const shiftMonth = (delta: number) => {
         setCursor((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1));
@@ -430,6 +423,15 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
         });
     };
 
+    const goToToday = () => {
+        setSelected(today);
+        setCursor(new Date(today.getFullYear(), today.getMonth(), 1));
+    };
+
+    const semesterLine = semester
+        ? `${semester.label} runs ${formatSemesterDate(semester.starts_on)} through ${formatSemesterDate(semester.ends_on)}.`
+        : '';
+
     return (
         <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
             <div className={`px-6 py-5 ${isExpanded ? 'border-b border-slate-100' : ''}`}>
@@ -443,47 +445,58 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
                     >
                         <div className="flex items-start gap-3">
                             <div className="min-w-0 flex-1">
-                                <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
-                                    <CalendarDays className="h-5 w-5 shrink-0 text-blue-600" />
-                                    {personal ? 'My schedule' : 'Organization schedule'}
+                                <h2 className="flex items-center gap-2.5 text-lg font-semibold text-slate-900">
+                                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                                        <CalendarDays className="h-5 w-5" />
+                                    </span>
+                                    {calendarTitle}
                                 </h2>
                                 {isExpanded ? (
                                     <>
                                         <p className="mt-1 text-sm text-slate-500">
                                             {personal
-                                                ? semester
-                                                    ? `${semester.label} runs ${formatSemesterDate(semester.starts_on)} through ${formatSemesterDate(semester.ends_on)}. Select a day to see your work and class blocks.`
+                                                ? semesterLine
+                                                    ? `${semesterLine} Select a day to see your work and class blocks, earliest first.`
                                                     : 'Select a day to see your work and class schedule once the semester window is set.'
-                                                : semester
-                                                    ? `${semester.label} runs ${formatSemesterDate(semester.starts_on)} through ${formatSemesterDate(semester.ends_on)}. Schedules repeat each week inside that window.`
-                                                    : 'Schedules repeat each week after WSPO staff or a super admin sets the semester length.'}
+                                                : officeScoped
+                                                    ? semesterLine
+                                                        ? `Students assigned to your office. ${semesterLine}`
+                                                        : 'Students assigned to your office. Schedules appear after the semester window is set.'
+                                                    : semesterLine
+                                                        ? `${semesterLine} Every office repeats each week inside that window.`
+                                                        : 'Schedules repeat each week after WSPO staff or a super admin sets the semester length.'}
                                         </p>
-                                        <div className="mt-3 flex items-center gap-3 text-xs font-semibold">
-                                            <span className="inline-flex items-center gap-1.5 text-blue-700">
+                                        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold">
+                                            <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2 py-1 text-blue-700">
                                                 <Briefcase className="h-3.5 w-3.5" /> Work
                                             </span>
-                                            <span className="inline-flex items-center gap-1.5 text-violet-700">
+                                            <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 px-2 py-1 text-violet-700">
                                                 <GraduationCap className="h-3.5 w-3.5" /> Class
                                             </span>
-                                            <span className="inline-flex items-center gap-1.5 text-amber-700">
+                                            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2 py-1 text-amber-700">
                                                 <Flag className="h-3.5 w-3.5" /> Holiday
                                             </span>
-                                            <span className="inline-flex items-center gap-1.5 text-teal-700">
+                                            <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-50 px-2 py-1 text-teal-700">
                                                 <Flag className="h-3.5 w-3.5" /> Class break
+                                            </span>
+                                            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-1 text-slate-600">
+                                                <Clock className="h-3.5 w-3.5" /> {clockLabel}
                                             </span>
                                         </div>
                                     </>
                                 ) : (
                                     <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-500">
                                         <span>{monthLabel}</span>
-                                        {personal && (
+                                        <span className="text-slate-300">·</span>
+                                        <span>{clockLabel}</span>
+                                        {liveShifts.length > 0 ? (
+                                            <span className="font-semibold text-emerald-700">{liveShifts.length} happening now</span>
+                                        ) : (
                                             <>
-                                                <span className="text-slate-300">·</span>
                                                 <span className="font-medium text-blue-700">{todayWork.length} work today</span>
                                                 <span className="font-medium text-violet-700">{todayClasses.length} class today</span>
                                             </>
                                         )}
-                                        {!personal && <span>Calendar collapsed</span>}
                                     </div>
                                 )}
                             </div>
@@ -494,38 +507,48 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
                         </div>
                     </button>
                     {isExpanded && (
-                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                            {!personal && (
+                        <div className="flex flex-col items-stretch gap-2 sm:items-end">
+                            {!personal && offices.length > 1 && (
                                 <ComboFilter
                                     commitOnType={false}
                                     value={office}
                                     onChange={setOffice}
                                     options={offices}
-                                    placeholder="All departments and offices"
-                                    emptyLabel="All departments and offices"
+                                    placeholder={officeScoped ? 'All of your offices' : 'All departments and offices'}
+                                    emptyLabel={officeScoped ? 'All of your offices' : 'All departments and offices'}
                                     className="w-full min-w-0 sm:w-72"
                                 />
                             )}
-                            <select
-                                value={category}
-                                onChange={(event) => setCategory(event.target.value as 'all' | 'work' | 'class' | 'holiday' | 'break')}
-                                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-600"
-                                aria-label="Filter by schedule category"
-                            >
-                                <option value="all">All categories</option>
-                                <option value="work">Work</option>
-                                <option value="class">Class</option>
-                                <option value="holiday">Holiday</option>
-                                <option value="break">Class break</option>
-                            </select>
-                            <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
-                                <button type="button" onClick={() => shiftMonth(-1)} className="rounded-lg p-1.5 text-slate-500 hover:bg-white hover:text-slate-900" aria-label="Previous month">
-                                    <ChevronLeft className="h-4 w-4" />
-                                </button>
-                                <span className="min-w-36 px-2 text-center text-sm font-semibold text-slate-900">{monthLabel}</span>
-                                <button type="button" onClick={() => shiftMonth(1)} className="rounded-lg p-1.5 text-slate-500 hover:bg-white hover:text-slate-900" aria-label="Next month">
-                                    <ChevronRight className="h-4 w-4" />
-                                </button>
+                            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                                <div className="flex flex-wrap rounded-xl border border-slate-200 bg-slate-50 p-1" role="group" aria-label="Filter by schedule category">
+                                    {CATEGORIES.map((item) => (
+                                        <button
+                                            key={item.id}
+                                            type="button"
+                                            aria-pressed={category === item.id}
+                                            onClick={() => setCategory(item.id)}
+                                            className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
+                                                category === item.id
+                                                    ? 'bg-white text-slate-900 shadow-sm'
+                                                    : 'text-slate-500 hover:text-slate-800'
+                                            }`}
+                                        >
+                                            {item.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+                                    <button type="button" onClick={() => shiftMonth(-1)} className="rounded-lg p-1.5 text-slate-500 hover:bg-white hover:text-slate-900" aria-label="Previous month">
+                                        <ChevronLeft className="h-4 w-4" />
+                                    </button>
+                                    <span className="min-w-36 px-2 text-center text-sm font-semibold text-slate-900">{monthLabel}</span>
+                                    <button type="button" onClick={() => shiftMonth(1)} className="rounded-lg p-1.5 text-slate-500 hover:bg-white hover:text-slate-900" aria-label="Next month">
+                                        <ChevronRight className="h-4 w-4" />
+                                    </button>
+                                    <button type="button" onClick={goToToday} className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-white hover:text-slate-900">
+                                        Today
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -534,37 +557,40 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
 
             {isExpanded && (
             <div id="schedule-calendar-body">
+            {!personal && liveShifts.length > 0 && (
+                <div className="border-b border-emerald-100 bg-emerald-50/80 px-4 py-4 sm:px-6" aria-live="polite">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                            <span className="relative flex h-2 w-2" aria-hidden="true">
+                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                            </span>
+                            Happening now
+                        </p>
+                        <span className="text-xs font-medium tabular-nums text-emerald-700">{clockLabel}</span>
+                    </div>
+                    <ul className="mt-3 grid gap-2 xl:grid-cols-2">
+                        {liveShifts.slice(0, 4).map((shift) => (
+                            <li key={`live-${shift.id}`}>
+                                <ScheduleCard shift={shift} active />
+                            </li>
+                        ))}
+                    </ul>
+                    {liveShifts.length > 4 && (
+                        <p className="mt-2 text-xs font-medium text-emerald-700">
+                            {liveShifts.length - 4} more in progress. Open today to see the full morning-to-evening list.
+                        </p>
+                    )}
+                </div>
+            )}
+
             {showTodayPanel && (
-                <div className={`border-b px-6 py-4 ${
-                    todayHasClass && !todayHasWork
-                        ? 'border-violet-100 bg-violet-50/60'
-                        : todayHasWork && !todayHasClass
-                            ? 'border-blue-100 bg-blue-50/60'
-                            : todayHasWork || todayHasClass
-                                ? 'border-slate-100 bg-slate-50/80'
-                                : 'border-slate-100 bg-slate-50/60'
-                }`}>
+                <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-4 sm:px-6">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
-                            <p className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wide ${
-                                todayHasClass && !todayHasWork
-                                    ? 'text-violet-700'
-                                    : todayHasWork && !todayHasClass
-                                        ? 'text-blue-700'
-                                        : 'text-slate-600'
-                            }`}>
-                                {todayHasClass && !todayHasWork ? (
-                                    <GraduationCap className="h-3.5 w-3.5" />
-                                ) : todayHasWork && !todayHasClass ? (
-                                    <Briefcase className="h-3.5 w-3.5" />
-                                ) : (
-                                    <CalendarDays className="h-3.5 w-3.5" />
-                                )}
-                                {todayHasClass && !todayHasWork
-                                    ? "Today's class schedule"
-                                    : todayHasWork && !todayHasClass
-                                        ? "Today's work schedule"
-                                        : "Today's schedule"}
+                            <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                <CalendarDays className="h-3.5 w-3.5" />
+                                Today, earliest first
                             </p>
                             <p className="mt-1 text-sm text-slate-600">
                                 {today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
@@ -573,23 +599,14 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
                         {!selectedIsToday && (
                             <button
                                 type="button"
-                                onClick={() => {
-                                    setSelected(today);
-                                    setCursor(new Date(today.getFullYear(), today.getMonth(), 1));
-                                }}
-                                className={`rounded-lg bg-white px-3 py-1.5 text-xs font-semibold shadow-sm hover:bg-slate-50 ${
-                                    todayHasClass && !todayHasWork
-                                        ? 'text-violet-700 ring-1 ring-violet-200 hover:bg-violet-50'
-                                        : todayHasWork && !todayHasClass
-                                            ? 'text-blue-700 ring-1 ring-blue-200 hover:bg-blue-50'
-                                            : 'text-slate-700 ring-1 ring-slate-200'
-                                }`}
+                                onClick={goToToday}
+                                className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50"
                             >
                                 Jump to today
                             </button>
                         )}
                     </div>
-                    {!todayHasWork && !todayHasClass ? (
+                    {todayAgenda.length === 0 ? (
                         <p className="mt-3 text-sm text-slate-500">
                             {showWork && showClass
                                 ? 'No work or class scheduled for today.'
@@ -598,71 +615,13 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
                                     : 'No classes scheduled for today.'}
                         </p>
                     ) : (
-                        <div className="mt-3 space-y-4">
-                            {todayHasWork && (
-                                <div>
-                                    {todayHasClass && (
-                                        <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-blue-700">
-                                            <Briefcase className="h-3 w-3" /> Work
-                                        </p>
-                                    )}
-                                    <ul className="space-y-2">
-                                        {todayWork.map((shift) => (
-                                            <li
-                                                key={`today-work-${shift.id}`}
-                                                className="flex items-start gap-3 rounded-xl border border-blue-200 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
-                                            >
-                                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
-                                                    <Briefcase className="h-4 w-4" />
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="truncate text-sm font-semibold text-slate-900">{scheduleTitle(shift)}</p>
-                                                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
-                                                        <span className="inline-flex items-center gap-1">
-                                                            <Clock className="h-3.5 w-3.5" />
-                                                            {shift.time}
-                                                        </span>
-                                                        {shift.department ? <span>{shift.department}</span> : null}
-                                                    </p>
-                                                </div>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
-                            {todayHasClass && (
-                                <div>
-                                    {todayHasWork && (
-                                        <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-violet-700">
-                                            <GraduationCap className="h-3 w-3" /> Class
-                                        </p>
-                                    )}
-                                    <ul className="space-y-2">
-                                        {todayClasses.map((shift) => (
-                                            <li
-                                                key={`today-class-${shift.id}`}
-                                                className="flex items-start gap-3 rounded-xl border border-violet-200 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
-                                            >
-                                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
-                                                    <GraduationCap className="h-4 w-4" />
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="truncate text-sm font-semibold text-slate-900">{scheduleTitle(shift)}</p>
-                                                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
-                                                        <span className="inline-flex items-center gap-1">
-                                                            <Clock className="h-3.5 w-3.5" />
-                                                            {shift.time}
-                                                        </span>
-                                                        {shift.room ? <span>{shift.room}</span> : null}
-                                                        {shift.instructor ? <span>{shift.instructor}</span> : null}
-                                                    </p>
-                                                </div>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
-                        </div>
+                        <ul className="mt-3 space-y-2">
+                            {todayAgenda.map((shift) => (
+                                <li key={`today-${shift.id}`}>
+                                    <ScheduleCard shift={shift} personal active={isLive(shift)} />
+                                </li>
+                            ))}
+                        </ul>
                     )}
                 </div>
             )}
@@ -675,15 +634,15 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
                         ))}
                     </div>
                     {isLoading ? (
-                        <div className="mt-2 grid grid-cols-7 gap-1">
+                        <div className="mt-2 grid grid-cols-7 gap-1.5">
                             {Array.from({ length: 35 }, (_, index) => (
-                                <div key={index} className="h-24 animate-pulse rounded-xl bg-slate-100" />
+                                <div key={index} className="h-28 animate-pulse rounded-xl bg-slate-100" />
                             ))}
                         </div>
                     ) : (
-                        <div className="mt-2 grid grid-cols-7 gap-1">
+                        <div className="mt-2 grid grid-cols-7 gap-1.5">
                             {cells.map((date, index) => {
-                                if (!date) return <div key={`empty-${index}`} className="h-24 rounded-xl bg-slate-50/60" />;
+                                if (!date) return <div key={`empty-${index}`} className="h-28 rounded-xl bg-slate-50/60" />;
                                 const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
                                 const inWindow = insideSemester(date, semester);
                                 const dayShifts = (inWindow ? (byWeekday.get(weekday) ?? []) : [])
@@ -696,14 +655,16 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
                                 const isSelected = sameDay(date, selected);
                                 const hasClass = classCount > 0;
                                 const hasWorkOnly = workCount > 0 && !hasClass;
+                                const liveCount = isToday ? dayShifts.filter(isLive).length : 0;
                                 return (
                                     <button
                                         key={date.toISOString()}
                                         type="button"
                                         onClick={() => setSelected(date)}
                                         aria-pressed={isSelected}
-                                        aria-label={`${date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}, ${workCount} work, ${classCount} class${holiday ? `, holiday ${holiday.name}${holiday.portion === 'half' ? ' half day' : ''}` : ''}${classBreak ? `, class break ${classBreak.name}` : ''}`}
-                                        className={`flex h-24 flex-col items-start rounded-xl px-1.5 py-1.5 text-left transition-colors sm:px-2 ${
+                                        aria-current={isToday ? 'date' : undefined}
+                                        aria-label={`${date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}, ${workCount} work, ${classCount} class${liveCount ? `, ${liveCount} happening now` : ''}${holiday ? `, holiday ${holiday.name}${holiday.portion === 'half' ? ' half day' : ''}` : ''}${classBreak ? `, class break ${classBreak.name}` : ''}`}
+                                        className={`flex h-28 flex-col items-start rounded-xl px-1.5 py-1.5 text-left transition-colors sm:px-2 ${
                                             isSelected
                                                 ? personal && hasClass
                                                     ? 'bg-violet-700 text-white ring-2 ring-violet-300'
@@ -725,7 +686,9 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
                                                                 : 'text-slate-700 hover:bg-slate-50'
                                         }`}
                                     >
-                                        <span className="text-sm font-semibold tabular-nums">{date.getDate()}</span>
+                                        <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-sm font-semibold tabular-nums ${
+                                            isToday && !isSelected ? 'bg-slate-900 text-white' : ''
+                                        }`}>{date.getDate()}</span>
                                         <span className="mt-auto flex w-full flex-col gap-0.5">
                                             {classBreak && (
                                                 <span title={classBreak.name} className={`truncate rounded px-1 text-[10px] font-semibold leading-4 ${isSelected ? 'bg-teal-500/30 text-teal-100' : 'bg-teal-50 text-teal-800'}`}>
@@ -735,6 +698,11 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
                                             {holiday && (
                                                 <span title={holiday.name} className={`truncate rounded px-1 text-[10px] font-semibold leading-4 ${isSelected ? 'bg-amber-500/30 text-amber-100' : 'bg-amber-50 text-amber-800'}`}>
                                                     {holiday.portion === 'half' ? `${holiday.name} · Half` : holiday.name}
+                                                </span>
+                                            )}
+                                            {liveCount > 0 && (
+                                                <span className={`truncate rounded px-1 text-[10px] font-semibold leading-4 ${isSelected ? 'bg-emerald-500/30 text-emerald-100' : 'bg-emerald-50 text-emerald-800'}`}>
+                                                    {liveCount} now
                                                 </span>
                                             )}
                                             {workCount > 0 && (
@@ -755,14 +723,8 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
                     )}
                 </div>
 
-                <div className="flex min-h-72 flex-col">
-                    <div className={`border-b px-6 py-4 ${
-                        highlightClasses
-                            ? 'border-violet-100 bg-violet-50/50'
-                            : highlightWork
-                                ? 'border-blue-100 bg-blue-50/50'
-                                : 'border-slate-100'
-                    }`}>
+                <div className="flex min-h-72 flex-col bg-slate-50/40">
+                    <div className="border-b border-slate-100 bg-white px-6 py-4">
                         <p className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
                             <span>
                                 {selected.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
@@ -772,20 +734,15 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
                                     Today
                                 </span>
                             )}
-                            {highlightClasses && (
-                                <span className="rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-bold normal-case tracking-wide text-white">
-                                    Class day
-                                </span>
-                            )}
-                            {highlightWork && (
-                                <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold normal-case tracking-wide text-white">
-                                    Work day
+                            {selectedIsToday && selectedAgenda.some(isLive) && (
+                                <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold normal-case tracking-wide text-white">
+                                    {selectedAgenda.filter(isLive).length} now
                                 </span>
                             )}
                         </p>
                         <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm font-medium">
-                            {showWork && <span className={highlightWork ? 'font-semibold text-blue-800' : 'text-blue-700'}>{selectedWork.length} work</span>}
-                            {showClass && <span className={highlightClasses ? 'font-semibold text-violet-800' : 'text-violet-700'}>{selectedClass.length} class</span>}
+                            {showWork && <span className="text-blue-700">{selectedWork.length} work</span>}
+                            {showClass && <span className="text-violet-700">{selectedClass.length} class</span>}
                             {showHoliday && selectedHoliday && <span className="text-amber-700">{selectedHoliday.portion === 'half' ? 'Half-day holiday' : 'Holiday'}</span>}
                             {showBreak && selectedBreak && <span className="text-teal-700">Class break</span>}
                             {category === 'holiday' && !selectedHoliday && <span className="text-slate-500">No holiday</span>}
@@ -855,32 +812,32 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
                             <p className="text-sm font-medium text-slate-600">This date is outside {semester.label}.</p>
                             <p className="mt-1 text-xs text-slate-500">Weekly schedules repeat from {formatSemesterDate(semester.starts_on)} through {formatSemesterDate(semester.ends_on)}.</p>
                         </div>
-                    ) : selectedShifts.length === 0 && hiddenShifts.length === 0 ? (
+                    ) : selectedAgenda.length === 0 && hiddenShifts.length === 0 ? (
                         <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 text-center">
                             <CalendarDays className="mb-3 h-8 w-8 text-slate-300" />
-                            <p className="text-sm font-medium text-slate-600">Nothing is scheduled on {selectedName}s.</p>
+                            <p className="text-sm font-medium text-slate-600">
+                                {category === 'work'
+                                    ? `No work is scheduled on ${selectedName}s.`
+                                    : category === 'class'
+                                        ? `No classes are scheduled on ${selectedName}s.`
+                                        : `Nothing is scheduled on ${selectedName}s.`}
+                            </p>
                         </div>
-                    ) : (
-                        <div>
-                            {showWork && (selectedWork.length > 0 || hiddenShifts.length === 0) && (
-                                <ScheduleGroup
-                                    title="Work"
-                                    shifts={selectedWork}
-                                    tone="work"
-                                    personal={personal}
-                                    highlight={highlightWork}
-                                />
-                            )}
-                            {showClass && (selectedClass.length > 0 || hiddenShifts.length === 0) && (
-                                <ScheduleGroup
-                                    title="Class"
-                                    shifts={selectedClass}
-                                    tone="class"
-                                    personal={personal}
-                                    highlight={highlightClasses}
-                                />
-                            )}
-                        </div>
+                    ) : selectedAgenda.length === 0 ? null : (
+                        <ol className="space-y-3 px-4 py-4 sm:px-5">
+                            {selectedAgenda.map((shift) => {
+                                const active = selectedIsToday && isLive(shift);
+                                return (
+                                    <li key={shift.id} className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-start gap-2">
+                                        <div className={`pt-3 text-right ${active ? 'text-emerald-700' : 'text-slate-600'}`}>
+                                            <p className="text-xs font-semibold tabular-nums">{formatShiftStart(shift.time)}</p>
+                                            <p className="text-[10px] tabular-nums text-slate-400">{formatShiftEnd(shift.time)}</p>
+                                        </div>
+                                        <ScheduleCard shift={shift} personal={personal} active={active} hideTime />
+                                    </li>
+                                );
+                            })}
+                        </ol>
                     )}
                     </div>
                 </div>
