@@ -69,19 +69,34 @@ class ScheduleController extends Controller
 
     /**
      * Recurring work and class schedules for the organization calendar.
-     * Shown on Student, Supervisor, WSPO Staff, and Super Admin dashboards.
+     * Supervisors see students placed in their office. Super Admin and WSPO staff see every office.
      */
     public function organization(Request $request)
     {
         $user = $request->user();
         abort_unless(in_array($user->role, ['Student', 'Supervisor', 'WSPO Staff', 'Super Admin'], true), 403);
 
-        $schedules = Schedule::with('user:id,name,profile_picture')
-            ->whereHas('user')
-            ->orderBy('day')
-            ->orderBy('time')
-            ->get()
+        $query = Schedule::with(['user:id,name,profile_picture', 'user.profile:id,user_id,assigned_office'])
+            ->whereHas('user');
+
+        $officeScoped = $user->role === 'Supervisor';
+        if ($officeScoped) {
+            $user->loadMissing('profile');
+            $areas = app(UserController::class)->supervisedOfficeAreas($user);
+            if ($areas === []) {
+                $query->whereRaw('0 = 1');
+            } else {
+                $query->whereHas('user.profile', function ($profile) use ($areas) {
+                    $profile->whereIn('assigned_office', $areas);
+                });
+            }
+        }
+
+        $weekdayOrder = array_flip(['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
+        $schedules = $query->get()
             ->map(function (Schedule $shift) {
+                $assignedOffice = trim((string) ($shift->user?->profile?->assigned_office ?? ''));
+
                 return [
                     'id' => $shift->id,
                     'day' => $shift->day,
@@ -92,18 +107,60 @@ class ScheduleController extends Controller
                     'room' => $shift->room,
                     'instructor' => $shift->instructor,
                     'department' => $shift->department,
+                    'assigned_office' => $assignedOffice !== '' ? $assignedOffice : $shift->department,
                     'student_name' => $shift->user?->name ?? 'Student',
                     'profile_picture' => $shift->user?->profile_picture,
                 ];
             })
+            ->sort(function (array $left, array $right) use ($weekdayOrder) {
+                $day = ($weekdayOrder[$left['day']] ?? 7) <=> ($weekdayOrder[$right['day']] ?? 7);
+                if ($day !== 0) {
+                    return $day;
+                }
+
+                $time = $this->scheduleStartMinutes((string) $left['time']) <=> $this->scheduleStartMinutes((string) $right['time']);
+                if ($time !== 0) {
+                    return $time;
+                }
+
+                return strcasecmp((string) $left['student_name'], (string) $right['student_name']);
+            })
             ->values();
 
+        $offices = $officeScoped
+            ? $schedules
+                ->map(fn (array $shift) => trim((string) ($shift['assigned_office'] ?: $shift['department'])))
+                ->filter()
+                ->unique()
+                ->sort()
+                ->values()
+            : Office::query()->orderBy('name')->pluck('name')->values();
+
         return response()->json([
-            'scope' => 'Organization',
+            'scope' => $officeScoped ? 'office' : 'organization',
             'semester' => SemesterTerm::current()?->toPayload(),
-            'offices' => Office::query()->orderBy('name')->pluck('name')->values(),
+            'offices' => $offices,
             'schedules' => $schedules,
         ]);
+    }
+
+    private function scheduleStartMinutes(string $time): int
+    {
+        if (! preg_match('/(\d{1,2}):(\d{2})\s*(am|pm)?/i', $time, $match)) {
+            return 24 * 60;
+        }
+
+        $hour = (int) $match[1];
+        $minute = (int) $match[2];
+        $meridiem = isset($match[3]) ? strtolower((string) $match[3]) : null;
+        if ($meridiem === 'pm' && $hour < 12) {
+            $hour += 12;
+        }
+        if ($meridiem === 'am' && $hour === 12) {
+            $hour = 0;
+        }
+
+        return ($hour * 60) + $minute;
     }
 
     // 3. For Assigning a New Shift (WITH SMART OVERLAP PREVENTION)
