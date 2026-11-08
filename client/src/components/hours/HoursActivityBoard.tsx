@@ -9,6 +9,8 @@ interface HourEntry {
   year_level?: number | null;
   status?: string | null;
   scanned_at?: string | null;
+  time_in?: string | null;
+  time_out?: string | null;
   hours_delta: number;
 }
 
@@ -68,7 +70,8 @@ export function HoursActivityBoard({
   const [notice, setNotice] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [rosterSearch, setRosterSearch] = useState('');
-  const [timeDrafts, setTimeDrafts] = useState<Record<number, string>>({});
+  const [timeInDrafts, setTimeInDrafts] = useState<Record<number, string>>({});
+  const [timeOutDrafts, setTimeOutDrafts] = useState<Record<number, string>>({});
   const issuer = canIssueActivity();
 
   const load = async () => {
@@ -103,7 +106,8 @@ export function HoursActivityBoard({
   };
 
   const correctTime = async (item: HourEvent, userId: number) => {
-    const time = timeDrafts[userId];
+    const saved = item.entries.find((entry) => entry.user_id === userId)?.time_in || '';
+    const time = timeInDrafts[userId] || saved;
     if (!time) {
       setNotice('Enter the clock-in time first.');
       return;
@@ -114,7 +118,24 @@ export function HoursActivityBoard({
       setNotice(res.message);
       onChanged();
     } catch (error) {
-      setNotice(apiError(error, 'Could not save that time.'));
+      setNotice(apiError(error, 'Could not save that time in.'));
+    }
+  };
+
+  const correctTimeout = async (item: HourEvent, userId: number) => {
+    const saved = item.entries.find((entry) => entry.user_id === userId)?.time_out || '';
+    const time = timeOutDrafts[userId] || saved;
+    if (!time) {
+      setNotice('Enter the time-out first.');
+      return;
+    }
+    try {
+      const res = await financialService.correctHourTimeout(item.id, userId, time);
+      setEvents((current) => current.map((row) => (row.id === item.id ? res.event : row)));
+      setNotice(res.message);
+      onChanged();
+    } catch (error) {
+      setNotice(apiError(error, 'Could not save that time out.'));
     }
   };
 
@@ -136,7 +157,7 @@ export function HoursActivityBoard({
           <h2 className="text-xl font-semibold text-slate-900">Activity hours</h2>
           <p className="text-sm text-slate-500 mt-1 max-w-2xl">
             Create these activities in the Attendance Hub for a group. Students clock in, then time out the same way they clocked in. Hours are added only when they time out, and only if that clock-in was on time. Late adds nothing and deducts nothing. Absent deducts the same hours.
-            The group leader can show that activity&apos;s QR code and passcode, which works for every year level in the group. Every activity stays on time for 1 hour after the official time in.
+            The group leader can show that activity&apos;s QR code and passcode, which works for every year level in the group. WSPO staff can also correct clock-in and time-out below. Every activity stays on time for 1 hour after the official time in.
           </p>
         </div>
       </div>
@@ -205,7 +226,7 @@ export function HoursActivityBoard({
                     {item.uses_attendance && !readOnly && issuer && (
                       <div className="space-y-3">
                         <p className="text-sm text-slate-600">
-                          The QR code for this activity is issued in the Attendance Hub. If the scanner fails, correct the clock-in time below. Hours are added only when the student times out, and only if that clock-in was on time.
+                          The QR code for this activity is issued in the Attendance Hub. If the scanner fails, correct the clock-in and time-out below. Hours are added only at time out, and only if that clock-in was on time.
                         </p>
                         <button type="button" onClick={() => markAbsent(item)} className="px-4 py-3 bg-white border border-slate-200 text-sm font-bold rounded-xl text-slate-700">Mark unmarked absent</button>
                       </div>
@@ -232,12 +253,20 @@ export function HoursActivityBoard({
                             <div className="flex flex-wrap items-center gap-2">
                               <input
                                 type="time"
-                                value={timeDrafts[entry.user_id] || ''}
-                                onChange={(input) => setTimeDrafts((current) => ({ ...current, [entry.user_id]: input.target.value }))}
+                                value={timeInDrafts[entry.user_id] ?? entry.time_in ?? ''}
+                                onChange={(input) => setTimeInDrafts((current) => ({ ...current, [entry.user_id]: input.target.value }))}
                                 className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold"
-                                aria-label={`Corrected time for ${entry.name}`}
+                                aria-label={`Clock-in time for ${entry.name}`}
                               />
-                              <button type="button" onClick={() => correctTime(item, entry.user_id)} className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border bg-white text-slate-700 border-slate-200">Save time</button>
+                              <button type="button" onClick={() => correctTime(item, entry.user_id)} className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border bg-white text-slate-700 border-slate-200">Save time in</button>
+                              <input
+                                type="time"
+                                value={timeOutDrafts[entry.user_id] ?? entry.time_out ?? ''}
+                                onChange={(input) => setTimeOutDrafts((current) => ({ ...current, [entry.user_id]: input.target.value }))}
+                                className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold"
+                                aria-label={`Time-out for ${entry.name}`}
+                              />
+                              <button type="button" onClick={() => correctTimeout(item, entry.user_id)} className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border bg-white text-slate-700 border-slate-200">Save time out</button>
                               <button
                                 type="button"
                                 onClick={() => mark(item, entry.user_id, 'absent')}

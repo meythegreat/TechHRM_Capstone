@@ -243,6 +243,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/financial/hour-events/{event}/scan', [\App\Http\Controllers\RenderedHourController::class, 'scan']);
         Route::post('/financial/hour-events/{event}/mark-absent', [\App\Http\Controllers\RenderedHourController::class, 'markRemainingAbsent']);
         Route::patch('/financial/hour-events/{event}/time', [\App\Http\Controllers\RenderedHourController::class, 'correctTime']);
+        Route::patch('/financial/hour-events/{event}/timeout', [\App\Http\Controllers\RenderedHourController::class, 'correctTimeout']);
         Route::post('/financial/compute-period', [FinancialController::class, 'computePeriod']);
         Route::put('/financial/records/{id}/adjustments', [FinancialController::class, 'updateAdjustments']);
         Route::delete('/financial/records/{id}', [FinancialController::class, 'destroy']);
