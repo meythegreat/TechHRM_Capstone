@@ -132,16 +132,17 @@ class ScheduleController extends Controller
             }
         }
 
-        $student = User::with('profile')->where('role', 'Student')->findOrFail($userId);
+        $accounts = app(UserController::class);
+        $student = $accounts->findSchedulableStudent($userId);
         abort_unless(
-            app(UserController::class)->canManageWorkSchedules($request->user()),
+            $accounts->canManageWorkSchedules($request->user()),
             403,
             $kind === 'class'
                 ? 'Only the WSPO coordinator or secretary can add a class schedule.'
                 : 'Only the WSPO coordinator or secretary can assign a work schedule.'
         );
 
-        $department = trim((string) ($student->profile?->assigned_office ?? ''));
+        $department = $accounts->scheduleDepartment($student);
         $includesWork = collect($entries)->contains(fn (array $entry) => $this->entryKind($entry, $kind) === 'work');
         if ($includesWork && $department === '') {
             return response()->json([
@@ -251,8 +252,9 @@ class ScheduleController extends Controller
             'instructor' => 'nullable|string|max:120',
         ]);
 
-        $student = User::with('profile')->where('role', 'Student')->findOrFail($validated['user_id']);
-        $department = trim((string) ($student->profile?->assigned_office ?? ''));
+        $accounts = app(UserController::class);
+        $student = $accounts->findSchedulableStudent($validated['user_id']);
+        $department = $accounts->scheduleDepartment($student);
         if ($kind === 'work' && $department === '') {
             return response()->json([
                 'message' => 'This student has no assigned office yet.',

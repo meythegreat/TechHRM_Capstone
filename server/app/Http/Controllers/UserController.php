@@ -35,7 +35,13 @@ class UserController extends Controller
 
         $roles = ['Student', 'Supervisor', 'WSPO Staff', 'Super Admin'];
         if ($request->filled('role') && in_array($request->role, $roles, true)) {
-            $query->where('role', $request->role);
+            if ($request->role === 'Student') {
+                // Secretary and president are students who also hold office.
+                // The coordinator is the only officer kept off the student list.
+                $this->constrainSchedulableStudents($query);
+            } else {
+                $query->where('role', $request->role);
+            }
         }
 
         if ($request->filled('department')) {
@@ -107,10 +113,14 @@ class UserController extends Controller
         return response()->json($this->departmentSupervisorMap());
     }
 
-    /** Students available to the current department. */
+    /**
+     * Working students who can receive a duty or class schedule.
+     * WSPO secretary and president are students; the coordinator is not.
+     */
     public function personnel(Request $request)
     {
-        $query = User::with('profile')->where('role', 'Student');
+        $query = User::with('profile');
+        $this->constrainSchedulableStudents($query);
         if ($request->user()->role === 'Supervisor') {
             $departments = $this->supervisedDepartments($request->user());
             if ($departments === []) {
@@ -259,6 +269,79 @@ class UserController extends Controller
     public function supervisorNamesForOffice(?string $department): array
     {
         return $this->supervisorNamesForDepartment($department);
+    }
+
+    /**
+     * Officer titles held by working students. The coordinator is staff only.
+     *
+     * @return list<string>
+     */
+    public function studentOfficerPositions(): array
+    {
+        return ['WSPO Secretary', 'WSPO President'];
+    }
+
+    /** Secretary and president keep a WSPO Staff login and still count as students. */
+    public function isStudentOfficer(User $user): bool
+    {
+        if ($user->role !== 'WSPO Staff') {
+            return false;
+        }
+
+        $position = strtolower(trim((string) ($user->profile?->assigned_office ?? '')));
+
+        foreach ($this->studentOfficerPositions() as $allowed) {
+            if ($position === strtolower($allowed)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Students, plus secretary and president, who can be given a duty schedule. */
+    public function findSchedulableStudent(int|string $id): User
+    {
+        $student = User::with('profile')->find($id);
+        if (!$student || ($student->role !== 'Student' && !$this->isStudentOfficer($student))) {
+            abort(404);
+        }
+
+        return $student;
+    }
+
+    /**
+     * Office stored on a work or class row.
+     * An officer title is not a department, so those duties stay on the WSPO office.
+     */
+    public function scheduleDepartment(User $student): string
+    {
+        if ($this->isStudentOfficer($student)) {
+            return 'WSPO';
+        }
+
+        return trim((string) ($student->profile?->assigned_office ?? ''));
+    }
+
+    /** @param  \Illuminate\Database\Eloquent\Builder<\App\Models\User>  $query */
+    public function constrainSchedulableStudents($query)
+    {
+        return $query->where(function ($people) {
+            $people->where('role', 'Student')
+                ->orWhere(fn ($officers) => $this->constrainStudentOfficers($officers));
+        });
+    }
+
+    /** @param  \Illuminate\Database\Eloquent\Builder<\App\Models\User>  $query */
+    public function constrainStudentOfficers($query)
+    {
+        return $query->where('role', 'WSPO Staff')->whereHas('profile', function ($profile) {
+            $profile->where(function ($office) {
+                foreach ($this->studentOfficerPositions() as $position) {
+                    $office->orWhereRaw('LOWER(TRIM(assigned_office)) = ?', [strtolower($position)]);
+                }
+            });
+        });
     }
 
     /** WSPO Coordinator supervises working students placed in the WSPO office. */

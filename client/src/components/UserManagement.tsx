@@ -530,6 +530,9 @@ const UserManagement = () => {
                                               {(!user.profile?.assigned_office || user.profile.assigned_office === 'WSPO Coordinator' || user.profile.assigned_office === 'WSPO') && (
                                                   <p className="text-xs font-semibold text-indigo-700 mt-1">Supervisor of WSPO</p>
                                               )}
+                                              {(user.profile?.assigned_office === 'WSPO Secretary' || user.profile?.assigned_office === 'WSPO President') && (
+                                                  <p className="text-xs font-semibold text-indigo-700 mt-1">Working student · can receive duty schedules</p>
+                                              )}
                                           </div>
                                       ) : (
                                           <span className="text-xs font-bold text-slate-400 flex items-center gap-1"><ShieldAlert className="w-3.5 h-3.5"/> Unrestricted Access</span>

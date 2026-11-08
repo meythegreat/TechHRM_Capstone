@@ -174,6 +174,106 @@ class AssignJanitorialShiftTest extends TestCase
         $this->assertDatabaseCount('schedules', 3);
     }
 
+    public function test_wspo_secretary_is_included_when_assigning_a_duty_schedule(): void
+    {
+        $staff = User::create([
+            'name' => 'WSPO Coordinator',
+            'username' => 'wspo.coordinator.'.uniqid(),
+            'password' => bcrypt('password'),
+            'role' => 'WSPO Staff',
+        ]);
+        UserProfile::create([
+            'user_id' => $staff->id,
+            'assigned_office' => 'WSPO Coordinator',
+        ]);
+
+        $secretary = User::create([
+            'name' => 'Quia de Felipe',
+            'username' => 'quia.defelipe.'.uniqid(),
+            'password' => bcrypt('password'),
+            'role' => 'WSPO Staff',
+        ]);
+        UserProfile::create([
+            'user_id' => $secretary->id,
+            'assigned_office' => 'WSPO Secretary',
+        ]);
+
+        $president = User::create([
+            'name' => 'WSPO President',
+            'username' => 'wspo.president.'.uniqid(),
+            'password' => bcrypt('password'),
+            'role' => 'WSPO Staff',
+        ]);
+        UserProfile::create([
+            'user_id' => $president->id,
+            'assigned_office' => 'WSPO President',
+        ]);
+
+        $student = User::create([
+            'name' => 'Library Worker',
+            'username' => 'library.worker.'.uniqid(),
+            'password' => bcrypt('password'),
+            'role' => 'Student',
+        ]);
+        UserProfile::create([
+            'user_id' => $student->id,
+            'assigned_office' => 'Library',
+        ]);
+
+        SemesterTerm::create([
+            'label' => '1st Semester',
+            'starts_on' => '2026-08-03',
+            'ends_on' => '2027-01-02',
+            'months' => 5,
+            'updated_by' => $staff->id,
+        ]);
+
+        Sanctum::actingAs($staff->load('profile'));
+
+        $personnel = $this->getJson('/api/personnel');
+        $personnel->assertOk();
+        $names = collect($personnel->json())->pluck('name')->all();
+        $this->assertContains('Quia de Felipe', $names);
+        $this->assertContains('WSPO President', $names);
+        $this->assertContains('Library Worker', $names);
+        $this->assertNotContains('WSPO Coordinator', $names);
+
+        $students = $this->getJson('/api/users?role=Student');
+        $students->assertOk();
+        $studentNames = collect($students->json('data'))->pluck('name')->all();
+        $this->assertContains('Quia de Felipe', $studentNames);
+        $this->assertContains('WSPO President', $studentNames);
+        $this->assertNotContains('WSPO Coordinator', $studentNames);
+
+        $response = $this->postJson('/api/schedules', [
+            'user_id' => $secretary->id,
+            'days' => ['Tuesday', 'Thursday'],
+            'time' => '08:00 - 12:00',
+            'kind' => 'work',
+            'duty_type' => 'Clerical',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('schedules.0.department', 'WSPO')
+            ->assertJsonPath('schedules.0.user_id', $secretary->id);
+
+        $this->assertDatabaseHas('schedules', [
+            'user_id' => $secretary->id,
+            'day' => 'Tuesday',
+            'kind' => 'work',
+            'duty_type' => 'Clerical',
+            'department' => 'WSPO',
+        ]);
+
+        $this->postJson('/api/schedules', [
+            'user_id' => $staff->id,
+            'days' => ['Monday'],
+            'time' => '08:00 - 12:00',
+            'kind' => 'work',
+            'duty_type' => 'Clerical',
+        ])->assertNotFound();
+    }
+
     public function test_overlapping_shifts_in_one_save_are_rejected(): void
     {
         [, $student] = $this->actingWspoWithStudent();
