@@ -431,14 +431,76 @@ class UserController extends Controller
         return false;
     }
 
-    /** Office name used when this person issues an attendance code. */
+    /** First office, kept for callers that still expect a single name. */
     public function attendanceOffice(User $user): string
     {
+        return $this->attendanceOffices($user)[0] ?? '';
+    }
+
+    /**
+     * Every office whose students may use this person's attendance code.
+     * One supervisor can cover several offices with the same passcode and QR.
+     *
+     * @return list<string>
+     */
+    public function attendanceOffices(User $user): array
+    {
         if ($this->isWspoDepartmentSupervisor($user)) {
-            return 'WSPO';
+            return ['WSPO'];
         }
 
-        return $this->supervisedDepartments($user)[0] ?? '';
+        return $this->supervisedDepartments($user);
+    }
+
+    public function attendanceScopeLabel(User $user): string
+    {
+        $offices = array_values($this->attendanceOffices($user));
+        $count = count($offices);
+        if ($count === 0) {
+            return '';
+        }
+        if ($count === 1) {
+            return $offices[0];
+        }
+        if ($count === 2) {
+            return $offices[0].' and '.$offices[1];
+        }
+
+        $last = array_pop($offices);
+
+        return implode(', ', $offices).', and '.$last;
+    }
+
+    /** Stable identity for the set of offices one live code covers. */
+    public function attendanceScopeKey(User $user): string
+    {
+        $keys = [];
+        foreach ($this->attendanceOffices($user) as $office) {
+            $aliases = array_values(array_filter(array_map(
+                [$this, 'normalizeDepartment'],
+                $this->departmentAliases($office)
+            )));
+            sort($aliases);
+            if ($aliases !== []) {
+                $keys[] = $aliases[0];
+            }
+        }
+
+        $keys = array_values(array_unique($keys));
+        sort($keys);
+
+        return implode('|', $keys);
+    }
+
+    public function codeCoversOffice(User $supervisor, string $studentOffice): bool
+    {
+        foreach ($this->attendanceOffices($supervisor) as $office) {
+            if ($this->officesMatch($office, $studentOffice)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function officesMatch(string $left, string $right): bool

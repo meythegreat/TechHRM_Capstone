@@ -54,6 +54,7 @@ const SupervisorAttendanceHub = () => {
     const supervisorDepartment = userRole === 'WSPO Staff' && ['WSPO Coordinator', 'WSPO', 'Unassigned', ''].includes(storedOffice)
         ? 'WSPO'
         : storedOffice;
+    const [tokenScope, setTokenScope] = useState(supervisorDepartment);
 
     const formatHours = (value) => Number(value || 0).toFixed(2);
 
@@ -103,6 +104,7 @@ const SupervisorAttendanceHub = () => {
                     expires_at: res.data.expires_at,
                     description: res.data.description,
                 });
+                if (res.data.department) setTokenScope(res.data.department);
                 setCopied(false);
                 setPasscodeSeconds(Number(res.data.seconds_remaining) || 0);
                 setErrorMsg('');
@@ -139,6 +141,7 @@ const SupervisorAttendanceHub = () => {
                 if (cancelled) return;
                 setQrSession(res.data);
                 setQrSeconds(Number(res.data.seconds_remaining) || 0);
+                if (res.data.department) setTokenScope(res.data.department);
                 setErrorMsg('');
                 const waitMs = Math.max(1000, (Number(res.data.seconds_remaining) || 3) * 1000 - 400);
                 refreshTimer = setTimeout(loadQr, waitMs);
@@ -281,8 +284,8 @@ const SupervisorAttendanceHub = () => {
                     <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                         Daily clock-in can use a passcode or a QR code. Cleaning, devotional, and assembly attendance use their own code. Students time out the same way they clocked in, and the hours are added only then.
                     </p>
-                    <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">
-                        Token scope: <span className="font-semibold text-slate-900">{supervisorDepartment}</span> students only
+                    <p className="mt-2 inline-flex max-w-lg flex-wrap items-center gap-x-2 gap-y-1 rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">
+                        Token scope: <span className="font-semibold text-slate-900">{tokenScope}</span> students only
                     </p>
                 </div>
 
