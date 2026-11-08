@@ -45,6 +45,14 @@ export function formatShiftEnd(time: string): string {
     return formatMinutes(window[1]);
 }
 
+/** Display a stored shift range as 12-hour start – end with AM/PM. */
+export function formatScheduleRange(time: string): string {
+    const start = formatShiftStart(time);
+    const end = formatShiftEnd(time);
+    if (!end) return start;
+    return `${start} – ${end}`;
+}
+
 export function compareSchedules<T extends { time: string; student_name?: string; id?: number }>(left: T, right: T): number {
     const byTime = startMinutes(left.time) - startMinutes(right.time);
     if (byTime !== 0) return byTime;

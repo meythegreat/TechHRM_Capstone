@@ -328,6 +328,40 @@ class AssignJanitorialShiftTest extends TestCase
         $this->assertDatabaseCount('schedules', 0);
     }
 
+    public function test_wspo_can_mass_delete_selected_schedules(): void
+    {
+        [, $student] = $this->actingWspoWithStudent();
+
+        $created = $this->postJson('/api/schedules', [
+            'user_id' => $student->id,
+            'kind' => 'work',
+            'entries' => [
+                [
+                    'days' => ['Monday', 'Wednesday', 'Friday'],
+                    'time' => '08:00 - 12:00',
+                    'duty_type' => 'Janitorial',
+                ],
+            ],
+        ]);
+
+        $created->assertOk();
+        $ids = collect($created->json('schedules'))->pluck('id')->take(2)->all();
+        $this->assertCount(2, $ids);
+        $this->assertDatabaseCount('schedules', 3);
+
+        $response = $this->deleteJson('/api/schedules/bulk', [
+            'ids' => $ids,
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('message', '2 schedules removed.')
+            ->assertJsonPath('deleted', 2);
+        $this->assertDatabaseCount('schedules', 1);
+        foreach ($ids as $id) {
+            $this->assertDatabaseMissing('schedules', ['id' => $id]);
+        }
+    }
+
     /**
      * @return array{0: User, 1: User}
      */

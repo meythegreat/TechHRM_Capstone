@@ -15,7 +15,6 @@ import {
     AlertCircle, 
     Trash2,
     Pencil,
-    Check, 
     X,
     ChevronLeft,
     ChevronRight,
@@ -33,6 +32,7 @@ import ComboFilter from './ComboFilter';
 import WsaExtraServiceLetter, { printExtraServiceLetter } from './staffing/WsaExtraServiceLetter';
 import SecureFileViewerModal from './SecureFileViewerModal';
 import { workShiftDutyOptions } from '../constants/workShiftDutyTypes';
+import { formatScheduleRange } from '../utils/scheduleTime';
 
 const HOUR_OPTIONS = Array.from({ length: 12 }, (_, index) => String(index + 1));
 const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0'));
@@ -261,6 +261,8 @@ const ScheduleManagement = () => {
     const [requestSlide, setRequestSlide] = useState(0);
     const [requestSlideDirection, setRequestSlideDirection] = useState(1);
     const [listKind, setListKind] = useState<'all' | 'work' | 'class'>('all');
+    const [selectedScheduleIds, setSelectedScheduleIds] = useState<number[]>([]);
+    const [isBulkDeleting, setIsBulkDeleting] = useState(false);
     const [entryKind, setEntryKind] = useState<'work' | 'class'>('work');
     const [staffingRequests, setStaffingRequests] = useState<any[]>([]);
     const [staffingCandidates, setStaffingCandidates] = useState<UserData[]>([]);
@@ -858,9 +860,29 @@ const ScheduleManagement = () => {
         try {
             await axios.delete(`/api/schedules/${id}`);
             showToast("Schedule deleted successfully.", "success");
+            setSelectedScheduleIds((current) => current.filter((selectedId) => selectedId !== id));
             fetchSchedules(currentPage);
         } catch (error) {
             showToast("Failed to delete schedule.", "error");
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        if (selectedScheduleIds.length === 0) return;
+        const count = selectedScheduleIds.length;
+        if (!confirm(`Delete ${count} selected schedule${count === 1 ? '' : 's'}? This cannot be undone.`)) return;
+        setIsBulkDeleting(true);
+        try {
+            const response = await axios.delete('/api/schedules/bulk', {
+                data: { ids: selectedScheduleIds },
+            });
+            showToast(response.data?.message || `${count} schedules removed.`, 'success');
+            setSelectedScheduleIds([]);
+            fetchSchedules(currentPage);
+        } catch (error: any) {
+            showToast(error.response?.data?.message || 'Failed to delete selected schedules.', 'error');
+        } finally {
+            setIsBulkDeleting(false);
         }
     };
 
@@ -916,12 +938,14 @@ const ScheduleManagement = () => {
         setCurrentPage(1);
         setRequestSlide(0);
         setSchedulePage(1);
+        setSelectedScheduleIds([]);
     };
 
     const applyDayFilter = (day: string) => {
         setDayFilter(day);
         setCurrentPage(1);
         setSchedulePage(1);
+        setSelectedScheduleIds([]);
     };
 
     const listFiltersActive = Boolean(nameFilter.trim() || dayFilter);
@@ -943,6 +967,26 @@ const ScheduleManagement = () => {
     const requestSlides = isAudit ? filteredRequests : staffingRequests;
     const requestSlideIndex = requestSlides.length === 0 ? 0 : Math.min(requestSlide, requestSlides.length - 1);
     const visibleSchedules = isAudit ? pagedSchedules.rows : schedules;
+    const visibleScheduleIds = visibleSchedules.map((schedule) => schedule.id);
+    const allVisibleSelected = visibleScheduleIds.length > 0 && visibleScheduleIds.every((id) => selectedScheduleIds.includes(id));
+
+    const toggleScheduleSelection = (id: number) => {
+        setSelectedScheduleIds((current) => (
+            current.includes(id)
+                ? current.filter((selectedId) => selectedId !== id)
+                : [...current, id]
+        ));
+    };
+
+    const toggleSelectVisibleSchedules = () => {
+        setSelectedScheduleIds((current) => {
+            if (allVisibleSelected) {
+                return current.filter((id) => !visibleScheduleIds.includes(id));
+            }
+            return Array.from(new Set([...current, ...visibleScheduleIds]));
+        });
+    };
+
     const scheduleSlotsAreMixed = formData.slots.some((slot) => slot.kind === 'class') && formData.slots.some((slot) => slot.kind === 'work');
     const scheduleSlotsAreClass = formData.slots.length > 0 && formData.slots.every((slot) => slot.kind === 'class');
 
@@ -1554,7 +1598,7 @@ const ScheduleManagement = () => {
                         <button
                             key={value}
                             type="button"
-                            onClick={() => { setListKind(value); setCurrentPage(1); setSchedulePage(1); }}
+                            onClick={() => { setListKind(value); setCurrentPage(1); setSchedulePage(1); setSelectedScheduleIds([]); }}
                             className={`px-4 py-2 rounded-xl text-sm font-bold border transition-colors ${listKind === value ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
                         >
                             {label}
@@ -1575,6 +1619,32 @@ const ScheduleManagement = () => {
                 )}
             </div>
 
+            {canManageSchedules && selectedScheduleIds.length > 0 && (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+                    <p className="text-sm font-semibold text-red-800">
+                        {selectedScheduleIds.length} schedule{selectedScheduleIds.length === 1 ? '' : 's'} selected
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setSelectedScheduleIds([])}
+                            className="px-3 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                        >
+                            Clear selection
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleBulkDelete}
+                            disabled={isBulkDeleting}
+                            className="px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-500 rounded-xl transition-colors flex items-center gap-2 disabled:opacity-60"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                            {isBulkDeleting ? 'Deleting…' : 'Delete selected'}
+                        </button>
+                    </div>
+                </div>
+            )}
+
             <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden relative min-h-[400px]">
                 
                 {isLoading && (
@@ -1587,13 +1657,26 @@ const ScheduleManagement = () => {
                 )}
 
                 <div className="overflow-x-auto custom-scrollbar">
-                    <table className="w-full text-left border-collapse">
+                    <table className="w-full text-left border-collapse min-w-[760px]">
                         <thead>
                             <tr className="bg-slate-50/80 border-b border-slate-200">
-                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Student Worker</th>
-                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Shift Timing</th>
-                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Details</th>
-                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                                {canManageSchedules && (
+                                    <th className="w-12 px-4 py-4">
+                                        <input
+                                            type="checkbox"
+                                            aria-label="Select all schedules on this page"
+                                            checked={allVisibleSelected}
+                                            onChange={toggleSelectVisibleSchedules}
+                                            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-600"
+                                        />
+                                    </th>
+                                )}
+                                <th className="px-4 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Student</th>
+                                <th className="px-4 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Day</th>
+                                <th className="px-4 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Time</th>
+                                <th className="px-4 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
+                                <th className="px-4 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Details</th>
+                                <th className="px-4 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Actions</th>
                             </tr>
                         </thead>
                         <motion.tbody 
@@ -1604,119 +1687,144 @@ const ScheduleManagement = () => {
                         >
                             {!isLoading && visibleSchedules.length === 0 ? (
                                 <tr>
-                                    <td colSpan={4} className="px-6 py-16 text-center text-slate-400">
+                                    <td colSpan={canManageSchedules ? 7 : 6} className="px-6 py-16 text-center text-slate-400">
                                         <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-20" />
                                         <p className="text-base font-semibold text-slate-600">{listFiltersActive ? 'No schedules match these filters' : 'No schedules found'}</p>
                                         <p className="text-sm font-medium">{listFiltersActive ? 'Choose another name or day, or clear the filters.' : canManageSchedules ? 'Assign a work shift or add a class schedule.' : 'The WSPO coordinator or secretary has not recorded a schedule yet.'}</p>
                                     </td>
                                 </tr>
                             ) : (
-                                visibleSchedules.map((schedule) => (
-                                    <motion.tr variants={rowVariants} key={schedule.id} className="hover:bg-slate-50 transition-colors group">
-                                        <td className="px-6 py-5 align-top">
-                                            <div className="flex items-center gap-3">
+                                visibleSchedules.map((schedule) => {
+                                    const isSelected = selectedScheduleIds.includes(schedule.id);
+                                    const isClass = schedule.kind === 'class';
+                                    return (
+                                    <motion.tr
+                                        variants={rowVariants}
+                                        key={schedule.id}
+                                        className={`transition-colors group ${isSelected ? 'bg-blue-50/70' : 'hover:bg-slate-50'}`}
+                                    >
+                                        {canManageSchedules && (
+                                            <td className="px-4 py-4 align-middle">
+                                                <input
+                                                    type="checkbox"
+                                                    aria-label={`Select schedule for ${schedule.user?.name || 'student'}`}
+                                                    checked={isSelected}
+                                                    onChange={() => toggleScheduleSelection(schedule.id)}
+                                                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-600"
+                                                />
+                                            </td>
+                                        )}
+                                        <td className="px-4 py-4 align-middle">
+                                            <div className="flex items-center gap-3 min-w-[12rem]">
                                                 <UserAvatar
                                                     name={schedule.user?.name}
                                                     picture={schedule.user?.profile_picture}
-                                                    className="w-10 h-10 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-sm"
+                                                    className="w-9 h-9 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-sm shrink-0"
                                                 />
-                                                <div>
-                                                    <p className="font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
+                                                <div className="min-w-0">
+                                                    <p className="font-semibold text-slate-900 truncate">
                                                         {schedule.user?.name || 'Unknown User'}
                                                     </p>
+                                                    <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5 truncate">
+                                                        <MapPin className="w-3 h-3 text-slate-400 shrink-0" /> {schedule.department}
+                                                    </p>
                                                     {schedule.user?.deleted_at && (
-                                                        <span className="mt-1 inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+                                                        <span className="mt-1 inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600">
                                                             Account deleted
                                                         </span>
                                                     )}
-                                                    <div className="text-xs font-medium text-slate-500 flex items-center gap-1 mt-0.5">
-                                                        <MapPin className="w-3 h-3 text-slate-400" /> {schedule.department}
-                                                    </div>
                                                 </div>
                                             </div>
                                         </td>
-                                        
-                                        <td className="px-6 py-5 align-top">
-                                            <div className="flex items-center gap-2 text-sm text-slate-900 font-bold mb-1.5">
-                                                <Clock className="w-4 h-4 text-blue-500" />
-                                                {schedule.time}
-                                            </div>
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 uppercase tracking-widest border border-slate-200">
-                                                    {schedule.day}
-                                                </span>
-                                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border ${schedule.kind === 'class' ? 'bg-violet-50 text-violet-700 border-violet-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
-                                                    {schedule.kind === 'class' ? <GraduationCap className="w-3 h-3" /> : <Briefcase className="w-3 h-3" />}
-                                                    {schedule.kind === 'class' ? 'Class' : 'Work'}
-                                                </span>
+
+                                        <td className="px-4 py-4 align-middle">
+                                            <span className="text-sm font-semibold text-slate-800">{schedule.day}</span>
+                                        </td>
+
+                                        <td className="px-4 py-4 align-middle">
+                                            <div className="inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-slate-900">
+                                                <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                                {formatScheduleRange(schedule.time)}
                                             </div>
                                         </td>
 
-                                        <td className="px-6 py-5 align-top">
-                                            {schedule.kind === 'class' ? (
+                                        <td className="px-4 py-4 align-middle">
+                                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold border ${isClass ? 'bg-violet-50 text-violet-700 border-violet-200' : 'bg-sky-50 text-sky-700 border-sky-200'}`}>
+                                                {isClass ? <GraduationCap className="w-3 h-3" /> : <Briefcase className="w-3 h-3" />}
+                                                {isClass ? 'Class' : 'Work'}
+                                            </span>
+                                        </td>
+
+                                        <td className="px-4 py-4 align-middle max-w-[16rem]">
+                                            {isClass ? (
                                                 <>
-                                                    <p className="text-sm font-bold text-slate-800">{schedule.subject || schedule.duty_type}</p>
-                                                    <p className="text-xs font-medium text-slate-500 mt-1">
+                                                    <p className="text-sm font-semibold text-slate-800 truncate">{schedule.subject || schedule.duty_type || 'Class'}</p>
+                                                    <p className="text-xs text-slate-500 mt-0.5 truncate">
                                                         {[schedule.room, schedule.instructor || schedule.supervisor].filter(Boolean).join(' · ') || 'No room or instructor'}
                                                     </p>
                                                 </>
                                             ) : (
-                                                <p className="text-sm font-bold text-slate-800">{schedule.duty_type}</p>
+                                                <p className="text-sm font-semibold text-slate-800 truncate">{schedule.duty_type || 'Work shift'}</p>
+                                            )}
+                                            {schedule.edit_request_status === 'pending' && (
+                                                <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2">
+                                                    <p className="text-[11px] font-semibold text-amber-800 flex items-center gap-1">
+                                                        <AlertCircle className="w-3.5 h-3.5 shrink-0" /> Edit requested
+                                                    </p>
+                                                    {schedule.edit_request_note && (
+                                                        <p className="mt-1 text-[11px] text-amber-700 leading-snug line-clamp-2">
+                                                            {schedule.edit_request_note}
+                                                        </p>
+                                                    )}
+                                                    {canManageSchedules && (
+                                                        <div className="mt-2 flex gap-1.5">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleEditAction(schedule.id, 'approve')}
+                                                                className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-[10px] font-bold transition-colors"
+                                                            >
+                                                                Approve
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleEditAction(schedule.id, 'reject')}
+                                                                className="px-2 py-1 bg-white border border-red-200 hover:bg-red-50 text-red-600 rounded-md text-[10px] font-bold transition-colors"
+                                                            >
+                                                                Reject
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             )}
                                         </td>
 
-                                        <td className="px-6 py-5 align-top text-right">
-                                            <div className="flex flex-col items-end gap-3">
-                                                {schedule.edit_request_status === 'pending' && (
-                                                    <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-left max-w-[280px] shadow-sm relative overflow-hidden">
-                                                        <div className="absolute top-0 right-0 w-16 h-16 bg-amber-500/10 rounded-full blur-xl"></div>
-                                                        <p className="text-xs font-semibold text-amber-800 mb-1.5 flex items-center gap-1.5 tracking-tight relative z-10">
-                                                            <AlertCircle className="w-4 h-4" /> Shift Edit Requested
-                                                        </p>
-                                                        <p className="text-[11px] text-amber-700 font-medium mb-3 italic leading-relaxed relative z-10 bg-white/50 p-2 rounded-lg border border-amber-100">
-                                                            "{schedule.edit_request_note}"
-                                                        </p>
-                                                        {canManageSchedules && <div className="flex gap-2 relative z-10">
-                                                            <button 
-                                                                onClick={() => handleEditAction(schedule.id, 'approve')} 
-                                                                className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold shadow-sm transition-colors flex items-center justify-center gap-1"
-                                                            >
-                                                                <Check className="w-3.5 h-3.5" /> Approve
-                                                            </button>
-                                                            <button 
-                                                                onClick={() => handleEditAction(schedule.id, 'reject')} 
-                                                                className="flex-1 py-1.5 bg-white border border-red-200 hover:bg-red-50 text-red-600 rounded-lg text-[11px] font-bold transition-colors flex items-center justify-center gap-1"
-                                                            >
-                                                                <X className="w-3.5 h-3.5" /> Reject
-                                                            </button>
-                                                        </div>}
-                                                    </div>
-                                                )}
-                                                
-                                                {canManageSchedules && (
-                                                    <div className="flex items-center justify-end gap-1">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => openEditSchedule(schedule)}
-                                                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-transparent hover:border-blue-100"
-                                                            title={schedule.kind === 'class' ? 'Edit class schedule' : 'Edit work schedule'}
-                                                        >
-                                                            <Pencil className="w-5 h-5" />
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleDelete(schedule.id)}
-                                                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
-                                                            title="Remove Schedule"
-                                                        >
-                                                            <Trash2 className="w-5 h-5" />
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
+                                        <td className="px-4 py-4 align-middle text-right">
+                                            {canManageSchedules ? (
+                                                <div className="inline-flex items-center justify-end gap-1">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openEditSchedule(schedule)}
+                                                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                        title={isClass ? 'Edit class schedule' : 'Edit work schedule'}
+                                                    >
+                                                        <Pencil className="w-4 h-4" />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDelete(schedule.id)}
+                                                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                        title="Remove schedule"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs text-slate-400">—</span>
+                                            )}
                                         </td>
                                     </motion.tr>
-                                ))
+                                    );
+                                })
                             )}
                         </motion.tbody>
                     </table>
@@ -1732,14 +1840,14 @@ const ScheduleManagement = () => {
                         <div className="flex gap-2">
                             <button 
                                 disabled={currentPage === 1} 
-                                onClick={() => setCurrentPage(p => p - 1)}
+                                onClick={() => { setCurrentPage(p => p - 1); setSelectedScheduleIds([]); }}
                                 className="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 transition-colors flex items-center gap-1 shadow-sm"
                             >
                                 <ChevronLeft className="w-4 h-4" /> Prev
                             </button>
                             <button 
                                 disabled={currentPage === totalPages} 
-                                onClick={() => setCurrentPage(p => p + 1)}
+                                onClick={() => { setCurrentPage(p => p + 1); setSelectedScheduleIds([]); }}
                                 className="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 transition-colors flex items-center gap-1 shadow-sm"
                             >
                                 Next <ChevronRight className="w-4 h-4" />

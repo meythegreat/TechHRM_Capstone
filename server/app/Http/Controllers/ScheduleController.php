@@ -362,6 +362,31 @@ class ScheduleController extends Controller
         ]);
     }
 
+    // Remove several schedules in one request (mass delete from Schedule Master).
+    public function destroyMany(Request $request)
+    {
+        SuperAdminAudit::denyMutation($request);
+        abort_unless(
+            app(UserController::class)->canManageWorkSchedules($request->user()),
+            403,
+            'Only the WSPO coordinator or secretary can remove a work schedule.'
+        );
+
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:100'],
+            'ids.*' => ['integer', 'distinct'],
+        ]);
+
+        $deleted = Schedule::query()->whereIn('id', $validated['ids'])->delete();
+
+        return response()->json([
+            'message' => $deleted === 1
+                ? '1 schedule removed.'
+                : "{$deleted} schedules removed.",
+            'deleted' => $deleted,
+        ]);
+    }
+
     // 5. For Students Requesting a Schedule Change
     public function requestEdit(Request $request, $id)
     {
