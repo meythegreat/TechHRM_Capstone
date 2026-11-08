@@ -106,6 +106,64 @@ function suggestedSemesterStart() {
     return `${year}-08-01`;
 }
 
+const MAX_SCHEDULE_SLOTS = 20;
+
+interface ScheduleSlot {
+    key: string;
+    kind: 'work' | 'class';
+    days: string[];
+    startTime: string;
+    endTime: string;
+    duty_type: string;
+    subject: string;
+    room: string;
+    instructor: string;
+}
+
+let scheduleSlotSerial = 0;
+
+function createScheduleSlot(seed: Partial<Omit<ScheduleSlot, 'key'>> = {}): ScheduleSlot {
+    scheduleSlotSerial += 1;
+    return {
+        key: `slot-${scheduleSlotSerial}`,
+        kind: 'work',
+        days: ['Monday'],
+        startTime: '',
+        endTime: '',
+        duty_type: 'Clerical Work',
+        subject: '',
+        room: '',
+        instructor: '',
+        ...seed,
+    };
+}
+
+function createScheduleForm(userId = '', slots?: ScheduleSlot[]) {
+    return {
+        user_id: userId,
+        slots: slots && slots.length > 0 ? slots : [createScheduleSlot()],
+    };
+}
+
+function slotLabel(kind: 'work' | 'class', index: number, total: number) {
+    const noun = kind === 'class' ? 'Class' : 'Shift';
+    return total > 1 ? `${noun} ${index + 1}` : noun;
+}
+
+function saveScheduleLabel(slots: ScheduleSlot[]) {
+    const classCount = slots.filter((slot) => slot.kind === 'class').length;
+    const workCount = slots.length - classCount;
+    if (classCount > 0 && workCount > 0) {
+        const classes = classCount === 1 ? '1 Class' : `${classCount} Classes`;
+        const shifts = workCount === 1 ? '1 Shift' : `${workCount} Shifts`;
+        return `Save ${classes} and ${shifts}`;
+    }
+    if (classCount > 1) return `Save ${classCount} Classes`;
+    if (workCount > 1) return `Save ${workCount} Shifts`;
+    if (classCount === 1) return 'Save Class';
+    return 'Finalize Shift';
+}
+
 const scheduleMatchesClock = (rawTime: string, hour: string, minute: string, meridiem: string) => {
     const wantedHour = hour.trim();
     const wantedMinute = minute.trim();
@@ -236,17 +294,7 @@ const ScheduleManagement = () => {
     );
 
     const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    const emptyForm = {
-        user_id: '',
-        days: ['Monday'] as string[],
-        startTime: '',
-        endTime: '',
-        duty_type: 'Clerical Work',
-        subject: '',
-        room: '',
-        instructor: '',
-    };
-    const [formData, setFormData] = useState(emptyForm);
+    const [formData, setFormData] = useState(() => createScheduleForm());
     const [editingId, setEditingId] = useState<number | null>(null);
 
     const openScheduleModal = (kind: 'work' | 'class') => {
@@ -256,7 +304,7 @@ const ScheduleManagement = () => {
         }
         setEditingId(null);
         setEntryKind(kind);
-        setFormData(emptyForm);
+        setFormData(createScheduleForm('', [createScheduleSlot({ kind })]));
         setIsModalOpen(true);
     };
 
@@ -265,8 +313,8 @@ const ScheduleManagement = () => {
         const kind = schedule.kind === 'class' ? 'class' : 'work';
         setEditingId(schedule.id);
         setEntryKind(kind);
-        setFormData({
-            user_id: String(schedule.user_id),
+        setFormData(createScheduleForm(String(schedule.user_id), [createScheduleSlot({
+            kind,
             days: weekdays.includes(schedule.day) ? [schedule.day] : ['Monday'],
             startTime: times.startTime,
             endTime: times.endTime,
@@ -274,14 +322,55 @@ const ScheduleManagement = () => {
             subject: schedule.subject || (kind === 'class' ? schedule.duty_type : '') || '',
             room: schedule.room || '',
             instructor: schedule.instructor || (kind === 'class' ? schedule.supervisor : '') || '',
-        });
+        })]));
         setIsModalOpen(true);
     };
 
     const closeScheduleModal = () => {
         setIsModalOpen(false);
         setEditingId(null);
-        setFormData(emptyForm);
+        setFormData(createScheduleForm());
+    };
+
+    const updateSlot = (key: string, patch: Partial<ScheduleSlot>) => {
+        setFormData((current) => ({
+            ...current,
+            slots: current.slots.map((slot) => (slot.key === key ? { ...slot, ...patch } : slot)),
+        }));
+    };
+
+    const toggleSlotDay = (key: string, day: string) => {
+        setFormData((current) => ({
+            ...current,
+            slots: current.slots.map((slot) => {
+                if (slot.key !== key) return slot;
+                if (editingId) return { ...slot, days: [day] };
+                const selected = slot.days.includes(day);
+                return {
+                    ...slot,
+                    days: selected ? slot.days.filter((item) => item !== day) : [...slot.days, day],
+                };
+            }),
+        }));
+    };
+
+    const addSlot = () => {
+        if (formData.slots.length >= MAX_SCHEDULE_SLOTS) {
+            showToast(`You can add up to ${MAX_SCHEDULE_SLOTS} at a time.`, 'error');
+            return;
+        }
+        const slot = createScheduleSlot({ kind: formData.slots[formData.slots.length - 1]?.kind || entryKind });
+        setFormData((current) => ({ ...current, slots: [...current.slots, slot] }));
+        window.setTimeout(() => {
+            document.getElementById(`schedule-slot-${slot.key}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 40);
+    };
+
+    const removeSlot = (key: string) => {
+        setFormData((current) => ({
+            ...current,
+            slots: current.slots.filter((slot) => slot.key !== key),
+        }));
     };
 
     useEffect(() => {
@@ -684,45 +773,69 @@ const ScheduleManagement = () => {
         e.preventDefault();
         setIsSubmitting(true);
 
-        if (formData.days.length === 0) {
-            showToast('Select at least one day.', 'error');
-            setIsSubmitting(false);
-            return;
+        const slots = editingId ? formData.slots.slice(0, 1) : formData.slots;
+        for (let index = 0; index < slots.length; index += 1) {
+            const slot = slots[index];
+            const label = slotLabel(slot.kind, index, slots.length);
+            if (slot.days.length === 0) {
+                showToast(`Select at least one day for ${label.toLowerCase()}.`, 'error');
+                setIsSubmitting(false);
+                return;
+            }
+            if (!slot.startTime || !slot.endTime) {
+                showToast(`Enter a start and end time for ${label.toLowerCase()}.`, 'error');
+                setIsSubmitting(false);
+                return;
+            }
+            if (slot.kind === 'class' && !slot.subject.trim()) {
+                showToast(`Enter a subject for ${label.toLowerCase()}.`, 'error');
+                setIsSubmitting(false);
+                return;
+            }
         }
 
-        const time = `${formData.startTime} - ${formData.endTime}`;
-        const details = entryKind === 'class'
-            ? {
-                subject: formData.subject.trim(),
-                room: formData.room.trim(),
-                instructor: formData.instructor.trim(),
-            }
-            : { duty_type: formData.duty_type };
+        const slotPayload = (slot: ScheduleSlot) => {
+            const time = `${slot.startTime} - ${slot.endTime}`;
+            return slot.kind === 'class'
+                ? {
+                    kind: slot.kind,
+                    days: slot.days,
+                    time,
+                    subject: slot.subject.trim(),
+                    room: slot.room.trim(),
+                    instructor: slot.instructor.trim(),
+                }
+                : {
+                    kind: slot.kind,
+                    days: slot.days,
+                    time,
+                    duty_type: slot.duty_type,
+                };
+        };
 
         try {
             if (editingId) {
+                const slot = slots[0];
                 await axios.put(`/api/schedules/${editingId}`, {
                     user_id: formData.user_id,
-                    day: formData.days[0],
-                    time,
-                    ...details,
+                    day: slot.days[0],
+                    time: `${slot.startTime} - ${slot.endTime}`,
+                    ...(slot.kind === 'class'
+                        ? {
+                            subject: slot.subject.trim(),
+                            room: slot.room.trim(),
+                            instructor: slot.instructor.trim(),
+                        }
+                        : { duty_type: slot.duty_type }),
                 });
                 showToast(entryKind === 'class' ? 'Class schedule updated.' : 'Work schedule updated.', 'success');
             } else {
-                await axios.post('/api/schedules', {
+                const response = await axios.post('/api/schedules', {
                     user_id: formData.user_id,
-                    days: formData.days,
-                    time,
                     kind: entryKind,
-                    ...details,
+                    entries: slots.map(slotPayload),
                 });
-                const saved = formData.days.length;
-                showToast(
-                    entryKind === 'class'
-                        ? (saved === 1 ? 'Class schedule saved.' : `${saved} class days saved.`)
-                        : (saved === 1 ? 'Shift assigned successfully!' : `${saved} work days assigned successfully!`),
-                    'success',
-                );
+                showToast(response.data?.message || (entryKind === 'class' ? 'Class schedule saved.' : 'Shift assigned successfully!'), 'success');
             }
             closeScheduleModal();
             fetchSchedules(currentPage);
@@ -833,6 +946,8 @@ const ScheduleManagement = () => {
     const requestSlides = isAudit ? filteredRequests : staffingRequests;
     const requestSlideIndex = requestSlides.length === 0 ? 0 : Math.min(requestSlide, requestSlides.length - 1);
     const visibleSchedules = isAudit ? pagedSchedules.rows : schedules;
+    const scheduleSlotsAreMixed = formData.slots.some((slot) => slot.kind === 'class') && formData.slots.some((slot) => slot.kind === 'work');
+    const scheduleSlotsAreClass = formData.slots.length > 0 && formData.slots.every((slot) => slot.kind === 'class');
 
     return (
         <div className="max-w-7xl mx-auto space-y-8 font-sans p-4 sm:p-8">
@@ -1651,7 +1766,7 @@ const ScheduleManagement = () => {
                             initial={{ scale: 0.95, opacity: 0, y: 20 }}
                             animate={{ scale: 1, opacity: 1, y: 0 }}
                             exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                            className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden my-auto"
+                            className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden my-auto"
                         >
                             <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center sticky top-0 z-10">
                                 <h3 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
@@ -1659,9 +1774,11 @@ const ScheduleManagement = () => {
                                         ? entryKind === 'class'
                                             ? <><GraduationCap className="w-5 h-5 text-violet-600" /> Edit Class Schedule</>
                                             : <><Pencil className="w-5 h-5 text-blue-600" /> Edit Work Schedule</>
-                                        : entryKind === 'class'
-                                            ? <><GraduationCap className="w-5 h-5 text-violet-600" /> Add Class Schedule</>
-                                            : <><Plus className="w-5 h-5 text-blue-600" /> Assign New Shift</>}
+                                        : scheduleSlotsAreMixed
+                                            ? <><CalendarDays className="w-5 h-5 text-slate-700" /> Add Classes and Shifts</>
+                                            : scheduleSlotsAreClass
+                                                ? <><GraduationCap className="w-5 h-5 text-violet-600" /> Add Class Schedule</>
+                                                : <><Plus className="w-5 h-5 text-blue-600" /> Assign New Shift</>}
                                 </h3>
                                 <button type="button" onClick={closeScheduleModal} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-full transition-colors">
                                     <X className="w-5 h-5" />
@@ -1677,9 +1794,7 @@ const ScheduleManagement = () => {
                                     <p className={`text-[11px] font-medium leading-relaxed ${entryKind === 'class' ? 'text-violet-800' : 'text-blue-800'}`}>
                                         {editingId
                                             ? 'This updates the selected row only. The new time still cannot overlap another class or work shift on that day.'
-                                            : entryKind === 'class'
-                                                ? 'Class hours stay separate from duty. A work shift cannot overlap a class already saved for this student. Clock-in still follows the work schedule only.'
-                                                : 'This is the student’s work schedule. It cannot overlap a class or another shift on the same day. Clock-in is accepted only inside this shift; clock-out is still allowed after it ends.'}
+                                            : 'Add every class and work shift for this student before you save. Use Add another, then set each block to class or work. Each block can use different days and times. Times cannot overlap on the same day. Clock-in follows work shifts only.'}
                                     </p>
                                 </div>
 
@@ -1701,92 +1816,142 @@ const ScheduleManagement = () => {
                                     </select>
                                 </div>
 
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">{editingId ? 'Day' : 'Days of the week'}</label>
-                                    <div className="flex flex-wrap gap-2">
-                                        {weekdays.map((day) => {
-                                            const selected = formData.days.includes(day);
-                                            return (
-                                                <button
-                                                    key={day}
-                                                    type="button"
-                                                    onClick={() => setFormData({
-                                                        ...formData,
-                                                        days: editingId
-                                                            ? [day]
-                                                            : selected ? formData.days.filter((item) => item !== day) : [...formData.days, day],
-                                                    })}
-                                                    className={`px-3 py-2 rounded-xl text-sm font-bold border transition-colors ${selected ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300'}`}
-                                                >
-                                                    {day}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                    <p className="mt-2 text-xs font-medium text-slate-500">
-                                        {editingId
-                                            ? 'Choose the day this entry should fall on.'
-                                            : entryKind === 'class'
-                                                ? 'Select every day this class meets.'
-                                                : 'Select every day this shift repeats, including Saturday when the student works.'}
-                                    </p>
+                                <div className="space-y-4">
+                                    {formData.slots.map((slot, index) => {
+                                        const label = slotLabel(slot.kind, index, editingId ? 1 : formData.slots.length);
+                                        const isClass = slot.kind === 'class';
+                                        const selectedDayClass = isClass
+                                            ? 'bg-violet-600 text-white border-violet-600'
+                                            : 'bg-blue-600 text-white border-blue-600';
+                                        const fieldClass = `w-full p-3.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 transition-all ${isClass ? 'focus:ring-violet-600' : 'focus:ring-blue-600'}`;
+                                        return (
+                                            <div key={slot.key} id={`schedule-slot-${slot.key}`} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:p-5 space-y-5">
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</p>
+                                                    {!editingId && formData.slots.length > 1 && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => removeSlot(slot.key)}
+                                                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                                        >
+                                                            <Trash2 className="w-3.5 h-3.5" /> Remove
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                                {!editingId && (
+                                                    <div className="grid grid-cols-2 gap-1 p-1 bg-white border border-slate-200 rounded-xl">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => updateSlot(slot.key, { kind: 'class' })}
+                                                            className={`py-2 rounded-lg text-sm font-bold transition-colors ${isClass ? 'bg-violet-600 text-white' : 'text-slate-500 hover:text-slate-800'}`}
+                                                        >
+                                                            Class
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => updateSlot(slot.key, { kind: 'work' })}
+                                                            className={`py-2 rounded-lg text-sm font-bold transition-colors ${!isClass ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-800'}`}
+                                                        >
+                                                            Work shift
+                                                        </button>
+                                                    </div>
+                                                )}
+
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">{editingId ? 'Day' : 'Days of the week'}</label>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {weekdays.map((day) => {
+                                                            const selected = slot.days.includes(day);
+                                                            return (
+                                                                <button
+                                                                    key={day}
+                                                                    type="button"
+                                                                    onClick={() => toggleSlotDay(slot.key, day)}
+                                                                    className={`px-3 py-2 rounded-xl text-sm font-bold border transition-colors ${selected ? selectedDayClass : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300'}`}
+                                                                >
+                                                                    {day}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                    <p className="mt-2 text-xs font-medium text-slate-500">
+                                                        {editingId
+                                                            ? 'Choose the day this entry should fall on.'
+                                                            : isClass
+                                                                ? 'Select every day this class meets.'
+                                                                : 'Select every day this shift repeats, including Saturday when the student works.'}
+                                                    </p>
+                                                </div>
+
+                                                {isClass ? (
+                                                    <div className="space-y-5">
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Subject</label>
+                                                            <input required value={slot.subject} onChange={e => updateSlot(slot.key, { subject: e.target.value })} placeholder="e.g. CS 301 Data Structures" className={`${fieldClass} placeholder:text-slate-400 placeholder:font-medium`} />
+                                                        </div>
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                                            <div>
+                                                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Room</label>
+                                                                <input value={slot.room} onChange={e => updateSlot(slot.key, { room: e.target.value })} placeholder="e.g. CCS 204" className={`${fieldClass} placeholder:text-slate-400 placeholder:font-medium`} />
+                                                            </div>
+                                                            <div>
+                                                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Instructor</label>
+                                                                <input value={slot.instructor} onChange={e => updateSlot(slot.key, { instructor: e.target.value })} placeholder="e.g. Prof. Cruz" className={`${fieldClass} placeholder:text-slate-400 placeholder:font-medium`} />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Duty Type</label>
+                                                        <select
+                                                            value={slot.duty_type}
+                                                            onChange={e => updateSlot(slot.key, { duty_type: e.target.value })}
+                                                            className={`${fieldClass} text-slate-700 appearance-none cursor-pointer`}
+                                                        >
+                                                            {workShiftDutyOptions(slot.duty_type).map((duty) => (
+                                                                <option key={duty} value={duty}>{duty}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                )}
+
+                                                <div className="grid grid-cols-2 gap-5">
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Start Time</label>
+                                                        <input required type="time" value={slot.startTime} onChange={e => updateSlot(slot.key, { startTime: e.target.value })} className={`${fieldClass} cursor-pointer`} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">End Time</label>
+                                                        <input required type="time" value={slot.endTime} onChange={e => updateSlot(slot.key, { endTime: e.target.value })} className={`${fieldClass} cursor-pointer`} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
 
-                                {entryKind === 'class' ? (
-                                    <div className="space-y-5">
-                                        <div>
-                                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Subject</label>
-                                            <input required value={formData.subject} onChange={e => setFormData({...formData, subject: e.target.value})} placeholder="e.g. CS 301 Data Structures" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-violet-600 focus:bg-white transition-all placeholder:text-slate-400 placeholder:font-medium" />
-                                        </div>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Room</label>
-                                                <input value={formData.room} onChange={e => setFormData({...formData, room: e.target.value})} placeholder="e.g. CCS 204" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-violet-600 focus:bg-white transition-all placeholder:text-slate-400 placeholder:font-medium" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Instructor</label>
-                                                <input value={formData.instructor} onChange={e => setFormData({...formData, instructor: e.target.value})} placeholder="e.g. Prof. Cruz" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-violet-600 focus:bg-white transition-all placeholder:text-slate-400 placeholder:font-medium" />
-                                            </div>
-                                        </div>
-                                    </div>
-                                ) : (
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Duty Type</label>
-                                        <select 
-                                            value={formData.duty_type} 
-                                            onChange={e => setFormData({...formData, duty_type: e.target.value})} 
-                                            className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all appearance-none cursor-pointer"
-                                        >
-                                            {workShiftDutyOptions(formData.duty_type).map((duty) => (
-                                                <option key={duty} value={duty}>{duty}</option>
-                                            ))}
-                                        </select>
-                                </div>
+                                {!editingId && (
+                                    <button
+                                        type="button"
+                                        onClick={addSlot}
+                                        className={`w-full px-4 py-3 rounded-xl border border-dashed text-sm font-bold transition-colors flex items-center justify-center gap-2 ${entryKind === 'class' ? 'border-violet-300 text-violet-700 hover:bg-violet-50' : 'border-blue-300 text-blue-700 hover:bg-blue-50'}`}
+                                    >
+                                        <Plus className="w-4 h-4" />
+                                        Add another class or shift
+                                    </button>
                                 )}
-
-                                <div className="grid grid-cols-2 gap-5">
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Start Time</label>
-                                        <input required type="time" value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all cursor-pointer" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">End Time</label>
-                                        <input required type="time" value={formData.endTime} onChange={e => setFormData({...formData, endTime: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all cursor-pointer" />
-                                    </div>
-                                </div>
 
                                 <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
                                     <button type="button" onClick={closeScheduleModal} className="px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-200 rounded-xl transition-colors">
                                         Cancel
                                     </button>
-                                    <button type="submit" disabled={isSubmitting} className={`px-6 py-2.5 text-sm font-bold text-white rounded-xl shadow-lg disabled:opacity-50 transition-all flex items-center gap-2 ${entryKind === 'class' ? 'bg-violet-600 hover:bg-violet-700 shadow-violet-600/25' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/25'}`}>
+                                    <button type="submit" disabled={isSubmitting} className={`px-6 py-2.5 text-sm font-bold text-white rounded-xl shadow-lg disabled:opacity-50 transition-all flex items-center gap-2 ${scheduleSlotsAreMixed ? 'bg-slate-900 hover:bg-slate-800 shadow-slate-900/20' : scheduleSlotsAreClass ? 'bg-violet-600 hover:bg-violet-700 shadow-violet-600/25' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/25'}`}>
                                         {isSubmitting
                                             ? 'Saving...'
                                             : editingId
                                                 ? <><CheckCircle2 className="w-4 h-4" /> Save Changes</>
-                                                : entryKind === 'class'
-                                                    ? <><CheckCircle2 className="w-4 h-4" /> Save Class</>
-                                                    : <><CheckCircle2 className="w-4 h-4" /> Finalize Shift</>}
+                                                : <><CheckCircle2 className="w-4 h-4" /> {saveScheduleLabel(formData.slots)}</>}
                                     </button>
                                 </div>
                             </form>

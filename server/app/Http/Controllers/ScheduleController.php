@@ -7,9 +7,10 @@ use App\Models\Schedule;
 use App\Models\SemesterTerm;
 use App\Models\User;
 use App\Support\SuperAdminAudit;
+use Carbon\Carbon;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
 
 class ScheduleController extends Controller
 {
@@ -109,17 +110,7 @@ class ScheduleController extends Controller
     public function store(Request $request)
     {
         SuperAdminAudit::denyMutation($request);
-        $validated = $request->validate([
-            'user_id' => 'required|exists:users,id',
-            'days' => 'required|array|min:1',
-            'days.*' => 'required|string|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
-            'time' => 'required|string',
-            'kind' => 'nullable|in:work,class',
-            'duty_type' => 'required_unless:kind,class|nullable|string|max:120',
-            'subject' => 'required_if:kind,class|nullable|string|max:160',
-            'room' => 'nullable|string|max:120',
-            'instructor' => 'nullable|string|max:120',
-        ]);
+        [$userId, $kind, $entries] = $this->validatedScheduleEntries($request);
 
         if (! SemesterTerm::current()) {
             return response()->json([
@@ -127,8 +118,21 @@ class ScheduleController extends Controller
             ], 422);
         }
 
-        $kind = $validated['kind'] ?? 'work';
-        $student = User::with('profile')->where('role', 'Student')->findOrFail($validated['user_id']);
+        foreach ($entries as $index => $entry) {
+            $blockKind = $this->entryKind($entry, $kind);
+            if ($blockKind === 'class' && trim((string) ($entry['subject'] ?? '')) === '') {
+                return response()->json([
+                    'message' => $this->entryLabel($blockKind, $index, count($entries)).' needs a subject.',
+                ], 422);
+            }
+            if ($blockKind !== 'class' && trim((string) ($entry['duty_type'] ?? '')) === '') {
+                return response()->json([
+                    'message' => $this->entryLabel($blockKind, $index, count($entries)).' needs a duty type.',
+                ], 422);
+            }
+        }
+
+        $student = User::with('profile')->where('role', 'Student')->findOrFail($userId);
         abort_unless(
             app(UserController::class)->canManageWorkSchedules($request->user()),
             403,
@@ -138,7 +142,8 @@ class ScheduleController extends Controller
         );
 
         $department = trim((string) ($student->profile?->assigned_office ?? ''));
-        if ($kind === 'work' && $department === '') {
+        $includesWork = collect($entries)->contains(fn (array $entry) => $this->entryKind($entry, $kind) === 'work');
+        if ($includesWork && $department === '') {
             return response()->json([
                 'message' => 'This student has no assigned office yet.',
             ], 422);
@@ -147,35 +152,75 @@ class ScheduleController extends Controller
             $department = 'Unassigned';
         }
 
-        $days = array_values(array_unique($validated['days']));
-        $conflict = $this->scheduleConflict($student->id, $days, $validated['time']);
-        if ($conflict) {
-            return response()->json(['message' => $conflict], 422);
+        $batchConflict = $this->batchEntryConflict($entries, $kind);
+        if ($batchConflict) {
+            return response()->json(['message' => $batchConflict], 422);
         }
 
-        $subject = trim((string) ($validated['subject'] ?? ''));
-        $room = trim((string) ($validated['room'] ?? ''));
-        $instructor = trim((string) ($validated['instructor'] ?? ''));
+        $schedules = DB::transaction(function () use ($student, $entries, $department, $kind) {
+            $created = collect();
 
-        $schedules = DB::transaction(function () use ($student, $days, $validated, $department, $kind, $subject, $room, $instructor) {
-            return collect($days)->map(fn (string $day) => Schedule::create([
-                'user_id' => $student->id,
-                'kind' => $kind,
-                'day' => $day,
-                'time' => $validated['time'],
-                'duty_type' => $kind === 'class' ? ($subject !== '' ? $subject : 'Class') : $validated['duty_type'],
-                'subject' => $kind === 'class' ? $subject : null,
-                'room' => $kind === 'class' && $room !== '' ? $room : null,
-                'instructor' => $kind === 'class' && $instructor !== '' ? $instructor : null,
-                'department' => $department,
-                'supervisor' => $kind === 'class' ? $instructor : '',
-            ]))->values();
+            foreach ($entries as $index => $entry) {
+                $blockKind = $this->entryKind($entry, $kind);
+                $days = array_values(array_unique($entry['days']));
+                $conflict = $this->scheduleConflict($student->id, $days, (string) $entry['time']);
+                if ($conflict) {
+                    $prefix = count($entries) > 1 ? $this->entryLabel($blockKind, $index, count($entries)).': ' : '';
+                    throw new HttpResponseException(response()->json([
+                        'message' => $prefix.$conflict,
+                    ], 422));
+                }
+
+                $subject = trim((string) ($entry['subject'] ?? ''));
+                $room = trim((string) ($entry['room'] ?? ''));
+                $instructor = trim((string) ($entry['instructor'] ?? ''));
+
+                foreach ($days as $day) {
+                    $created->push(Schedule::create([
+                        'user_id' => $student->id,
+                        'kind' => $blockKind,
+                        'day' => $day,
+                        'time' => $entry['time'],
+                        'duty_type' => $blockKind === 'class' ? ($subject !== '' ? $subject : 'Class') : $entry['duty_type'],
+                        'subject' => $blockKind === 'class' ? $subject : null,
+                        'room' => $blockKind === 'class' && $room !== '' ? $room : null,
+                        'instructor' => $blockKind === 'class' && $instructor !== '' ? $instructor : null,
+                        'department' => $department,
+                        'supervisor' => $blockKind === 'class' ? $instructor : '',
+                    ]));
+                }
+            }
+
+            return $created->values();
         });
 
-        $saved = count($days);
-        $message = $kind === 'class'
-            ? ($saved === 1 ? 'Class schedule saved.' : $saved.' class days saved.')
-            : ($saved === 1 ? 'Schedule assigned successfully!' : $saved.' work days assigned successfully!');
+        $classBlocks = 0;
+        $workBlocks = 0;
+        $classDays = 0;
+        $workDays = 0;
+        foreach ($entries as $entry) {
+            $dayCount = count(array_values(array_unique($entry['days'])));
+            if ($this->entryKind($entry, $kind) === 'class') {
+                $classBlocks++;
+                $classDays += $dayCount;
+            } else {
+                $workBlocks++;
+                $workDays += $dayCount;
+            }
+        }
+
+        if ($classBlocks > 0 && $workBlocks > 0) {
+            $message = $this->countPhrase($classBlocks, 'class', 'classes')
+                .' and '.$this->countPhrase($workBlocks, 'work shift', 'work shifts').' saved.';
+        } elseif ($classBlocks > 1) {
+            $message = $classDays.' class days saved across '.$classBlocks.' classes.';
+        } elseif ($workBlocks > 1) {
+            $message = $workDays.' work days assigned across '.$workBlocks.' shifts.';
+        } elseif ($classBlocks === 1) {
+            $message = $classDays === 1 ? 'Class schedule saved.' : $classDays.' class days saved.';
+        } else {
+            $message = $workDays === 1 ? 'Schedule assigned successfully!' : $workDays.' work days assigned successfully!';
+        }
 
         return response()->json([
             'message' => $message,
@@ -320,6 +365,123 @@ class ScheduleController extends Controller
         ]);
 
         return response()->json(['message' => 'Student request acknowledged and cleared.']);
+    }
+
+    /**
+     * One class or work block, or several blocks saved together.
+     *
+     * @return array{0: int, 1: string, 2: list<array<string, mixed>>}
+     */
+    private function validatedScheduleEntries(Request $request): array
+    {
+        $dayRule = 'required|string|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday';
+
+        if ($request->exists('entries')) {
+            $validated = $request->validate([
+                'user_id' => 'required|exists:users,id',
+                'kind' => 'nullable|in:work,class',
+                'entries' => 'required|array|min:1|max:20',
+                'entries.*.days' => 'required|array|min:1',
+                'entries.*.days.*' => $dayRule,
+                'entries.*.time' => 'required|string',
+                'entries.*.kind' => 'nullable|in:work,class',
+                'entries.*.duty_type' => 'nullable|string|max:120',
+                'entries.*.subject' => 'nullable|string|max:160',
+                'entries.*.room' => 'nullable|string|max:120',
+                'entries.*.instructor' => 'nullable|string|max:120',
+            ]);
+
+            return [(int) $validated['user_id'], $validated['kind'] ?? 'work', array_values($validated['entries'])];
+        }
+
+        $validated = $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'days' => 'required|array|min:1',
+            'days.*' => $dayRule,
+            'time' => 'required|string',
+            'kind' => 'nullable|in:work,class',
+            'duty_type' => 'required_unless:kind,class|nullable|string|max:120',
+            'subject' => 'required_if:kind,class|nullable|string|max:160',
+            'room' => 'nullable|string|max:120',
+            'instructor' => 'nullable|string|max:120',
+        ]);
+
+        return [(int) $validated['user_id'], $validated['kind'] ?? 'work', [[
+            'kind' => $validated['kind'] ?? 'work',
+            'days' => $validated['days'],
+            'time' => $validated['time'],
+            'duty_type' => $validated['duty_type'] ?? null,
+            'subject' => $validated['subject'] ?? null,
+            'room' => $validated['room'] ?? null,
+            'instructor' => $validated['instructor'] ?? null,
+        ]]];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $entries
+     */
+    private function batchEntryConflict(array $entries, string $kind): ?string
+    {
+        $rows = [];
+
+        foreach ($entries as $index => $entry) {
+            $blockKind = $this->entryKind($entry, $kind);
+            $bounds = $this->timeBounds((string) ($entry['time'] ?? ''));
+            if (! $bounds) {
+                $prefix = count($entries) > 1 ? $this->entryLabel($blockKind, $index, count($entries)).': ' : '';
+
+                return $prefix.'Enter a start and end time.';
+            }
+
+            foreach (array_values(array_unique($entry['days'] ?? [])) as $day) {
+                $rows[] = [
+                    'index' => $index,
+                    'kind' => $blockKind,
+                    'day' => $day,
+                    'start' => $bounds[0]->copy(),
+                    'end' => $bounds[1]->copy(),
+                ];
+            }
+        }
+
+        $count = count($rows);
+        for ($left = 0; $left < $count; $left++) {
+            for ($right = $left + 1; $right < $count; $right++) {
+                if ($rows[$left]['day'] !== $rows[$right]['day']) {
+                    continue;
+                }
+                if ($rows[$left]['start']->lt($rows[$right]['end']) && $rows[$left]['end']->gt($rows[$right]['start'])) {
+                    return $this->entryLabel($rows[$left]['kind'], $rows[$left]['index'], count($entries))
+                        .' overlaps '
+                        .$this->entryLabel($rows[$right]['kind'], $rows[$right]['index'], count($entries))
+                        .' on '.$rows[$left]['day'].'.';
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function entryLabel(string $kind, int $index, int $total): string
+    {
+        $noun = $kind === 'class' ? 'Class' : 'Shift';
+
+        return $total > 1 ? $noun.' '.($index + 1) : $noun;
+    }
+
+    /**
+     * @param  array<string, mixed>  $entry
+     */
+    private function entryKind(array $entry, string $fallback): string
+    {
+        $kind = $entry['kind'] ?? $fallback;
+
+        return $kind === 'class' ? 'class' : 'work';
+    }
+
+    private function countPhrase(int $count, string $singular, string $plural): string
+    {
+        return $count.' '.($count === 1 ? $singular : $plural);
     }
 
     /**

@@ -20,6 +20,191 @@ class AssignJanitorialShiftTest extends TestCase
 
     public function test_wspo_can_assign_a_janitorial_work_shift(): void
     {
+        [, $student] = $this->actingWspoWithStudent();
+
+        $response = $this->postJson('/api/schedules', [
+            'user_id' => $student->id,
+            'days' => ['Monday', 'Wednesday'],
+            'time' => '08:00 - 12:00',
+            'kind' => 'work',
+            'duty_type' => 'Janitorial',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('message', '2 work days assigned successfully!')
+            ->assertJsonPath('schedules.0.duty_type', 'Janitorial')
+            ->assertJsonPath('schedules.0.day', 'Monday')
+            ->assertJsonPath('schedules.1.duty_type', 'Janitorial')
+            ->assertJsonPath('schedules.1.day', 'Wednesday');
+
+        $this->assertDatabaseHas('schedules', [
+            'user_id' => $student->id,
+            'day' => 'Monday',
+            'kind' => 'work',
+            'duty_type' => 'Janitorial',
+            'department' => 'Library',
+        ]);
+        $this->assertDatabaseHas('schedules', [
+            'user_id' => $student->id,
+            'day' => 'Wednesday',
+            'kind' => 'work',
+            'duty_type' => 'Janitorial',
+        ]);
+    }
+
+    public function test_wspo_can_assign_several_work_shifts_at_once(): void
+    {
+        [, $student] = $this->actingWspoWithStudent();
+
+        $response = $this->postJson('/api/schedules', [
+            'user_id' => $student->id,
+            'kind' => 'work',
+            'entries' => [
+                [
+                    'days' => ['Monday', 'Wednesday'],
+                    'time' => '08:00 - 12:00',
+                    'duty_type' => 'Janitorial',
+                ],
+                [
+                    'days' => ['Friday'],
+                    'time' => '13:00 - 17:00',
+                    'duty_type' => 'Clerical Work',
+                ],
+            ],
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('message', '3 work days assigned across 2 shifts.')
+            ->assertJsonCount(3, 'schedules');
+
+        $this->assertDatabaseHas('schedules', [
+            'user_id' => $student->id,
+            'day' => 'Friday',
+            'duty_type' => 'Clerical Work',
+            'time' => '13:00 - 17:00',
+        ]);
+        $this->assertDatabaseCount('schedules', 3);
+    }
+
+    public function test_wspo_can_save_several_classes_at_once(): void
+    {
+        [, $student] = $this->actingWspoWithStudent();
+
+        $response = $this->postJson('/api/schedules', [
+            'user_id' => $student->id,
+            'kind' => 'class',
+            'entries' => [
+                [
+                    'days' => ['Tuesday', 'Thursday'],
+                    'time' => '09:00 - 10:30',
+                    'subject' => 'CS 301 Data Structures',
+                    'room' => 'CCS 204',
+                    'instructor' => 'Prof. Cruz',
+                ],
+                [
+                    'days' => ['Monday'],
+                    'time' => '13:00 - 16:00',
+                    'subject' => 'IT 221 Networking',
+                    'room' => 'CCS 101',
+                    'instructor' => 'Prof. Reyes',
+                ],
+            ],
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('message', '3 class days saved across 2 classes.');
+
+        $this->assertDatabaseHas('schedules', [
+            'user_id' => $student->id,
+            'kind' => 'class',
+            'day' => 'Thursday',
+            'subject' => 'CS 301 Data Structures',
+            'room' => 'CCS 204',
+            'instructor' => 'Prof. Cruz',
+        ]);
+        $this->assertDatabaseHas('schedules', [
+            'user_id' => $student->id,
+            'kind' => 'class',
+            'day' => 'Monday',
+            'subject' => 'IT 221 Networking',
+        ]);
+    }
+
+    public function test_wspo_can_save_classes_and_work_shifts_together(): void
+    {
+        [, $student] = $this->actingWspoWithStudent();
+
+        $response = $this->postJson('/api/schedules', [
+            'user_id' => $student->id,
+            'kind' => 'class',
+            'entries' => [
+                [
+                    'kind' => 'class',
+                    'days' => ['Monday', 'Wednesday'],
+                    'time' => '07:30 - 09:00',
+                    'subject' => 'GE 101',
+                    'room' => 'A-12',
+                    'instructor' => 'Prof. Santos',
+                ],
+                [
+                    'kind' => 'work',
+                    'days' => ['Monday'],
+                    'time' => '13:00 - 17:00',
+                    'duty_type' => 'Library Assistant',
+                ],
+            ],
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('message', '1 class and 1 work shift saved.');
+
+        $this->assertDatabaseHas('schedules', [
+            'user_id' => $student->id,
+            'kind' => 'class',
+            'day' => 'Wednesday',
+            'subject' => 'GE 101',
+        ]);
+        $this->assertDatabaseHas('schedules', [
+            'user_id' => $student->id,
+            'kind' => 'work',
+            'day' => 'Monday',
+            'duty_type' => 'Library Assistant',
+            'time' => '13:00 - 17:00',
+        ]);
+        $this->assertDatabaseCount('schedules', 3);
+    }
+
+    public function test_overlapping_shifts_in_one_save_are_rejected(): void
+    {
+        [, $student] = $this->actingWspoWithStudent();
+
+        $response = $this->postJson('/api/schedules', [
+            'user_id' => $student->id,
+            'kind' => 'work',
+            'entries' => [
+                [
+                    'days' => ['Monday'],
+                    'time' => '08:00 - 12:00',
+                    'duty_type' => 'Janitorial',
+                ],
+                [
+                    'days' => ['Monday'],
+                    'time' => '11:00 - 15:00',
+                    'duty_type' => 'Clerical Work',
+                ],
+            ],
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonPath('message', 'Shift 1 overlaps Shift 2 on Monday.');
+        $this->assertDatabaseCount('schedules', 0);
+    }
+
+    /**
+     * @return array{0: User, 1: User}
+     */
+    private function actingWspoWithStudent(): array
+    {
         $staff = User::create([
             'name' => 'WSPO Coordinator',
             'username' => 'wspo.coordinator.'.uniqid(),
@@ -54,34 +239,7 @@ class AssignJanitorialShiftTest extends TestCase
 
         Sanctum::actingAs($staff->load('profile'));
 
-        $response = $this->postJson('/api/schedules', [
-            'user_id' => $student->id,
-            'days' => ['Monday', 'Wednesday'],
-            'time' => '08:00 - 12:00',
-            'kind' => 'work',
-            'duty_type' => 'Janitorial',
-        ]);
-
-        $response->assertOk()
-            ->assertJsonPath('message', '2 work days assigned successfully!')
-            ->assertJsonPath('schedules.0.duty_type', 'Janitorial')
-            ->assertJsonPath('schedules.0.day', 'Monday')
-            ->assertJsonPath('schedules.1.duty_type', 'Janitorial')
-            ->assertJsonPath('schedules.1.day', 'Wednesday');
-
-        $this->assertDatabaseHas('schedules', [
-            'user_id' => $student->id,
-            'day' => 'Monday',
-            'kind' => 'work',
-            'duty_type' => 'Janitorial',
-            'department' => 'Library',
-        ]);
-        $this->assertDatabaseHas('schedules', [
-            'user_id' => $student->id,
-            'day' => 'Wednesday',
-            'kind' => 'work',
-            'duty_type' => 'Janitorial',
-        ]);
+        return [$staff, $student];
     }
 
     private function createSchema(): void
