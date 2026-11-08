@@ -39,6 +39,7 @@ class AdvancedAttendanceController extends Controller
             'message' => 'Secure authentication token generated!',
             'token' => $issued['token'],
             'department' => $issued['department'],
+            'departments' => $issued['departments'],
             'seconds_remaining' => $issued['seconds_remaining'],
             'ttl_seconds' => self::ACCESS_TTL_SECONDS,
         ]);
@@ -67,6 +68,7 @@ class AdvancedAttendanceController extends Controller
             'type' => $token->type,
             'description' => $token->description,
             'department' => $issued['department'],
+            'departments' => $issued['departments'],
         ]);
     }
 
@@ -91,6 +93,7 @@ class AdvancedAttendanceController extends Controller
             'ttl_seconds' => self::ACCESS_TTL_SECONDS,
             'type' => $token->type,
             'department' => $issued['department'],
+            'departments' => $issued['departments'],
         ]);
     }
 
@@ -456,14 +459,14 @@ class AdvancedAttendanceController extends Controller
 
         $accounts = app(UserController::class);
         $creator = $matched->creator;
-        $supervisorDepartment = $creator ? $accounts->attendanceOffice($creator) : '';
-        if ($supervisorDepartment === '') {
+        $supervisorDepartments = $creator ? $accounts->attendanceScopeLabel($creator) : '';
+        if ($supervisorDepartments === '') {
             return response()->json(['message' => 'This token is not linked to a valid department.'], 422);
         }
 
-        if (!$accounts->officesMatch($supervisorDepartment, $studentDepartment)) {
+        if (!$accounts->codeCoversOffice($creator, $studentDepartment)) {
             return response()->json([
-                'message' => "This code is only valid for {$supervisorDepartment} students. You are assigned to {$studentDepartment}.",
+                'message' => "This code is only valid for {$supervisorDepartments} students. You are assigned to {$studentDepartment}.",
             ], 403);
         }
 
@@ -497,15 +500,17 @@ class AdvancedAttendanceController extends Controller
     }
 
     /**
-     * @return array{token: DailyToken, department: string, seconds_remaining: int}|\Illuminate\Http\JsonResponse
+     * @return array{token: DailyToken, department: string, departments: list<string>, seconds_remaining: int}|\Illuminate\Http\JsonResponse
      */
     private function issueRotatingToken(Request $request, string $type, string $channel, ?string $description, bool $forceNew)
     {
         $supervisor = $request->user()->load('profile');
         $accounts = app(UserController::class);
-        $department = $accounts->attendanceOffice($supervisor);
+        $departments = $accounts->attendanceOffices($supervisor);
+        $department = $accounts->attendanceScopeLabel($supervisor);
+        $scopeKey = $accounts->attendanceScopeKey($supervisor);
 
-        if ($department === '') {
+        if ($department === '' || $scopeKey === '') {
             $action = $channel === 'qr' ? 'showing a QR code' : 'generating a passcode';
 
             return response()->json([
@@ -513,15 +518,15 @@ class AdvancedAttendanceController extends Controller
             ], 422);
         }
 
-        $issue = function () use ($type, $channel, $description, $forceNew, $supervisor, $accounts, $department) {
+        $issue = function () use ($type, $channel, $description, $forceNew, $supervisor, $accounts, $scopeKey) {
             if (!$forceNew) {
-                $live = $this->liveDepartmentToken($type, $channel, $department, $accounts);
+                $live = $this->liveScopeToken($type, $channel, $scopeKey, $accounts);
                 if ($live && $this->tokenIsCurrent($live) && $live->expires_at->getTimestamp() - Carbon::now()->getTimestamp() > 2) {
                     return $live;
                 }
             }
 
-            $this->forgetDepartmentTokens($type, $channel, $department, $accounts);
+            $this->forgetScopeTokens($type, $channel, $scopeKey, $accounts);
 
             return DailyToken::create([
                 'token_code' => $channel === 'qr'
@@ -535,17 +540,18 @@ class AdvancedAttendanceController extends Controller
             ]);
         };
 
-        $lockName = 'attendance-'.$channel.':'.md5($department.'|'.$type);
+        $lockName = 'attendance-'.$channel.':'.md5($scopeKey.'|'.$type);
 
         try {
             $token = Cache::lock($lockName, 8)->block(5, $issue);
         } catch (LockTimeoutException) {
-            $token = $this->liveDepartmentToken($type, $channel, $department, $accounts) ?? $issue();
+            $token = $this->liveScopeToken($type, $channel, $scopeKey, $accounts) ?? $issue();
         }
 
         return [
             'token' => $token,
             'department' => $department,
+            'departments' => $departments,
             'seconds_remaining' => max(1, $token->expires_at->getTimestamp() - Carbon::now()->getTimestamp()),
         ];
     }
@@ -560,15 +566,15 @@ class AdvancedAttendanceController extends Controller
         return !$token->created_at || $token->created_at->copy()->addSeconds(self::ACCESS_TTL_SECONDS)->gt($now);
     }
 
-    private function forgetDepartmentTokens(string $type, string $channel, string $department, UserController $accounts): void
+    private function forgetScopeTokens(string $type, string $channel, string $scopeKey, UserController $accounts): void
     {
         DailyToken::with('creator.profile')
             ->where('type', $type)
             ->where('channel', $channel)
             ->get()
-            ->each(function (DailyToken $token) use ($accounts, $department) {
+            ->each(function (DailyToken $token) use ($accounts, $scopeKey) {
                 $creator = $token->creator;
-                if ($creator && $accounts->officesMatch($department, $accounts->attendanceOffice($creator))) {
+                if ($creator && $accounts->attendanceScopeKey($creator) === $scopeKey) {
                     $token->update(['expires_at' => Carbon::now()]);
                 }
             });
@@ -970,7 +976,7 @@ class AdvancedAttendanceController extends Controller
         return $code;
     }
 
-    private function liveDepartmentToken(string $type, string $channel, string $department, UserController $accounts): ?DailyToken
+    private function liveScopeToken(string $type, string $channel, string $scopeKey, UserController $accounts): ?DailyToken
     {
         return DailyToken::with('creator.profile')
             ->where('type', $type)
@@ -978,10 +984,10 @@ class AdvancedAttendanceController extends Controller
             ->where('expires_at', '>', Carbon::now())
             ->where('created_at', '>', Carbon::now()->subSeconds(self::ACCESS_TTL_SECONDS))
             ->get()
-            ->first(function (DailyToken $token) use ($accounts, $department) {
+            ->first(function (DailyToken $token) use ($accounts, $scopeKey) {
                 $creator = $token->creator;
 
-                return $creator && $accounts->officesMatch($department, $accounts->attendanceOffice($creator));
+                return $creator && $accounts->attendanceScopeKey($creator) === $scopeKey;
             });
     }
 }
