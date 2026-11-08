@@ -388,6 +388,95 @@ class RenderedHourController extends Controller
         ]);
     }
 
+    /** WSPO staff closes or corrects an activity time-out without the QR/passcode. */
+    public function correctTimeout(Request $request, RenderedHourEvent $event)
+    {
+        SuperAdminAudit::denyMutation($request);
+        $this->assertActivityIssuer($request);
+        if (!$event->usesAttendance()) {
+            abort(422, 'Special requests do not use attendance.');
+        }
+
+        $validated = $request->validate([
+            'user_id' => 'required|integer|exists:users,id',
+            'time' => ['required', 'regex:/^\d{2}:\d{2}$/'],
+        ]);
+
+        if (!in_array((int) $validated['user_id'], $this->eligibleIds($event), true)) {
+            abort(422, 'That student is not assigned to this activity.');
+        }
+
+        $student = User::query()->findOrFail($validated['user_id']);
+        $entry = RenderedHourEntry::query()
+            ->where('event_id', $event->id)
+            ->where('user_id', $student->id)
+            ->first();
+
+        if ($entry?->status === 'absent') {
+            abort(422, 'This activity was marked absent, so it cannot be timed out.');
+        }
+        if (!$entry || !$entry->attendance_id) {
+            abort(422, 'Save a clock-in time for this student before setting time out.');
+        }
+
+        $attendance = \App\Models\Attendance::find($entry->attendance_id);
+        if (!$attendance || !$attendance->time_in) {
+            abort(422, 'Save a clock-in time for this student before setting time out.');
+        }
+
+        $clockIn = Carbon::parse($attendance->time_in);
+        $clockOut = Carbon::parse($event->event_date->toDateString().' '.$validated['time']);
+        if ($clockOut->lessThanOrEqualTo($clockIn)) {
+            abort(422, 'Time out must be after the clock-in time.');
+        }
+        if ($clockOut->greaterThan(now())) {
+            abort(422, 'The corrected time cannot be in the future.');
+        }
+
+        $status = $event->statusAt($clockIn);
+        $delta = $event->deltaFor($status);
+        if ($delta > 0) {
+            $fit = HourLimits::fitHours((int) $student->id, (float) $delta, $clockIn, (int) $attendance->id);
+            if ($fit['allowed'] < (float) $delta) {
+                abort(422, $fit['denial']
+                    ?? ("{$student->name} cannot receive "
+                        .HourLimits::hoursLabel((float) $delta)
+                        .' hours ('
+                        .HourLimits::hoursLabel($fit['allowed'])
+                        .' hours remain under the weekly or monthly limit).'));
+            }
+        }
+
+        $hours = number_format((float) $event->hours, 2);
+        $message = $status === 'late'
+            ? "{$student->name} timed out late. No hours were added or deducted."
+            : "{$student->name} timed out. {$hours} hours were added.";
+
+        DB::transaction(function () use ($attendance, $entry, $clockOut, $status, $delta, $message) {
+            $attendance->update([
+                'time_out' => $clockOut,
+                'activity_hours' => $delta,
+                'status' => 'accepted',
+                'task_description' => 'Time out corrected by WSPO staff. '.$message,
+                'is_anomaly' => $status === 'late',
+                'anomaly_reason' => $status === 'late'
+                    ? 'Clocked in after the on-time window. No hours were added or deducted.'
+                    : null,
+            ]);
+
+            $entry->status = $status;
+            $entry->scanned_at = $entry->scanned_at ?: $attendance->time_in;
+            $entry->hours_delta = $delta;
+            $entry->attendance_id = $attendance->id;
+            $entry->save();
+        });
+
+        return response()->json([
+            'message' => $message,
+            'event' => $this->present($event->load('entries.student.profile')),
+        ]);
+    }
+
     public function markRemainingAbsent(Request $request, RenderedHourEvent $event)
     {
         SuperAdminAudit::denyMutation($request);
@@ -745,14 +834,19 @@ class RenderedHourController extends Controller
     {
         $event->loadMissing('entries.student.profile');
         $byUser = $event->entries->keyBy('user_id');
+        $attendanceIds = $event->entries->pluck('attendance_id')->filter()->values()->all();
+        $attendances = $attendanceIds === []
+            ? collect()
+            : \App\Models\Attendance::query()->whereIn('id', $attendanceIds)->get()->keyBy('id');
         $students = User::query()
             ->with('profile:id,user_id,student_id_number,year_level')
             ->whereIn('id', $this->eligibleIds($event))
             ->orderBy('name')
             ->get();
 
-        return $students->map(function (User $student) use ($byUser) {
+        return $students->map(function (User $student) use ($byUser, $attendances) {
             $entry = $byUser->get($student->id);
+            $attendance = $entry?->attendance_id ? $attendances->get($entry->attendance_id) : null;
 
             return [
                 'user_id' => $student->id,
@@ -761,6 +855,8 @@ class RenderedHourController extends Controller
                 'year_level' => $student->profile?->year_level,
                 'status' => $entry?->status,
                 'scanned_at' => optional($entry?->scanned_at)?->toIso8601String(),
+                'time_in' => optional($attendance?->time_in)?->format('H:i'),
+                'time_out' => optional($attendance?->time_out)?->format('H:i'),
                 'hours_delta' => (float) ($entry->hours_delta ?? 0),
             ];
         })->values()->all();

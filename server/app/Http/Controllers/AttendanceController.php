@@ -470,7 +470,7 @@ class AttendanceController extends Controller
         $attendance = \App\Models\Attendance::with('user.profile')->findOrFail($id);
         if ($attendance->rendered_hour_event_id) {
             return response()->json([
-                'message' => 'Activity attendance is corrected by the WSPO coordinator, secretary, or president from Hours Rendered.',
+                'message' => 'Activity attendance time in and time out are corrected by the WSPO coordinator, secretary, or president from Hours Rendered.',
             ], 403);
         }
 

@@ -158,6 +158,15 @@ export const financialService = {
     return response.data;
   },
 
+  correctHourTimeout: async (id: number, user_id: number, time: string) => {
+    const response = await axios.patch(
+      `${API_BASE_URL}/financial/hour-events/${id}/timeout`,
+      { user_id, time },
+      getAuthHeaders(),
+    );
+    return response.data;
+  },
+
   exportCsvUrl: (params?: Record<string, any>) => {
     const query = new URLSearchParams(params).toString();
     return `${API_BASE_URL}/financial/export-csv?${query}`;

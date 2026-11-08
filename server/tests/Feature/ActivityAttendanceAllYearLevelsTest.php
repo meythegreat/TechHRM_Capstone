@@ -260,6 +260,120 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
         ]);
     }
 
+    public function test_wspo_staff_can_manually_set_activity_timeout(): void
+    {
+        $staff = $this->makeUser('WSPO Staff', 'WSPO Coordinator');
+        $student = $this->makeStudent('Manual Timeout', 1, '2026-5001');
+        $group = DailyCleaningGroup::create(['name' => 'Manual']);
+        $this->attachMembers($group, [$student->id], $student->id);
+
+        Sanctum::actingAs($staff);
+        $eventId = (int) $this->postJson('/api/financial/hour-events', [
+            'kind' => 'daily_cleaning',
+            'title' => 'Daily cleaning',
+            'event_date' => '2026-10-28',
+            'group_id' => $group->id,
+            'starts_at' => '05:00',
+        ])->assertCreated()->json('event.id');
+
+        $this->patchJson('/api/financial/hour-events/'.$eventId.'/time', [
+            'user_id' => $student->id,
+            'time' => '05:10',
+        ])->assertOk()
+            ->assertJsonPath('event.entries.0.status', 'timed_in');
+
+        Carbon::setTestNow(Carbon::parse('2026-10-28 06:00:00'));
+        $this->patchJson('/api/financial/hour-events/'.$eventId.'/timeout', [
+            'user_id' => $student->id,
+            'time' => '05:45',
+        ])->assertOk()
+            ->assertJsonPath('event.entries.0.status', 'on_time')
+            ->assertJsonPath('event.entries.0.hours_delta', 1)
+            ->assertJsonPath('event.entries.0.time_in', '05:10')
+            ->assertJsonPath('event.entries.0.time_out', '05:45');
+
+        $this->assertDatabaseHas('rendered_hour_entries', [
+            'event_id' => $eventId,
+            'user_id' => $student->id,
+            'status' => 'on_time',
+        ]);
+        $this->assertDatabaseHas('attendances', [
+            'user_id' => $student->id,
+            'rendered_hour_event_id' => $eventId,
+            'activity_hours' => 1,
+            'status' => 'accepted',
+        ]);
+    }
+
+    public function test_group_leader_cannot_manually_set_activity_timeout(): void
+    {
+        $staff = $this->makeUser('WSPO Staff', 'WSPO Coordinator');
+        $leader = $this->makeStudent('Timeout Leader', 2, '2026-5002');
+        $student = $this->makeStudent('Timeout Member', 1, '2026-5003');
+        $group = DailyCleaningGroup::create(['name' => 'Leader Block']);
+        $this->attachMembers($group, [$leader->id, $student->id], $leader->id);
+
+        Sanctum::actingAs($staff);
+        $eventId = (int) $this->postJson('/api/financial/hour-events', [
+            'kind' => 'daily_cleaning',
+            'title' => 'Daily cleaning',
+            'event_date' => '2026-10-28',
+            'group_id' => $group->id,
+            'starts_at' => '05:00',
+        ])->assertCreated()->json('event.id');
+
+        $this->patchJson('/api/financial/hour-events/'.$eventId.'/time', [
+            'user_id' => $student->id,
+            'time' => '05:10',
+        ])->assertOk();
+
+        Carbon::setTestNow(Carbon::parse('2026-10-28 06:00:00'));
+        Sanctum::actingAs($leader);
+        $this->patchJson('/api/financial/hour-events/'.$eventId.'/timeout', [
+            'user_id' => $student->id,
+            'time' => '05:45',
+        ])->assertForbidden();
+    }
+
+    public function test_manual_timeout_requires_clock_in_and_rejects_absent(): void
+    {
+        $staff = $this->makeUser('WSPO Staff', 'WSPO Secretary');
+        $student = $this->makeStudent('Needs Clock In', 3, '2026-5004');
+        $group = DailyCleaningGroup::create(['name' => 'Needs In']);
+        $this->attachMembers($group, [$student->id], $student->id);
+
+        Sanctum::actingAs($staff);
+        $eventId = (int) $this->postJson('/api/financial/hour-events', [
+            'kind' => 'devotional',
+            'title' => 'Devotional meeting',
+            'event_date' => '2026-10-28',
+            'group_id' => $group->id,
+            'starts_at' => '05:00',
+        ])->assertCreated()->json('event.id');
+
+        Carbon::setTestNow(Carbon::parse('2026-10-28 06:00:00'));
+        $this->patchJson('/api/financial/hour-events/'.$eventId.'/timeout', [
+            'user_id' => $student->id,
+            'time' => '05:45',
+        ])->assertStatus(422)
+            ->assertJsonFragment(['message' => 'Save a clock-in time for this student before setting time out.']);
+
+        $this->patchJson('/api/financial/hour-events/'.$eventId.'/time', [
+            'user_id' => $student->id,
+            'time' => '05:10',
+        ])->assertOk();
+
+        $this->postJson('/api/financial/hour-events/'.$eventId.'/marks', [
+            'marks' => [['user_id' => $student->id, 'status' => 'absent']],
+        ])->assertOk();
+
+        $this->patchJson('/api/financial/hour-events/'.$eventId.'/timeout', [
+            'user_id' => $student->id,
+            'time' => '05:45',
+        ])->assertStatus(422)
+            ->assertJsonFragment(['message' => 'This activity was marked absent, so it cannot be timed out.']);
+    }
+
     public function test_devotional_hours_are_credited_when_timing_out_after_the_window(): void
     {
         $staff = $this->makeUser('WSPO Staff', 'WSPO Coordinator');
