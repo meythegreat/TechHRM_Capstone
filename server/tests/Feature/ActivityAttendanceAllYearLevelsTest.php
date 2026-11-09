@@ -463,9 +463,17 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
             'user_id' => $student->id,
             'time' => '17:30',
         ])->assertStatus(422);
+
+        Carbon::setTestNow(Carbon::parse('2026-10-28 18:00:00'));
+        $this->patchJson('/api/financial/hour-events/'.$eventId.'/timeout', [
+            'user_id' => $student->id,
+            'time' => '17:30',
+        ])->assertOk()
+            ->assertJsonPath('event.entries.0.time_out', '17:30')
+            ->assertJsonPath('event.entries.0.status', 'on_time');
     }
 
-    public function test_qr_timeout_records_activity_end_time(): void
+    public function test_qr_timeout_records_the_actual_time_after_clock_in(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-10-28 13:20:00'));
         $staff = $this->makeUser('WSPO Staff', 'WSPO Coordinator');
@@ -508,7 +516,8 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
 
         $this->assertDatabaseHas('attendances', [
             'id' => $clockIn->json('attendance.id'),
-            'time_out' => '2026-10-28 17:00:00',
+            'time_out' => '2026-10-28 14:20:00',
+            'status' => 'approved',
         ]);
     }
 

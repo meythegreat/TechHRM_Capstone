@@ -78,7 +78,7 @@ class RenderedHourEvent extends Model
         return Carbon::parse($this->event_date->toDateString().' '.substr((string) $this->starts_at, 0, 5));
     }
 
-    /** Official activity end used for recorded time-out. */
+    /** Official activity end. A student clock-out records the actual time after clock-in. */
     public function officialEnd(): ?Carbon
     {
         if (!$this->ends_at || !$this->event_date) {

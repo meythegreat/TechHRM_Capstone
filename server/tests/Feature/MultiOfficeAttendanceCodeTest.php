@@ -88,6 +88,43 @@ class MultiOfficeAttendanceCodeTest extends TestCase
             ->assertJsonPath('message', 'This code is only valid for Human Resource Development Center and VP-Administration students. You are assigned to Library.');
     }
 
+    public function test_clock_out_any_time_after_clock_in_is_approved(): void
+    {
+        $supervisor = $this->makeSupervisor('Duty Supervisor', ['Library']);
+        $student = $this->makeStudent('Early Out Student', 'Library');
+
+        Carbon::setTestNow(Carbon::parse('2026-11-09 07:40:00'));
+        Sanctum::actingAs($supervisor);
+        $code = $this->getJson('/api/attendance/passcode?'.http_build_query(['type' => 'Daily Clock']))
+            ->assertOk()
+            ->json('token_code');
+
+        Sanctum::actingAs($student);
+        $clockIn = $this->postJson('/api/attendance/secure-clock-in', [
+            'token_code' => $code,
+            'method' => 'passcode',
+        ])->assertOk();
+
+        Carbon::setTestNow(Carbon::parse('2026-11-09 07:55:00'));
+        Sanctum::actingAs($supervisor);
+        $code = $this->getJson('/api/attendance/passcode?'.http_build_query(['type' => 'Daily Clock']))
+            ->assertOk()
+            ->json('token_code');
+
+        Sanctum::actingAs($student);
+        $this->putJson('/api/attendance/secure-clock-out/'.$clockIn->json('attendance.id'), [
+            'token_code' => $code,
+            'method' => 'passcode',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('attendances', [
+            'id' => $clockIn->json('attendance.id'),
+            'time_in' => '2026-11-09 07:40:00',
+            'time_out' => '2026-11-09 07:55:00',
+            'status' => 'approved',
+        ]);
+    }
+
     /**
      * @param  list<string>  $offices
      */

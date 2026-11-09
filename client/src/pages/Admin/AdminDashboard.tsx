@@ -367,7 +367,7 @@ const AdminDashboard = () => {
                         </h3>
                         <p className="text-sm text-slate-500 font-medium mt-1">
                             {isWspo
-                                ? 'Students placed in the WSPO office. Issue their attendance codes from Attendance Hub and accept their timesheets after they time out.'
+                                ? 'Students placed in the WSPO office. Issue their attendance codes from Attendance Hub. A clock-out is approved as soon as the student clocks out.'
                                 : 'Students placed in your department appear here. Open a student to review their details.'}
                         </p>
                     </div>

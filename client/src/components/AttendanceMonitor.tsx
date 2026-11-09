@@ -629,9 +629,9 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                     </h1>
                     <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                         {canApprove
-                            ? 'See the working students in your department, enter time in and time out on their DTR, and accept or reject hours.'
+                            ? 'See the working students in your department. Clock-outs are approved when the student clocks out. Enter or correct DTR times when a record needs a manual change.'
                             : canApproveWspoStudents
-                                ? 'Review campus timesheets. Enter, correct, and accept hours only for working students assigned to the WSPO office.'
+                                ? 'Review campus timesheets. Student clock-outs are approved immediately. Enter or correct hours for working students assigned to the WSPO office.'
                                 : 'Review daily timesheets and open the official monthly DTR for any working student to view or print.'}
                     </p>
                 </div>

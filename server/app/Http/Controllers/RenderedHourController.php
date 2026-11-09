@@ -430,11 +430,9 @@ class RenderedHourController extends Controller
             abort(422, 'Time out must be after the clock-in time.');
         }
         $officialEnd = $event->officialEnd();
-        if ($officialEnd && $clockOut->greaterThan($officialEnd)) {
-            abort(422, 'Time out cannot be after the activity end time ('.$officialEnd->format('H:i').').');
-        }
-        // Manual timeout may use the activity end even before wall-clock reaches it.
-        if (!$officialEnd && $clockOut->greaterThan(now())) {
+        // Any time after clock-in is valid. The official end may still be saved before the wall clock reaches it.
+        $usesOfficialEndEarly = $officialEnd && $clockOut->equalTo($officialEnd);
+        if (!$usesOfficialEndEarly && $clockOut->greaterThan(now())) {
             abort(422, 'The corrected time cannot be in the future.');
         }
 

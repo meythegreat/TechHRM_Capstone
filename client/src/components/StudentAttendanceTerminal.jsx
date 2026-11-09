@@ -572,7 +572,7 @@ const StudentAttendanceTerminal = () => {
                                     {openActivity.work_type || openActivity.attendance_type || 'Activity'}
                                 </p>
                                 <p className="mt-3 text-sm font-medium text-emerald-800">
-                                    Time out the same way you clocked in. The activity hours are added only when you time out.
+                                    Time out the same way you clocked in, any time after you clock in. The activity hours are added only when you time out.
                                 </p>
                                 <div className="mt-6 w-full p-4 bg-white/60 rounded-2xl border border-emerald-100">
                                     <p className="text-xs font-bold text-emerald-600 uppercase mb-1">Time In</p>
@@ -801,6 +801,9 @@ const StudentAttendanceTerminal = () => {
                                         <p className="text-xs font-bold text-emerald-600 uppercase mb-1">Time In</p>
                                         <p className="text-xl font-semibold text-emerald-900 font-mono">
                                             {activeShift.time_in ? new Date(activeShift.time_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                                        </p>
+                                        <p className="mt-2 text-xs font-medium text-emerald-800">
+                                            You can clock out any time after you clock in. The entry is approved when you clock out.
                                         </p>
                                     </div>
 

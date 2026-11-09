@@ -48,9 +48,9 @@ const HELP_TOPICS: HelpTopic[] = [
             'Choose Passcode or QR at the top of the page.',
             'Ask your supervisor for the current passcode, or scan the QR code they show.',
             'Click Clock In when your duty starts.',
-            'Click Clock Out when your duty ends.',
+            'Click Clock Out any time after you clock in. The recorded time is that moment, and the entry is approved right away.',
             'Open DTR Preview to review your recorded times.',
-            'Check Recent Logs to see if each entry was accepted or still pending.',
+            'Check Recent Logs. An open shift shows Timed in. After you clock out, it shows Accepted.',
         ],
         tips: [
             'You can usually clock in starting 30 minutes before your shift begins.',
@@ -228,13 +228,13 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Timesheets',
         summary: 'Review and manage student daily time records.',
         about:
-            'Timesheets shows student attendance logs. Supervisors and WSPO staff can review pending entries, accept or reject them, print monthly DTRs, and process Extra Hours letters that raise the weekly cap from 20 to 25. Super Admins can browse and filter records, but usually cannot approve or reject from this page.',
+            'Timesheets shows student attendance logs. A student clock-out is approved immediately, so supervisors do not accept each one. Manual time entries can still be pending. Supervisors and WSPO staff can accept or reject those, print monthly DTRs, and process Extra Hours letters that raise the weekly cap from 20 to 25. Super Admins can browse and filter records, but usually cannot approve or reject from this page.',
         audience: ['Supervisor', 'WSPO Staff', 'Super Admin'],
         steps: [
             'Click Timesheets in the left menu.',
             'Use the date controls (previous, next, Today, or jump) to find the day you need.',
             'Filter or search by student, department, or office when available.',
-            'For pending logs, click Accept if the time is correct, or Reject if it is not.',
+            'Student clock-outs are already approved. For a manual entry that is still pending, click Accept if the time is correct, or Reject if it is not.',
             'Review Extra Hours near the top. Supervisors Save & Print the letter, collect wet signatures, then upload the signed scan. WSPO records Approve 25 or Decline.',
             'Open a student monthly DTR when you need to review or print the full sheet.',
             'Use Manual Timesheet Override to add or edit time in and time out, including a date that has no DTR yet. Each shift is saved as its own row.',

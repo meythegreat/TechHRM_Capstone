@@ -306,9 +306,11 @@ class AdvancedAttendanceController extends Controller
 
         $method = $request->input('method', 'passcode');
         $clockOutTime = Carbon::now();
-        // Clock-out stays allowed after the scheduled shift ends so students can still end an open session.
-
         $clockInTime = Carbon::parse($attendance->time_in);
+        if ($clockOutTime->lt($clockInTime)) {
+            return response()->json(['message' => 'Clock out must be after you clock in.'], 422);
+        }
+
         $totalMinutes = $clockInTime->diffInMinutes($clockOutTime);
         $computedHours = round($totalMinutes / 60, 2);
         $fit = HourLimits::fitHours($user->id, $computedHours, $clockOutTime, (int) $attendance->id);
@@ -335,6 +337,7 @@ class AdvancedAttendanceController extends Controller
             'time_out' => $clockOutTime,
             'computed_hours' => $credited,
             'rendered_hours' => $credited,
+            'status' => 'approved',
             'is_anomaly' => $isAnomaly,
             'anomaly_reason' => $anomalyReason,
         ]);
@@ -779,9 +782,10 @@ class AdvancedAttendanceController extends Controller
 
         $hours = number_format((float) $event->hours, 2);
         $label = RenderedHourEvent::KINDS[$event->kind]['label'] ?? $event->kind;
-        $officialEnd = $event->officialEnd();
-        // Recorded time-out follows the activity end time when one is set.
-        $clockOutTime = ($officialEnd && $officialEnd->greaterThan($clockIn)) ? $officialEnd : $now;
+        if ($now->lt($clockIn)) {
+            return response()->json(['message' => 'Clock out must be after you clock in.'], 422);
+        }
+        $clockOutTime = $now;
         $message = $status === 'late'
             ? 'Timed out. No hours were added or deducted.'
             : "Timed out. {$hours} hours were added to your hours rendered.";
@@ -790,7 +794,7 @@ class AdvancedAttendanceController extends Controller
             $attendance->update([
                 'time_out' => $clockOutTime,
                 'activity_hours' => $delta,
-                'status' => 'accepted',
+                'status' => 'approved',
                 'task_description' => $message,
                 'is_anomaly' => $status === 'late',
                 'anomaly_reason' => $status === 'late'

@@ -81,9 +81,12 @@ class AttendanceController extends Controller
             return response()->json(['message' => 'No active clock-in found.'], 400);
         }
 
-        // Calculate hours and update
+        // Calculate hours and update. Clock-out is the actual time, any moment after clock-in.
         $timeOut = \Carbon\Carbon::now();
         $timeIn = \Carbon\Carbon::parse($attendance->time_in);
+        if ($timeOut->lt($timeIn)) {
+            return response()->json(['message' => 'Clock out must be after you clock in.'], 422);
+        }
         $hours = round($timeIn->diffInMinutes($timeOut) / 60, 2);
         $fit = HourLimits::fitHours($user->id, $hours, $timeOut, (int) $attendance->id);
         if ($fit['allowed'] <= 0) {
@@ -98,6 +101,7 @@ class AttendanceController extends Controller
             'task_description' => $validated['task_description'],
             'rendered_hours' => $fit['allowed'],
             'computed_hours' => $fit['allowed'],
+            'status' => 'approved',
         ]);
 
         $message = 'Successfully clocked out!';
