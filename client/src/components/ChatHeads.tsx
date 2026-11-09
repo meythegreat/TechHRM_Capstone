@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { MessageCircle, Plus } from 'lucide-react';
+import { MessageCircle, Plus, X } from 'lucide-react';
 import UserAvatar from './UserAvatar';
 import MessagesPage from './MessagesPage';
 import { chatService, type ChatConversation } from '../services/chatService';
@@ -27,7 +27,7 @@ function isOnline(conversation: ChatConversation): boolean {
 }
 
 /**
- * Desktop-only chat heads docked to the far right of the app shell.
+ * Desktop-only chat heads docked to the bottom-far-right of the app shell.
  * Hidden on mobile viewports.
  */
 export default function ChatHeads() {
@@ -35,6 +35,8 @@ export default function ChatHeads() {
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [open, setOpen] = useState(false);
   const [focusId, setFocusId] = useState<number | null>(null);
+  const [hiddenIds, setHiddenIds] = useState<Set<number>>(() => new Set());
+  const previousUnread = useRef<Record<number, number>>({});
 
   const load = async () => {
     try {
@@ -59,6 +61,22 @@ export default function ChatHeads() {
   }, []);
 
   useEffect(() => {
+    setHiddenIds((current) => {
+      let changed = false;
+      const next = new Set(current);
+      for (const conversation of conversations) {
+        const previous = previousUnread.current[conversation.id] ?? 0;
+        if (conversation.unread_count > previous && next.has(conversation.id)) {
+          next.delete(conversation.id);
+          changed = true;
+        }
+        previousUnread.current[conversation.id] = conversation.unread_count;
+      }
+      return changed ? next : current;
+    });
+  }, [conversations]);
+
+  useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -72,11 +90,20 @@ export default function ChatHeads() {
 
   const heads = useMemo(() => {
     return conversations
+      .filter((item) => !hiddenIds.has(item.id))
       .filter((item) => item.unread_count > 0 || item.peer?.online || (item.is_group && item.participants?.some((p) => p.online)))
-      .concat(conversations.filter((item) => item.unread_count === 0 && !item.peer?.online && !(item.is_group && item.participants?.some((p) => p.online))))
+      .concat(
+        conversations.filter(
+          (item) =>
+            !hiddenIds.has(item.id) &&
+            item.unread_count === 0 &&
+            !item.peer?.online &&
+            !(item.is_group && item.participants?.some((p) => p.online)),
+        ),
+      )
       .filter((item, index, all) => all.findIndex((row) => row.id === item.id) === index)
       .slice(0, 6);
-  }, [conversations]);
+  }, [conversations, hiddenIds]);
 
   const unreadTotal = conversations.reduce((sum, item) => sum + (item.unread_count || 0), 0);
 
@@ -85,10 +112,22 @@ export default function ChatHeads() {
     setOpen(true);
   };
 
+  const closeHead = (conversationId: number) => {
+    setHiddenIds((current) => {
+      const next = new Set(current);
+      next.add(conversationId);
+      return next;
+    });
+    if (focusId === conversationId) {
+      setOpen(false);
+      setFocusId(null);
+    }
+  };
+
   return (
     <>
-      <div className="pointer-events-none fixed inset-y-0 right-0 z-[75] hidden w-16 flex-col items-center justify-end gap-3 pb-28 pr-3 lg:flex print:hidden">
-        <div className="pointer-events-auto flex flex-col-reverse items-center gap-2.5">
+      <div className="pointer-events-none fixed bottom-0 right-0 z-[75] hidden flex-col items-end justify-end gap-3 pb-4 pr-2 lg:flex print:hidden">
+        <div className="pointer-events-auto flex flex-col-reverse items-end gap-2.5">
           <motion.button
             type="button"
             whileHover={reduceMotion ? undefined : { scale: 1.06 }}
@@ -110,42 +149,55 @@ export default function ChatHeads() {
             const label = conversationLabel(conversation);
             const online = isOnline(conversation);
             return (
-              <motion.button
-                key={conversation.id}
-                type="button"
-                layout={!reduceMotion}
-                whileHover={reduceMotion ? undefined : { scale: 1.06, x: -2 }}
-                whileTap={reduceMotion ? undefined : { scale: 0.94 }}
-                onClick={() => openChat(conversation.id)}
-                className="relative"
-                title={label}
-                aria-label={`Open chat with ${label}`}
-              >
-                <div className="relative">
-                  {conversation.is_group || conversation.type === 'group' ? (
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-800 text-xs font-bold text-white ring-2 ring-white shadow-lg">
-                      <Plus className="absolute h-3 w-3 opacity-0" />
-                      {(conversation.name || 'G').slice(0, 2).toUpperCase()}
-                    </div>
-                  ) : (
-                    <UserAvatar
-                      name={label}
-                      picture={conversationPicture(conversation)}
-                      className="h-12 w-12 rounded-full bg-slate-100 text-sm text-slate-600 ring-2 ring-white shadow-lg"
+              <div key={conversation.id} className="group relative">
+                <motion.button
+                  type="button"
+                  layout={!reduceMotion}
+                  whileHover={reduceMotion ? undefined : { scale: 1.06, x: -2 }}
+                  whileTap={reduceMotion ? undefined : { scale: 0.94 }}
+                  onClick={() => openChat(conversation.id)}
+                  className="relative"
+                  title={label}
+                  aria-label={`Open chat with ${label}`}
+                >
+                  <div className="relative">
+                    {conversation.is_group || conversation.type === 'group' ? (
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-800 text-xs font-bold text-white shadow-lg ring-2 ring-white">
+                        <Plus className="absolute h-3 w-3 opacity-0" />
+                        {(conversation.name || 'G').slice(0, 2).toUpperCase()}
+                      </div>
+                    ) : (
+                      <UserAvatar
+                        name={label}
+                        picture={conversationPicture(conversation)}
+                        className="h-12 w-12 rounded-full bg-slate-100 text-sm text-slate-600 shadow-lg ring-2 ring-white"
+                      />
+                    )}
+                    <span
+                      className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white ${
+                        online ? 'bg-emerald-500' : 'bg-slate-300'
+                      }`}
                     />
-                  )}
-                  <span
-                    className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white ${
-                      online ? 'bg-emerald-500' : 'bg-slate-300'
-                    }`}
-                  />
-                  {conversation.unread_count > 0 && (
-                    <span className="absolute -right-1 -top-1 inline-flex min-w-5 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold text-white">
-                      {conversation.unread_count > 9 ? '9+' : conversation.unread_count}
-                    </span>
-                  )}
-                </div>
-              </motion.button>
+                    {conversation.unread_count > 0 && (
+                      <span className="absolute -right-1 -top-1 inline-flex min-w-5 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold text-white">
+                        {conversation.unread_count > 9 ? '9+' : conversation.unread_count}
+                      </span>
+                    )}
+                  </div>
+                </motion.button>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    closeHead(conversation.id);
+                  }}
+                  className="absolute -left-1 -top-1 z-10 inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-700 text-white opacity-0 shadow ring-2 ring-white transition hover:bg-slate-900 group-hover:opacity-100 focus-visible:opacity-100"
+                  aria-label={`Close chat head for ${label}`}
+                  title="Close"
+                >
+                  <X className="h-3 w-3" strokeWidth={2.5} />
+                </button>
+              </div>
             );
           })}
         </div>

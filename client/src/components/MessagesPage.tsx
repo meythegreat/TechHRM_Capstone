@@ -5,6 +5,7 @@ import {
   Archive,
   ArchiveRestore,
   Check,
+  CheckCheck,
   ChevronLeft,
   ChevronRight,
   MapPin,
@@ -45,6 +46,20 @@ function formatClock(value?: string | null): string {
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+function MessageReceipt({ readAt }: { readAt?: string | null }) {
+  const seen = Boolean(readAt);
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 ${seen ? 'text-sky-100' : 'text-blue-100/80'}`}
+      title={seen ? `Seen ${formatClock(readAt)}` : 'Delivered'}
+      aria-label={seen ? 'Seen' : 'Delivered'}
+    >
+      <CheckCheck className={`h-3 w-3 ${seen ? 'opacity-100' : 'opacity-80'}`} strokeWidth={2.4} />
+      <span className="font-medium">{seen ? 'Seen' : 'Delivered'}</span>
+    </span>
+  );
 }
 
 function formatLastSeen(value?: string | null): string {
@@ -890,9 +905,16 @@ export default function MessagesPage({
                             <p className="whitespace-pre-wrap break-words leading-relaxed">
                               {unsent ? 'Message unsent' : message.body}
                             </p>
-                            <p className={`mt-1 text-[10px] ${mine && !unsent ? 'text-blue-100' : 'text-slate-400'}`}>
-                              {formatClock(message.created_at)}
-                              {!unsent && message.edited_at ? ' · edited' : ''}
+                            <p
+                              className={`mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] ${
+                                mine && !unsent ? 'justify-end text-blue-100' : 'text-slate-400'
+                              }`}
+                            >
+                              <span>
+                                {formatClock(message.created_at)}
+                                {!unsent && message.edited_at ? ' · edited' : ''}
+                              </span>
+                              {mine && !unsent && <MessageReceipt readAt={message.read_at} />}
                             </p>
                           </div>
                         )}
@@ -1402,7 +1424,7 @@ export default function MessagesPage({
       className={
         isOverlay
           ? 'flex h-full min-h-0 w-full flex-col'
-          : 'mx-auto flex h-[calc(100vh-6.5rem)] max-w-6xl flex-col gap-4 p-4 sm:p-6 lg:p-8'
+          : 'flex h-full min-h-0 w-full max-w-none flex-col gap-2 p-2 sm:gap-3 sm:p-3'
       }
     >
       {!isOverlay && (
@@ -1410,10 +1432,11 @@ export default function MessagesPage({
           initial={reduceMotion ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease }}
+          className="shrink-0 px-1"
         >
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-600">Inbox</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">Messages</h1>
-          <p className="mt-1 max-w-2xl text-sm text-slate-500">
+          <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">Messages</h1>
+          <p className="mt-0.5 text-sm text-slate-500">
             Message any signed-in TechHRM user, create group chats, and stay reachable from the chat heads on desktop.
           </p>
         </motion.div>

@@ -187,10 +187,10 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Messages',
         summary: 'Chat with any signed-in TechHRM user.',
         about:
-            'Messages lets you send direct or group chats to supervisors, WSPO staff, or other students. Opening a conversation marks their messages as read, and a new message also creates a notification for the other person. On desktop, chat heads on the far right open messaging from any page.',
+            'Messages lets you send direct or group chats to supervisors, WSPO staff, or other students. Your messages show Delivered after they send, then Seen once the other person opens the conversation. Opening a chat also marks their messages as read and creates a notification. On desktop, chat heads at the bottom-right open messaging from any page; use the X on a head to dismiss it.',
         audience: ['Student'],
         steps: [
-            'Click Messages in the left menu, or use a chat head on the right (desktop).',
+            'Click Messages in the left menu, or use a chat head at the bottom-right (desktop).',
             'Search for a person by name, username, or role, or create a group chat.',
             'Open their conversation, type your message, then press Enter or click Send.',
             'Archive a chat to hide it, then restore it later from the Archived tab. Delete removes it for you only.',
@@ -486,10 +486,10 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Messages',
         summary: 'Chat with students, supervisors, and other staff.',
         about:
-            'Messages supports direct and group chats for any signed-in TechHRM account. Use it for quick questions about schedules, attendance, or office coordination. Desktop chat heads on the far right open messaging from anywhere in the system.',
+            'Messages supports direct and group chats for any signed-in TechHRM account. Sent messages show Delivered, then Seen when the other person opens the thread. Desktop chat heads at the bottom-right open messaging from anywhere; close a head with its X without leaving the page.',
         audience: ['Supervisor', 'WSPO Staff', 'Super Admin'],
         steps: [
-            'Click Messages in the left menu, or open a chat head on the right (desktop only).',
+            'Click Messages in the left menu, or open a chat head at the bottom-right (desktop only).',
             'Search for the person you need, or create a group chat with several members.',
             'Type your reply and press Enter or click Send.',
             'Archive chats you want out of the way, restore them from Archived, or delete a chat for yourself only.',

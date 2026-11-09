@@ -425,22 +425,30 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                     </div>
                 </header>
 
-                <main className="install-clearance flex-1 overflow-y-auto p-4 sm:p-0 relative custom-scrollbar print:overflow-visible print:h-auto print:p-0">
-                    <div className="max-w-6xl mx-auto space-y-6 sm:p-8">
-                        
-                        <Toast
-                            message={message?.text ?? null}
-                            type={message?.type}
-                            onClose={() => setMessage(null)}
-                        />
+                <main
+                    className={`install-clearance relative flex-1 custom-scrollbar print:h-auto print:overflow-visible print:p-0 ${
+                        currentPath === 'messages'
+                            ? 'flex min-h-0 flex-col overflow-hidden p-0'
+                            : 'overflow-y-auto p-4 sm:p-0'
+                    }`}
+                >
+                    <Toast
+                        message={message?.text ?? null}
+                        type={message?.type}
+                        onClose={() => setMessage(null)}
+                    />
 
+                    {currentPath === 'messages' ? (
+                        <PageTransition pageKey={currentPath} className="flex min-h-0 flex-1 flex-col">
+                            <MessagesPage />
+                        </PageTransition>
+                    ) : (
+                    <div className="max-w-6xl mx-auto space-y-6 sm:p-8">
                         <PageTransition pageKey={currentPath}>
                         {/* 1. DASHBOARD */}
                         {currentPath === 'dashboard' && <StudentOverview />}
 
                         {currentPath === 'application' && <ApplicationStatusTracker />}
-
-                        {currentPath === 'messages' && <MessagesPage />}
 
                         {currentPath === 'help' && <HelpPage userRole="Student" />}
 
@@ -865,6 +873,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                         )}
                         </PageTransition>
                     </div>
+                    )}
                 </main>
             </div>
 

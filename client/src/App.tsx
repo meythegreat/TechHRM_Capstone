@@ -389,12 +389,19 @@ function App() {
         </header>
 
         {/* MAIN CONTENT AREA */}
-        <main className="install-clearance flex-1 overflow-y-auto relative custom-scrollbar print:overflow-visible print:h-auto">
+        <main
+          className={`install-clearance relative flex-1 custom-scrollbar print:h-auto print:overflow-visible ${
+            currentPath === 'messages' ? 'flex min-h-0 flex-col overflow-hidden' : 'overflow-y-auto'
+          }`}
+        >
           {/* Subtle background texture for the entire admin area */}
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-[0.02] pointer-events-none -z-10 print:hidden"></div>
           
-          <div className="relative">
-            <PageTransition pageKey={location.pathname}>
+          <div className={`relative ${currentPath === 'messages' ? 'flex min-h-0 flex-1 flex-col' : ''}`}>
+            <PageTransition
+              pageKey={location.pathname}
+              className={currentPath === 'messages' ? 'flex min-h-0 h-full flex-1 flex-col' : ''}
+            >
             <PageErrorBoundary>
               <Routes location={location}>
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
