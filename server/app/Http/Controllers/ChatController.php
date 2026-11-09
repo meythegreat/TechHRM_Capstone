@@ -4,16 +4,18 @@ namespace App\Http\Controllers;
 
 use App\Models\Attendance;
 use App\Models\Conversation;
+use App\Models\ConversationParticipant;
 use App\Models\Message;
 use App\Models\Notification;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class ChatController extends Controller
 {
-    private const PRESENCE_TTL_SECONDS = 45;
+    private const PRESENCE_TTL_SECONDS = 90;
 
     private const TYPING_TTL_SECONDS = 5;
 
@@ -55,23 +57,47 @@ class ChatController extends Controller
         $user = $request->user();
         $this->touchPresence($user->id);
 
+        $scope = $request->query('scope', 'active');
+        if (! in_array($scope, ['active', 'archived'], true)) {
+            $scope = 'active';
+        }
+
         $conversations = Conversation::query()
-            ->where(function ($builder) use ($user) {
-                $builder->where('user_low_id', $user->id)
-                    ->orWhere('user_high_id', $user->id);
+            ->whereHas('participantRows', function ($query) use ($user, $scope) {
+                $query->where('user_id', $user->id)->whereNull('hidden_at');
+                if ($scope === 'archived') {
+                    $query->whereNotNull('archived_at');
+                } else {
+                    $query->whereNull('archived_at');
+                }
             })
             ->with([
                 'userLow:id,name,username,role,profile_picture',
                 'userLow.profile',
                 'userHigh:id,name,username,role,profile_picture',
                 'userHigh.profile',
+                'participants:id,name,username,role,profile_picture',
+                'participants.profile',
                 'latestMessage.sender:id,name,profile_picture',
+                'participantRows',
             ])
             ->orderByDesc('last_message_at')
             ->orderByDesc('id')
             ->get();
 
-        $peerIds = $conversations->map(fn (Conversation $conversation) => $conversation->peerIdFor($user->id))->all();
+        $peerIds = $conversations
+            ->flatMap(function (Conversation $conversation) use ($user) {
+                if ($conversation->isGroup()) {
+                    return $conversation->participants->pluck('id');
+                }
+
+                $peerId = $conversation->peerIdFor($user->id);
+
+                return $peerId ? [$peerId] : [];
+            })
+            ->unique()
+            ->values()
+            ->all();
         $this->warmOpenAttendances($peerIds);
 
         return response()->json(
@@ -79,6 +105,89 @@ class ChatController extends Controller
                 ->map(fn (Conversation $conversation) => $this->serializeConversation($conversation, $user->id))
                 ->values()
         );
+    }
+
+    public function archive(Request $request, Conversation $conversation)
+    {
+        $user = $request->user();
+        $this->assertParticipant($conversation, $user->id, true);
+        $this->touchPresence($user->id);
+
+        $row = $this->participantRowFor($conversation, $user->id);
+        if ($row->hidden_at) {
+            return response()->json(['message' => 'Conversation was deleted.'], 422);
+        }
+
+        $row->forceFill([
+            'archived_at' => now(),
+        ])->save();
+
+        $conversation->load([
+            'userLow:id,name,username,role,profile_picture',
+            'userLow.profile',
+            'userHigh:id,name,username,role,profile_picture',
+            'userHigh.profile',
+            'participants:id,name,username,role,profile_picture',
+            'participants.profile',
+            'latestMessage.sender:id,name,profile_picture',
+            'participantRows',
+        ]);
+
+        return response()->json([
+            'message' => 'Conversation archived.',
+            'data' => $this->serializeConversation($conversation, $user->id),
+        ]);
+    }
+
+    public function restore(Request $request, Conversation $conversation)
+    {
+        $user = $request->user();
+        $this->assertParticipant($conversation, $user->id, true);
+        $this->touchPresence($user->id);
+
+        $row = $this->participantRowFor($conversation, $user->id);
+        if ($row->hidden_at) {
+            return response()->json(['message' => 'Deleted conversations cannot be restored.'], 422);
+        }
+
+        $row->forceFill([
+            'archived_at' => null,
+        ])->save();
+
+        $conversation->load([
+            'userLow:id,name,username,role,profile_picture',
+            'userLow.profile',
+            'userHigh:id,name,username,role,profile_picture',
+            'userHigh.profile',
+            'participants:id,name,username,role,profile_picture',
+            'participants.profile',
+            'latestMessage.sender:id,name,profile_picture',
+            'participantRows',
+        ]);
+
+        return response()->json([
+            'message' => 'Conversation restored.',
+            'data' => $this->serializeConversation($conversation, $user->id),
+        ]);
+    }
+
+    public function deleteForMe(Request $request, Conversation $conversation)
+    {
+        $user = $request->user();
+        $this->assertParticipant($conversation, $user->id, true);
+        $this->touchPresence($user->id);
+        $this->clearTyping($conversation->id, $user->id);
+
+        $row = $this->participantRowFor($conversation, $user->id);
+        $row->forceFill([
+            'hidden_at' => now(),
+            'archived_at' => null,
+        ])->save();
+
+        return response()->json([
+            'message' => 'Conversation deleted.',
+            'ok' => true,
+        ]);
     }
 
     public function activeNow(Request $request)
@@ -131,16 +240,58 @@ class ChatController extends Controller
 
         $peer = User::query()->with('profile')->findOrFail($peerId);
         $conversation = Conversation::findOrCreateBetween($user->id, $peer->id);
+        $this->reviveParticipant($conversation, $user->id);
         $conversation->load([
             'userLow:id,name,username,role,profile_picture',
             'userLow.profile',
             'userHigh:id,name,username,role,profile_picture',
             'userHigh.profile',
+            'participants:id,name,username,role,profile_picture',
+            'participants.profile',
             'latestMessage.sender:id,name,profile_picture',
+            'participantRows',
         ]);
         $this->warmOpenAttendances([$peer->id]);
 
         return response()->json($this->serializeConversation($conversation, $user->id));
+    }
+
+    public function createGroup(Request $request)
+    {
+        $user = $request->user();
+        $this->touchPresence($user->id);
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'min:2', 'max:80'],
+            'member_ids' => ['required', 'array', 'min:1'],
+            'member_ids.*' => ['integer', 'distinct', 'exists:users,id', Rule::notIn([(int) $user->id])],
+        ]);
+
+        $name = trim($validated['name']);
+        if ($name === '') {
+            return response()->json(['message' => 'Group name cannot be empty.'], 422);
+        }
+
+        $conversation = Conversation::createGroup($name, $user->id, $validated['member_ids']);
+        $conversation->load([
+            'participants:id,name,username,role,profile_picture',
+            'participants.profile',
+            'latestMessage.sender:id,name,profile_picture',
+            'participantRows',
+        ]);
+
+        $memberIds = collect($validated['member_ids'])->map(fn ($id) => (int) $id)->all();
+        $this->warmOpenAttendances($memberIds);
+
+        foreach ($memberIds as $memberId) {
+            Notification::create([
+                'user_id' => $memberId,
+                'title' => 'New Group Chat',
+                'message' => $user->name.' added you to "'.$name.'"',
+            ]);
+        }
+
+        return response()->json($this->serializeConversation($conversation, $user->id), 201);
     }
 
     public function messages(Request $request, Conversation $conversation)
@@ -154,6 +305,16 @@ class ChatController extends Controller
             ->where('sender_id', '!=', $user->id)
             ->whereNull('read_at')
             ->update(['read_at' => now()]);
+
+        ConversationParticipant::query()->updateOrCreate(
+            [
+                'conversation_id' => $conversation->id,
+                'user_id' => $user->id,
+            ],
+            [
+                'last_read_at' => now(),
+            ]
+        );
 
         $messages = $conversation->messages()
             ->with('sender:id,name,profile_picture')
@@ -189,12 +350,31 @@ class ChatController extends Controller
 
         $conversation->forceFill(['last_message_at' => $message->created_at])->save();
 
-        $peerId = $conversation->peerIdFor($user->id);
-        Notification::create([
-            'user_id' => $peerId,
-            'title' => 'New Message',
-            'message' => $user->name . ': ' . Str::limit($body, 120),
-        ]);
+        ConversationParticipant::query()->updateOrCreate(
+            [
+                'conversation_id' => $conversation->id,
+                'user_id' => $user->id,
+            ],
+            [
+                'last_read_at' => now(),
+            ]
+        );
+
+        $recipientIds = $this->participantIds($conversation)
+            ->reject(fn (int $id) => $id === (int) $user->id)
+            ->values();
+
+        $preview = $conversation->isGroup()
+            ? $user->name.' in '.$conversation->name.': '.Str::limit($body, 100)
+            : $user->name.': '.Str::limit($body, 120);
+
+        foreach ($recipientIds as $recipientId) {
+            Notification::create([
+                'user_id' => $recipientId,
+                'title' => 'New Message',
+                'message' => $preview,
+            ]);
+        }
 
         $message->load('sender:id,name,profile_picture');
 
@@ -289,6 +469,14 @@ class ChatController extends Controller
         ]);
     }
 
+    public function leavePresence(Request $request)
+    {
+        $user = $request->user();
+        Cache::forget($this->presenceKey($user->id));
+
+        return response()->json(['ok' => true, 'online' => false]);
+    }
+
     public function typing(Request $request, Conversation $conversation)
     {
         $user = $request->user();
@@ -318,17 +506,62 @@ class ChatController extends Controller
         $this->assertParticipant($conversation, $user->id);
         $this->touchPresence($user->id);
 
+        $conversation->loadMissing([
+            'participants:id,name,username,role,profile_picture',
+            'participants.profile',
+            'userLow:id,name,username,role,profile_picture',
+            'userLow.profile',
+            'userHigh:id,name,username,role,profile_picture',
+            'userHigh.profile',
+        ]);
+
+        if ($conversation->isGroup()) {
+            $others = $conversation->participants
+                ->filter(fn (User $participant) => (int) $participant->id !== (int) $user->id)
+                ->values();
+            $this->warmOpenAttendances($others->pluck('id')->all());
+
+            $typingNames = $others
+                ->filter(fn (User $participant) => (bool) Cache::get($this->typingKey($conversation->id, $participant->id), false))
+                ->pluck('name')
+                ->values();
+
+            $onlineCount = $others->filter(fn (User $participant) => $this->isOnline($participant->id))->count();
+
+            return response()->json([
+                'conversation_id' => $conversation->id,
+                'type' => Conversation::TYPE_GROUP,
+                'peer_id' => null,
+                'peer_online' => $onlineCount > 0,
+                'peer_typing' => $typingNames->isNotEmpty(),
+                'typing_names' => $typingNames,
+                'online_count' => $onlineCount,
+                'member_count' => $conversation->participants->count(),
+                'peer_last_seen_at' => null,
+                'peer_assignment' => null,
+                'peer_clocked_in' => false,
+                'peer_clocked_in_since' => null,
+                'peer_work_type' => null,
+            ]);
+        }
+
         $peerId = $conversation->peerIdFor($user->id);
-        $peer = User::query()->with('profile')->find($peerId);
-        $this->warmOpenAttendances([$peerId]);
-        $open = $this->openAttendanceFor($peerId);
+        $peer = $peerId ? User::query()->with('profile')->find($peerId) : null;
+        $this->warmOpenAttendances($peerId ? [$peerId] : []);
+        $open = $peerId ? $this->openAttendanceFor($peerId) : null;
 
         return response()->json([
             'conversation_id' => $conversation->id,
+            'type' => Conversation::TYPE_DIRECT,
             'peer_id' => $peerId,
-            'peer_online' => $this->isOnline($peerId),
-            'peer_typing' => (bool) Cache::get($this->typingKey($conversation->id, $peerId), false),
-            'peer_last_seen_at' => $this->lastSeenAt($peerId),
+            'peer_online' => $peerId ? $this->isOnline($peerId) : false,
+            'peer_typing' => $peerId
+                ? (bool) Cache::get($this->typingKey($conversation->id, $peerId), false)
+                : false,
+            'typing_names' => [],
+            'online_count' => $peerId && $this->isOnline($peerId) ? 1 : 0,
+            'member_count' => 2,
+            'peer_last_seen_at' => $peerId ? $this->lastSeenAt($peerId) : null,
             'peer_assignment' => $peer ? $this->assignmentFor($peer) : 'Unassigned',
             'peer_clocked_in' => $open !== null,
             'peer_clocked_in_since' => optional($open?->time_in)?->toIso8601String(),
@@ -338,10 +571,49 @@ class ChatController extends Controller
         ]);
     }
 
-    private function assertParticipant(Conversation $conversation, int $userId): void
+    private function assertParticipant(Conversation $conversation, int $userId, bool $allowHidden = false): void
     {
         if (! $conversation->involves($userId)) {
             abort(403, 'You are not part of this conversation.');
+        }
+
+        if ($allowHidden) {
+            return;
+        }
+
+        $row = ConversationParticipant::query()
+            ->where('conversation_id', $conversation->id)
+            ->where('user_id', $userId)
+            ->first();
+
+        if ($row?->hidden_at) {
+            abort(403, 'You are not part of this conversation.');
+        }
+    }
+
+    private function participantRowFor(Conversation $conversation, int $userId): ConversationParticipant
+    {
+        return ConversationParticipant::query()->firstOrCreate(
+            [
+                'conversation_id' => $conversation->id,
+                'user_id' => $userId,
+            ],
+            [
+                'last_read_at' => null,
+                'archived_at' => null,
+                'hidden_at' => null,
+            ]
+        );
+    }
+
+    private function reviveParticipant(Conversation $conversation, int $userId): void
+    {
+        $row = $this->participantRowFor($conversation, $userId);
+        if ($row->hidden_at || $row->archived_at) {
+            $row->forceFill([
+                'hidden_at' => null,
+                'archived_at' => null,
+            ])->save();
         }
     }
 
@@ -352,36 +624,132 @@ class ChatController extends Controller
         }
     }
 
+    /**
+     * @return \Illuminate\Support\Collection<int, int>
+     */
+    private function participantIds(Conversation $conversation)
+    {
+        if ($conversation->relationLoaded('participants') && $conversation->participants->isNotEmpty()) {
+            return $conversation->participants->pluck('id')->map(fn ($id) => (int) $id);
+        }
+
+        if ($conversation->relationLoaded('participantRows') && $conversation->participantRows->isNotEmpty()) {
+            return $conversation->participantRows->pluck('user_id')->map(fn ($id) => (int) $id);
+        }
+
+        $ids = ConversationParticipant::query()
+            ->where('conversation_id', $conversation->id)
+            ->pluck('user_id')
+            ->map(fn ($id) => (int) $id);
+
+        if ($ids->isNotEmpty()) {
+            return $ids;
+        }
+
+        return collect([
+            (int) $conversation->user_low_id,
+            (int) $conversation->user_high_id,
+        ])->filter()->unique()->values();
+    }
+
     private function serializeConversation(Conversation $conversation, int $viewerId): array
     {
-        $peer = $conversation->user_low_id === $viewerId
-            ? $conversation->userHigh
-            : $conversation->userLow;
-
         $latest = $conversation->latestMessage;
+        $isGroup = $conversation->isGroup();
 
-        $unreadCount = Message::query()
-            ->where('conversation_id', $conversation->id)
-            ->where('sender_id', '!=', $viewerId)
-            ->whereNull('read_at')
-            ->count();
+        if (! $conversation->relationLoaded('participants')) {
+            $conversation->load([
+                'participants:id,name,username,role,profile_picture',
+                'participants.profile',
+            ]);
+        }
 
-        $peerId = $peer?->id;
-        $peerTyping = $peerId
-            ? (bool) Cache::get($this->typingKey($conversation->id, $peerId), false)
-            : false;
+        $participants = $conversation->participants
+            ->map(fn (User $participant) => $this->serializeUser($participant))
+            ->values();
+
+        $peer = null;
+        if (! $isGroup) {
+            $peerModel = $conversation->user_low_id === $viewerId
+                ? $conversation->userHigh
+                : $conversation->userLow;
+
+            if (! $peerModel) {
+                $peerModel = $conversation->participants
+                    ->first(fn (User $participant) => (int) $participant->id !== $viewerId);
+            }
+
+            $peer = $peerModel ? $this->serializeUser($peerModel) : null;
+        }
+
+        $unreadCount = $this->unreadCountFor($conversation, $viewerId);
+
+        $typingFromOthers = $conversation->participants
+            ->filter(fn (User $participant) => (int) $participant->id !== $viewerId)
+            ->contains(fn (User $participant) => (bool) Cache::get(
+                $this->typingKey($conversation->id, $participant->id),
+                false
+            ));
+
+        $title = $isGroup
+            ? ($conversation->name ?: 'Group chat')
+            : ($peer['name'] ?? 'Unknown user');
+
+        $viewerRow = $conversation->relationLoaded('participantRows')
+            ? $conversation->participantRows->firstWhere('user_id', $viewerId)
+            : ConversationParticipant::query()
+                ->where('conversation_id', $conversation->id)
+                ->where('user_id', $viewerId)
+                ->first();
 
         return [
             'id' => $conversation->id,
-            'peer' => $peer ? $this->serializeUser($peer) : null,
+            'type' => $isGroup ? Conversation::TYPE_GROUP : Conversation::TYPE_DIRECT,
+            'is_group' => $isGroup,
+            'name' => $isGroup ? $conversation->name : null,
+            'title' => $title,
+            'created_by' => $conversation->created_by,
+            'peer' => $peer,
+            'participants' => $participants,
+            'member_count' => $participants->count(),
             'last_message' => $latest ? $this->serializeMessage($latest, $viewerId) : null,
             'last_message_preview' => $latest
                 ? ($latest->isUnsent() ? 'Message unsent' : $latest->body)
                 : null,
             'last_message_at' => optional($conversation->last_message_at)?->toIso8601String(),
             'unread_count' => $unreadCount,
-            'peer_typing' => $peerTyping,
+            'peer_typing' => $typingFromOthers,
+            'is_archived' => $viewerRow?->archived_at !== null,
+            'archived_at' => optional($viewerRow?->archived_at)?->toIso8601String(),
         ];
+    }
+
+    private function unreadCountFor(Conversation $conversation, int $viewerId): int
+    {
+        $lastReadAt = null;
+        if ($conversation->relationLoaded('participantRows')) {
+            $lastReadAt = optional(
+                $conversation->participantRows->firstWhere('user_id', $viewerId)
+            )->last_read_at;
+        } else {
+            $lastReadAt = ConversationParticipant::query()
+                ->where('conversation_id', $conversation->id)
+                ->where('user_id', $viewerId)
+                ->value('last_read_at');
+        }
+
+        $query = Message::query()
+            ->where('conversation_id', $conversation->id)
+            ->where('sender_id', '!=', $viewerId)
+            ->whereNull('unsent_at');
+
+        if ($lastReadAt) {
+            $query->where('created_at', '>', $lastReadAt);
+        } else {
+            $query->whereNull('read_at');
+        }
+
+        return $query->count();
     }
 
     private function serializeUser(User $user, ?Attendance $openAttendance = null): array

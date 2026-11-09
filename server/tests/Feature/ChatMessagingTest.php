@@ -314,6 +314,134 @@ class ChatMessagingTest extends TestCase
             ->assertJsonPath('peer_work_type', 'Clerical');
     }
 
+    public function test_users_can_create_group_chats(): void
+    {
+        $ana = User::create([
+            'name' => 'Ana Cruz',
+            'username' => 'ana.group',
+            'password' => 'password',
+            'role' => 'Student',
+        ]);
+        $ben = User::create([
+            'name' => 'Ben Reyes',
+            'username' => 'ben.group',
+            'password' => 'password',
+            'role' => 'Supervisor',
+        ]);
+        $carla = User::create([
+            'name' => 'Carla Lim',
+            'username' => 'carla.group',
+            'password' => 'password',
+            'role' => 'WSPO Staff',
+        ]);
+
+        Sanctum::actingAs($ana);
+
+        $group = $this->postJson('/api/chat/groups', [
+            'name' => 'Shift Leads',
+            'member_ids' => [$ben->id, $carla->id],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('is_group', true)
+            ->assertJsonPath('name', 'Shift Leads')
+            ->assertJsonPath('member_count', 3);
+
+        $conversationId = $group->json('id');
+
+        $this->postJson("/api/chat/conversations/{$conversationId}/messages", [
+            'body' => 'Welcome to the group',
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $ben->id,
+            'title' => 'New Group Chat',
+        ]);
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $carla->id,
+            'title' => 'New Message',
+        ]);
+
+        Sanctum::actingAs($ben);
+        $this->getJson('/api/chat/conversations')
+            ->assertOk()
+            ->assertJsonPath('0.id', $conversationId)
+            ->assertJsonPath('0.is_group', true);
+    }
+
+    public function test_users_can_archive_restore_and_delete_conversations(): void
+    {
+        $ana = User::create([
+            'name' => 'Ana Cruz',
+            'username' => 'ana.archive',
+            'password' => 'password',
+            'role' => 'Student',
+        ]);
+        $ben = User::create([
+            'name' => 'Ben Reyes',
+            'username' => 'ben.archive',
+            'password' => 'password',
+            'role' => 'Supervisor',
+        ]);
+
+        Sanctum::actingAs($ana);
+        $conversationId = $this->postJson('/api/chat/conversations', ['user_id' => $ben->id])
+            ->assertOk()
+            ->json('id');
+
+        $this->postJson("/api/chat/conversations/{$conversationId}/messages", [
+            'body' => 'Keep this around',
+        ])->assertCreated();
+
+        $this->postJson("/api/chat/conversations/{$conversationId}/archive")
+            ->assertOk()
+            ->assertJsonPath('data.is_archived', true);
+
+        $this->getJson('/api/chat/conversations')
+            ->assertOk()
+            ->assertJsonCount(0);
+
+        $this->getJson('/api/chat/conversations?scope=archived')
+            ->assertOk()
+            ->assertJsonPath('0.id', $conversationId)
+            ->assertJsonPath('0.is_archived', true);
+
+        Sanctum::actingAs($ben);
+        $this->getJson('/api/chat/conversations')
+            ->assertOk()
+            ->assertJsonPath('0.id', $conversationId);
+
+        Sanctum::actingAs($ana);
+        $this->postJson("/api/chat/conversations/{$conversationId}/restore")
+            ->assertOk()
+            ->assertJsonPath('data.is_archived', false);
+
+        $this->getJson('/api/chat/conversations')
+            ->assertOk()
+            ->assertJsonPath('0.id', $conversationId);
+
+        $this->deleteJson("/api/chat/conversations/{$conversationId}")
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+
+        $this->getJson('/api/chat/conversations')->assertOk()->assertJsonCount(0);
+        $this->getJson('/api/chat/conversations?scope=archived')->assertOk()->assertJsonCount(0);
+        $this->getJson("/api/chat/conversations/{$conversationId}/messages")->assertForbidden();
+
+        Sanctum::actingAs($ben);
+        $this->getJson('/api/chat/conversations')
+            ->assertOk()
+            ->assertJsonPath('0.id', $conversationId);
+
+        Sanctum::actingAs($ana);
+        $this->postJson('/api/chat/conversations', ['user_id' => $ben->id])
+            ->assertOk()
+            ->assertJsonPath('id', $conversationId);
+
+        $this->getJson('/api/chat/conversations')
+            ->assertOk()
+            ->assertJsonPath('0.id', $conversationId);
+    }
+
     private function createSchema(): void
     {
         Schema::dropAllTables();
@@ -344,11 +472,25 @@ class ChatMessagingTest extends TestCase
 
         Schema::create('conversations', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_low_id')->constrained('users')->cascadeOnDelete();
-            $table->foreignId('user_high_id')->constrained('users')->cascadeOnDelete();
+            $table->string('type', 20)->default('direct');
+            $table->string('name')->nullable();
+            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->unsignedBigInteger('user_low_id')->nullable();
+            $table->unsignedBigInteger('user_high_id')->nullable();
             $table->timestamp('last_message_at')->nullable();
             $table->timestamps();
             $table->unique(['user_low_id', 'user_high_id']);
+        });
+
+        Schema::create('conversation_participants', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('conversation_id')->constrained('conversations')->cascadeOnDelete();
+            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->timestamp('last_read_at')->nullable();
+            $table->timestamp('archived_at')->nullable();
+            $table->timestamp('hidden_at')->nullable();
+            $table->timestamps();
+            $table->unique(['conversation_id', 'user_id']);
         });
 
         Schema::create('messages', function (Blueprint $table) {

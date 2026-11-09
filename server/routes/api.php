@@ -86,9 +86,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/chat/users', [ChatController::class, 'directory']);
     Route::post('/chat/presence', [ChatController::class, 'heartbeat']);
+    Route::delete('/chat/presence', [ChatController::class, 'leavePresence']);
     Route::get('/chat/active-now', [ChatController::class, 'activeNow']);
     Route::get('/chat/conversations', [ChatController::class, 'conversations']);
     Route::post('/chat/conversations', [ChatController::class, 'open']);
+    Route::post('/chat/groups', [ChatController::class, 'createGroup']);
+    Route::post('/chat/conversations/{conversation}/archive', [ChatController::class, 'archive']);
+    Route::post('/chat/conversations/{conversation}/restore', [ChatController::class, 'restore']);
+    Route::delete('/chat/conversations/{conversation}', [ChatController::class, 'deleteForMe']);
     Route::get('/chat/conversations/{conversation}/messages', [ChatController::class, 'messages']);
     Route::post('/chat/conversations/{conversation}/messages', [ChatController::class, 'send']);
     Route::patch('/chat/conversations/{conversation}/messages/{message}', [ChatController::class, 'updateMessage']);

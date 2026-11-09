@@ -187,18 +187,18 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Messages',
         summary: 'Chat with any signed-in TechHRM user.',
         about:
-            'Messages lets you send direct chats to supervisors, WSPO staff, or other students. Opening a conversation marks their messages as read, and a new message also creates a notification for the other person.',
+            'Messages lets you send direct or group chats to supervisors, WSPO staff, or other students. Opening a conversation marks their messages as read, and a new message also creates a notification for the other person. On desktop, chat heads on the far right open messaging from any page.',
         audience: ['Student'],
         steps: [
-            'Click Messages in the left menu.',
-            'Search for a person by name, username, or role.',
+            'Click Messages in the left menu, or use a chat head on the right (desktop).',
+            'Search for a person by name, username, or role, or create a group chat.',
             'Open their conversation, type your message, then press Enter or click Send.',
-            'Check the left inbox for unread badges and recent chats.',
+            'Archive a chat to hide it, then restore it later from the Archived tab. Delete removes it for you only.',
             'If you get a New Message notification, open it to jump back to Messages.',
         ],
         tips: [
             'You can only message other signed-in accounts, not applicants who have not been enrolled yet.',
-            'Keep the Messages page open to refresh new replies every few seconds.',
+            'Online status follows your signed-in session across the whole system, not only the Messages page.',
         ],
     },
     {
@@ -486,18 +486,18 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Messages',
         summary: 'Chat with students, supervisors, and other staff.',
         about:
-            'Messages is a direct inbox for any signed-in TechHRM account. Use it for quick questions about schedules, attendance, or office coordination. New chats also send a New Message notification to the recipient.',
+            'Messages supports direct and group chats for any signed-in TechHRM account. Use it for quick questions about schedules, attendance, or office coordination. Desktop chat heads on the far right open messaging from anywhere in the system.',
         audience: ['Supervisor', 'WSPO Staff', 'Super Admin'],
         steps: [
-            'Click Messages in the left menu.',
-            'Search for the person you need, then open the conversation.',
+            'Click Messages in the left menu, or open a chat head on the right (desktop only).',
+            'Search for the person you need, or create a group chat with several members.',
             'Type your reply and press Enter or click Send.',
-            'Use unread badges in the inbox to find conversations that still need attention.',
+            'Archive chats you want out of the way, restore them from Archived, or delete a chat for yourself only.',
             'Click a New Message notification to return to this page.',
         ],
         tips: [
-            'Conversations are private between the two people in the thread.',
-            'Keep Messages open if you want replies to appear without refreshing the whole browser tab.',
+            'Direct chats stay private between the two people; group chats notify every member.',
+            'Online indicators light up while someone is signed in anywhere in TechHRM, not only when Messages is open.',
         ],
     },
     {

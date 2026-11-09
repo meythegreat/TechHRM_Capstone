@@ -37,19 +37,32 @@ export interface ChatMessage {
 
 export interface ChatConversation {
   id: number;
+  type?: 'direct' | 'group';
+  is_group?: boolean;
+  name?: string | null;
+  title?: string | null;
+  created_by?: number | null;
   peer: ChatUser | null;
+  participants?: ChatUser[];
+  member_count?: number;
   last_message: ChatMessage | null;
   last_message_preview?: string | null;
   last_message_at: string | null;
   unread_count: number;
   peer_typing?: boolean;
+  is_archived?: boolean;
+  archived_at?: string | null;
 }
 
 export interface ChatConversationState {
   conversation_id: number;
-  peer_id: number;
+  type?: 'direct' | 'group';
+  peer_id: number | null;
   peer_online: boolean;
   peer_typing: boolean;
+  typing_names?: string[];
+  online_count?: number;
+  member_count?: number;
   peer_last_seen_at: string | null;
   peer_assignment?: string | null;
   peer_clocked_in?: boolean;
@@ -68,9 +81,25 @@ export const chatService = {
     return Array.isArray(response.data) ? response.data : [];
   },
 
-  listConversations: async (): Promise<ChatConversation[]> => {
-    const response = await axios.get('/api/chat/conversations');
+  listConversations: async (scope: 'active' | 'archived' = 'active'): Promise<ChatConversation[]> => {
+    const response = await axios.get('/api/chat/conversations', {
+      params: scope === 'archived' ? { scope: 'archived' } : undefined,
+    });
     return Array.isArray(response.data) ? response.data : [];
+  },
+
+  archiveConversation: async (conversationId: number): Promise<ChatConversation> => {
+    const response = await axios.post(`/api/chat/conversations/${conversationId}/archive`);
+    return response.data.data;
+  },
+
+  restoreConversation: async (conversationId: number): Promise<ChatConversation> => {
+    const response = await axios.post(`/api/chat/conversations/${conversationId}/restore`);
+    return response.data.data;
+  },
+
+  deleteConversation: async (conversationId: number): Promise<void> => {
+    await axios.delete(`/api/chat/conversations/${conversationId}`);
   },
 
   listActiveNow: async (): Promise<ChatActiveNowResponse> => {
@@ -83,6 +112,14 @@ export const chatService = {
 
   openConversation: async (userId: number): Promise<ChatConversation> => {
     const response = await axios.post('/api/chat/conversations', { user_id: userId });
+    return response.data;
+  },
+
+  createGroup: async (name: string, memberIds: number[]): Promise<ChatConversation> => {
+    const response = await axios.post('/api/chat/groups', {
+      name,
+      member_ids: memberIds,
+    });
     return response.data;
   },
 
@@ -108,6 +145,10 @@ export const chatService = {
 
   heartbeat: async (): Promise<void> => {
     await axios.post('/api/chat/presence');
+  },
+
+  leavePresence: async (): Promise<void> => {
+    await axios.delete('/api/chat/presence');
   },
 
   setTyping: async (conversationId: number, typing: boolean): Promise<void> => {

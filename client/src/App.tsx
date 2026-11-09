@@ -66,9 +66,12 @@ import StaffProfileSettings from './components/StaffProfileSettings';
 import OfficeDirectory from './components/OfficeDirectory';
 import HelpPage from './components/HelpPage';
 import MessagesPage from './components/MessagesPage';
+import ChatPresence from './components/ChatPresence';
+import ChatHeads from './components/ChatHeads';
 import InstallAppPrompt from './components/InstallAppPrompt';
 import PhoneNotificationPrompt from './components/PhoneNotificationPrompt';
 import { unsubscribePhoneNotifications } from './phoneNotifications';
+import { chatService } from './services/chatService';
 
 class PageErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
@@ -249,6 +252,7 @@ function App() {
 
   const handleLogout = async () => {
     try {
+      await chatService.leavePresence().catch(() => undefined);
       await unsubscribePhoneNotifications();
       await axios.post('/api/logout');
     } catch (error) {
@@ -311,10 +315,15 @@ function App() {
         )}
       </PageTransition>
     ) : userRole === 'Student' ? (
-      <StudentDashboard onLogout={handleLogout} />
+      <>
+        <ChatPresence enabled />
+        <ChatHeads />
+        <StudentDashboard onLogout={handleLogout} />
+      </>
     ) : (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans selection:bg-blue-200 selection:text-blue-900 print:h-auto print:overflow-visible print:bg-white">
-      
+      <ChatPresence enabled />
+      <ChatHeads />
       <Sidebar 
         isSidebarOpen={isSidebarOpen} 
         setIsSidebarOpen={setIsSidebarOpen} 
