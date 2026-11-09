@@ -532,3 +532,31 @@ html[data-pwa-install='open'] .install-clearance {
   overflow-y: auto;
   padding-bottom: calc(6.5rem + env(safe-area-inset-bottom));
 }
+
+/* Chat thread wallpaper follows TechHRM light/dark theme (sun schedule or manual toggle). */
+.chat-wallpaper {
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 34%),
+    linear-gradient(180deg, #f8fafc 0%, #eef2ff 42%, #ffffff 100%);
+}
+
+@media screen {
+  html.dark .chat-wallpaper {
+    background:
+      radial-gradient(circle at top left, rgba(56, 189, 248, 0.12), transparent 36%),
+      radial-gradient(circle at bottom right, rgba(37, 99, 235, 0.16), transparent 40%),
+      linear-gradient(180deg, #0b1220 0%, #111827 48%, #0a1020 100%);
+  }
+
+  html.dark .chat-bubble-peer {
+    background-color: #172033;
+    border-color: #2a3950;
+    color: #e2e8f0;
+  }
+
+  html.dark .chat-unsent {
+    background-color: rgb(23 32 51 / 0.72);
+    border-color: #2a3950;
+    color: #94a3b8;
+  }
+}

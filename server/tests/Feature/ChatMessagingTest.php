@@ -152,6 +152,110 @@ class ChatMessagingTest extends TestCase
         $this->assertSame(0, Notification::query()->count());
     }
 
+    public function test_presence_and_typing_are_visible_to_the_peer(): void
+    {
+        $ana = User::create([
+            'name' => 'Ana Cruz',
+            'username' => 'ana.presence',
+            'password' => 'password',
+            'role' => 'Student',
+        ]);
+        $ben = User::create([
+            'name' => 'Ben Reyes',
+            'username' => 'ben.presence',
+            'password' => 'password',
+            'role' => 'Supervisor',
+        ]);
+
+        Sanctum::actingAs($ana);
+        $conversationId = $this->postJson('/api/chat/conversations', ['user_id' => $ben->id])
+            ->assertOk()
+            ->json('id');
+
+        $this->postJson('/api/chat/presence')->assertOk()->assertJsonPath('online', true);
+        $this->postJson("/api/chat/conversations/{$conversationId}/typing", ['typing' => true])
+            ->assertOk();
+
+        Sanctum::actingAs($ben);
+
+        $this->getJson("/api/chat/conversations/{$conversationId}/state")
+            ->assertOk()
+            ->assertJsonPath('peer_online', true)
+            ->assertJsonPath('peer_typing', true);
+
+        Sanctum::actingAs($ana);
+        $this->postJson("/api/chat/conversations/{$conversationId}/typing", ['typing' => false])
+            ->assertOk();
+
+        Sanctum::actingAs($ben);
+        $this->getJson("/api/chat/conversations/{$conversationId}/state")
+            ->assertOk()
+            ->assertJsonPath('peer_typing', false)
+            ->assertJsonPath('peer_online', true);
+    }
+
+    public function test_sender_can_edit_within_fifteen_minutes_and_unsend(): void
+    {
+        $ana = User::create([
+            'name' => 'Ana Cruz',
+            'username' => 'ana.edit',
+            'password' => 'password',
+            'role' => 'Student',
+        ]);
+        $ben = User::create([
+            'name' => 'Ben Reyes',
+            'username' => 'ben.edit',
+            'password' => 'password',
+            'role' => 'Supervisor',
+        ]);
+
+        Sanctum::actingAs($ana);
+        $conversationId = $this->postJson('/api/chat/conversations', ['user_id' => $ben->id])
+            ->assertOk()
+            ->json('id');
+
+        $messageId = $this->postJson("/api/chat/conversations/{$conversationId}/messages", [
+            'body' => 'Original wording',
+        ])->assertCreated()->json('data.id');
+
+        $this->patchJson("/api/chat/conversations/{$conversationId}/messages/{$messageId}", [
+            'body' => 'Updated wording',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.body', 'Updated wording')
+            ->assertJsonPath('data.can_edit', true);
+
+        $this->assertNotNull(Message::query()->find($messageId)?->edited_at);
+
+        Sanctum::actingAs($ben);
+        $this->patchJson("/api/chat/conversations/{$conversationId}/messages/{$messageId}", [
+            'body' => 'Hijacked',
+        ])->assertForbidden();
+
+        Sanctum::actingAs($ana);
+        $this->deleteJson("/api/chat/conversations/{$conversationId}/messages/{$messageId}")
+            ->assertOk()
+            ->assertJsonPath('data.is_unsent', true)
+            ->assertJsonPath('data.body', '')
+            ->assertJsonPath('data.can_edit', false)
+            ->assertJsonPath('data.can_unsend', false);
+
+        $this->patchJson("/api/chat/conversations/{$conversationId}/messages/{$messageId}", [
+            'body' => 'Too late',
+        ])->assertStatus(422);
+
+        Message::query()->whereKey($messageId)->update([
+            'created_at' => now()->subMinutes(16),
+            'unsent_at' => null,
+            'body' => 'Old enough',
+            'edited_at' => null,
+        ]);
+
+        $this->patchJson("/api/chat/conversations/{$conversationId}/messages/{$messageId}", [
+            'body' => 'Should fail',
+        ])->assertStatus(422);
+    }
+
     private function createSchema(): void
     {
         Schema::dropAllTables();
@@ -195,6 +299,8 @@ class ChatMessagingTest extends TestCase
             $table->foreignId('sender_id')->constrained('users')->cascadeOnDelete();
             $table->text('body');
             $table->timestamp('read_at')->nullable();
+            $table->timestamp('edited_at')->nullable();
+            $table->timestamp('unsent_at')->nullable();
             $table->timestamps();
         });
 

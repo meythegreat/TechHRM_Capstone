@@ -7,13 +7,20 @@ use App\Models\Message;
 use App\Models\Notification;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class ChatController extends Controller
 {
+    private const PRESENCE_TTL_SECONDS = 45;
+
+    private const TYPING_TTL_SECONDS = 5;
+
     public function directory(Request $request)
     {
         $user = $request->user();
+        $this->touchPresence($user->id);
+
         $query = User::query()
             ->whereKeyNot($user->id)
             ->orderBy('name');
@@ -29,7 +36,8 @@ class ChatController extends Controller
 
         $users = $query
             ->limit(50)
-            ->get(['id', 'name', 'username', 'role', 'profile_picture']);
+            ->get(['id', 'name', 'username', 'role', 'profile_picture'])
+            ->map(fn (User $peer) => $this->serializeUser($peer));
 
         return response()->json($users);
     }
@@ -37,6 +45,7 @@ class ChatController extends Controller
     public function conversations(Request $request)
     {
         $user = $request->user();
+        $this->touchPresence($user->id);
 
         $conversations = Conversation::query()
             ->where(function ($builder) use ($user) {
@@ -62,6 +71,8 @@ class ChatController extends Controller
     public function open(Request $request)
     {
         $user = $request->user();
+        $this->touchPresence($user->id);
+
         $validated = $request->validate([
             'user_id' => ['required', 'integer', 'exists:users,id'],
         ]);
@@ -86,6 +97,7 @@ class ChatController extends Controller
     {
         $user = $request->user();
         $this->assertParticipant($conversation, $user->id);
+        $this->touchPresence($user->id);
 
         Message::query()
             ->where('conversation_id', $conversation->id)
@@ -108,6 +120,8 @@ class ChatController extends Controller
     {
         $user = $request->user();
         $this->assertParticipant($conversation, $user->id);
+        $this->touchPresence($user->id);
+        $this->clearTyping($conversation->id, $user->id);
 
         $validated = $request->validate([
             'body' => ['required', 'string', 'max:4000'],
@@ -140,10 +154,142 @@ class ChatController extends Controller
         ], 201);
     }
 
+    public function updateMessage(Request $request, Conversation $conversation, Message $message)
+    {
+        $user = $request->user();
+        $this->assertParticipant($conversation, $user->id);
+        $this->assertMessageInConversation($conversation, $message);
+        $this->touchPresence($user->id);
+
+        if ((int) $message->sender_id !== (int) $user->id) {
+            abort(403, 'You can only edit your own messages.');
+        }
+
+        if ($message->isUnsent()) {
+            return response()->json(['message' => 'Unsent messages cannot be edited.'], 422);
+        }
+
+        if (! $message->isWithinEditWindow()) {
+            return response()->json(['message' => 'Messages can only be edited within 15 minutes.'], 422);
+        }
+
+        $validated = $request->validate([
+            'body' => ['required', 'string', 'max:4000'],
+        ]);
+
+        $body = trim($validated['body']);
+        if ($body === '') {
+            return response()->json(['message' => 'Message cannot be empty.'], 422);
+        }
+
+        $message->forceFill([
+            'body' => $body,
+            'edited_at' => now(),
+        ])->save();
+
+        $message->load('sender:id,name,profile_picture');
+
+        return response()->json([
+            'message' => 'Message updated.',
+            'data' => $this->serializeMessage($message, $user->id),
+        ]);
+    }
+
+    public function unsendMessage(Request $request, Conversation $conversation, Message $message)
+    {
+        $user = $request->user();
+        $this->assertParticipant($conversation, $user->id);
+        $this->assertMessageInConversation($conversation, $message);
+        $this->touchPresence($user->id);
+
+        if ((int) $message->sender_id !== (int) $user->id) {
+            abort(403, 'You can only unsend your own messages.');
+        }
+
+        if ($message->isUnsent()) {
+            return response()->json([
+                'message' => 'Message already unsent.',
+                'data' => $this->serializeMessage($message, $user->id),
+            ]);
+        }
+
+        $message->forceFill([
+            'body' => '',
+            'unsent_at' => now(),
+            'edited_at' => null,
+        ])->save();
+
+        $message->load('sender:id,name,profile_picture');
+
+        return response()->json([
+            'message' => 'Message unsent.',
+            'data' => $this->serializeMessage($message, $user->id),
+        ]);
+    }
+
+    public function heartbeat(Request $request)
+    {
+        $user = $request->user();
+        $this->touchPresence($user->id);
+
+        return response()->json([
+            'ok' => true,
+            'online' => true,
+            'last_seen_at' => $this->lastSeenAt($user->id),
+        ]);
+    }
+
+    public function typing(Request $request, Conversation $conversation)
+    {
+        $user = $request->user();
+        $this->assertParticipant($conversation, $user->id);
+        $this->touchPresence($user->id);
+
+        $validated = $request->validate([
+            'typing' => ['required', 'boolean'],
+        ]);
+
+        if ($validated['typing']) {
+            Cache::put(
+                $this->typingKey($conversation->id, $user->id),
+                true,
+                now()->addSeconds(self::TYPING_TTL_SECONDS)
+            );
+        } else {
+            $this->clearTyping($conversation->id, $user->id);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function state(Request $request, Conversation $conversation)
+    {
+        $user = $request->user();
+        $this->assertParticipant($conversation, $user->id);
+        $this->touchPresence($user->id);
+
+        $peerId = $conversation->peerIdFor($user->id);
+
+        return response()->json([
+            'conversation_id' => $conversation->id,
+            'peer_id' => $peerId,
+            'peer_online' => $this->isOnline($peerId),
+            'peer_typing' => (bool) Cache::get($this->typingKey($conversation->id, $peerId), false),
+            'peer_last_seen_at' => $this->lastSeenAt($peerId),
+        ]);
+    }
+
     private function assertParticipant(Conversation $conversation, int $userId): void
     {
         if (! $conversation->involves($userId)) {
             abort(403, 'You are not part of this conversation.');
+        }
+    }
+
+    private function assertMessageInConversation(Conversation $conversation, Message $message): void
+    {
+        if ((int) $message->conversation_id !== (int) $conversation->id) {
+            abort(404);
         }
     }
 
@@ -161,29 +307,53 @@ class ChatController extends Controller
             ->whereNull('read_at')
             ->count();
 
+        $peerId = $peer?->id;
+        $peerTyping = $peerId
+            ? (bool) Cache::get($this->typingKey($conversation->id, $peerId), false)
+            : false;
+
         return [
             'id' => $conversation->id,
-            'peer' => $peer ? [
-                'id' => $peer->id,
-                'name' => $peer->name,
-                'username' => $peer->username,
-                'role' => $peer->role,
-                'profile_picture' => $peer->profile_picture,
-            ] : null,
+            'peer' => $peer ? $this->serializeUser($peer) : null,
             'last_message' => $latest ? $this->serializeMessage($latest, $viewerId) : null,
+            'last_message_preview' => $latest
+                ? ($latest->isUnsent() ? 'Message unsent' : $latest->body)
+                : null,
             'last_message_at' => optional($conversation->last_message_at)?->toIso8601String(),
             'unread_count' => $unreadCount,
+            'peer_typing' => $peerTyping,
+        ];
+    }
+
+    private function serializeUser(User $user): array
+    {
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'username' => $user->username,
+            'role' => $user->role,
+            'profile_picture' => $user->profile_picture,
+            'online' => $this->isOnline($user->id),
+            'last_seen_at' => $this->lastSeenAt($user->id),
         ];
     }
 
     private function serializeMessage(Message $message, int $viewerId): array
     {
+        $isUnsent = $message->isUnsent();
+        $isMine = (int) $message->sender_id === $viewerId;
+
         return [
             'id' => $message->id,
             'conversation_id' => $message->conversation_id,
             'sender_id' => $message->sender_id,
-            'body' => $message->body,
-            'is_mine' => (int) $message->sender_id === $viewerId,
+            'body' => $isUnsent ? '' : $message->body,
+            'is_mine' => $isMine,
+            'is_unsent' => $isUnsent,
+            'edited_at' => optional($message->edited_at)?->toIso8601String(),
+            'unsent_at' => optional($message->unsent_at)?->toIso8601String(),
+            'can_edit' => $message->canBeEditedBy($viewerId),
+            'can_unsend' => $message->canBeUnsentBy($viewerId),
             'read_at' => optional($message->read_at)?->toIso8601String(),
             'created_at' => optional($message->created_at)?->toIso8601String(),
             'sender' => $message->relationLoaded('sender') && $message->sender ? [
@@ -192,5 +362,41 @@ class ChatController extends Controller
                 'profile_picture' => $message->sender->profile_picture,
             ] : null,
         ];
+    }
+
+    private function touchPresence(int $userId): void
+    {
+        Cache::put(
+            $this->presenceKey($userId),
+            now()->toIso8601String(),
+            now()->addSeconds(self::PRESENCE_TTL_SECONDS)
+        );
+    }
+
+    private function isOnline(int $userId): bool
+    {
+        return Cache::has($this->presenceKey($userId));
+    }
+
+    private function lastSeenAt(int $userId): ?string
+    {
+        $value = Cache::get($this->presenceKey($userId));
+
+        return is_string($value) && $value !== '' ? $value : null;
+    }
+
+    private function clearTyping(int $conversationId, int $userId): void
+    {
+        Cache::forget($this->typingKey($conversationId, $userId));
+    }
+
+    private function presenceKey(int $userId): string
+    {
+        return "chat:presence:{$userId}";
+    }
+
+    private function typingKey(int $conversationId, int $userId): string
+    {
+        return "chat:typing:{$conversationId}:{$userId}";
     }
 }

@@ -85,10 +85,15 @@ Route::middleware('auth:sanctum')->group(function () {
     // =====================================================
 
     Route::get('/chat/users', [ChatController::class, 'directory']);
+    Route::post('/chat/presence', [ChatController::class, 'heartbeat']);
     Route::get('/chat/conversations', [ChatController::class, 'conversations']);
     Route::post('/chat/conversations', [ChatController::class, 'open']);
     Route::get('/chat/conversations/{conversation}/messages', [ChatController::class, 'messages']);
     Route::post('/chat/conversations/{conversation}/messages', [ChatController::class, 'send']);
+    Route::patch('/chat/conversations/{conversation}/messages/{message}', [ChatController::class, 'updateMessage']);
+    Route::delete('/chat/conversations/{conversation}/messages/{message}', [ChatController::class, 'unsendMessage']);
+    Route::post('/chat/conversations/{conversation}/typing', [ChatController::class, 'typing']);
+    Route::get('/chat/conversations/{conversation}/state', [ChatController::class, 'state']);
 
     // =====================================================
     // WORKING STUDENT FEATURES
