@@ -63,10 +63,15 @@ class ChatMessagingTest extends TestCase
 
         Sanctum::actingAs($ben);
 
+        $this->assertNull(Message::query()->where('conversation_id', $conversationId)->value('delivered_at'));
+
         $this->getJson('/api/chat/conversations')
             ->assertOk()
             ->assertJsonPath('0.peer.id', $ana->id)
             ->assertJsonPath('0.unread_count', 1);
+
+        $this->assertNotNull(Message::query()->where('conversation_id', $conversationId)->value('delivered_at'));
+        $this->assertNull(Message::query()->where('conversation_id', $conversationId)->value('read_at'));
 
         $this->getJson("/api/chat/conversations/{$conversationId}/messages")
             ->assertOk()
@@ -498,6 +503,7 @@ class ChatMessagingTest extends TestCase
             $table->foreignId('conversation_id')->constrained('conversations')->cascadeOnDelete();
             $table->foreignId('sender_id')->constrained('users')->cascadeOnDelete();
             $table->text('body');
+            $table->timestamp('delivered_at')->nullable();
             $table->timestamp('read_at')->nullable();
             $table->timestamp('edited_at')->nullable();
             $table->timestamp('unsent_at')->nullable();

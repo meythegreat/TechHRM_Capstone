@@ -26,6 +26,7 @@ export interface ChatMessage {
   unsent_at?: string | null;
   can_edit?: boolean;
   can_unsend?: boolean;
+  delivered_at?: string | null;
   read_at: string | null;
   created_at: string | null;
   sender?: {

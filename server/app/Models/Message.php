@@ -13,6 +13,7 @@ class Message extends Model
         'conversation_id',
         'sender_id',
         'body',
+        'delivered_at',
         'read_at',
         'edited_at',
         'unsent_at',
@@ -21,6 +22,7 @@ class Message extends Model
     protected function casts(): array
     {
         return [
+            'delivered_at' => 'datetime',
             'read_at' => 'datetime',
             'edited_at' => 'datetime',
             'unsent_at' => 'datetime',

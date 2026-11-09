@@ -100,6 +100,16 @@ class ChatController extends Controller
             ->all();
         $this->warmOpenAttendances($peerIds);
 
+        // Inbox fetch counts as delivery: recipient received the message without opening the thread.
+        $conversationIds = $conversations->pluck('id')->all();
+        if ($conversationIds !== []) {
+            Message::query()
+                ->whereIn('conversation_id', $conversationIds)
+                ->where('sender_id', '!=', $user->id)
+                ->whereNull('delivered_at')
+                ->update(['delivered_at' => now()]);
+        }
+
         return response()->json(
             $conversations
                 ->map(fn (Conversation $conversation) => $this->serializeConversation($conversation, $user->id))
@@ -299,6 +309,12 @@ class ChatController extends Controller
         $user = $request->user();
         $this->assertParticipant($conversation, $user->id);
         $this->touchPresence($user->id);
+
+        Message::query()
+            ->where('conversation_id', $conversation->id)
+            ->where('sender_id', '!=', $user->id)
+            ->whereNull('delivered_at')
+            ->update(['delivered_at' => now()]);
 
         Message::query()
             ->where('conversation_id', $conversation->id)
@@ -873,6 +889,7 @@ class ChatController extends Controller
             'unsent_at' => optional($message->unsent_at)?->toIso8601String(),
             'can_edit' => $message->canBeEditedBy($viewerId),
             'can_unsend' => $message->canBeUnsentBy($viewerId),
+            'delivered_at' => optional($message->delivered_at)?->toIso8601String(),
             'read_at' => optional($message->read_at)?->toIso8601String(),
             'created_at' => optional($message->created_at)?->toIso8601String(),
             'sender' => $message->relationLoaded('sender') && $message->sender ? [

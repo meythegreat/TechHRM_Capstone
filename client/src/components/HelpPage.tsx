@@ -187,11 +187,11 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Messages',
         summary: 'Chat with any signed-in TechHRM user.',
         about:
-            'Messages lets you send direct or group chats to supervisors, WSPO staff, or other students. Your messages show Delivered after they send, then Seen once the other person opens the conversation. On phones, open a chat for a full-screen thread and use Back to return to the inbox. On desktop, chat heads open compact floating windows you can minimize or close.',
+            'Messages lets you send direct or group chats to supervisors, WSPO staff, or other students. Outbound messages show Sent, then Delivered when the other person receives them in their inbox, then Seen when they open the chat. On phones, use search and New Message from the inbox list; open a chat for a full-screen thread and Back to return.',
         audience: ['Student'],
         steps: [
             'Click Messages in the left menu, or use a chat head at the bottom-right (desktop).',
-            'Search for a person by name, username, or role, or create a group chat.',
+            'On mobile, search the inbox or tap New Message to pick a recipient. On desktop, search or create a group chat.',
             'Open their conversation, type your message, then press Enter or click Send.',
             'Archive a chat to hide it, then restore it later from the Archived tab. Delete removes it for you only.',
             'If you get a New Message notification, open it to jump back to Messages.',
@@ -486,11 +486,11 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Messages',
         summary: 'Chat with students, supervisors, and other staff.',
         about:
-            'Messages supports direct and group chats for any signed-in TechHRM account. Sent messages show Delivered, then Seen when the other person opens the thread. Mobile shows inbox or chat one at a time. Desktop chat heads open compact floating windows (~360×500) without resizing the Messages page.',
+            'Messages supports direct and group chats for any signed-in TechHRM account. Receipts progress from Sent → Delivered (inbox received) → Seen (thread opened). Mobile uses a full inbox list with search and New Message; desktop keeps the split layout and floating chat heads.',
         audience: ['Supervisor', 'WSPO Staff', 'Super Admin'],
         steps: [
             'Click Messages in the left menu, or open a chat head at the bottom-right (desktop only).',
-            'Search for the person you need, or create a group chat with several members.',
+            'Search the inbox, tap New Message on mobile to pick a recipient, or create a group chat on desktop.',
             'Type your reply and press Enter or click Send.',
             'Archive chats you want out of the way, restore them from Archived, or delete a chat for yourself only.',
             'Click a New Message notification to return to this page.',
