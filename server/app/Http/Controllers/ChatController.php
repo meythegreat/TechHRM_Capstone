@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Attendance;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\Notification;
@@ -16,12 +17,16 @@ class ChatController extends Controller
 
     private const TYPING_TTL_SECONDS = 5;
 
+    /** @var array<int, Attendance|null> */
+    private array $openAttendanceByUser = [];
+
     public function directory(Request $request)
     {
         $user = $request->user();
         $this->touchPresence($user->id);
 
         $query = User::query()
+            ->with('profile')
             ->whereKeyNot($user->id)
             ->orderBy('name');
 
@@ -36,10 +41,13 @@ class ChatController extends Controller
 
         $users = $query
             ->limit(50)
-            ->get(['id', 'name', 'username', 'role', 'profile_picture'])
-            ->map(fn (User $peer) => $this->serializeUser($peer));
+            ->get(['id', 'name', 'username', 'role', 'profile_picture']);
 
-        return response()->json($users);
+        $this->warmOpenAttendances($users->pluck('id')->all());
+
+        return response()->json(
+            $users->map(fn (User $peer) => $this->serializeUser($peer))->values()
+        );
     }
 
     public function conversations(Request $request)
@@ -54,18 +62,57 @@ class ChatController extends Controller
             })
             ->with([
                 'userLow:id,name,username,role,profile_picture',
+                'userLow.profile',
                 'userHigh:id,name,username,role,profile_picture',
+                'userHigh.profile',
                 'latestMessage.sender:id,name,profile_picture',
             ])
             ->orderByDesc('last_message_at')
             ->orderByDesc('id')
-            ->get()
-            ->map(function (Conversation $conversation) use ($user) {
-                return $this->serializeConversation($conversation, $user->id);
+            ->get();
+
+        $peerIds = $conversations->map(fn (Conversation $conversation) => $conversation->peerIdFor($user->id))->all();
+        $this->warmOpenAttendances($peerIds);
+
+        return response()->json(
+            $conversations
+                ->map(fn (Conversation $conversation) => $this->serializeConversation($conversation, $user->id))
+                ->values()
+        );
+    }
+
+    public function activeNow(Request $request)
+    {
+        $viewer = $request->user();
+        $this->touchPresence($viewer->id);
+
+        $rows = Attendance::query()
+            ->whereNull('time_out')
+            ->with(['user.profile'])
+            ->whereHas('user')
+            ->orderByDesc('time_in')
+            ->limit(40)
+            ->get();
+
+        $this->warmOpenAttendances($rows->pluck('user_id')->all());
+
+        $people = $rows
+            ->map(function (Attendance $attendance) use ($viewer) {
+                $person = $attendance->user;
+                if (! $person || (int) $person->id === (int) $viewer->id) {
+                    return null;
+                }
+
+                return $this->serializeUser($person, $attendance);
             })
+            ->filter()
+            ->unique('id')
             ->values();
 
-        return response()->json($conversations);
+        return response()->json([
+            'people' => $people,
+            'count' => $people->count(),
+        ]);
     }
 
     public function open(Request $request)
@@ -82,13 +129,16 @@ class ChatController extends Controller
             return response()->json(['message' => 'You cannot start a chat with yourself.'], 422);
         }
 
-        $peer = User::query()->findOrFail($peerId);
+        $peer = User::query()->with('profile')->findOrFail($peerId);
         $conversation = Conversation::findOrCreateBetween($user->id, $peer->id);
         $conversation->load([
             'userLow:id,name,username,role,profile_picture',
+            'userLow.profile',
             'userHigh:id,name,username,role,profile_picture',
+            'userHigh.profile',
             'latestMessage.sender:id,name,profile_picture',
         ]);
+        $this->warmOpenAttendances([$peer->id]);
 
         return response()->json($this->serializeConversation($conversation, $user->id));
     }
@@ -269,6 +319,9 @@ class ChatController extends Controller
         $this->touchPresence($user->id);
 
         $peerId = $conversation->peerIdFor($user->id);
+        $peer = User::query()->with('profile')->find($peerId);
+        $this->warmOpenAttendances([$peerId]);
+        $open = $this->openAttendanceFor($peerId);
 
         return response()->json([
             'conversation_id' => $conversation->id,
@@ -276,6 +329,12 @@ class ChatController extends Controller
             'peer_online' => $this->isOnline($peerId),
             'peer_typing' => (bool) Cache::get($this->typingKey($conversation->id, $peerId), false),
             'peer_last_seen_at' => $this->lastSeenAt($peerId),
+            'peer_assignment' => $peer ? $this->assignmentFor($peer) : 'Unassigned',
+            'peer_clocked_in' => $open !== null,
+            'peer_clocked_in_since' => optional($open?->time_in)?->toIso8601String(),
+            'peer_work_type' => $open
+                ? trim((string) ($open->work_type ?: $open->attendance_type ?: 'On duty'))
+                : null,
         ]);
     }
 
@@ -325,8 +384,11 @@ class ChatController extends Controller
         ];
     }
 
-    private function serializeUser(User $user): array
+    private function serializeUser(User $user, ?Attendance $openAttendance = null): array
     {
+        $open = $openAttendance ?? $this->openAttendanceFor($user->id);
+        $assignment = $this->assignmentFor($user);
+
         return [
             'id' => $user->id,
             'name' => $user->name,
@@ -335,7 +397,96 @@ class ChatController extends Controller
             'profile_picture' => $user->profile_picture,
             'online' => $this->isOnline($user->id),
             'last_seen_at' => $this->lastSeenAt($user->id),
+            'assignment' => $assignment,
+            'assigned_office' => trim((string) ($user->profile?->assigned_office ?? '')) ?: null,
+            'clocked_in' => $open !== null,
+            'clocked_in_since' => optional($open?->time_in)?->toIso8601String(),
+            'work_type' => $open
+                ? trim((string) ($open->work_type ?: $open->attendance_type ?: 'On duty'))
+                : null,
         ];
+    }
+
+    private function assignmentFor(User $user): string
+    {
+        $profile = $user->profile;
+        if (! $profile) {
+            return match ($user->role) {
+                'Super Admin' => 'System',
+                'WSPO Staff' => 'WSPO',
+                default => 'Unassigned',
+            };
+        }
+
+        if ($user->role === 'Supervisor') {
+            $departments = $profile->supervised_departments;
+            if (is_array($departments) && count($departments) > 0) {
+                return implode(', ', $departments);
+            }
+        }
+
+        $label = trim((string) ($profile->assignment_label ?? ''));
+        if ($label !== '') {
+            return $label;
+        }
+
+        $office = trim((string) ($profile->assigned_office ?? ''));
+        if ($office !== '') {
+            return $office;
+        }
+
+        return match ($user->role) {
+            'WSPO Staff' => 'WSPO',
+            'Super Admin' => 'System',
+            default => 'Unassigned',
+        };
+    }
+
+    /**
+     * @param  array<int|string|null>  $userIds
+     */
+    private function warmOpenAttendances(array $userIds): void
+    {
+        $ids = collect($userIds)
+            ->filter(fn ($id) => $id !== null && $id !== '')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        $missing = array_values(array_filter(
+            $ids,
+            fn (int $id) => ! array_key_exists($id, $this->openAttendanceByUser)
+        ));
+
+        if ($missing === []) {
+            return;
+        }
+
+        foreach ($missing as $id) {
+            $this->openAttendanceByUser[$id] = null;
+        }
+
+        Attendance::query()
+            ->whereNull('time_out')
+            ->whereIn('user_id', $missing)
+            ->orderByDesc('time_in')
+            ->get()
+            ->each(function (Attendance $attendance) {
+                $userId = (int) $attendance->user_id;
+                if (($this->openAttendanceByUser[$userId] ?? null) === null) {
+                    $this->openAttendanceByUser[$userId] = $attendance;
+                }
+            });
+    }
+
+    private function openAttendanceFor(int $userId): ?Attendance
+    {
+        if (! array_key_exists($userId, $this->openAttendanceByUser)) {
+            $this->warmOpenAttendances([$userId]);
+        }
+
+        return $this->openAttendanceByUser[$userId] ?? null;
     }
 
     private function serializeMessage(Message $message, int $viewerId): array

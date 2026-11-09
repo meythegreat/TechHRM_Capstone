@@ -77,7 +77,12 @@
   color: #1d4ed8 !important;
 }
 
-  html.dark :is(.bg-white, .hover\:bg-white:hover, .focus\:bg-white:focus) {
+  html.dark :is(
+    .bg-white,
+    .hover\:bg-white:hover,
+    .focus\:bg-white:focus,
+    .focus-within\:bg-white:focus-within
+  ) {
     background-color: #141c2e;
   }
 
@@ -557,6 +562,24 @@ html[data-pwa-install='open'] .install-clearance {
   html.dark .chat-unsent {
     background-color: rgb(23 32 51 / 0.72);
     border-color: #2a3950;
+    color: #94a3b8;
+  }
+
+  /* Keep chat fields dark on focus instead of flashing bright white. */
+  html.dark .chat-composer,
+  html.dark .chat-composer:focus,
+  html.dark .chat-composer:focus-within {
+    background-color: #172033;
+    color: #e2e8f0;
+  }
+
+  html.dark .chat-composer:focus,
+  html.dark .chat-composer:focus-within {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgb(37 99 235 / 0.28);
+  }
+
+  html.dark .chat-composer::placeholder {
     color: #94a3b8;
   }
 }

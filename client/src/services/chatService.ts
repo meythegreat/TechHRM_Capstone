@@ -8,6 +8,11 @@ export interface ChatUser {
   profile_picture?: string | null;
   online?: boolean;
   last_seen_at?: string | null;
+  assignment?: string | null;
+  assigned_office?: string | null;
+  clocked_in?: boolean;
+  clocked_in_since?: string | null;
+  work_type?: string | null;
 }
 
 export interface ChatMessage {
@@ -46,6 +51,15 @@ export interface ChatConversationState {
   peer_online: boolean;
   peer_typing: boolean;
   peer_last_seen_at: string | null;
+  peer_assignment?: string | null;
+  peer_clocked_in?: boolean;
+  peer_clocked_in_since?: string | null;
+  peer_work_type?: string | null;
+}
+
+export interface ChatActiveNowResponse {
+  people: ChatUser[];
+  count: number;
 }
 
 export const chatService = {
@@ -57,6 +71,14 @@ export const chatService = {
   listConversations: async (): Promise<ChatConversation[]> => {
     const response = await axios.get('/api/chat/conversations');
     return Array.isArray(response.data) ? response.data : [];
+  },
+
+  listActiveNow: async (): Promise<ChatActiveNowResponse> => {
+    const response = await axios.get('/api/chat/active-now');
+    return {
+      people: Array.isArray(response.data?.people) ? response.data.people : [],
+      count: Number(response.data?.count || 0),
+    };
   },
 
   openConversation: async (userId: number): Promise<ChatConversation> => {
