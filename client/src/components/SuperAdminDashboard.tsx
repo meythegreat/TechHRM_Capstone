@@ -34,7 +34,7 @@ interface ActiveStudent {
         user?: {
         name?: string;
         profile_picture?: string | null;
-        profile?: { assigned_office?: string | null; student_id_number?: string | null } | null;
+        profile?: { assigned_office?: string | null; assignment_label?: string | null; student_id_number?: string | null } | null;
     } | null;
 }
 
@@ -473,7 +473,7 @@ const SuperAdminDashboard = () => {
                                                     </span>
                                                 )}
                                                 <p className="text-xs font-medium text-slate-500 mt-0.5 truncate max-w-[250px] sm:max-w-full">
-                                                    {record.user?.profile?.assigned_office || 'Unassigned'}
+                                                    {record.user?.profile?.assignment_label || record.user?.profile?.assigned_office || 'Unassigned'}
                                                 </p>
                                             </div>
                                             <div className="flex flex-col items-end gap-1.5 shrink-0">
@@ -563,7 +563,7 @@ const SuperAdminDashboard = () => {
                                                                 <UserAvatar name={record.user?.name} picture={record.user?.profile_picture} className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs" />
                                                                 <div>
                                                                 <p className="font-bold text-slate-900 text-sm">{record.user?.name || 'Unknown'}</p>
-                                                                <p className="text-xs text-slate-500">{record.user?.profile?.assigned_office || 'Unassigned'}</p>
+                                                                <p className="text-xs text-slate-500">{record.user?.profile?.assignment_label || record.user?.profile?.assigned_office || 'Unassigned'}</p>
                                                                 </div>
                                                             </div>
                                                             <span className="flex items-center gap-1.5 shrink-0">

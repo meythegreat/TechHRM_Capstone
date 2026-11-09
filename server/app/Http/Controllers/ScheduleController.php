@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Office;
 use App\Models\Schedule;
+use Illuminate\Support\Facades\Schema;
 use App\Models\SemesterTerm;
 use App\Models\User;
 use App\Support\SuperAdminAudit;
@@ -18,6 +19,9 @@ class ScheduleController extends Controller
     public function mySchedule(Request $request)
     {
         $schedules = Schedule::where('user_id', $request->user()->id)->get();
+        $order = array_flip(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
+        $schedules = $schedules->sortBy(fn (Schedule $shift) => sprintf('%02d-%s', $order[$shift->day] ?? 8, $shift->time))->values();
+
         return response()->json($schedules);
     }
 
@@ -27,16 +31,24 @@ class ScheduleController extends Controller
         $user = $request->user();
         if ($user->role === 'Super Admin') {
             $query = Schedule::with(['user' => function ($relation) {
-                $relation->withTrashed()->select('id', 'name', 'profile_picture', 'deleted_at');
+                $relation->withTrashed()->select('id', 'name', 'profile_picture', 'deleted_at')->with('profile');
             }]);
         } else {
-            $query = Schedule::with('user:id,name,profile_picture')->whereHas('user');
+            $query = Schedule::with(['user:id,name,profile_picture', 'user.profile'])->whereHas('user');
         }
 
         // IF THE USER IS A SUPERVISOR: Strict Department Filter
-        if ($user->role === 'Supervisor') {
-            $myDepartment = $user->profile->assigned_office ?? 'Unassigned';
-            $query->where('department', $myDepartment);
+        $accounts = app(UserController::class);
+        if ($accounts->usesSupervisorScope($user)) {
+            $areas = $accounts->supervisedOfficeAreas($user);
+            if ($areas === []) {
+                $query->whereRaw('0 = 1');
+            } else {
+                $query->where(function ($rows) use ($areas) {
+                    $rows->whereIn('department', $areas)
+                        ->orWhereHas('user.profile', fn ($profile) => $profile->whereIn('assigned_office', $areas));
+                });
+            }
         }
 
         if (in_array($request->query('kind'), ['work', 'class'], true)) {
@@ -59,11 +71,13 @@ class ScheduleController extends Controller
             $query->where('day', $day);
         }
 
+        $this->orderByWeekday($query);
+
         if ($request->boolean('audit') && $user->role === 'Super Admin') {
-            return response()->json($query->latest()->get());
+            return response()->json($query->get());
         }
 
-        $schedules = $query->latest()->paginate(10);
+        $schedules = $query->paginate(10);
         return response()->json($schedules);
     }
 
@@ -74,15 +88,21 @@ class ScheduleController extends Controller
     public function organization(Request $request)
     {
         $user = $request->user();
-        abort_unless(in_array($user->role, ['Student', 'Supervisor', 'WSPO Staff', 'Super Admin'], true), 403);
+        abort_unless(in_array($user->role, ['Student', 'Supervisor', 'Department Secretary', 'WSPO Staff', 'Super Admin'], true), 403);
 
-        $query = Schedule::with(['user:id,name,profile_picture', 'user.profile:id,user_id,assigned_office'])
+        $profileColumns = 'id,user_id,assigned_office';
+        if (Schema::hasColumn('user_profiles', 'assignment_area')) {
+            $profileColumns .= ',assignment_area';
+        }
+
+        $query = Schedule::with(['user:id,name,profile_picture', 'user.profile:'.$profileColumns])
             ->whereHas('user');
 
-        $officeScoped = $user->role === 'Supervisor';
+        $accounts = app(UserController::class);
+        $officeScoped = $user->role === 'Supervisor' || $user->role === 'Department Secretary';
         if ($officeScoped) {
             $user->loadMissing('profile');
-            $areas = app(UserController::class)->supervisedOfficeAreas($user);
+            $areas = $accounts->supervisedOfficeAreas($user);
             if ($areas === []) {
                 $query->whereRaw('0 = 1');
             } else {
@@ -92,7 +112,7 @@ class ScheduleController extends Controller
             }
         }
 
-        $weekdayOrder = array_flip(['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
+        $weekdayOrder = array_flip(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
         $schedules = $query->get()
             ->map(function (Schedule $shift) {
                 $assignedOffice = trim((string) ($shift->user?->profile?->assigned_office ?? ''));
@@ -108,6 +128,8 @@ class ScheduleController extends Controller
                     'instructor' => $shift->instructor,
                     'department' => $shift->department,
                     'assigned_office' => $assignedOffice !== '' ? $assignedOffice : $shift->department,
+                    'assignment_label' => $shift->user?->profile?->assignment_label
+                        ?: ($assignedOffice !== '' ? $assignedOffice : $shift->department),
                     'student_name' => $shift->user?->name ?? 'Student',
                     'profile_picture' => $shift->user?->profile_picture,
                 ];
@@ -142,6 +164,21 @@ class ScheduleController extends Controller
             'offices' => $offices,
             'schedules' => $schedules,
         ]);
+    }
+
+    private function orderByWeekday($query): void
+    {
+        $query->orderByRaw("CASE day
+            WHEN 'Monday' THEN 1
+            WHEN 'Tuesday' THEN 2
+            WHEN 'Wednesday' THEN 3
+            WHEN 'Thursday' THEN 4
+            WHEN 'Friday' THEN 5
+            WHEN 'Saturday' THEN 6
+            WHEN 'Sunday' THEN 7
+            ELSE 8 END")
+            ->orderBy('time')
+            ->orderBy('id');
     }
 
     private function scheduleStartMinutes(string $time): int

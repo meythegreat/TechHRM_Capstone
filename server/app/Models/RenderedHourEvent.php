@@ -109,10 +109,6 @@ class RenderedHourEvent extends Model
     }
 
     /**
-     * On time adds the event hours. A late scan adds nothing and deducts nothing.
-     * Absent deducts the same hours. Special requests apply the entered hours directly.
-     */
-    /**
      * Students who may be marked for this activity.
      * Grouped activities use the roster saved with the event.
      * Older activities that were not tied to a group keep their previous audience.
@@ -140,10 +136,11 @@ class RenderedHourEvent extends Model
             return $this->direction === 'deduct' ? -$hours : $hours;
         }
 
+        // Selected members who scan on time receive this meeting's hours.
+        // Absent and late scans are awarded nothing.
         return match ($status) {
             'on_time' => $hours,
-            'late', RenderedHourEntry::TIMED_IN => 0.0,
-            'absent' => -$hours,
+            'late', 'absent', RenderedHourEntry::TIMED_IN => 0.0,
             default => 0.0,
         };
     }

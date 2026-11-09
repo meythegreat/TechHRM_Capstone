@@ -17,6 +17,7 @@ interface DashboardData {
     logged_hours: number;
     penalty_hours: number;
     required_hours: number;
+    special_hours_request?: boolean;
     upcoming_schedules: any[];
     performance_score: number;
     has_activity: boolean;
@@ -28,7 +29,7 @@ const emptyDashboard = (): DashboardData => ({
     total_hours_rendered: 0,
     logged_hours: 0,
     penalty_hours: 0,
-    required_hours: 100,
+    required_hours: 80,
     upcoming_schedules: [],
     performance_score: 0,
     has_activity: false,
@@ -85,7 +86,7 @@ const StudentOverview = () => {
                     setUserName(profile.name);
                     localStorage.setItem('user_name', profile.name);
                 }
-                const office = profile.profile?.assigned_office || '';
+                const office = profile.profile?.assignment_label || profile.profile?.assigned_office || '';
                 setAssignedOffice(office || localStorage.getItem('assigned_office') || '');
                 if (office) localStorage.setItem('assigned_office', office);
                 setSupervisorNames(Array.isArray(profile.department_supervisors) ? profile.department_supervisors : []);
@@ -145,7 +146,7 @@ const StudentOverview = () => {
     }
 
     const rendered = Number(data?.total_hours_rendered ?? 0);
-    const required = data?.required_hours ?? 100;
+    const required = data?.required_hours ?? 80;
     const progressPercentage = required > 0 ? Math.min((rendered / required) * 100, 100) : 0;
     const remaining = Math.max(required - rendered, 0);
     const todayName = new Date().toLocaleDateString(undefined, { weekday: 'long' });
@@ -204,7 +205,7 @@ const StudentOverview = () => {
                     <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-500">
                         {progressPercentage >= 100
                             ? 'You have completed the required hours for this term.'
-                            : `${remaining.toFixed(1)} hours left to reach your ${required}-hour requirement.`}
+                            : `${remaining.toFixed(1)} hours left to reach your ${required}-hour requirement.${data?.special_hours_request ? ' Special request: 100 hours instead of 80.' : ''}`}
                     </p>
                 </div>
 

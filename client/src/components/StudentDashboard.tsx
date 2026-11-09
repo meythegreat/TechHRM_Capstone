@@ -91,6 +91,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
         year_level: '...',
         phone_number: 'Loading...',
         assigned_office: 'Loading...',
+        special_hours_request: false,
         supervisors: [] as string[]
     });
 
@@ -140,7 +141,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                 setFullName(user.name);
                 localStorage.setItem('user_name', user.name);
             }
-            const office = user.profile?.assigned_office || 'Unassigned';
+            const office = user.profile?.assignment_label || user.profile?.assigned_office || 'Unassigned';
             setAssignedOffice(office);
             if (user.profile?.assigned_office) {
                 localStorage.setItem('assigned_office', user.profile.assigned_office);
@@ -150,7 +151,8 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                 course: user.profile?.course || 'Not Assigned',
                 year_level: user.profile?.year_level || 'N/A',
                 phone_number: user.phone_number || 'No Contact Provided',
-                assigned_office: user.profile?.assigned_office || 'Not Assigned',
+                assigned_office: user.profile?.assignment_label || user.profile?.assigned_office || 'Not Assigned',
+                special_hours_request: Boolean(user.profile?.special_hours_request),
                 supervisors: Array.isArray(user.department_supervisors) ? user.department_supervisors : []
             });
             setAccountPhone(user.phone_number || '');
@@ -785,6 +787,9 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                                 <div>
                                                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Assigned Office</label>
                                                     <input type="text" disabled value={studentProfile.assigned_office} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-bold opacity-80 cursor-not-allowed" />
+                                                    {studentProfile.special_hours_request && (
+                                                        <p className="mt-2 text-xs font-semibold text-violet-700">Special request · 100 hours instead of 80</p>
+                                                    )}
                                                     <p className="mt-2 text-xs font-semibold text-indigo-700">
                                                         Supervisor: {studentProfile.supervisors.length > 0 ? studentProfile.supervisors.join(', ') : 'No supervisor assigned'}
                                                     </p>

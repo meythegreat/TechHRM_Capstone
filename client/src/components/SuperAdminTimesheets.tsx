@@ -16,7 +16,7 @@ interface AttendanceRecord {
     user?: {
         name?: string;
         deleted_at?: string | null;
-        profile?: { assigned_office?: string | null; student_id_number?: string | null } | null;
+        profile?: { assigned_office?: string | null; assignment_label?: string | null; student_id_number?: string | null } | null;
     } | null;
     account_deleted?: boolean;
 }
@@ -65,7 +65,7 @@ const SuperAdminTimesheets = () => {
     const filtered = useMemo(() => {
         const query = search.trim().toLowerCase();
         return records.filter((record) => {
-            const office = record.user?.profile?.assigned_office || 'Unassigned';
+            const office = record.user?.profile?.assignment_label || record.user?.profile?.assigned_office || 'Unassigned';
             if (department && office !== department) return false;
             if (!query) return true;
             const haystack = [record.user?.name, record.user?.profile?.student_id_number, office, record.status]
@@ -166,7 +166,7 @@ const SuperAdminTimesheets = () => {
                                             </span>
                                         )}
                                     </td>
-                                    <td className="px-6 py-4 text-sm font-semibold text-slate-700">{record.user?.profile?.assigned_office || 'Unassigned'}</td>
+                                    <td className="px-6 py-4 text-sm font-semibold text-slate-700">{record.user?.profile?.assignment_label || record.user?.profile?.assigned_office || 'Unassigned'}</td>
                                     <td className="px-6 py-4 text-sm font-medium text-slate-700">{formatWhen(record.time_in)}</td>
                                     <td className="px-6 py-4 text-sm font-medium text-slate-700">{record.time_out ? formatWhen(record.time_out) : 'Still in'}</td>
                                     <td className="px-6 py-4 text-sm font-semibold text-slate-900">{record.rendered_hours ?? '—'}</td>

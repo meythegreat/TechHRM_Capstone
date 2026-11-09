@@ -13,6 +13,9 @@ export interface HourStudentRow {
   course?: string | null;
   course_abbreviation?: string | null;
   assigned_office?: string | null;
+  assignment_area?: string | null;
+  assignment_label?: string | null;
+  special_hours_request?: boolean;
   office_abbreviation?: string | null;
   year_level?: number | null;
   dtr_hours: number;
@@ -94,7 +97,9 @@ const dutyMonth = (start?: string) => {
 const cell = 'border border-black px-1 py-1 text-[10px] align-middle';
 
 const assignmentArea = (student: HourStudentRow) =>
-  student.office_abbreviation?.trim() || student.assigned_office || '—';
+  student.assignment_label?.trim()
+  || [student.office_abbreviation?.trim() || student.assigned_office, student.assignment_area?.trim()].filter(Boolean).join(' - ')
+  || '—';
 
 const courseYear = (student: HourStudentRow) => {
   const course = student.course_abbreviation?.trim() || student.course;
@@ -251,7 +256,10 @@ export function HoursSummarySheet({ report, rate }: { report: HoursReport | null
                 </tr>
                 {group.students.map((student) => (
                   <tr key={student.user_id}>
-                    <td className={cell}>{student.name}</td>
+                    <td className={cell}>
+                      {student.name}
+                      {student.special_hours_request ? ' · Special request 100 hrs' : ''}
+                    </td>
                     <td className={cell}>{assignmentArea(student)}</td>
                     <td className={cell}>{courseYear(student)}</td>
                     <td className={`${cell} text-right`}>{hoursText(renderedHours(student))}</td>

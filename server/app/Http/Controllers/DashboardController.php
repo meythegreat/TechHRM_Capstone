@@ -9,6 +9,7 @@ use App\Models\ActivityLog;
 use App\Models\DisciplinaryRecord;
 use App\Models\Schedule;
 use App\Support\HourLimits;
+use App\Support\WorkRequirement;
 use Carbon\Carbon;
 
 class DashboardController extends Controller
@@ -22,8 +23,8 @@ class DashboardController extends Controller
         $attendanceQuery = Attendance::query();
 
         // Supervisors only see working students assigned to their supervised departments.
-        if ($user->role === 'Supervisor') {
-            $areas = $this->supervisedDepartmentAreas($user);
+        if (app(UserController::class)->usesSupervisorScope($user)) {
+            $areas = app(UserController::class)->supervisedOfficeAreas($user);
 
             if ($areas === []) {
                 $studentsQuery->whereRaw('0 = 1');
@@ -91,7 +92,7 @@ class DashboardController extends Controller
                     'profile_picture' => $log->admin?->profile_picture,
                     'action' => $log->action,
                     'description' => $log->description,
-                    'office' => $log->admin?->profile?->assigned_office,
+                    'office' => $log->admin?->profile?->assignment_label ?: $log->admin?->profile?->assigned_office,
                     'created_at' => $log->created_at,
                 ];
             });
@@ -112,7 +113,7 @@ class DashboardController extends Controller
                     'description' => $clockedOut
                         ? ($activity ? 'timed out of an activity.' : 'clocked out of their shift.')
                         : ($activity ? 'clocked in for an activity.' : 'clocked in for their shift.'),
-                    'office' => $record->user?->profile?->assigned_office,
+                    'office' => $record->user?->profile?->assignment_label ?: $record->user?->profile?->assigned_office,
                     'created_at' => $record->updated_at,
                 ];
             });
@@ -127,7 +128,7 @@ class DashboardController extends Controller
 
         $assignedStudents = [];
         $rosterQuery = null;
-        if ($user->role === 'Supervisor') {
+        if (app(UserController::class)->usesSupervisorScope($user)) {
             $rosterQuery = clone $studentsQuery;
         } elseif (app(UserController::class)->isWspoDepartmentSupervisor($user)) {
             $wspoOffices = app(UserController::class)->officeNames('WSPO');
@@ -154,6 +155,10 @@ class DashboardController extends Controller
                         'year_level' => $profile?->year_level,
                         'gender' => $profile?->gender,
                         'assigned_office' => $profile?->assigned_office,
+                        'assignment_area' => $profile?->assignment_area,
+                        'assignment_label' => $profile?->assignment_label ?: $profile?->assigned_office,
+                        'special_hours_request' => (bool) $profile?->special_hours_request,
+                        'required_hours' => WorkRequirement::hoursFor($student),
                         'duty_type' => $profile?->duty_type,
                         'duty_request' => $profile?->duty_request,
                     ];
@@ -178,7 +183,7 @@ class DashboardController extends Controller
     public function studentOverview(Request $request)
     {
         $user = $request->user();
-        $requiredHours = 100.0;
+        $requiredHours = WorkRequirement::hoursFor($user);
 
         $records = Attendance::where('user_id', $user->id)->get();
         $totalRendered = $records->sum(function (Attendance $record) {
@@ -259,6 +264,7 @@ class DashboardController extends Controller
             'logged_hours' => round($totalRendered, 2),
             'penalty_hours' => round($penaltyHours, 2),
             'required_hours' => $requiredHours,
+            'special_hours_request' => (bool) $user->profile?->special_hours_request,
             'performance_score' => $performance,
             'has_activity' => $hasActivity,
             'violations' => $openViolations->count(),
@@ -275,8 +281,8 @@ class DashboardController extends Controller
      */
     private function departmentStudentIds(User $user): ?array
     {
-        if ($user->role === 'Supervisor') {
-            $areas = $this->supervisedDepartmentAreas($user);
+        if (app(UserController::class)->usesSupervisorScope($user)) {
+            $areas = app(UserController::class)->supervisedOfficeAreas($user);
         } elseif (app(UserController::class)->isWspoDepartmentSupervisor($user)) {
             $areas = app(UserController::class)->officeNames('WSPO');
         } else {

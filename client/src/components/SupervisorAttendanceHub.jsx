@@ -50,8 +50,8 @@ const SupervisorAttendanceHub = () => {
     const userRole = localStorage.getItem('user_role') || '';
     const storedOffice = localStorage.getItem('assigned_office') || 'Unassigned';
     const canIssueActivity = userRole === 'WSPO Staff' && ['WSPO Coordinator', 'WSPO Secretary', 'WSPO President', 'WSPO', 'Unassigned', ''].includes(storedOffice);
-    const canManageCleaningGroups = userRole === 'WSPO Staff' && ['WSPO Coordinator', 'WSPO', ''].includes(storedOffice);
-    const supervisorDepartment = userRole === 'WSPO Staff' && ['WSPO Coordinator', 'WSPO', 'Unassigned', ''].includes(storedOffice)
+    const canManageCleaningGroups = userRole === 'WSPO Staff' && ['WSPO Coordinator', 'WSPO Secretary', 'WSPO', ''].includes(storedOffice);
+    const supervisorDepartment = userRole === 'WSPO Staff' && ['WSPO Coordinator', 'WSPO Secretary', 'WSPO', 'Unassigned', ''].includes(storedOffice)
         ? 'WSPO'
         : storedOffice;
     const [tokenScope, setTokenScope] = useState(supervisorDepartment);

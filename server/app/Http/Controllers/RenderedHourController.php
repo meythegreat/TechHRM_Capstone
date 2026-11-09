@@ -500,7 +500,7 @@ class RenderedHourController extends Controller
         return response()->json([
             'message' => count($missing) === 0
                 ? 'Everyone assigned already has a mark.'
-                : count($missing) . ' unmarked student' . (count($missing) === 1 ? '' : 's') . ' marked absent. Their hours will be deducted.',
+                : count($missing) . ' unmarked student' . (count($missing) === 1 ? '' : 's') . ' marked absent. No meeting hours were awarded.',
             'event' => $this->present($event->load('entries.student.profile')),
         ]);
     }
@@ -746,8 +746,8 @@ class RenderedHourController extends Controller
                 'activity_hours' => $entry->hours_delta,
                 'is_anomaly' => $status !== 'on_time',
                 'anomaly_reason' => $status === 'absent'
-                    ? 'Marked absent. The activity hours were deducted.'
-                    : ($status === 'late' ? 'Clocked in after the on-time window. No hours were added or deducted.' : null),
+                    ? 'Marked absent. No meeting hours were awarded.'
+                    : ($status === 'late' ? 'Clocked in after the on-time window. No hours were added.' : null),
             ];
             if ($status === 'absent' && $attendance && !$attendance->time_out) {
                 $update['time_out'] = now();

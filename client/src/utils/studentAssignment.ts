@@ -46,6 +46,21 @@ export function formatYearLevel(yearLevel?: string | number | null): string | nu
     return `Yr ${raw}`;
 }
 
+/** Department or its acronym, then the specific area. Example: "CCS - Laboratory". */
+export function formatAssignment(office?: string | null, area?: string | null, abbreviation?: string | null): string {
+    const place = (office || '').trim();
+    const spot = (area || '').trim();
+    const given = (abbreviation || '').trim();
+    const paren = place.match(/\(([A-Za-z0-9]{2,12})\)\s*$/);
+    const group = groupFor(place);
+    const fromGroup = group && group[0] !== place ? group[0] : (group && group.length > 1 ? group[0] : '');
+    const short = given || (paren ? paren[1].toUpperCase() : '') || fromGroup;
+    const head = short || place;
+    if (!head) return spot;
+    if (!spot) return head;
+    return `${head} - ${spot}`;
+}
+
 export function withHomeDepartmentNote(
     label: string,
     course?: string | null,

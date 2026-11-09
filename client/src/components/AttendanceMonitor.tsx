@@ -308,7 +308,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                     student_id_number: student?.profile?.student_id_number || 'Not Assigned',
                     course: student?.profile?.course || 'Not Assigned',
                     year_level: student?.profile?.year_level != null ? String(student.profile.year_level) : 'N/A',
-                    assigned_office: student?.profile?.assigned_office || 'Unassigned',
+                    assigned_office: student?.profile?.assignment_label || student?.profile?.assigned_office || 'Unassigned',
                     duty_type: student?.profile?.duty_type || '',
                     supervisors: Array.isArray(student?.department_supervisors) ? student.department_supervisors : [],
                 });

@@ -5,7 +5,7 @@ import Toast from './Toast';
 import { REALTIME_EVENT, emitRealtimeRefresh } from '../utils/realtime';
 import { bindPopup } from '../utils/popupDismiss';
 import UserAvatar from './UserAvatar';
-import { withHomeDepartmentNote } from '../utils/studentAssignment';
+import { formatAssignment, withHomeDepartmentNote } from '../utils/studentAssignment';
 import { 
     CalendarDays, 
     Clock, 
@@ -194,6 +194,8 @@ interface UserData {
     gender?: string | null;
     profile?: {
         assigned_office?: string;
+        assignment_area?: string | null;
+        assignment_label?: string | null;
         course?: string | null;
         year_level?: string | number | null;
         gender?: string | null;
@@ -226,6 +228,7 @@ interface Schedule {
         name: string;
         profile_picture?: string | null;
         deleted_at?: string | null;
+        profile?: { assignment_label?: string | null; assigned_office?: string | null } | null;
     }
 }
 
@@ -296,6 +299,7 @@ const ScheduleManagement = () => {
     );
 
     const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const weekdayRank: Record<string, number> = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6, Sunday: 7 };
     const [formData, setFormData] = useState(() => createScheduleForm());
     const [editingId, setEditingId] = useState<number | null>(null);
 
@@ -966,7 +970,12 @@ const ScheduleManagement = () => {
     const pagedSchedules = pageSlice(filteredSchedules, schedulePage);
     const requestSlides = isAudit ? filteredRequests : staffingRequests;
     const requestSlideIndex = requestSlides.length === 0 ? 0 : Math.min(requestSlide, requestSlides.length - 1);
-    const visibleSchedules = isAudit ? pagedSchedules.rows : schedules;
+    const arrangeByWeekday = (rows: Schedule[]) => [...rows].sort((left, right) => {
+        const day = (weekdayRank[left.day] ?? 8) - (weekdayRank[right.day] ?? 8);
+        if (day !== 0) return day;
+        return String(left.time || '').localeCompare(String(right.time || ''));
+    });
+    const visibleSchedules = arrangeByWeekday(isAudit ? pagedSchedules.rows : schedules);
     const visibleScheduleIds = visibleSchedules.map((schedule) => schedule.id);
     const allVisibleSelected = visibleScheduleIds.length > 0 && visibleScheduleIds.every((id) => selectedScheduleIds.includes(id));
 
@@ -1551,7 +1560,7 @@ const ScheduleManagement = () => {
                                                         <div className="flex flex-col">
                                                             <span className="text-sm font-bold text-slate-900">{student.name}</span>
                                                             <span className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
-                                                                {gender || 'No gender'} • <MapPin className="w-3 h-3"/> {student.profile?.assigned_office || 'Unassigned'}
+                                                                {gender || 'No gender'} • <MapPin className="w-3 h-3"/> {student.profile?.assignment_label || formatAssignment(student.profile?.assigned_office, student.profile?.assignment_area) || 'Unassigned'}
                                                             </span>
                                                         </div>
                                                     </label>
@@ -1726,7 +1735,7 @@ const ScheduleManagement = () => {
                                                         {schedule.user?.name || 'Unknown User'}
                                                     </p>
                                                     <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5 truncate">
-                                                        <MapPin className="w-3 h-3 text-slate-400 shrink-0" /> {schedule.department}
+                                                        <MapPin className="w-3 h-3 text-slate-400 shrink-0" /> {schedule.user?.profile?.assignment_label || schedule.department}
                                                     </p>
                                                     {schedule.user?.deleted_at && (
                                                         <span className="mt-1 inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600">
@@ -1917,7 +1926,7 @@ const ScheduleManagement = () => {
                                                 {schedules.find((schedule) => schedule.id === editingId)?.user?.name || 'Current student'}
                                             </option>
                                         )}
-                                        {students.map(s => <option key={s.id} value={s.id}>{withHomeDepartmentNote(`${s.name} (${s.profile?.assigned_office || 'Unassigned'})`, s.profile?.course, s.profile?.assigned_office, s.profile?.year_level)}</option>)}
+                                        {students.map(s => <option key={s.id} value={s.id}>{withHomeDepartmentNote(`${s.name} (${s.profile?.assignment_label || formatAssignment(s.profile?.assigned_office, s.profile?.assignment_area) || 'Unassigned'})`, s.profile?.course, s.profile?.assigned_office, s.profile?.year_level)}</option>)}
                                     </select>
                                 </div>
 

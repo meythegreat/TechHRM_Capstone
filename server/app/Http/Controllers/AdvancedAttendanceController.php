@@ -106,7 +106,7 @@ class AdvancedAttendanceController extends Controller
             ->visibleTo($user->role)
             ->where('is_anomaly', true);
 
-        if ($user->role === 'Supervisor' || $accounts->isWspoDepartmentSupervisor($user)) {
+        if ($accounts->usesSupervisorScope($user) || $accounts->isWspoDepartmentSupervisor($user)) {
             $areas = $accounts->supervisedOfficeAreas($user);
             if ($areas === []) {
                 $query->whereRaw('0 = 1');
@@ -367,7 +367,7 @@ class AdvancedAttendanceController extends Controller
                 : (float) ($record->rendered_hours ?? 0);
         });
 
-        $targetHours = 100.00;
+        $targetHours = \App\Support\WorkRequirement::hoursFor($request->user());
         $dutyDeduction = \App\Models\DisciplinaryRecord::dutyDeductionHours($userId);
         $activityHours = RenderedHours::activityTotal(
             RenderedHours::deltasBetween(Carbon::create(2000, 1, 1), Carbon::now()->endOfDay())[$userId] ?? []
@@ -386,6 +386,7 @@ class AdvancedAttendanceController extends Controller
             'activity_hours' => round($activityHours, 2),
             'remaining_hours' => round($remainingHours, 2),
             'target_hours' => $targetHours,
+            'special_hours_request' => (bool) $request->user()->profile?->special_hours_request,
             'hour_limits' => $hourLimits,
             'open_activity' => $openActivity,
             'history' => $records->filter(fn (Attendance $record) => $this->belongsInRecentLogs($record))->values(),

@@ -48,14 +48,15 @@ const OfficeDirectory = () => {
     const [toast, setToast] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
     const [breakdown, setBreakdown] = useState<{
         office: string;
-        supervisors: { id: number; name: string }[];
-        students: { id: number; name: string; student_id_number?: string | null; course?: string | null }[];
+        supervisors: { id: number; name: string; absent_today?: boolean }[];
+        secretaries?: { id: number; name: string }[];
+        students: { id: number; name: string; student_id_number?: string | null; course?: string | null; assignment_label?: string | null; special_hours_request?: boolean }[];
         requests: { id: number; duty_type: string; quantity: number; status: string; requester?: string | null; duty_request?: string | null }[];
     } | null>(null);
     const [breakdownLoading, setBreakdownLoading] = useState(false);
 
     const openBreakdown = async (office: OfficeRecord) => {
-        setBreakdown({ office: office.name, supervisors: [], students: [], requests: [] });
+        setBreakdown({ office: office.name, supervisors: [], secretaries: [], students: [], requests: [] });
         setBreakdownLoading(true);
         try {
             const response = await axios.get(`/api/offices/${office.id}/breakdown`);
@@ -447,7 +448,21 @@ const OfficeDirectory = () => {
                                         <h4 className="text-sm font-semibold text-slate-900 mb-2 flex items-center gap-2"><UserCheck className="w-4 h-4 text-indigo-600" /> Assigned supervisors</h4>
                                         {breakdown.supervisors.length === 0 ? <p className="text-sm text-slate-500">No supervisor assigned.</p> : (
                                             <ul className="divide-y divide-slate-100 border border-slate-100 rounded-2xl">
-                                                {breakdown.supervisors.map((person) => <li key={person.id} className="px-4 py-3 text-sm font-bold text-slate-800">{person.name}</li>)}
+                                                {breakdown.supervisors.map((person) => (
+                                                    <li key={person.id} className="px-4 py-3 text-sm font-bold text-slate-800">
+                                                        {person.name}
+                                                        {person.absent_today ? <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-700">Absent today</span> : null}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </section>
+                                    <section>
+                                        <h4 className="text-sm font-semibold text-slate-900 mb-2">Department secretary</h4>
+                                        <p className="text-xs text-slate-500 mb-2">Acts with the supervisor&apos;s access while every supervisor of this office is marked absent.</p>
+                                        {(breakdown.secretaries || []).length === 0 ? <p className="text-sm text-slate-500">No secretary assigned.</p> : (
+                                            <ul className="divide-y divide-slate-100 border border-slate-100 rounded-2xl">
+                                                {(breakdown.secretaries || []).map((person) => <li key={person.id} className="px-4 py-3 text-sm font-bold text-slate-800">{person.name}</li>)}
                                             </ul>
                                         )}
                                     </section>
@@ -457,8 +472,11 @@ const OfficeDirectory = () => {
                                             <ul className="divide-y divide-slate-100 border border-slate-100 rounded-2xl">
                                                 {breakdown.students.map((student) => (
                                                     <li key={student.id} className="px-4 py-3 flex justify-between gap-3">
-                                                        <span className="text-sm font-bold text-slate-800">{student.name}</span>
-                                                        <span className="text-xs text-slate-500">{student.student_id_number || student.course || '—'}</span>
+                                                        <span className="text-sm font-bold text-slate-800">
+                                                            {student.name}
+                                                            {student.special_hours_request ? <span className="ml-2 text-[10px] uppercase tracking-wide text-violet-700">100 hrs</span> : null}
+                                                        </span>
+                                                        <span className="text-xs text-slate-500">{student.assignment_label || student.student_id_number || student.course || '—'}</span>
                                                     </li>
                                                 ))}
                                             </ul>

@@ -8,10 +8,26 @@ use App\Models\Office;
 use App\Models\RenderedHourEvent;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Schema;
 
 class RenderedHours
 {
     private const VERIFIED_STATUSES = ['accepted', 'approved', 'Approved'];
+
+    private static function profileColumns(): string
+    {
+        $columns = ['id', 'user_id', 'student_id_number', 'year_level', 'course', 'assigned_office'];
+        if (Schema::hasTable('user_profiles')) {
+            if (Schema::hasColumn('user_profiles', 'assignment_area')) {
+                $columns[] = 'assignment_area';
+            }
+            if (Schema::hasColumn('user_profiles', 'special_hours_request')) {
+                $columns[] = 'special_hours_request';
+            }
+        }
+
+        return implode(',', $columns);
+    }
 
     /**
      * Hour adjustments from special requests, cleaning, devotionals, and assemblies.
@@ -61,7 +77,7 @@ class RenderedHours
     public static function report(Carbon $start, Carbon $end): array
     {
         $students = User::query()
-            ->with('profile:id,user_id,student_id_number,year_level,course,assigned_office')
+            ->with('profile:'.self::profileColumns())
             ->where('role', 'Student')
             ->orderBy('name')
             ->get();
@@ -93,6 +109,14 @@ class RenderedHours
                 'course' => $student->profile?->course,
                 'course_abbreviation' => self::abbreviationFor($courseName, $abbreviations),
                 'assigned_office' => $student->profile?->assigned_office,
+                'assignment_area' => $student->profile?->assignment_area,
+                'assignment_label' => AssignmentLabel::format(
+                    $officeName,
+                    $student->profile?->assignment_area,
+                    self::abbreviationFor($officeName, $abbreviations)
+                ),
+                'special_hours_request' => (bool) $student->profile?->special_hours_request,
+                'required_hours' => WorkRequirement::hoursFor($student),
                 'office_abbreviation' => self::abbreviationFor($officeName, $abbreviations),
                 'year_level' => $year ? (int) $year : null,
                 'dtr_hours' => $dtrHours,

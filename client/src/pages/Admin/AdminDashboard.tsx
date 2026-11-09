@@ -49,6 +49,8 @@ const AdminDashboard = () => {
         year_level?: number | string | null;
         gender?: string | null;
         assigned_office?: string | null;
+        assignment_label?: string | null;
+        special_hours_request?: boolean;
         duty_type?: string | null;
         duty_request?: string | null;
     };
@@ -70,6 +72,9 @@ const AdminDashboard = () => {
     });
     const [assignmentNotices, setAssignmentNotices] = useState<{ id: number; message: string; created_at: string }[]>([]);
     const [selectedStudent, setSelectedStudent] = useState<AssignedStudent | null>(null);
+    const [supervisorAbsent, setSupervisorAbsent] = useState(false);
+    const [secretaryActing, setSecretaryActing] = useState(localStorage.getItem('secretary_acting') === '1');
+    const [absenceSaving, setAbsenceSaving] = useState(false);
 
     const [isLoading, setIsLoading] = useState(true);
 
@@ -79,7 +84,7 @@ const AdminDashboard = () => {
         id: number;
         time_in: string;
         device?: string | null;
-        user?: { name?: string; profile_picture?: string | null; profile?: { assigned_office?: string | null } | null } | null;
+        user?: { name?: string; profile_picture?: string | null; profile?: { assigned_office?: string | null; assignment_label?: string | null } | null } | null;
     }[]>([]);
     const [onlineStaff, setOnlineStaff] = useState<{
         id: number;
@@ -158,11 +163,23 @@ const AdminDashboard = () => {
                 console.error('Failed to load active now list', err);
             }
         };
+        const fetchCoverage = () => {
+            axios.get('/api/user')
+                .then((response) => {
+                    setSupervisorAbsent(Boolean(response.data.supervisor_absent));
+                    setSecretaryActing(Boolean(response.data.acting));
+                    if (response.data.role === 'Department Secretary') {
+                        localStorage.setItem('secretary_acting', response.data.acting ? '1' : '0');
+                    }
+                })
+                .catch(() => {});
+        };
         const refresh = () => {
             fetchStats();
             fetchAssignmentNotices();
             fetchPendingApplications();
             fetchActiveNow();
+            fetchCoverage();
         };
         refresh();
         const interval = setInterval(refresh, 5000);
@@ -172,6 +189,18 @@ const AdminDashboard = () => {
             window.removeEventListener(REALTIME_EVENT, refresh);
         };
     }, [isWspo, userRole]);
+
+    const toggleSupervisorAbsence = async () => {
+        setAbsenceSaving(true);
+        try {
+            const response = await axios.post('/api/supervisor-absence', { absent: !supervisorAbsent });
+            setSupervisorAbsent(Boolean(response.data.supervisor_absent));
+        } catch (err) {
+            console.error('Failed to update absence', err);
+        } finally {
+            setAbsenceSaving(false);
+        }
+    };
 
     const dismissAssignmentNotice = async (id: number) => {
         setAssignmentNotices((current) => current.filter((notice) => notice.id !== id));
@@ -250,6 +279,32 @@ const AdminDashboard = () => {
                     </div>
                 </div>
             </motion.div>
+
+            {userRole === 'Supervisor' && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <p className="text-sm font-semibold text-amber-950">{supervisorAbsent ? 'You are marked absent today' : 'You are on duty'}</p>
+                        <p className="text-xs text-amber-800 mt-1">Mark yourself absent so the department secretary can act with your access.</p>
+                    </div>
+                    <button type="button" onClick={toggleSupervisorAbsence} disabled={absenceSaving} className="rounded-xl bg-amber-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-60">
+                        {absenceSaving ? 'Saving…' : supervisorAbsent ? 'Mark me present' : 'Mark me absent today'}
+                    </button>
+                </div>
+            )}
+
+            {userRole === 'Department Secretary' && !secretaryActing && (
+                <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4">
+                    <p className="text-sm font-semibold text-slate-900">Waiting for the supervisor to be marked absent</p>
+                    <p className="text-xs text-slate-500 mt-1">You have the same access as the supervisor, and it turns on for today once they are marked absent.</p>
+                </div>
+            )}
+
+            {userRole === 'Department Secretary' && secretaryActing && (
+                <div className="rounded-2xl border border-violet-200 bg-violet-50 px-5 py-4">
+                    <p className="text-sm font-semibold text-violet-950">You are acting for the supervisor</p>
+                    <p className="text-xs text-violet-800 mt-1">Their departments are covered with your account until they are marked present again.</p>
+                </div>
+            )}
 
             {isWspo && (
                 <motion.button
@@ -408,7 +463,10 @@ const AdminDashboard = () => {
                                     <div className="min-w-0 flex items-center gap-3">
                                         <UserAvatar name={student.name} picture={student.profile_picture} className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-sm" />
                                         <div className="min-w-0">
-                                        <p className="font-semibold text-slate-900 truncate">{student.name}</p>
+                                        <p className="font-semibold text-slate-900 truncate">
+                                            {student.name}
+                                            {student.special_hours_request ? <span className="ml-2 align-middle text-[10px] font-bold uppercase tracking-wide text-violet-700">Special request · 100 hrs</span> : null}
+                                        </p>
                                         {(yearLabel || homeCollege) && (
                                             <div className="mt-1 flex flex-wrap items-center gap-1.5">
                                                 {yearLabel && (
@@ -427,7 +485,7 @@ const AdminDashboard = () => {
                                             </div>
                                         )}
                                         <p className="text-xs font-medium text-slate-500 mt-1 truncate">
-                                            {student.assigned_office || 'Department'} · {dutyLabel(student)}
+                                            {student.assignment_label || student.assigned_office || 'Department'} · {dutyLabel(student)}
                                         </p>
                                         </div>
                                     </div>
@@ -546,7 +604,7 @@ const AdminDashboard = () => {
                                                             <UserAvatar name={record.user?.name} picture={record.user?.profile_picture} className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs" />
                                                             <div>
                                                                 <p className="font-bold text-slate-900 text-sm">{record.user?.name || 'Unknown'}</p>
-                                                                <p className="text-xs text-slate-500">{record.user?.profile?.assigned_office || 'Unassigned'}</p>
+                                                                <p className="text-xs text-slate-500">{record.user?.profile?.assignment_label || record.user?.profile?.assigned_office || 'Unassigned'}</p>
                                                             </div>
                                                         </div>
                                                         <span className="flex items-center gap-1.5 shrink-0">
@@ -648,7 +706,7 @@ const AdminDashboard = () => {
                         </div>
                         <dl className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                             {[
-                                ['Department', selectedStudent.assigned_office],
+                                ['Department', selectedStudent.assignment_label || selectedStudent.assigned_office],
                                 ['Duty', dutyLabel(selectedStudent)],
                                 ['Student ID', selectedStudent.student_id_number],
                                 ['Course', selectedStudent.course],

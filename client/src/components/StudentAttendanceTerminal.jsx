@@ -82,7 +82,7 @@ const StudentAttendanceTerminal = () => {
     const [summary, setSummary] = useState({
         total_rendered: 0,
         remaining_hours: 100,
-        target_hours: 100,
+        target_hours: 80,
         history: [],
     });
     
@@ -458,7 +458,7 @@ const StudentAttendanceTerminal = () => {
                 student_id_number: user.profile?.student_id_number || 'Not Assigned',
                 course: user.profile?.course || 'Not Assigned',
                 year_level: user.profile?.year_level || 'N/A',
-                assigned_office: user.profile?.assigned_office || assignedDepartment,
+                assigned_office: user.profile?.assignment_label || user.profile?.assigned_office || assignedDepartment,
                 duty_type: user.profile?.duty_type || '',
                 supervisors: Array.isArray(user.department_supervisors) ? user.department_supervisors : [],
             });
@@ -930,7 +930,7 @@ const StudentAttendanceTerminal = () => {
                                 {formatHours(summary.remaining_hours)} <span className="text-sm font-bold text-slate-400 uppercase tracking-normal">hrs</span>
                             </h3>
                             <p className="text-xs font-bold text-emerald-600 mt-3 flex items-center gap-1">
-                                <CheckCircle2 className="w-4 h-4" /> Target: {summary.target_hours} hrs
+                                <CheckCircle2 className="w-4 h-4" /> Target: {summary.target_hours} hrs{summary.special_hours_request ? ' · Special request' : ''}
                             </p>
                         </div>
                     </div>

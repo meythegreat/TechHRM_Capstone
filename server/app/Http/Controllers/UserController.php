@@ -24,8 +24,8 @@ class UserController extends Controller
         $query = \App\Models\User::with('profile');
 
         // Supervisors can oversee one or more departments.
-        if ($user->role === 'Supervisor') {
-            $departments = $this->supervisedDepartments($user);
+        if ($this->usesSupervisorScope($user)) {
+            $departments = $this->supervisedOfficeAreas($user);
 
             $query->whereHas('profile', function($q) use ($departments) {
                 $q->whereIn('assigned_office', $departments);
@@ -33,7 +33,7 @@ class UserController extends Controller
             $query->whereNotIn('role', ['Super Admin', 'WSPO Staff']);
         }
 
-        $roles = ['Student', 'Supervisor', 'WSPO Staff', 'Super Admin'];
+        $roles = ['Student', 'Supervisor', 'Department Secretary', 'WSPO Staff', 'Super Admin'];
         if ($request->filled('role') && in_array($request->role, $roles, true)) {
             if ($request->role === 'Student') {
                 // Secretary and president are students who also hold office.
@@ -100,10 +100,20 @@ class UserController extends Controller
         if ($user->role === 'Supervisor') {
             $departments = $this->supervisedDepartments($user);
             $data['supervised_departments'] = $departments;
+            $data['supervisor_absent'] = $this->supervisorIsAbsentToday($user);
             if (isset($data['profile']) && is_array($data['profile'])) {
                 $data['profile']['supervised_departments'] = $departments;
             }
         }
+
+        if ($user->role === 'Department Secretary') {
+            $data['secretary_departments'] = $this->secretaryDepartments($user);
+            $data['acting_departments'] = $this->actingDepartments($user);
+            $data['acting'] = $data['acting_departments'] !== [];
+        }
+
+        $data['required_hours'] = \App\Support\WorkRequirement::hoursFor($user);
+        $data['special_hours_request'] = (bool) $user->profile?->special_hours_request;
 
         return response()->json($data);
     }
@@ -121,7 +131,7 @@ class UserController extends Controller
     {
         $query = User::with('profile');
         $this->constrainSchedulableStudents($query);
-        if ($request->user()->role === 'Supervisor') {
+        if ($this->usesSupervisorScope($request->user())) {
             $departments = $this->supervisedDepartments($request->user());
             if ($departments === []) {
                 return response()->json([
@@ -355,7 +365,89 @@ class UserController extends Controller
 
         return $position === ''
             || strcasecmp($position, 'WSPO Coordinator') === 0
+            || strcasecmp($position, 'WSPO Secretary') === 0
             || strcasecmp($position, 'WSPO') === 0;
+    }
+
+    /** Department secretary covers a supervisor only while that supervisor is absent today. */
+    public function isActingDepartmentSecretary(User $user): bool
+    {
+        return $user->role === 'Department Secretary' && $this->actingDepartments($user) !== [];
+    }
+
+    public function usesSupervisorScope(User $user): bool
+    {
+        return $user->role === 'Supervisor' || $this->isActingDepartmentSecretary($user);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function secretaryDepartments(User $user): array
+    {
+        $configured = $user->profile?->secretary_departments;
+        $departments = is_array($configured) ? $configured : [];
+        if ($departments === [] && $user->profile?->assigned_office) {
+            $departments[] = $user->profile->assigned_office;
+        }
+
+        return array_values(array_unique(array_filter(array_map(
+            fn ($department) => is_string($department) ? trim($department) : '',
+            $departments
+        ))));
+    }
+
+    /**
+     * Departments whose supervisors are all absent today, so the secretary may act.
+     *
+     * @return list<string>
+     */
+    public function actingDepartments(User $user): array
+    {
+        if ($user->role !== 'Department Secretary') {
+            return [];
+        }
+
+        $user->loadMissing('profile');
+
+        return array_values(array_filter(
+            $this->secretaryDepartments($user),
+            fn (string $department) => $this->departmentSupervisorsAreAbsent($department)
+        ));
+    }
+
+    public function supervisorIsAbsentToday(User $user): bool
+    {
+        $user->loadMissing('profile');
+        $absentOn = $user->profile?->supervisor_absent_on;
+        if ($absentOn === null || $absentOn === '') {
+            return false;
+        }
+
+        return \Carbon\Carbon::parse($absentOn)->isSameDay(\Carbon\Carbon::today());
+    }
+
+    private function departmentSupervisorsAreAbsent(string $department): bool
+    {
+        $targets = array_map(fn (string $name) => $this->normalizeDepartment($name), $this->departmentAliases($department));
+        $supervisors = User::with('profile')
+            ->where('role', 'Supervisor')
+            ->get()
+            ->filter(function (User $supervisor) use ($targets) {
+                foreach ($this->supervisedDepartments($supervisor) as $assigned) {
+                    if (in_array($this->normalizeDepartment($assigned), $targets, true)) {
+                        return true;
+                    }
+                }
+
+                return false;
+            });
+
+        if ($supervisors->isEmpty()) {
+            return true;
+        }
+
+        return $supervisors->every(fn (User $supervisor) => $this->supervisorIsAbsentToday($supervisor));
     }
 
     /**
@@ -564,8 +656,12 @@ class UserController extends Controller
         app(DepartmentAssignmentNotifier::class)->notify($student, $office, $dutyLabel !== '' ? $dutyLabel : null);
     }
 
-    private function supervisedDepartments(User $user): array
+    public function supervisedDepartments(User $user): array
     {
+        if ($user->role === 'Department Secretary') {
+            return $this->actingDepartments($user);
+        }
+
         if ($this->isWspoDepartmentSupervisor($user)) {
             return ['WSPO'];
         }
@@ -912,18 +1008,19 @@ class UserController extends Controller
             return;
         }
 
-        if ($target && $target->role !== 'Student') {
-            abort(403, 'WSPO staff can only modify student accounts.');
+        $wspoMayManage = ['Student', 'Department Secretary'];
+        if ($target && !in_array($target->role, $wspoMayManage, true)) {
+            abort(403, 'WSPO staff can only modify student and department secretary accounts.');
         }
 
-        if ($requestedRole !== null && $requestedRole !== 'Student') {
-            abort(403, 'WSPO staff can only manage student accounts.');
+        if ($requestedRole !== null && !in_array($requestedRole, $wspoMayManage, true)) {
+            abort(403, 'WSPO staff can only manage student and department secretary accounts.');
         }
     }
 
     private function roleUsesProfile(string $role): bool
     {
-        return in_array($role, ['Student', 'Supervisor', 'WSPO Staff'], true);
+        return in_array($role, ['Student', 'Supervisor', 'Department Secretary', 'WSPO Staff'], true);
     }
 
     private function ensureOfficeIsAllowed(Request $request): void
@@ -932,6 +1029,13 @@ class UserController extends Controller
             $request->validate([
                 'supervised_departments' => ['nullable', 'array'],
                 'supervised_departments.*' => ['string', Rule::in(Office::names())],
+            ]);
+        }
+
+        if ($request->input('role') === 'Department Secretary') {
+            $request->validate([
+                'secretary_departments' => ['nullable', 'array'],
+                'secretary_departments.*' => ['string', Rule::in(Office::names())],
             ]);
         }
 
@@ -953,8 +1057,21 @@ class UserController extends Controller
                 'course' => $nullableString($request->input('course')),
                 'year_level' => $nullableInt($request->input('year_level')),
                 'assigned_office' => $nullableString($request->input('assigned_office')),
+                'assignment_area' => $nullableString($request->input('assignment_area')),
+                'special_hours_request' => $request->boolean('special_hours_request'),
                 'duty_type' => $nullableString($request->input('duty_type')),
                 'duty_request' => $request->input('duty_type') === 'Request' ? $nullableString($request->input('duty_request')) : null,
+                'gender' => in_array($request->input('gender'), ['Male', 'Female'], true) ? $request->input('gender') : null,
+            ],
+            'Department Secretary' => [
+                'student_id_number' => null,
+                'course' => null,
+                'year_level' => null,
+                'assigned_office' => $nullableString(($this->namedDepartmentsFromRequest($request, 'secretary_departments')[0] ?? null)),
+                'secretary_departments' => $this->namedDepartmentsFromRequest($request, 'secretary_departments'),
+                'supervised_departments' => null,
+                'duty_type' => null,
+                'duty_request' => null,
                 'gender' => in_array($request->input('gender'), ['Male', 'Female'], true) ? $request->input('gender') : null,
             ],
             'Supervisor', 'WSPO Staff' => [
@@ -979,11 +1096,16 @@ class UserController extends Controller
 
     private function supervisedDepartmentsFromRequest(Request $request): array
     {
-        $departments = $request->input('supervised_departments', []);
+        return $this->namedDepartmentsFromRequest($request, 'supervised_departments');
+    }
+
+    private function namedDepartmentsFromRequest(Request $request, string $key): array
+    {
+        $departments = $request->input($key, []);
         $departments = is_array($departments) ? $departments : [];
 
         // Accept the former single-select payload from older clients.
-        if ($departments === [] && $request->filled('assigned_office')) {
+        if ($key === 'supervised_departments' && $departments === [] && $request->filled('assigned_office')) {
             $departments[] = $request->input('assigned_office');
         }
 
@@ -1000,6 +1122,41 @@ class UserController extends Controller
         $user->delete();
 
         return response()->json(['message' => 'User deleted successfully']);
+    }
+
+    public function markSupervisorAbsent(Request $request)
+    {
+        $actor = $request->user();
+        $validated = $request->validate([
+            'absent' => 'required|boolean',
+            'user_id' => 'nullable|integer|exists:users,id',
+        ]);
+
+        $target = $actor;
+        if (!empty($validated['user_id']) && (int) $validated['user_id'] !== (int) $actor->id) {
+            if (!in_array($actor->role, ['WSPO Staff', 'Super Admin'], true)) {
+                abort(403, 'Only WSPO staff can mark another supervisor absent.');
+            }
+            $target = User::with('profile')->where('role', 'Supervisor')->findOrFail($validated['user_id']);
+        }
+
+        if ($target->role !== 'Supervisor') {
+            abort(403, 'Only a department supervisor can be marked absent.');
+        }
+
+        $absent = (bool) $validated['absent'];
+        $target->profile()->updateOrCreate(
+            ['user_id' => $target->id],
+            ['supervisor_absent_on' => $absent ? \Carbon\Carbon::today()->toDateString() : null]
+        );
+
+        return response()->json([
+            'message' => $absent
+                ? $target->name.' is marked absent today. The department secretary can act on their behalf.'
+                : $target->name.' is marked present. The department secretary no longer acts for them.',
+            'supervisor_absent' => $absent,
+            'user_id' => $target->id,
+        ]);
     }
 
     public function uploadAvatar(Request $request)

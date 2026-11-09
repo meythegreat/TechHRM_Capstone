@@ -78,7 +78,7 @@ class AdminController extends Controller
         $students = Attendance::query()
             ->visibleTo($viewer->role)
             ->whereNull('time_out')
-            ->when($viewer->role === 'Supervisor', function ($query) use ($viewer) {
+            ->when(app(UserController::class)->usesSupervisorScope($viewer), function ($query) use ($viewer) {
                 $areas = app(UserController::class)->supervisedOfficeAreas($viewer);
                 if ($areas === []) {
                     $query->whereRaw('0 = 1');
@@ -150,7 +150,7 @@ class AdminController extends Controller
                 $attendance->whereNull('time_out');
             });
 
-        if ($viewer->role === 'Supervisor') {
+        if (app(UserController::class)->usesSupervisorScope($viewer)) {
             $areas = app(UserController::class)->supervisedOfficeAreas($viewer);
             if ($areas === []) {
                 $query->whereRaw('0 = 1');
@@ -238,6 +238,7 @@ class AdminController extends Controller
 
         return $position === ''
             || strcasecmp($position, 'WSPO Coordinator') === 0
+            || strcasecmp($position, 'WSPO Secretary') === 0
             || strcasecmp($position, 'WSPO') === 0;
     }
 }

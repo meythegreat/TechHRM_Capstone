@@ -38,7 +38,7 @@ class HourLimitController extends Controller
 
         // College supervisors see their office only. WSPO Staff (including the
         // Coordinator, who also supervises WSPO-office students) review campus-wide.
-        if ($user->role === 'Supervisor') {
+        if (app(UserController::class)->usesSupervisorScope($user)) {
             $areas = $accounts->supervisedOfficeAreas($user);
             if ($areas === []) {
                 $query->whereRaw('0 = 1');
@@ -232,7 +232,7 @@ class HourLimitController extends Controller
             return true;
         }
 
-        if ($reviewer->role === 'Supervisor' || $accounts->isWspoDepartmentSupervisor($reviewer)) {
+        if ($accounts->usesSupervisorScope($reviewer) || $accounts->isWspoDepartmentSupervisor($reviewer)) {
             return $accounts->supervisorCanAccessStudent($reviewer, $student);
         }
 

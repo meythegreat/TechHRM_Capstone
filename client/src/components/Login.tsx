@@ -97,13 +97,18 @@ const Login = ({ onLoginSuccess, onNavigateToApply, onNavigateToTrack }: LoginPr
 
         try {
             const response = await axios.post('/api/login', { username, password });
-            const { token, role, name, office, profile_picture, must_change_password } = response.data;
+            const { token, role, name, office, profile_picture, must_change_password, acting } = response.data;
 
             localStorage.setItem('auth_token', token);
             localStorage.setItem('user_role', role);
             localStorage.setItem('user_name', name || username);
             localStorage.setItem('profile_picture', normalizeFilePath(profile_picture) || '');
             localStorage.setItem('assigned_office', office || 'System Administrator');
+            if (role === 'Department Secretary') {
+                localStorage.setItem('secretary_acting', acting ? '1' : '0');
+            } else {
+                localStorage.removeItem('secretary_acting');
+            }
 
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 

@@ -163,6 +163,8 @@ Route::middleware('auth:sanctum')->group(function () {
         // SCHEDULE MANAGEMENT
         // =================================================
 
+        Route::post('/supervisor-absence', [UserController::class, 'markSupervisorAbsent']);
+
         Route::get('/schedules', [ScheduleController::class, 'index']);
 
         Route::post('/schedules', [ScheduleController::class, 'store']);

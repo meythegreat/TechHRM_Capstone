@@ -34,7 +34,10 @@ class ExtraHoursController extends Controller
         // Supervisors only see their own letters. WSPO Coordinator is also a
         // department supervisor for WSPO-placed students, but must still review
         // campus-wide Extra Hours submissions — do not scope them to requested_by.
-        if ($user->role === 'Supervisor') {
+        if ($user->role === 'Department Secretary') {
+            $areas = $accounts->supervisedOfficeAreas($user);
+            $query->whereIn('department', $areas === [] ? ['__none__'] : $areas);
+        } elseif ($user->role === 'Supervisor') {
             $query->where('requested_by', $user->id);
         } elseif ($user->role === 'WSPO Staff' || $user->role === 'Super Admin') {
             $query->where('status', '!=', ExtraHoursRequest::DRAFT);
@@ -61,7 +64,7 @@ class ExtraHoursController extends Controller
             ->where('role', 'Student')
             ->orderBy('name');
 
-        if ($user->role === 'Supervisor' || $accounts->isWspoDepartmentSupervisor($user)) {
+        if ($accounts->usesSupervisorScope($user) || $accounts->isWspoDepartmentSupervisor($user)) {
             $areas = $accounts->supervisedOfficeAreas($user);
             if ($areas === []) {
                 return response()->json(['students' => []]);
@@ -111,7 +114,7 @@ class ExtraHoursController extends Controller
         SuperAdminAudit::denyMutation($request);
         $user = $request->user()->loadMissing('profile');
         abort_unless(
-            $user->role === 'Supervisor' || app(UserController::class)->isWspoDepartmentSupervisor($user),
+            app(UserController::class)->usesSupervisorScope($user) || app(UserController::class)->isWspoDepartmentSupervisor($user),
             403,
             'Only supervisors can create Extra Hours requests.'
         );
@@ -338,7 +341,7 @@ class ExtraHoursController extends Controller
         $students = User::with('profile')->where('role', 'Student')->whereIn('id', $studentIds)->get();
         abort_unless($students->count() === count(array_unique($studentIds)), 422, 'One or more selected students were not found.');
 
-        if ($actor->role === 'Supervisor' || $accounts->isWspoDepartmentSupervisor($actor)) {
+        if ($accounts->usesSupervisorScope($actor) || $accounts->isWspoDepartmentSupervisor($actor)) {
             foreach ($students as $student) {
                 abort_unless(
                     $accounts->supervisorCanAccessStudent($actor, $student),

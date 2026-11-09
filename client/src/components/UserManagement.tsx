@@ -3,6 +3,7 @@ import axios from "axios";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import Toast from "./Toast";
 import UserAvatar from "./UserAvatar";
+import { formatAssignment } from "../utils/studentAssignment";
 import ComboFilter from "./ComboFilter";
 import { REALTIME_EVENT } from "../utils/realtime";
 import { bindPopup } from "../utils/popupDismiss";
@@ -45,7 +46,12 @@ interface UserRecord {
   profile?: {
     student_id_number?: string;
     assigned_office?: string;
+    assignment_area?: string | null;
+    assignment_label?: string | null;
+    special_hours_request?: boolean;
     supervised_departments?: string[];
+    secretary_departments?: string[];
+    supervisor_absent_on?: string | null;
     course?: string;
     year_level?: number;
     duty_type?: 'Clerical' | 'Janitorial' | 'Request';
@@ -59,6 +65,7 @@ const GENDERS = ['Male', 'Female'];
 const ROLE_FILTERS = [
   { value: 'Student', label: 'Student Worker' },
   { value: 'Supervisor', label: 'Department Supervisor' },
+  { value: 'Department Secretary', label: 'Department Secretary' },
   { value: 'WSPO Staff', label: 'WSPO Staff' },
   { value: 'Super Admin', label: 'Super Admin' },
 ];
@@ -67,7 +74,7 @@ const UserManagement = () => {
   const currentUserRole = localStorage.getItem("user_role") || "";
   const canManageSecurity = currentUserRole === "Super Admin" || currentUserRole === "WSPO Staff";
   const isWspoStaff = currentUserRole === "WSPO Staff";
-  const canModifyAccount = (role: string) => currentUserRole === "Super Admin" || (isWspoStaff && role === "Student");
+  const canModifyAccount = (role: string) => currentUserRole === "Super Admin" || (isWspoStaff && (role === "Student" || role === "Department Secretary"));
 
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -104,7 +111,11 @@ const UserManagement = () => {
     course: "",
     year_level: "",
     assigned_office: "",
+    assignment_area: "",
+    special_hours_request: false,
     supervised_departments: [] as string[],
+    secretary_departments: [] as string[],
+    supervisor_absent: false,
     duty_type: "Clerical",
     duty_request: "",
     gender: "",
@@ -184,14 +195,21 @@ const UserManagement = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const toggleSupervisedDepartment = (department: string) => {
+  const localDateKey = () => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  };
+
+  const toggleNamedDepartments = (key: 'supervised_departments' | 'secretary_departments', department: string) => {
     setFormData((current) => ({
       ...current,
-      supervised_departments: current.supervised_departments.includes(department)
-        ? current.supervised_departments.filter((item) => item !== department)
-        : [...current.supervised_departments, department],
+      [key]: current[key].includes(department)
+        ? current[key].filter((item) => item !== department)
+        : [...current[key], department],
     }));
   };
+
+  const toggleSupervisedDepartment = (department: string) => toggleNamedDepartments('supervised_departments', department);
 
   // Prefixes and middle initials are abbreviations in the saved display name.
   // Strip any entered trailing dots first so the result always contains exactly one.
@@ -254,6 +272,12 @@ const UserManagement = () => {
     e.preventDefault();
     setIsSubmitting(true);
 
+    if (formData.role === 'Department Secretary' && formData.secretary_departments.length === 0) {
+      showToast('Select the office this secretary covers.', 'error');
+      setIsSubmitting(false);
+      return;
+    }
+
     if (formData.role === 'Student' && (!formData.phone_number || !formData.gender || !formData.student_id_number.trim() || !formData.course || !formData.year_level || !formData.assigned_office)) {
       showToast('Complete the personal profile and university details before issuing this account.', 'error');
       setIsSubmitting(false);
@@ -272,10 +296,11 @@ const UserManagement = () => {
             phone_number: formData.phone_number ? `+63${formData.phone_number}` : '',
             role: formData.role,
             assigned_office: formData.assigned_office,
-            supervised_departments: formData.role === 'Supervisor' ? formData.supervised_departments : undefined
-            , duty_type: formData.duty_type
-            , duty_request: formData.duty_request
-            , gender: formData.gender || null
+            supervised_departments: formData.role === 'Supervisor' ? formData.supervised_departments : undefined,
+            secretary_departments: formData.role === 'Department Secretary' ? formData.secretary_departments : undefined,
+            duty_type: formData.duty_type,
+            duty_request: formData.duty_request,
+            gender: formData.gender || null,
         };
         // Add password payload ONLY if admin typed a new one to reset it
         if (formData.password) {
@@ -286,9 +311,14 @@ const UserManagement = () => {
             payload.student_id_number = formData.student_id_number;
             payload.course = formData.course;
             payload.year_level = formData.year_level;
+            payload.assignment_area = formData.assignment_area;
+            payload.special_hours_request = formData.special_hours_request;
         }
 
         await axios.put(`/api/users/${editingUserId}`, payload);
+        if (formData.role === 'Supervisor') {
+            await axios.post('/api/supervisor-absence', { absent: formData.supervisor_absent, user_id: editingUserId });
+        }
         showToast("User updated successfully.", "success");
         setIsModalOpen(false);
       } else {
@@ -303,18 +333,24 @@ const UserManagement = () => {
             phone_number: formData.phone_number ? `+63${formData.phone_number}` : '',
             role: formData.role,
             assigned_office: formData.assigned_office,
-            supervised_departments: formData.role === 'Supervisor' ? formData.supervised_departments : undefined
-            , duty_type: formData.duty_type
-            , duty_request: formData.duty_request
-            , gender: formData.gender || null
+            supervised_departments: formData.role === 'Supervisor' ? formData.supervised_departments : undefined,
+            secretary_departments: formData.role === 'Department Secretary' ? formData.secretary_departments : undefined,
+            duty_type: formData.duty_type,
+            duty_request: formData.duty_request,
+            gender: formData.gender || null,
         };
         if (formData.role === 'Student') {
             payload.student_id_number = formData.student_id_number;
             payload.course = formData.course;
             payload.year_level = formData.year_level;
+            payload.assignment_area = formData.assignment_area;
+            payload.special_hours_request = formData.special_hours_request;
         }
 
-        await axios.post('/api/users', payload);
+        const created = await axios.post('/api/users', payload);
+        if (formData.role === 'Supervisor' && created.data?.user?.id) {
+            await axios.post('/api/supervisor-absence', { absent: formData.supervisor_absent, user_id: created.data.user.id });
+        }
 
         setIsModalOpen(false);
         setGeneratedCredentials({ name: combinedName, username: genUser, email: formData.email.trim(), password: genPass });
@@ -362,7 +398,11 @@ const UserManagement = () => {
       course: user.profile?.course || "",
       year_level: user.profile?.year_level?.toString() || "",
       assigned_office: user.profile?.assigned_office || "",
+      assignment_area: user.profile?.assignment_area || "",
+      special_hours_request: Boolean(user.profile?.special_hours_request),
       supervised_departments: user.profile?.supervised_departments || (user.role === 'Supervisor' && user.profile?.assigned_office ? [user.profile.assigned_office] : []),
+      secretary_departments: user.profile?.secretary_departments || (user.role === 'Department Secretary' && user.profile?.assigned_office ? [user.profile.assigned_office] : []),
+      supervisor_absent: Boolean(user.profile?.supervisor_absent_on && String(user.profile.supervisor_absent_on).slice(0, 10) === localDateKey()),
       duty_type: user.profile?.duty_type || "Clerical",
       duty_request: user.profile?.duty_request || "",
       gender: user.profile?.gender || "",
@@ -375,7 +415,7 @@ const UserManagement = () => {
     setFormData({
       prefix: "", first_name: "", middle_initial: "", last_name: "",
       username: "", email: "", password: "", phone_number: "", role: "Student",
-      student_id_number: "", course: "", year_level: "", assigned_office: "", supervised_departments: [], duty_type: "Clerical", duty_request: "", gender: "",
+      student_id_number: "", course: "", year_level: "", assigned_office: "", assignment_area: "", special_hours_request: false, supervised_departments: [], secretary_departments: [], supervisor_absent: false, duty_type: "Clerical", duty_request: "", gender: "",
     });
     setIsModalOpen(true);
   };
@@ -392,6 +432,7 @@ const UserManagement = () => {
       case 'Super Admin': return `${base} bg-purple-50 text-purple-700 border-purple-200`;
       case 'WSPO Staff': return `${base} bg-emerald-50 text-emerald-700 border-emerald-200`;
       case 'Supervisor': return `${base} bg-blue-50 text-blue-700 border-blue-200`;
+      case 'Department Secretary': return `${base} bg-violet-50 text-violet-700 border-violet-200`;
       default: return `${base} bg-slate-50 text-slate-600 border-slate-200`;
     }
   };
@@ -515,9 +556,17 @@ const UserManagement = () => {
                                   <td className="px-6 py-5 align-top">
                                       {user.role === 'Student' ? (
                                           <div>
-                                              <p className="text-sm font-bold text-slate-800">{user.profile?.assigned_office || 'No Office Assigned'}</p>
+                                              <p className="text-sm font-bold text-slate-800">{user.profile?.assignment_label || formatAssignment(user.profile?.assigned_office, user.profile?.assignment_area) || 'No Office Assigned'}</p>
                                               <p className="text-xs font-medium text-slate-500 mt-1">ID: {user.profile?.student_id_number || 'N/A'}{user.profile?.gender ? ` · ${user.profile.gender}` : ''}</p>
+                                              {user.profile?.special_hours_request && (
+                                                  <p className="text-xs font-semibold text-violet-700 mt-1">Special request · 100 hrs instead of 80</p>
+                                              )}
                                               <p className="text-xs font-semibold text-indigo-700 mt-1">Supervisor: {(user.department_supervisors && user.department_supervisors.length > 0) ? user.department_supervisors.join(', ') : supervisorLabelForOffice(user.profile?.assigned_office)}</p>
+                                          </div>
+                                      ) : user.role === 'Department Secretary' ? (
+                                          <div>
+                                              <p className="text-sm font-bold text-slate-800">{(user.profile?.secretary_departments || []).join(', ') || user.profile?.assigned_office || 'No office assigned'}</p>
+                                              <p className="text-xs font-medium text-slate-500 mt-1">Acts for the supervisor when they are absent</p>
                                           </div>
                                       ) : user.role === 'Supervisor' ? (
                                           <div>
@@ -527,10 +576,13 @@ const UserManagement = () => {
                                       ) : user.role === 'WSPO Staff' ? (
                                           <div>
                                               <p className="text-sm font-bold text-slate-800">{user.profile?.assigned_office || 'WSPO Coordinator'}</p>
-                                              {(!user.profile?.assigned_office || user.profile.assigned_office === 'WSPO Coordinator' || user.profile.assigned_office === 'WSPO') && (
-                                                  <p className="text-xs font-semibold text-indigo-700 mt-1">Supervisor of WSPO</p>
+                                              {(!user.profile?.assigned_office || user.profile.assigned_office === 'WSPO Coordinator' || user.profile.assigned_office === 'WSPO' || user.profile.assigned_office === 'WSPO Secretary') && (
+                                                  <p className="text-xs font-semibold text-indigo-700 mt-1">Coordinator access for WSPO</p>
                                               )}
-                                              {(user.profile?.assigned_office === 'WSPO Secretary' || user.profile?.assigned_office === 'WSPO President') && (
+                                              {user.profile?.assigned_office === 'WSPO Secretary' && (
+                                                  <p className="text-xs font-medium text-slate-500 mt-1">Also a working student who can receive duty schedules</p>
+                                              )}
+                                              {user.profile?.assigned_office === 'WSPO President' && (
                                                   <p className="text-xs font-semibold text-indigo-700 mt-1">Working student · can receive duty schedules</p>
                                               )}
                                           </div>
@@ -659,8 +711,9 @@ const UserManagement = () => {
                 {/* GLOBAL ROLE SELECTION */}
                 <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl">
                     <label className="block text-xs font-semibold text-indigo-700 uppercase tracking-widest mb-3 flex items-center gap-1.5"><ShieldCheck className="w-4 h-4"/> Security Authorization Level</label>
-                    <select name="role" value={isWspoStaff ? "Student" : formData.role} onChange={handleInputChange} disabled={isWspoStaff} className="w-full p-3.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 transition-all appearance-none cursor-pointer shadow-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600">
+                    <select name="role" value={isWspoStaff && formData.role !== 'Department Secretary' && formData.role !== 'Student' ? 'Student' : formData.role} onChange={handleInputChange} className="w-full p-3.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 transition-all appearance-none cursor-pointer shadow-sm">
                         <option value="Student">Student Worker</option>
+                        <option value="Department Secretary">Department Secretary</option>
                         {!isWspoStaff && (
                             <>
                                 <option value="Supervisor">Department Supervisor</option>
@@ -670,7 +723,7 @@ const UserManagement = () => {
                         )}
                     </select>
                     {isWspoStaff && (
-                        <p className="mt-2 text-xs font-semibold text-slate-500">WSPO staff can create and update student accounts only.</p>
+                        <p className="mt-2 text-xs font-semibold text-slate-500">WSPO staff can create students and department secretaries. A secretary uses the supervisor&apos;s access while that supervisor is marked absent.</p>
                     )}
                 </div>
 
@@ -755,8 +808,23 @@ const UserManagement = () => {
                           {formData.assigned_office && (
                             <p className="mt-2 text-xs font-semibold text-indigo-700">
                               Supervisor: {supervisorLabelForOffice(formData.assigned_office)}
+                              {formData.assignment_area.trim() ? ` · Shown as ${formatAssignment(formData.assigned_office, formData.assignment_area)}` : ''}
                             </p>
                           )}
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Specific area of assignment</label>
+                          <input name="assignment_area" value={formData.assignment_area} onChange={handleInputChange} placeholder="Laboratory" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all placeholder:text-slate-400" />
+                          <p className="mt-2 text-xs font-medium text-slate-500">Shown after the department. Example: CCS - Laboratory.</p>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="flex items-start gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 cursor-pointer">
+                            <input type="checkbox" checked={formData.special_hours_request} onChange={(event) => setFormData((current) => ({ ...current, special_hours_request: event.target.checked }))} className="mt-0.5 h-4 w-4 rounded border-slate-300 text-violet-700 focus:ring-violet-600" />
+                            <span>
+                              <span className="block text-sm font-bold text-violet-900">Special request · 100 hours</span>
+                              <span className="block text-xs font-medium text-violet-800 mt-1">Standard working students render 80 hours. Turn this on when this student is approved for 100 hours.</span>
+                            </span>
+                          </label>
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Course / Degree *</label>
@@ -821,6 +889,33 @@ const UserManagement = () => {
                         {formData.supervised_departments.length > 0 && (
                           <p className="mt-2 text-xs font-semibold text-indigo-700">{formData.supervised_departments.length} department{formData.supervised_departments.length === 1 ? '' : 's'} selected</p>
                         )}
+                        <label className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 cursor-pointer">
+                          <input type="checkbox" checked={formData.supervisor_absent} onChange={(event) => setFormData((current) => ({ ...current, supervisor_absent: event.target.checked }))} className="mt-0.5 h-4 w-4 rounded border-slate-300 text-amber-700 focus:ring-amber-600" />
+                          <span>
+                            <span className="block text-sm font-bold text-amber-950">Absent today</span>
+                            <span className="block text-xs font-medium text-amber-800 mt-1">While this is on, the department secretary can act with this supervisor&apos;s access.</span>
+                          </span>
+                        </label>
+                      </div>
+                    )}
+
+                    {formData.role === "Department Secretary" && (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Secretary for</label>
+                        <p className="text-xs text-slate-500 mb-3">Same access as the supervisor of these offices, and only while that supervisor is marked absent.</p>
+                        <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 divide-y divide-slate-100">
+                          {officeChoices(formData.secretary_departments).map((dept) => (
+                            <label key={`sec-${dept}`} className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-white transition-colors">
+                              <input
+                                type="checkbox"
+                                checked={formData.secretary_departments.includes(dept)}
+                                onChange={() => toggleNamedDepartments('secretary_departments', dept)}
+                                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600"
+                              />
+                              <span className="text-sm font-bold text-slate-700">{dept}</span>
+                            </label>
+                          ))}
+                        </div>
                       </div>
                     )}
 

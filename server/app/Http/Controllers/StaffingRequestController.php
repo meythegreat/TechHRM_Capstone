@@ -17,7 +17,11 @@ class StaffingRequestController extends Controller
     public function index(Request $request)
     {
         $query = StaffingRequest::with('requester:id,name')->latest();
-        if ($request->user()->role === 'Supervisor') {
+        $accounts = app(UserController::class);
+        if ($request->user()->role === 'Department Secretary') {
+            $areas = $accounts->supervisedOfficeAreas($request->user());
+            $query->whereIn('department', $areas === [] ? ['__none__'] : $areas);
+        } elseif ($request->user()->role === 'Supervisor') {
             $query->where('requested_by', $request->user()->id);
         } else {
             // Draft Extra Service letters stay with the supervisor until the signed scan is attached.

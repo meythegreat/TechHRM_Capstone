@@ -30,9 +30,9 @@ class DisciplinaryController extends Controller
                 ->whereHas('student');
         }
 
-        if ($request->user()->role === 'Supervisor') {
+        if (app(UserController::class)->usesSupervisorScope($request->user())) {
             $request->user()->loadMissing('profile');
-            $departments = $this->supervisedDepartments($request->user());
+            $departments = app(UserController::class)->supervisedOfficeAreas($request->user());
             $query->whereHas('student.profile', function ($q) use ($departments) {
                 $q->whereIn('assigned_office', $departments);
             });
@@ -479,9 +479,9 @@ class DisciplinaryController extends Controller
 
     private function limitToVisibleStudents($query, User $user): void
     {
-        if ($user->role === 'Supervisor') {
+        if (app(UserController::class)->usesSupervisorScope($user)) {
             $user->loadMissing('profile');
-            $departments = $this->supervisedDepartments($user);
+            $departments = app(UserController::class)->supervisedOfficeAreas($user);
             $query->whereHas('student.profile', function ($q) use ($departments) {
                 $q->whereIn('assigned_office', $departments);
             });
@@ -496,14 +496,14 @@ class DisciplinaryController extends Controller
     private function visibleStudent(Request $request, int $studentId): ?User
     {
         $student = User::with('profile')->where('role', 'Student')->find($studentId);
-        if (!$student || $request->user()->role !== 'Supervisor') {
+        if (!$student || !app(UserController::class)->usesSupervisorScope($request->user())) {
             return $student;
         }
 
         $request->user()->loadMissing('profile');
         $office = trim((string) $student->profile?->assigned_office);
 
-        return in_array($office, $this->supervisedDepartments($request->user()), true) ? $student : null;
+        return in_array($office, app(UserController::class)->supervisedOfficeAreas($request->user()), true) ? $student : null;
     }
 
     private function reassignStudent(User $student, string $department): void

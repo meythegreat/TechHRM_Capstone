@@ -68,6 +68,9 @@ class OfficeController extends Controller
                 'student_id_number' => $user->profile->student_id_number ?? null,
                 'course' => $user->profile->course ?? null,
                 'year_level' => $user->profile->year_level ?? null,
+                'assignment_area' => $user->profile->assignment_area ?? null,
+                'assignment_label' => $user->profile->assignment_label ?: $name,
+                'special_hours_request' => (bool) ($user->profile->special_hours_request ?? false),
             ])
             ->values();
 
@@ -80,6 +83,25 @@ class OfficeController extends Controller
                 if ($departments === [] && $user->profile?->assigned_office) {
                     $departments = [$user->profile->assigned_office];
                 }
+                return in_array($name, array_map('strval', $departments), true);
+            })
+            ->map(fn (User $user) => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'absent_today' => app(UserController::class)->supervisorIsAbsentToday($user),
+            ])
+            ->values();
+
+        $secretaries = User::with('profile')
+            ->where('role', 'Department Secretary')
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->filter(function (User $user) use ($name) {
+                $departments = is_array($user->profile?->secretary_departments) ? $user->profile->secretary_departments : [];
+                if ($departments === [] && $user->profile?->assigned_office) {
+                    $departments = [$user->profile->assigned_office];
+                }
+
                 return in_array($name, array_map('strval', $departments), true);
             })
             ->map(fn (User $user) => [
@@ -106,6 +128,7 @@ class OfficeController extends Controller
         return response()->json([
             'office' => $name,
             'supervisors' => $supervisors,
+            'secretaries' => $secretaries,
             'students' => $students,
             'requests' => $requests,
         ]);

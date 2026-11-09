@@ -18,6 +18,7 @@ interface OrgSchedule {
     instructor?: string | null;
     department?: string | null;
     assigned_office?: string | null;
+    assignment_label?: string | null;
     student_name: string;
     profile_picture?: string | null;
 }
@@ -105,7 +106,7 @@ function insideSemester(date: Date, semester: SemesterWindow | null) {
     return key >= semester.starts_on && key <= semester.ends_on;
 }
 
-const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 function sameDay(left: Date, right: Date) {
     return left.getFullYear() === right.getFullYear()
@@ -117,7 +118,7 @@ function monthCells(cursor: Date) {
     const year = cursor.getFullYear();
     const month = cursor.getMonth();
     const first = new Date(year, month, 1);
-    const lead = first.getDay();
+    const lead = (first.getDay() + 6) % 7;
     const count = new Date(year, month + 1, 0).getDate();
     const cells: Array<Date | null> = [];
     for (let index = 0; index < lead; index += 1) cells.push(null);
@@ -162,7 +163,7 @@ function ScheduleCard({
     const office = shiftOffice(shift);
     const details = [
         !hideTime ? `${formatShiftStart(shift.time)}${formatShiftEnd(shift.time) ? ` – ${formatShiftEnd(shift.time)}` : ''}` : '',
-        (!personal || !isClass) && office ? office : '',
+        (!personal || !isClass) && (shift.assignment_label || office) ? (shift.assignment_label || office) : '',
         shift.room || '',
         shift.instructor || '',
     ].filter(Boolean);

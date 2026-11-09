@@ -29,6 +29,17 @@ class RoleMiddleware
         // Clean route roles
         $cleanRoles = array_map('trim', $roles);
 
+        // A department secretary uses the supervisor's access only while that supervisor is absent.
+        if ($user->role === 'Department Secretary' && in_array('Supervisor', $cleanRoles, true)) {
+            if (!app(\App\Http\Controllers\UserController::class)->isActingDepartmentSecretary($user)) {
+                return response()->json([
+                    'message' => 'The department supervisor is on duty. You can act for them after they are marked absent.',
+                ], 403);
+            }
+
+            return $next($request);
+        }
+
         // Check authorization
         if (!in_array($user->role, $cleanRoles)) {
             return response()->json([

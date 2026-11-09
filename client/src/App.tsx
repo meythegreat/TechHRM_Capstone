@@ -143,6 +143,11 @@ function App() {
           setAdminName(response.data.name);
           localStorage.setItem('user_name', response.data.name);
         }
+        if (role === 'Department Secretary') {
+          localStorage.setItem('secretary_acting', response.data.acting ? '1' : '0');
+        } else {
+          localStorage.removeItem('secretary_acting');
+        }
         setMustChangePassword(Boolean(response.data.must_change_password));
         
         if (response.data.profile_picture) {
@@ -170,6 +175,9 @@ function App() {
           if (response.data.name) {
             setAdminName(response.data.name);
             localStorage.setItem('user_name', response.data.name);
+          }
+          if (response.data.role === 'Department Secretary') {
+            localStorage.setItem('secretary_acting', response.data.acting ? '1' : '0');
           }
           if (response.data.profile_picture) {
             const path = normalizeFilePath(response.data.profile_picture);

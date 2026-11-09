@@ -38,9 +38,11 @@ class AuthController extends Controller
 
         // 4. Return assigned department for students/supervisors; admins get 'Management'
         $office = match ($user->role) {
-            'Student', 'Supervisor', 'WSPO Staff' => $user->profile?->assigned_office ?? 'Unassigned',
+            'Student', 'Supervisor', 'WSPO Staff', 'Department Secretary' => $user->profile?->assignment_label
+                ?: ($user->profile?->assigned_office ?? 'Unassigned'),
             default => 'Management',
         };
+        $accounts = app(\App\Http\Controllers\UserController::class);
 
         // 5. Create Sanctum Token for secure React API requests.
         // The token stops working at 11:59 PM on the day it was issued.
@@ -68,6 +70,10 @@ class AuthController extends Controller
             'office' => $office,
             'profile_picture' => $user->profile_picture,
             'must_change_password' => (bool) $user->must_change_password,
+            'acting' => $user->role === 'Department Secretary' ? $accounts->isActingDepartmentSecretary($user) : null,
+            'supervisor_absent' => $user->role === 'Supervisor' ? $accounts->supervisorIsAbsentToday($user) : null,
+            'special_hours_request' => (bool) $user->profile?->special_hours_request,
+            'required_hours' => \App\Support\WorkRequirement::hoursFor($user),
         ]);
     }
 

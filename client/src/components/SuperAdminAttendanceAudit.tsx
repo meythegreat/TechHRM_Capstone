@@ -12,7 +12,7 @@ interface LoginRecord {
     work_type?: string | null;
     user?: {
         name?: string;
-        profile?: { assigned_office?: string | null; student_id_number?: string | null } | null;
+        profile?: { assigned_office?: string | null; assignment_label?: string | null; student_id_number?: string | null } | null;
     } | null;
 }
 
@@ -87,7 +87,7 @@ const SuperAdminAttendanceAudit = () => {
                                         <p className="font-bold text-slate-900">{record.user?.name || 'Unknown'}</p>
                                         <p className="text-xs text-slate-500">{record.user?.profile?.student_id_number || 'No ID'}</p>
                                     </td>
-                                    <td className="px-6 py-4 text-sm font-semibold text-slate-700">{record.user?.profile?.assigned_office || 'Unassigned'}</td>
+                                    <td className="px-6 py-4 text-sm font-semibold text-slate-700">{record.user?.profile?.assignment_label || record.user?.profile?.assigned_office || 'Unassigned'}</td>
                                     <td className="px-6 py-4 text-sm font-medium text-slate-700">
                                         <span className="inline-flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-slate-400" />{formatWhen(record.time_in)}</span>
                                     </td>

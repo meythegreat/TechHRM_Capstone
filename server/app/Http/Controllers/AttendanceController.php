@@ -159,7 +159,7 @@ class AttendanceController extends Controller
         }
         $student = $studentQuery->findOrFail($id);
 
-        if ($actor->role === 'Supervisor' && !app(\App\Http\Controllers\UserController::class)->supervisorCanAccessStudent($actor, $student)) {
+        if (app(\App\Http\Controllers\UserController::class)->usesSupervisorScope($actor) && !app(\App\Http\Controllers\UserController::class)->supervisorCanAccessStudent($actor, $student)) {
             return response()->json(['message' => 'You can only view DTRs for working students in your department.'], 403);
         }
 
@@ -231,13 +231,16 @@ class AttendanceController extends Controller
 
         $query = Attendance::query()->visibleTo($user->role);
 
-        // MULTI-TENANT CHECK: If Supervisor, lock down to their department
-        if ($user->role === 'Supervisor') {
-            $myDepartment = $user->profile->assigned_office ?? 'Unassigned';
-
-            $query->whereHas('user.profile', function ($q) use ($myDepartment) {
-                $q->where('assigned_office', $myDepartment);
-            });
+        $accounts = app(\App\Http\Controllers\UserController::class);
+        if ($accounts->usesSupervisorScope($user)) {
+            $areas = $accounts->supervisedOfficeAreas($user);
+            if ($areas === []) {
+                $query->whereRaw('0 = 1');
+            } else {
+                $query->whereHas('user.profile', function ($q) use ($areas) {
+                    $q->whereIn('assigned_office', $areas);
+                });
+            }
         }
 
         return $query;
@@ -339,7 +342,7 @@ class AttendanceController extends Controller
         $user = $request->user()->loadMissing('profile');
 
         $accounts = app(\App\Http\Controllers\UserController::class);
-        if ($user->role !== 'Supervisor' && !$accounts->isWspoDepartmentSupervisor($user)) {
+        if (!$accounts->usesSupervisorScope($user) && !$accounts->isWspoDepartmentSupervisor($user)) {
             return response()->json(['message' => 'Only department supervisors can accept or reject attendance.'], 403);
         }
 
