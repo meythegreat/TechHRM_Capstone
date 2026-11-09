@@ -45,7 +45,6 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
             'kind' => 'daily_cleaning',
             'title' => 'Daily cleaning',
             'event_date' => '2026-10-28',
-            'year_level' => 1,
             'group_id' => $group->id,
             'starts_at' => '05:00',
         ]);
@@ -61,6 +60,10 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
             collect([$leader->id, $yearOne->id, $yearTwo->id, $yearFour->id])->sort()->values()->all(),
             $rosterIds
         );
+        foreach ($create->json('event.entries') as $entry) {
+            $this->assertSame('selected', $entry['status']);
+            $this->assertSame(1, (int) $entry['hours_delta']);
+        }
 
         $passcode = $this->getJson('/api/attendance/activity-passcode?event_id='.$eventId);
         $passcode->assertOk();
@@ -102,6 +105,41 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
                 'status' => 'on_time',
             ]);
         }
+    }
+
+    public function test_selecting_fourth_year_credits_only_those_students(): void
+    {
+        $staff = $this->makeUser('WSPO Staff', 'WSPO Coordinator');
+        $leader = $this->makeStudent('Leader One', 4, '2026-4001');
+        $yearThree = $this->makeStudent('Year Three', 3, '2026-4002');
+        $yearFour = $this->makeStudent('Year Four', 4, '2026-4003');
+
+        $group = DailyCleaningGroup::create(['name' => 'Fourth Year Meeting']);
+        $this->attachMembers($group, [$leader->id, $yearThree->id, $yearFour->id], $leader->id);
+
+        Sanctum::actingAs($staff);
+        $create = $this->postJson('/api/financial/hour-events', [
+            'kind' => 'meeting_assembly',
+            'title' => 'Meeting assembly',
+            'event_date' => '2026-10-27',
+            'year_level' => 4,
+            'group_id' => $group->id,
+            'starts_at' => '08:00',
+            'ends_at' => '12:00',
+        ])->assertCreated()
+            ->assertJsonPath('event.year_level', 4)
+            ->assertJsonPath('event.hours', 5);
+
+        $entries = collect($create->json('event.entries'));
+        $this->assertSame(
+            collect([$leader->id, $yearFour->id])->sort()->values()->all(),
+            $entries->pluck('user_id')->sort()->values()->all()
+        );
+        $entries->each(function (array $entry) {
+            $this->assertSame('selected', $entry['status']);
+            $this->assertSame(5, (int) $entry['hours_delta']);
+        });
+        $this->assertFalse($entries->contains(fn (array $entry) => $entry['user_id'] === $yearThree->id));
     }
 
     public function test_legacy_year_scoped_qr_works_for_sibling_year_levels(): void

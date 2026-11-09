@@ -662,7 +662,7 @@ class AdvancedAttendanceController extends Controller
             ->where('user_id', $user->id)
             ->whereNotNull('status')
             ->first();
-        if ($existing && $existing->status !== RenderedHourEntry::TIMED_IN) {
+        if ($existing && !in_array($existing->status, [RenderedHourEntry::TIMED_IN, RenderedHourEntry::SELECTED], true)) {
             return response()->json(['message' => 'You already clocked in for this activity.'], 422);
         }
 

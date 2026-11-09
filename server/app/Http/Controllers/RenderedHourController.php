@@ -563,35 +563,41 @@ class RenderedHourController extends Controller
             $validated['group_id'] = $group->id;
             $validated['group_name'] = $group->name;
             // One activity covers every year level in the group; QR/passcode is not year-scoped.
-            $validated['year_level'] = null;
             $this->assertGroupLeader($group);
         }
 
-        if ($kind === RenderedHourEvent::DEVOTIONAL) {
-            $duplicate = RenderedHourEvent::query()
-                ->where('kind', RenderedHourEvent::DEVOTIONAL)
-                ->where('group_id', $validated['group_id'])
-                ->whereDate('event_date', $validated['event_date'])
-                ->when($existing, fn ($query) => $query->where('id', '!=', $existing->id))
-                ->exists();
-            if ($duplicate) {
-                abort(422, 'This group already has a devotional meeting on that date.');
-            }
-        }
-
-        if ($kind === RenderedHourEvent::GENERAL_CLEANING) {
-            $duplicate = RenderedHourEvent::query()
-                ->where('kind', RenderedHourEvent::GENERAL_CLEANING)
-                ->where('group_id', $validated['group_id'])
-                ->whereDate('event_date', $validated['event_date'])
-                ->when($existing, fn ($query) => $query->where('id', '!=', $existing->id))
-                ->exists();
-            if ($duplicate) {
-                abort(422, 'This group already has general cleaning on that date.');
-            }
+        if (in_array($kind, [RenderedHourEvent::DEVOTIONAL, RenderedHourEvent::GENERAL_CLEANING], true)) {
+            $this->assertNoOverlappingGroupActivity($validated, $existing);
         }
 
         return $validated;
+    }
+
+    /**
+     * A year-specific activity and an all-years activity cannot cover the same students twice.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function assertNoOverlappingGroupActivity(array $validated, ?RenderedHourEvent $existing = null): void
+    {
+        $yearLevel = isset($validated['year_level']) ? (int) $validated['year_level'] : 0;
+        $label = $validated['kind'] === RenderedHourEvent::DEVOTIONAL ? 'a devotional meeting' : 'general cleaning';
+        $existingEvents = RenderedHourEvent::query()
+            ->where('kind', $validated['kind'])
+            ->where('group_id', $validated['group_id'])
+            ->whereDate('event_date', $validated['event_date'])
+            ->when($existing, fn ($query) => $query->where('id', '!=', $existing->id))
+            ->get(['year_level']);
+
+        $overlaps = $existingEvents->contains(function (RenderedHourEvent $event) use ($yearLevel) {
+            $savedYear = (int) ($event->year_level ?? 0);
+
+            return $savedYear === 0 || $yearLevel === 0 || $savedYear === $yearLevel;
+        });
+
+        if ($overlaps) {
+            abort(422, 'This group already has '.$label.' on that date for the selected year.');
+        }
     }
 
     private function cleaningGroup(Request $request): DailyCleaningGroup
@@ -624,13 +630,22 @@ class RenderedHourController extends Controller
     {
         if ($kind !== RenderedHourEvent::SPECIAL) {
             $group = $this->cleaningGroup($request);
-            $ids = $group->students
+            $yearLevel = (int) $request->input('year_level', 0);
+            $members = $group->students;
+            if ($yearLevel >= 1 && $yearLevel <= 4) {
+                $members = $members->filter(
+                    fn (User $student) => (int) ($student->profile?->year_level ?? 0) === $yearLevel
+                );
+            }
+            $ids = $members
                 ->pluck('id')
                 ->map(fn ($id) => (int) $id)
                 ->unique()
                 ->values();
             if ($ids->isEmpty()) {
-                abort(422, 'That group has no students.');
+                abort(422, $yearLevel >= 1
+                    ? 'That group has no '.RenderedHours::yearLabel($yearLevel).' students.'
+                    : 'That group has no students.');
             }
         } else {
             $ids = collect($request->input('user_ids', []))
@@ -713,6 +728,8 @@ class RenderedHourController extends Controller
             if ($event->kind === RenderedHourEvent::SPECIAL) {
                 $entry->status = 'applied';
                 $entry->scanned_at = null;
+            } elseif ($entry->status === null || $entry->status === RenderedHourEntry::SELECTED) {
+                $entry->status = RenderedHourEntry::SELECTED;
             }
             $entry->hours_delta = $event->deltaFor($entry->status);
             $entry->save();

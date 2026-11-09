@@ -139,7 +139,7 @@ class RenderedHourEvent extends Model
         // Selected members who scan on time receive this meeting's hours.
         // Absent and late scans are awarded nothing.
         return match ($status) {
-            'on_time' => $hours,
+            'on_time', RenderedHourEntry::SELECTED => $hours,
             'late', 'absent', RenderedHourEntry::TIMED_IN => 0.0,
             default => 0.0,
         };

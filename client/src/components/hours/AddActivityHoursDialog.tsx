@@ -18,6 +18,7 @@ export interface EditableHourEvent {
   event_date: string;
   hours?: number;
   direction?: string | null;
+  year_level?: number | null;
   group_id?: number | null;
   starts_at?: string | null;
   ends_at?: string | null;
@@ -29,9 +30,9 @@ export interface EditableHourEvent {
 const KINDS = [
   { id: 'special_request', label: 'Special request', hours: '', hint: 'Enter the hours of the event, then add or deduct them.' },
   { id: 'daily_cleaning', label: 'Daily cleaning', hours: '1', hint: 'Choose a group. Every year level in that group can use the same QR code and passcode. Students clock in, then time out the same way any time after they clock in. 1 hour is added only when they time out, and only if the clock-in was within the first hour after the official time in. A later clock-in is late and adds nothing. The recorded time out is the moment they time out.' },
-  { id: 'general_cleaning', label: 'General cleaning', hours: '5', hint: '5 hours for every year level in the chosen group. One QR code and passcode works for all of them. Hours are added only when the student times out, and only if the clock-in was on time. They can time out any time after they clock in, and that moment is the recorded time out.' },
-  { id: 'devotional', label: 'Devotional meeting', hours: '1', hint: '1 hour for every year level in the group. Students clock in, then time out with the same QR or passcode any time after they clock in. The hour is added only at time out, and only if they clocked in within 1 hour of the official time in. The recorded time out is the moment they time out.' },
-  { id: 'meeting_assembly', label: 'Meeting assembly', hours: '5', hint: '5 hours for every year level in the group. Students clock in, then time out with the same QR or passcode any time after they clock in. Hours are added only at time out, and only if they clocked in within 1 hour of the official time in. The recorded time out is the moment they time out.' },
+  { id: 'general_cleaning', label: 'General cleaning', hours: '5', hint: '5 hours are added to the selected year in the group as soon as this is saved. Choose 4th year to credit only those students. Absent or late later removes the hours. An on-time scan keeps them.' },
+  { id: 'devotional', label: 'Devotional meeting', hours: '1', hint: '1 hour is added to the selected year in the group as soon as this is saved. Absent or late later removes the hour. An on-time scan keeps it.' },
+  { id: 'meeting_assembly', label: 'Meeting assembly', hours: '5', hint: '5 hours are added to the selected year in the group as soon as this is saved. Choose 4th year to credit only those students. Absent or late later removes the hours. An on-time scan keeps them.' },
 ] as const;
 
 const today = () => {
@@ -56,6 +57,7 @@ const emptyForm = () => ({
   hours: '1',
   direction: 'add',
   group_id: '',
+  year_level: '',
   starts_at: '05:00',
   ends_at: '06:00',
   notes: '',
@@ -72,6 +74,7 @@ const formFromEvent = (event: EditableHourEvent) => {
     hours: String(event.hours ?? ''),
     direction: event.direction || 'add',
     group_id: event.group_id ? String(event.group_id) : '',
+    year_level: event.year_level ? String(event.year_level) : '',
     starts_at: starts,
     ends_at: event.ends_at || addHours(starts, hours || 1),
     notes: event.notes || '',
@@ -161,6 +164,7 @@ export function AddActivityHoursDialog({
         hours: form.kind === 'special_request' ? Number(form.hours) : undefined,
         direction: form.kind === 'special_request' ? form.direction : undefined,
         group_id: form.kind === 'special_request' ? undefined : Number(form.group_id),
+        year_level: form.kind === 'special_request' || form.year_level === '' ? undefined : Number(form.year_level),
         starts_at: form.kind === 'special_request' ? undefined : form.starts_at,
         ends_at: form.kind === 'special_request' ? undefined : form.ends_at,
         notes: form.notes || undefined,
@@ -242,20 +246,34 @@ export function AddActivityHoursDialog({
 
         {form.kind !== 'special_request' && (
           <div className="space-y-3">
-            <label className="block text-xs font-bold uppercase tracking-wide text-slate-500">
-              Group
-              <select required value={form.group_id} onChange={(input) => setForm({ ...form, group_id: input.target.value })} className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900">
-                <option value="">Choose a group</option>
-                {groups.map((group) => (
-                  <option key={group.id} value={group.id}>{group.name} · {group.students.length} student{group.students.length === 1 ? '' : 's'}</option>
-                ))}
-              </select>
-            </label>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <label className="block text-xs font-bold uppercase tracking-wide text-slate-500">
+                Group
+                <select required value={form.group_id} onChange={(input) => setForm({ ...form, group_id: input.target.value })} className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900">
+                  <option value="">Choose a group</option>
+                  {groups.map((group) => (
+                    <option key={group.id} value={group.id}>{group.name} · {group.students.length} student{group.students.length === 1 ? '' : 's'}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-xs font-bold uppercase tracking-wide text-slate-500">
+                Year level
+                <select value={form.year_level} onChange={(input) => setForm({ ...form, year_level: input.target.value })} className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900">
+                  <option value="">All year levels in the group</option>
+                  <option value="1">1st year</option>
+                  <option value="2">2nd year</option>
+                  <option value="3">3rd year</option>
+                  <option value="4">4th year</option>
+                </select>
+              </label>
+            </div>
             {groupsLoaded && groups.length === 0 ? (
               <p className="text-sm text-slate-500">No groups yet. The coordinator can add them from Groups in the Attendance Hub. Assign one group leader, then the members.</p>
             ) : form.group_id && (
               <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
-                {(groups.find((group) => String(group.id) === String(form.group_id))?.students || []).map((student) => (
+                {(groups.find((group) => String(group.id) === String(form.group_id))?.students || [])
+                  .filter((student) => form.year_level === '' || String(student.year_level || '') === form.year_level)
+                  .map((student) => (
                   <p key={student.id} className="px-3 py-2 text-sm">
                     <span className="font-bold text-slate-900">{student.name}</span>
                     <span className="text-slate-500"> · {student.student_id_number || 'No ID'} · {student.year_label}{student.is_leader ? ' · Leader' : ''}</span>

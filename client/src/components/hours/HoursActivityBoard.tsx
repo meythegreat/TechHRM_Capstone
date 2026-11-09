@@ -56,6 +56,7 @@ const statusLabel: Record<string, string> = {
   timed_in: 'Timed in',
   absent: 'Absent',
   applied: 'Applied',
+  selected: 'Included',
 };
 
 export function HoursActivityBoard({
@@ -160,7 +161,7 @@ export function HoursActivityBoard({
         <div>
           <h2 className="text-xl font-semibold text-slate-900">Activity hours</h2>
           <p className="text-sm text-slate-500 mt-1 max-w-2xl">
-            Create these activities in the Attendance Hub for a group. Students clock in, then time out the same way they clocked in. Hours are added only when they time out, and only if that clock-in was on time. Late adds nothing and deducts nothing. Absent deducts the same hours.
+            Create these activities in the Attendance Hub for a group and, if needed, one year level. The selected students receive that meeting's hours immediately. Marking someone absent or late removes those hours. An on-time scan keeps them.
             The group leader can show that activity&apos;s QR code and passcode, which works for every year level in the group, and can also correct clock-in and time-out from Group activities. WSPO staff can correct times below. Every activity stays on time for 1 hour after the official time in.
           </p>
         </div>
