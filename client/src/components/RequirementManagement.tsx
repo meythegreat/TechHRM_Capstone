@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import Toast from './Toast';
-import { openSecureFile } from '../utils/secureFile';
+import SecureFileViewerModal from './SecureFileViewerModal';
 import { bindPopup } from '../utils/popupDismiss';
 import { 
     FileText, 
@@ -48,6 +48,7 @@ const RequirementManagement = () => {
     const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
     const [selectedReqId, setSelectedReqId] = useState<number | null>(null);
     const [rejectRemarks, setRejectRemarks] = useState('');
+    const [documentViewer, setDocumentViewer] = useState<{ path: string; title: string } | null>(null);
 
     useEffect(() => {
         fetchRequirements();
@@ -116,6 +117,11 @@ const RequirementManagement = () => {
 
     return (
         <div className="max-w-7xl mx-auto space-y-8 font-sans p-4 sm:p-8">
+            <SecureFileViewerModal
+                filePath={documentViewer?.path || null}
+                title={documentViewer?.title || 'Submitted document'}
+                onClose={() => setDocumentViewer(null)}
+            />
             
             {/* DARK THEME HEADER - COMPLIANCE CENTER */}
             <motion.div 
@@ -223,7 +229,8 @@ const RequirementManagement = () => {
                                                 <Clock className="w-3.5 h-3.5" /> Uploaded: {new Date(req.created_at).toLocaleDateString()}
                                             </p>
                                             <button 
-                                                onClick={() => openSecureFile(req.file_path)}
+                                                type="button"
+                                                onClick={() => setDocumentViewer({ path: req.file_path, title: req.document_type || 'Submitted document' })}
                                                 className="mt-2 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1"
                                             >
                                                 <Eye className="w-3.5 h-3.5" /> View Secure File

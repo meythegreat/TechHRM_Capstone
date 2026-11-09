@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Clock, GraduationCap, Briefcase, Flag } from 'lucide-react';
 import { REALTIME_EVENT } from '../utils/realtime';
 import { compareSchedules, formatShiftEnd, formatShiftStart, happensNow, shiftWindow } from '../utils/scheduleTime';
@@ -219,6 +220,123 @@ function ScheduleCard({
                 )}
             </div>
         </article>
+    );
+}
+
+function HappeningNowSlideshow({
+    shifts,
+    personal,
+    clockLabel,
+}: {
+    shifts: OrgSchedule[];
+    personal: boolean;
+    clockLabel: string;
+}) {
+    const [index, setIndex] = useState(0);
+    const [expanded, setExpanded] = useState(false);
+    const [paused, setPaused] = useState(false);
+    const reduceMotion = useReducedMotion();
+    const count = shifts.length;
+    const safeIndex = count === 0 ? 0 : index % count;
+
+    useEffect(() => {
+        setIndex((current) => (count === 0 ? 0 : current % count));
+    }, [count]);
+
+    useEffect(() => {
+        if (expanded || paused || count < 2 || reduceMotion) return undefined;
+        const timer = window.setInterval(() => {
+            setIndex((current) => (current + 1) % count);
+        }, 5000);
+        return () => window.clearInterval(timer);
+    }, [expanded, paused, count, reduceMotion]);
+
+    const current = shifts[safeIndex];
+    const go = (delta: number) => setIndex((currentIndex) => (currentIndex + delta + count) % count);
+
+    if (!current) return null;
+
+    return (
+        <div
+            className="border-b border-emerald-100 bg-emerald-50/60 px-6 py-4"
+            onMouseEnter={() => setPaused(true)}
+            onMouseLeave={() => setPaused(false)}
+            onFocus={() => setPaused(true)}
+            onBlur={() => setPaused(false)}
+        >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-emerald-800">
+                    <span className="relative flex h-2 w-2" aria-hidden="true">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                    </span>
+                    Happening now
+                    <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold normal-case tracking-wide text-emerald-700 ring-1 ring-emerald-200">
+                        {count}
+                    </span>
+                    <span className="text-[11px] font-medium normal-case tracking-normal text-emerald-700">{clockLabel}</span>
+                </p>
+                <button
+                    type="button"
+                    onClick={() => setExpanded((value) => !value)}
+                    aria-expanded={expanded}
+                    className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200 hover:bg-emerald-50"
+                >
+                    {expanded ? 'Slideshow' : 'Expand'}
+                </button>
+            </div>
+
+            {expanded ? (
+                <ul className="mt-3 grid max-h-96 gap-2 overflow-y-auto pr-1 xl:grid-cols-2">
+                    {shifts.map((shift) => (
+                        <li key={`now-${shift.id}`}>
+                            <ScheduleCard shift={shift} personal={personal} active />
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <div className="mt-3">
+                    <div aria-live="polite">
+                        <AnimatePresence mode="wait" initial={false}>
+                            <motion.div
+                                key={current.id}
+                                initial={reduceMotion ? false : { opacity: 0, x: 18 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={reduceMotion ? { opacity: 1 } : { opacity: 0, x: -18 }}
+                                transition={{ duration: reduceMotion ? 0 : 0.25 }}
+                            >
+                                <ScheduleCard shift={current} personal={personal} active />
+                            </motion.div>
+                        </AnimatePresence>
+                    </div>
+                    {count > 1 && (
+                        <div className="mt-3 flex items-center justify-between gap-3">
+                            <button type="button" onClick={() => go(-1)} aria-label="Previous happening now" className="rounded-lg bg-white p-1.5 text-emerald-800 ring-1 ring-emerald-200 hover:bg-emerald-50">
+                                <ChevronLeft className="h-4 w-4" />
+                            </button>
+                            <div className="flex min-w-0 items-center justify-center gap-1.5" role="tablist" aria-label="Happening now slides">
+                                {count <= 8 ? shifts.map((shift, slideIndex) => (
+                                    <button
+                                        key={`now-dot-${shift.id}`}
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={slideIndex === safeIndex}
+                                        aria-label={`Show ${personal ? scheduleTitle(shift) : shift.student_name}`}
+                                        onClick={() => setIndex(slideIndex)}
+                                        className={`h-1.5 rounded-full transition-all ${slideIndex === safeIndex ? 'w-5 bg-emerald-600' : 'w-1.5 bg-emerald-200 hover:bg-emerald-300'}`}
+                                    />
+                                )) : (
+                                    <span className="text-xs font-semibold tabular-nums text-emerald-800">{safeIndex + 1} of {count}</span>
+                                )}
+                            </div>
+                            <button type="button" onClick={() => go(1)} aria-label="Next happening now" className="rounded-lg bg-white p-1.5 text-emerald-800 ring-1 ring-emerald-200 hover:bg-emerald-50">
+                                <ChevronRight className="h-4 w-4" />
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
     );
 }
 
@@ -557,31 +675,8 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
 
             {isExpanded && (
             <div id="schedule-calendar-body">
-            {!personal && liveShifts.length > 0 && (
-                <div className="border-b border-emerald-100 bg-emerald-50/80 px-4 py-4 sm:px-6" aria-live="polite">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                            <span className="relative flex h-2 w-2" aria-hidden="true">
-                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                            </span>
-                            Happening now
-                        </p>
-                        <span className="text-xs font-medium tabular-nums text-emerald-700">{clockLabel}</span>
-                    </div>
-                    <ul className="mt-3 grid gap-2 xl:grid-cols-2">
-                        {liveShifts.slice(0, 4).map((shift) => (
-                            <li key={`live-${shift.id}`}>
-                                <ScheduleCard shift={shift} active />
-                            </li>
-                        ))}
-                    </ul>
-                    {liveShifts.length > 4 && (
-                        <p className="mt-2 text-xs font-medium text-emerald-700">
-                            {liveShifts.length - 4} more in progress. Open today to see the full morning-to-evening list.
-                        </p>
-                    )}
-                </div>
+            {liveShifts.length > 0 && (
+                <HappeningNowSlideshow shifts={liveShifts} personal={personal} clockLabel={clockLabel} />
             )}
 
             {showTodayPanel && (

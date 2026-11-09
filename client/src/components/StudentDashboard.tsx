@@ -27,7 +27,8 @@ import NotificationBell from './NotificationBell';
 import SecureImage from './SecureImage';
 import AvatarCropDialog from './AvatarCropDialog';
 import AvatarPhotoMenu from './AvatarPhotoMenu';
-import { normalizeFilePath, openSecureFile } from '../utils/secureFile';
+import { normalizeFilePath } from '../utils/secureFile';
+import SecureFileViewerModal from './SecureFileViewerModal';
 import { firstPathSegment, resolveStudentPath } from '../config/routes';
 import { REALTIME_EVENT, emitRealtimeRefresh } from '../utils/realtime';
 import { bindPopup } from '../utils/popupDismiss';
@@ -79,6 +80,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
     const pathSegment = firstPathSegment(location.pathname);
     const currentPath = resolveStudentPath(pathSegment);
     const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+    const [documentViewer, setDocumentViewer] = useState<{ path: string; title: string } | null>(null);
 
     const [avatarPath, setAvatarPath] = useState<string | null>(() => normalizeFilePath(localStorage.getItem('profile_picture')));
     const [cropSource, setCropSource] = useState<string | null>(null);
@@ -365,6 +367,11 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
 
     return (
         <div className="flex h-screen bg-slate-50 overflow-hidden font-sans print:h-auto print:overflow-visible print:bg-white">
+            <SecureFileViewerModal
+                filePath={documentViewer?.path || null}
+                title={documentViewer?.title || 'Submitted document'}
+                onClose={() => setDocumentViewer(null)}
+            />
             <Sidebar 
                 isSidebarOpen={isSidebarOpen} 
                 setIsSidebarOpen={setIsSidebarOpen} 
@@ -668,7 +675,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                                                 <div>
                                                                     <h4 className="font-bold text-slate-900 text-base">{req.document_type}</h4>
                                                                     <p className="text-xs font-medium text-slate-500 mt-0.5">Uploaded: {new Date(req.created_at).toLocaleDateString()}</p>
-                                                                    <button type="button" onClick={() => openSecureFile(req.file_path)} className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors mt-1.5 flex items-center gap-1">
+                                                                    <button type="button" onClick={() => setDocumentViewer({ path: req.file_path, title: req.document_type || 'Submitted document' })} className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors mt-1.5 flex items-center gap-1">
                                                                         <FileText className="w-3.5 h-3.5" /> View Document
                                                                     </button>
                                                                 </div>

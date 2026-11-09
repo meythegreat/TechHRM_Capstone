@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { motion } from 'framer-motion';
 import { CheckCircle2, Circle, MapPin, XCircle, CalendarClock, Info, FileText } from 'lucide-react';
+import SecureFileViewerModal from './SecureFileViewerModal';
 
 export const TRACKER_STAGES = [
     {
@@ -80,6 +81,7 @@ const ApplicationStatusTracker = ({ application: provided = null, variant = 'pag
     const [application, setApplication] = useState(() => normalizeTracker(provided));
     const [isLoading, setIsLoading] = useState(!provided);
     const [loadError, setLoadError] = useState('');
+    const [documentViewer, setDocumentViewer] = useState(null);
 
     useEffect(() => {
         if (provided) {
@@ -310,14 +312,35 @@ const ApplicationStatusTracker = ({ application: provided = null, variant = 'pag
                     </div>
                     <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {application.documents.map((doc) => (
-                            <li key={doc.id} className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl border border-slate-100">
-                                <FileText className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                                <span className="text-xs font-bold text-slate-700 truncate">{doc.original_name}</span>
+                            <li key={doc.id}>
+                                {doc.file_path ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => setDocumentViewer({ path: doc.file_path, title: doc.original_name || 'Submitted document' })}
+                                        className="flex w-full items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl border border-slate-100 text-left hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+                                    >
+                                        <FileText className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block text-xs font-bold text-slate-700 truncate">{doc.original_name}</span>
+                                            <span className="block text-[11px] font-semibold text-indigo-600">Open file</span>
+                                        </span>
+                                    </button>
+                                ) : (
+                                    <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl border border-slate-100">
+                                        <FileText className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                                        <span className="text-xs font-bold text-slate-700 truncate">{doc.original_name}</span>
+                                    </div>
+                                )}
                             </li>
                         ))}
                     </ul>
                 </div>
             )}
+            <SecureFileViewerModal
+                filePath={documentViewer?.path || null}
+                title={documentViewer?.title || 'Submitted document'}
+                onClose={() => setDocumentViewer(null)}
+            />
         </div>
     );
 };

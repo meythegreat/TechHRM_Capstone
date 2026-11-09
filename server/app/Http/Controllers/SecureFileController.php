@@ -40,13 +40,15 @@ class SecureFileController extends Controller
             abort(403, 'You do not have permission to view this file.');
         }
 
-        $mime = Storage::disk('local')->mimeType($path) ?: 'application/octet-stream';
+        $mime = $this->contentType($path);
         $absolutePath = Storage::disk('local')->path($path);
+        $filename = $this->safeFilename($this->recordedDownloadName($path), $path);
 
         return response()->file($absolutePath, [
             'Content-Type' => $mime,
-            'Cache-Control' => 'private, no-cache, no-store, must-revalidate',
-            'Pragma' => 'no-cache',
+            'Content-Disposition' => 'inline; filename="'.$filename.'"',
+            'X-Content-Type-Options' => 'nosniff',
+            'Cache-Control' => 'private, max-age=120',
         ]);
     }
 
@@ -144,5 +146,91 @@ class SecureFileController extends Controller
         }
 
         return false;
+    }
+
+    private function contentType(string $path): string
+    {
+        $fromExtension = match (strtolower(pathinfo($path, PATHINFO_EXTENSION))) {
+            'pdf' => 'application/pdf',
+            'jpg', 'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+            'gif' => 'image/gif',
+            'webp' => 'image/webp',
+            default => null,
+        };
+
+        if ($fromExtension) {
+            return $fromExtension;
+        }
+
+        $recorded = strtolower(trim((string) $this->recordedMime($path)));
+        if ($this->isDisplayMime($recorded)) {
+            return $recorded;
+        }
+
+        $detected = Storage::disk('local')->mimeType($path);
+
+        return is_string($detected) && $this->isDisplayMime(strtolower($detected))
+            ? strtolower($detected)
+            : 'application/octet-stream';
+    }
+
+    private function recordedMime(string $path): ?string
+    {
+        if (!str_starts_with($path, 'application-documents/')) {
+            return null;
+        }
+
+        $mime = ApplicationDocument::where('file_path', $path)->value('mime_type');
+
+        return is_string($mime) && $mime !== '' ? $mime : null;
+    }
+
+    private function recordedDownloadName(string $path): ?string
+    {
+        if (str_starts_with($path, 'application-documents/')) {
+            $name = ApplicationDocument::where('file_path', $path)->value('original_name');
+
+            return is_string($name) && trim($name) !== '' ? $name : null;
+        }
+
+        if (str_starts_with($path, 'requirements/')) {
+            $name = Requirement::where('file_path', $path)->value('document_type');
+            if (!is_string($name) || trim($name) === '') {
+                return null;
+            }
+
+            $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+            if ($extension !== '' && !str_ends_with(strtolower($name), '.'.$extension)) {
+                return $name.'.'.$extension;
+            }
+
+            return $name;
+        }
+
+        return null;
+    }
+
+    private function safeFilename(?string $name, string $path): string
+    {
+        $candidate = trim((string) ($name ?: basename($path)));
+        $candidate = str_replace(["\r", "\n", '"', '\\'], '', $candidate);
+        $candidate = preg_replace('/[^\x20-\x7E]+/', '_', $candidate) ?? '';
+        $candidate = trim($candidate, ". \t");
+
+        if ($candidate === '') {
+            $candidate = 'document';
+        }
+
+        return substr($candidate, 0, 180);
+    }
+
+    private function isDisplayMime(string $mime): bool
+    {
+        return $mime !== ''
+            && $mime !== 'application/octet-stream'
+            && $mime !== 'text/plain'
+            && $mime !== 'text/html'
+            && !str_contains($mime, ' ');
     }
 }

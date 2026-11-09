@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Download, X } from 'lucide-react';
 import { bindPopup } from '../utils/popupDismiss';
 import { fetchSecureFile, type SecureFilePayload } from '../utils/secureFile';
 
@@ -60,9 +61,21 @@ export default function SecureFileViewerModal({
 
   if (!filePath) return null;
 
-  return (
+  const downloadName = payload
+    ? (/\.[a-z0-9]{2,5}$/i.test(title)
+        ? title
+        : payload.kind === 'pdf'
+            ? `${title}.pdf`
+            : payload.kind === 'image' && payload.mime === 'image/png'
+                ? `${title}.png`
+                : payload.kind === 'image'
+                    ? `${title}.jpg`
+                    : title)
+    : title;
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-[80] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-[110] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4"
       {...bindPopup(onClose)}
     >
       <div
@@ -74,14 +87,25 @@ export default function SecureFileViewerModal({
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Secure document</p>
             <h3 className="text-xl font-semibold text-slate-900 truncate">{title}</h3>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700 shrink-0"
-            aria-label="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {payload && (
+              <a
+                href={payload.url}
+                download={downloadName}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white"
+              >
+                <Download className="w-4 h-4" /> Download
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700 shrink-0"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 min-h-0 overflow-auto bg-slate-50 p-4 sm:p-6">
@@ -132,6 +156,7 @@ export default function SecureFileViewerModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

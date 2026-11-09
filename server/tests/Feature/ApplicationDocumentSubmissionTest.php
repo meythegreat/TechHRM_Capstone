@@ -108,8 +108,72 @@ class ApplicationDocumentSubmissionTest extends TestCase
 
         Sanctum::actingAs($staff);
 
-        $this->getJson('/api/secure-file?path='.urlencode($path))
-            ->assertOk();
+        $response = $this->get('/api/secure-file?path='.urlencode($path));
+        $response->assertOk();
+        $this->assertStringStartsWith('application/pdf', (string) $response->headers->get('Content-Type'));
+        $this->assertStringContainsString('inline', (string) $response->headers->get('Content-Disposition'));
+        $this->assertStringContainsString('letter.pdf', (string) $response->headers->get('Content-Disposition'));
+        $this->assertSame('pdf-bytes', $response->streamedContent());
+    }
+
+    public function test_staff_can_open_each_submitted_document(): void
+    {
+        $staff = User::create([
+            'name' => 'WSPO Coordinator',
+            'username' => 'wspo.open',
+            'password' => bcrypt('password'),
+            'role' => 'WSPO Staff',
+        ]);
+
+        $this->post('/api/apply', $this->officialPayload('docs.open@example.com'))
+            ->assertCreated();
+
+        $application = Application::with('documents')->first();
+        $this->assertNotNull($application);
+        $this->assertGreaterThan(0, $application->documents->count());
+
+        Sanctum::actingAs($staff);
+
+        foreach ($application->documents as $document) {
+            $response = $this->get('/api/secure-file?path='.urlencode($document->file_path));
+            $response->assertOk();
+
+            $extension = strtolower(pathinfo($document->file_path, PATHINFO_EXTENSION));
+            $expected = match ($extension) {
+                'pdf' => 'application/pdf',
+                'jpg', 'jpeg' => 'image/jpeg',
+                'png' => 'image/png',
+                default => null,
+            };
+            $this->assertNotNull($expected, $document->file_path);
+            $this->assertStringStartsWith($expected, (string) $response->headers->get('Content-Type'));
+            $this->assertStringContainsString('inline', (string) $response->headers->get('Content-Disposition'));
+            $this->assertSame(
+                Storage::disk('local')->get($document->file_path),
+                $response->streamedContent()
+            );
+        }
+    }
+
+    public function test_other_students_cannot_open_submitted_documents(): void
+    {
+        $this->post('/api/apply', $this->officialPayload('docs.private@example.com'))
+            ->assertCreated();
+
+        $document = ApplicationDocument::first();
+        $this->assertNotNull($document);
+
+        $student = User::create([
+            'name' => 'Other Student',
+            'username' => 'other.student',
+            'password' => bcrypt('password'),
+            'role' => 'Student',
+        ]);
+
+        Sanctum::actingAs($student);
+
+        $this->get('/api/secure-file?path='.urlencode($document->file_path))
+            ->assertForbidden();
     }
 
     private function officialPayload(string $email): array

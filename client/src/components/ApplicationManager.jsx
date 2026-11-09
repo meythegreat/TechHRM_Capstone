@@ -34,7 +34,7 @@ import {
     Undo2,
     Printer,
 } from 'lucide-react';
-import { openSecureFile } from '../utils/secureFile';
+import SecureFileViewerModal from './SecureFileViewerModal';
 import OfficialWspForms, { printOfficialForms } from './wsp/OfficialWspForms';
 import { bindPopup } from '../utils/popupDismiss';
 import ApplicationStatusTracker from './ApplicationStatusTracker';
@@ -149,6 +149,7 @@ const ApplicationManager = () => {
     const [undoAction, setUndoAction] = useState(null);
     const [officialForms, setOfficialForms] = useState(null);
     const [formsNote, setFormsNote] = useState('');
+    const [documentViewer, setDocumentViewer] = useState(null);
     const stageOverlays = useRef(new Map());
     const stageQueues = useRef(new Map());
     const commitToken = useRef(0);
@@ -1335,7 +1336,10 @@ const ApplicationManager = () => {
                                                 <li key={doc.id}>
                                                     <button
                                                         type="button"
-                                                        onClick={() => openSecureFile(doc.file_path)}
+                                                        onClick={() => setDocumentViewer({
+                                                            path: doc.file_path,
+                                                            title: DOCUMENT_LABELS[doc.document_key] || doc.original_name || 'Submitted document',
+                                                        })}
                                                         className="w-full text-left px-4 py-3 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
                                                     >
                                                         <p className="text-sm font-bold text-slate-800 truncate">{DOCUMENT_LABELS[doc.document_key] || doc.original_name}</p>
@@ -1490,6 +1494,12 @@ const ApplicationManager = () => {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            <SecureFileViewerModal
+                filePath={documentViewer?.path || null}
+                title={documentViewer?.title || 'Submitted document'}
+                onClose={() => setDocumentViewer(null)}
+            />
         </div>
     );
 };

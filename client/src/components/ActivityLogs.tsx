@@ -16,12 +16,10 @@ import {
     ListTree,
     X,
     FileText,
-    ExternalLink,
     Filter,
     User,
-    AlertCircle
 } from 'lucide-react';
-import { openSecureFile } from '../utils/secureFile';
+import SecureFileViewerModal from './SecureFileViewerModal';
 
 interface BreakdownStep {
     title: string;
@@ -67,8 +65,7 @@ const ActivityLogs = () => {
     const [logs, setLogs] = useState<LogRecord[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedLog, setSelectedLog] = useState<LogRecord | null>(null);
-    const [openingPath, setOpeningPath] = useState<string | null>(null);
-    const [openError, setOpenError] = useState('');
+    const [documentViewer, setDocumentViewer] = useState<{ path: string; title: string } | null>(null);
     const [category, setCategory] = useState<ActionCategory>('all');
     const [nameInput, setNameInput] = useState('');
     const [name, setName] = useState('');
@@ -109,21 +106,7 @@ const ActivityLogs = () => {
     }, [currentPage, category, name]);
 
     const openBreakdown = (log: LogRecord) => {
-        setOpenError('');
-        setOpeningPath(null);
         setSelectedLog(log);
-    };
-
-    const openDocument = async (filePath: string) => {
-        setOpenError('');
-        setOpeningPath(filePath);
-        try {
-            await openSecureFile(filePath);
-        } catch {
-            setOpenError('This document could not be opened. It may have been replaced or removed.');
-        } finally {
-            setOpeningPath(null);
-        }
     };
 
     const selectCategory = (next: ActionCategory) => {
@@ -498,22 +481,15 @@ const ActivityLogs = () => {
                                                     </div>
                                                     <button
                                                         type="button"
-                                                        onClick={() => openDocument(document.path)}
-                                                        disabled={openingPath === document.path}
-                                                        className="shrink-0 w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-60 transition-all shadow-md shadow-indigo-600/20"
+                                                        onClick={() => setDocumentViewer({ path: document.path, title: document.name })}
+                                                        className="shrink-0 w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 transition-all shadow-md shadow-indigo-600/20"
                                                     >
-                                                        <ExternalLink className="w-4 h-4" />
-                                                        {openingPath === document.path ? 'Opening…' : 'View Document'}
+                                                        <FileText className="w-4 h-4" />
+                                                        View Document
                                                     </button>
                                                 </div>
                                             ))}
                                         </div>
-                                        {openError && (
-                                            <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl text-sm font-bold text-red-700">
-                                                <AlertCircle className="w-5 h-5 shrink-0" />
-                                                <p>{openError}</p>
-                                            </div>
-                                        )}
                                     </div>
                                 )}
                             </div>
@@ -534,6 +510,11 @@ const ActivityLogs = () => {
                 </AnimatePresence>,
                 document.body
             )}
+            <SecureFileViewerModal
+                filePath={documentViewer?.path || null}
+                title={documentViewer?.title || 'Submitted document'}
+                onClose={() => setDocumentViewer(null)}
+            />
         </div>
     );
 };

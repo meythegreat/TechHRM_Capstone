@@ -76,6 +76,34 @@ async function rethrowSecureFileError(error: any): Promise<never> {
     throw error;
 }
 
+function baseMime(value: string): string {
+    return value.split(';')[0].trim().toLowerCase();
+}
+
+function mimeFromPath(path: string): string {
+    if (/\.pdf$/i.test(path)) return 'application/pdf';
+    if (/\.png$/i.test(path)) return 'image/png';
+    if (/\.jpe?g$/i.test(path)) return 'image/jpeg';
+    if (/\.gif$/i.test(path)) return 'image/gif';
+    if (/\.webp$/i.test(path)) return 'image/webp';
+    return '';
+}
+
+function isUsefulMime(mime: string): boolean {
+    return mime !== ''
+        && mime !== 'application/octet-stream'
+        && mime !== 'text/plain'
+        && mime !== 'text/html';
+}
+
+function preferredMime(headerMime: string, blobMime: string, path: string): string {
+    if (isUsefulMime(headerMime)) return headerMime;
+    const fromPath = mimeFromPath(path);
+    if (fromPath) return fromPath;
+    if (isUsefulMime(blobMime)) return blobMime;
+    return blobMime || headerMime || 'application/octet-stream';
+}
+
 function kindForMime(mime: string, path: string): SecureFileKind {
     if (mime.startsWith('image/') || /\.(jpe?g|png|gif|webp)$/i.test(path)) return 'image';
     if (mime === 'application/pdf' || /\.pdf$/i.test(path)) return 'pdf';
@@ -94,8 +122,11 @@ export async function fetchSecureFile(filePath: string): Promise<SecureFilePaylo
             params: { path },
             responseType: 'blob',
         });
-        const blob: Blob = response.data;
-        const mime = blob.type || String(response.headers?.['content-type'] || 'application/octet-stream');
+        const raw: Blob = response.data;
+        const headerMime = baseMime(String(response.headers?.['content-type'] || ''));
+        const blobMime = baseMime(raw.type || '');
+        const mime = preferredMime(headerMime, blobMime, path);
+        const blob = raw.type.toLowerCase() === mime ? raw : new Blob([raw], { type: mime });
         return {
             url: URL.createObjectURL(blob),
             mime,
@@ -107,9 +138,23 @@ export async function fetchSecureFile(filePath: string): Promise<SecureFilePaylo
     }
 }
 
-/** Opens a secured file in a new tab (legacy). Prefer in-app SecureFileViewerModal. */
+/**
+ * Opens a secured file in a new tab.
+ * The blank tab is opened before the download so the browser still treats it as the click,
+ * and the blob is loaded in that same tab. A noopener window cannot read the blob and stays blank.
+ */
 export async function openSecureFile(filePath: string): Promise<void> {
-    const payload = await fetchSecureFile(filePath);
-    window.open(payload.url, '_blank', 'noopener,noreferrer');
-    setTimeout(() => URL.revokeObjectURL(payload.url), 60_000);
+    const preview = window.open('about:blank', '_blank');
+    if (!preview) {
+        throw new Error('The browser blocked the document window. Allow pop-ups for this site and try again.');
+    }
+
+    try {
+        const payload = await fetchSecureFile(filePath);
+        preview.location.replace(payload.url);
+        window.setTimeout(() => URL.revokeObjectURL(payload.url), 60_000);
+    } catch (error) {
+        preview.close();
+        throw error;
+    }
 }
