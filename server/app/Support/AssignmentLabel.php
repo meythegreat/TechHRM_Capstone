@@ -14,7 +14,7 @@ class AssignmentLabel
      */
     private const KNOWN = [
         'college of computer studies' => 'CCS',
-        'college of nursing' => 'CN',
+        'college of nursing' => 'CON',
         'college of business and accountancy' => 'CBA',
         'college of business administration' => 'CBA',
         'college of criminal justice education' => 'CCJE',

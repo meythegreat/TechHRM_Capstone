@@ -46,6 +46,17 @@ export function formatYearLevel(yearLevel?: string | number | null): string | nu
     return `Yr ${raw}`;
 }
 
+/** Short college code when one is known. Example: "College of Computer Studies" → "CCS". */
+export function courseAcronym(course?: string | null): string {
+    const value = (course || '').trim();
+    if (!value) return '';
+    const paren = value.match(/\(([A-Za-z0-9]{2,12})\)\s*$/);
+    if (paren) return paren[1].toUpperCase();
+    const group = groupFor(value);
+    if (group && group.length > 1) return group[0];
+    return value;
+}
+
 /** Department or its acronym, then the specific area. Example: "CCS - Laboratory". */
 export function formatAssignment(office?: string | null, area?: string | null, abbreviation?: string | null): string {
     const place = (office || '').trim();

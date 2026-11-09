@@ -246,7 +246,9 @@ class RenderedHours
             }
         }
 
-        return null;
+        $known = AssignmentLabel::abbreviationFor($label);
+
+        return $known !== '' ? $known : null;
     }
 
     public static function yearLabel(?int $year): string

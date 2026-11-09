@@ -491,6 +491,8 @@
 
   .hours-summary-sheet table {
     margin-top: 0 !important;
+    table-layout: fixed !important;
+    width: 100% !important;
   }
 
   .hours-summary-sheet thead {

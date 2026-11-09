@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Printer } from 'lucide-react';
 import { CAMPUS_LETTERHEAD, CAMPUS_OFFICERS } from '../../constants/campusDocuments';
+import { courseAcronym } from '../../utils/studentAssignment';
 import { financialService } from '../../services/financialService';
 import { REALTIME_EVENT } from '../../utils/realtime';
 import { HoursActivityBoard } from './HoursActivityBoard';
@@ -102,8 +103,8 @@ const assignmentArea = (student: HourStudentRow) =>
   || '—';
 
 const courseYear = (student: HourStudentRow) => {
-  const course = student.course_abbreviation?.trim() || student.course;
-  const year = student.year_level ? `Year ${student.year_level}` : '';
+  const course = student.course_abbreviation?.trim() || courseAcronym(student.course);
+  const year = student.year_level ? `Y${student.year_level}` : '';
   return [course, year].filter(Boolean).join(' / ') || '—';
 };
 
@@ -230,7 +231,18 @@ export function HoursSummarySheet({ report, rate }: { report: HoursReport | null
           <img src={CAMPUS_LETTERHEAD.wspoLogoSrc} alt="Work Study Program Organization" className="h-14 w-14 shrink-0 object-contain" />
         </div>
 
-        <table className="w-full border-collapse" style={{ borderCollapse: 'collapse' }}>
+        <table className="w-full border-collapse table-fixed" style={{ borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: '26%' }} />
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '9%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '9%' }} />
+            <col style={{ width: '9%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '6%' }} />
+            <col style={{ width: '6%' }} />
+          </colgroup>
           <thead>
             <tr>
               <th className={cell}>Name</th>
@@ -261,7 +273,7 @@ export function HoursSummarySheet({ report, rate }: { report: HoursReport | null
                       {student.special_hours_request ? ' · Special request 100 hrs' : ''}
                     </td>
                     <td className={cell}>{assignmentArea(student)}</td>
-                    <td className={cell}>{courseYear(student)}</td>
+                    <td className={cell} title={student.course || undefined}>{courseYear(student)}</td>
                     <td className={`${cell} text-right`}>{hoursText(renderedHours(student))}</td>
                     <td className={`${cell} text-right`}>{hoursText(student.special_request)}</td>
                     <td className={`${cell} text-right`}>{hoursText(student.daily_cleaning)}</td>
