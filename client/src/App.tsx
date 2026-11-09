@@ -40,6 +40,7 @@ const STAFF_PAGE_TITLES: Record<string, string> = {
   offices: 'Offices',
   analytics: 'Reports & Analytics',
   financial: 'Hours Rendered',
+  messages: 'Messages',
   help: 'Help',
   settings: 'Profile Settings',
 };
@@ -53,6 +54,7 @@ const STUDENT_PAGE_TITLES: Record<string, string> = {
   requirements: 'Requirements',
   disciplinary: 'Disciplinary Records',
   application: 'Application Status',
+  messages: 'Messages',
   help: 'Help',
   settings: 'Settings',
 };
@@ -63,6 +65,7 @@ import AdminAnalyticsDashboard from './components/AdminAnalyticsDashboard';
 import StaffProfileSettings from './components/StaffProfileSettings';
 import OfficeDirectory from './components/OfficeDirectory';
 import HelpPage from './components/HelpPage';
+import MessagesPage from './components/MessagesPage';
 import InstallAppPrompt from './components/InstallAppPrompt';
 import PhoneNotificationPrompt from './components/PhoneNotificationPrompt';
 import { unsubscribePhoneNotifications } from './phoneNotifications';
@@ -403,6 +406,7 @@ function App() {
                     <Route path="/financial" element={<FinancialManagement />} />
                   </>
                 )}
+                <Route path="/messages" element={<MessagesPage />} />
                 <Route path="/help" element={<HelpPage userRole={userRole} />} />
                 <Route
                   path="/settings"

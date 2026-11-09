@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\AttendanceController;
+use App\Http\Controllers\ChatController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\ScheduleController;
@@ -78,6 +79,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/notifications', [NotificationController::class, 'clearAll']);
     Route::patch('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
     Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
+
+    // =====================================================
+    // CHAT (ALL AUTHENTICATED USERS)
+    // =====================================================
+
+    Route::get('/chat/users', [ChatController::class, 'directory']);
+    Route::get('/chat/conversations', [ChatController::class, 'conversations']);
+    Route::post('/chat/conversations', [ChatController::class, 'open']);
+    Route::get('/chat/conversations/{conversation}/messages', [ChatController::class, 'messages']);
+    Route::post('/chat/conversations/{conversation}/messages', [ChatController::class, 'send']);
 
     // =====================================================
     // WORKING STUDENT FEATURES

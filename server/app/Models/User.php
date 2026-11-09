@@ -113,6 +113,11 @@ class User extends Authenticatable
         return $this->hasMany(Notification::class);
     }
 
+    public function sentMessages()
+    {
+        return $this->hasMany(Message::class, 'sender_id');
+    }
+
     public function pushSubscriptions()
     {
         return $this->hasMany(PushSubscription::class);

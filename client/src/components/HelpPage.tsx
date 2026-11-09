@@ -183,6 +183,25 @@ const HELP_TOPICS: HelpTopic[] = [
         ],
     },
     {
+        id: 'student-messages',
+        title: 'Messages',
+        summary: 'Chat with any signed-in TechHRM user.',
+        about:
+            'Messages lets you send direct chats to supervisors, WSPO staff, or other students. Opening a conversation marks their messages as read, and a new message also creates a notification for the other person.',
+        audience: ['Student'],
+        steps: [
+            'Click Messages in the left menu.',
+            'Search for a person by name, username, or role.',
+            'Open their conversation, type your message, then press Enter or click Send.',
+            'Check the left inbox for unread badges and recent chats.',
+            'If you get a New Message notification, open it to jump back to Messages.',
+        ],
+        tips: [
+            'You can only message other signed-in accounts, not applicants who have not been enrolled yet.',
+            'Keep the Messages page open to refresh new replies every few seconds.',
+        ],
+    },
+    {
         id: 'student-settings',
         title: 'Settings',
         summary: 'Update your photo or password.',
@@ -460,6 +479,25 @@ const HELP_TOPICS: HelpTopic[] = [
         tips: [
             'Logs cannot be edited or deleted from this page.',
             'Treat audit information as private operational data.',
+        ],
+    },
+    {
+        id: 'staff-messages',
+        title: 'Messages',
+        summary: 'Chat with students, supervisors, and other staff.',
+        about:
+            'Messages is a direct inbox for any signed-in TechHRM account. Use it for quick questions about schedules, attendance, or office coordination. New chats also send a New Message notification to the recipient.',
+        audience: ['Supervisor', 'WSPO Staff', 'Super Admin'],
+        steps: [
+            'Click Messages in the left menu.',
+            'Search for the person you need, then open the conversation.',
+            'Type your reply and press Enter or click Send.',
+            'Use unread badges in the inbox to find conversations that still need attention.',
+            'Click a New Message notification to return to this page.',
+        ],
+        tips: [
+            'Conversations are private between the two people in the thread.',
+            'Keep Messages open if you want replies to appear without refreshing the whole browser tab.',
         ],
     },
     {
