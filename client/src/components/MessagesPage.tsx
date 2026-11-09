@@ -31,9 +31,26 @@ import {
 } from '../services/chatService';
 
 export interface MessagesPageProps {
-  variant?: 'page' | 'overlay';
+  variant?: 'page' | 'overlay' | 'float';
   initialConversationId?: number | null;
   onClose?: () => void;
+  onMinimize?: () => void;
+}
+
+function useIsMobileLayout(breakpointPx = 1024) {
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < breakpointPx : false,
+  );
+
+  useEffect(() => {
+    const media = window.matchMedia(`(max-width: ${breakpointPx - 1}px)`);
+    const sync = () => setIsMobile(media.matches);
+    sync();
+    media.addEventListener('change', sync);
+    return () => media.removeEventListener('change', sync);
+  }, [breakpointPx]);
+
+  return isMobile;
 }
 
 function formatClock(value?: string | null): string {
@@ -191,9 +208,12 @@ export default function MessagesPage({
   variant = 'page',
   initialConversationId = null,
   onClose,
+  onMinimize,
 }: MessagesPageProps) {
   const reduceMotion = useReducedMotion();
+  const isMobileLayout = useIsMobileLayout();
   const isOverlay = variant === 'overlay';
+  const isFloat = variant === 'float';
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [directory, setDirectory] = useState<ChatUser[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -215,6 +235,9 @@ export default function MessagesPage({
   const [memberCount, setMemberCount] = useState(0);
   const [activeNow, setActiveNow] = useState<ChatUser[]>([]);
   const [maximized, setMaximized] = useState(isOverlay);
+  const [mobileThreadOpen, setMobileThreadOpen] = useState(
+    Boolean(isFloat || (initialConversationId && isOverlay)),
+  );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState('');
@@ -495,6 +518,20 @@ export default function MessagesPage({
     bottomRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'end' });
   }, [messages.length, activeId, peerTyping, maximized, reduceMotion]);
 
+  const openConversation = (conversationId: number) => {
+    setActiveId(conversationId);
+    setThreadMenuOpen(false);
+    setManagingId(null);
+    setMenuId(null);
+    if (isMobileLayout || isFloat) setMobileThreadOpen(true);
+  };
+
+  const backToInbox = () => {
+    setMobileThreadOpen(false);
+    setThreadMenuOpen(false);
+    setMenuId(null);
+  };
+
   const startChat = async (user: ChatUser) => {
     try {
       const conversation = await chatService.openConversation(user.id);
@@ -504,6 +541,7 @@ export default function MessagesPage({
       setInboxScope('active');
       setLoadingInbox(true);
       await loadInbox(conversation.id, 'active');
+      openConversation(conversation.id);
       setError(null);
       draftRef.current?.focus();
     } catch {
@@ -615,6 +653,7 @@ export default function MessagesPage({
       setInboxScope('active');
       setLoadingInbox(true);
       await loadInbox(conversation.id, 'active');
+      openConversation(conversation.id);
       setError(null);
     } catch {
       setError('Could not create that group chat.');
@@ -632,6 +671,7 @@ export default function MessagesPage({
       if (activeId === conversationId) {
         setActiveId(null);
         setMessages([]);
+        setMobileThreadOpen(false);
       }
       setError(null);
     } catch {
@@ -669,6 +709,7 @@ export default function MessagesPage({
       if (activeId === conversationId) {
         setActiveId(null);
         setMessages([]);
+        setMobileThreadOpen(false);
       }
       setError(null);
     } catch {
@@ -690,6 +731,9 @@ export default function MessagesPage({
         ? 'Online'
         : formatLastSeen(peerLastSeenAt || active?.peer?.last_seen_at);
 
+  const showMobileThread = isMobileLayout && mobileThreadOpen && Boolean(active);
+  const showMobileInbox = isMobileLayout && !showMobileThread;
+
   const conversationPane = (
     <section className="chat-wallpaper flex min-h-0 flex-1 flex-col">
       {!active ? (
@@ -709,13 +753,30 @@ export default function MessagesPage({
         </div>
       ) : (
         <>
-          <header className="flex items-center gap-3 border-b border-slate-200/80 bg-white/90 px-4 py-3 backdrop-blur sm:px-5">
+          <header
+            className={`flex shrink-0 items-center gap-2 border-b border-slate-200/80 bg-white/90 backdrop-blur sm:gap-3 ${
+              isFloat ? 'px-3 py-2' : 'px-3 py-2.5 sm:px-5 sm:py-3'
+            }`}
+          >
+            {isMobileLayout && !isFloat && (
+              <button
+                type="button"
+                onClick={backToInbox}
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                aria-label="Back to inbox"
+                title="Back"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+            )}
             <AvatarWithPresence
               name={activeIsGroup ? conversationTitle(active) : active.peer?.name}
               picture={active.peer?.profile_picture}
               online={peerOnline || conversationOnline(active)}
               group={activeIsGroup}
-              className="h-11 w-11 rounded-full bg-slate-100 text-sm text-slate-600"
+              className={`rounded-full bg-slate-100 text-sm text-slate-600 ${
+                isFloat || isMobileLayout ? 'h-9 w-9' : 'h-11 w-11'
+              }`}
             />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-slate-900">{conversationTitle(active)}</p>
@@ -740,8 +801,8 @@ export default function MessagesPage({
                   )}
                 </motion.p>
               </AnimatePresence>
-              {!activeIsGroup && (
-                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {!activeIsGroup && !isFloat && (
+                <div className="mt-1.5 hidden flex-wrap items-center gap-1.5 sm:flex">
                   <AssignmentChip label={peerAssignment || active.peer?.assignment} />
                   <ClockedInChip
                     clockedIn={peerClockedIn || active.peer?.clocked_in}
@@ -750,57 +811,81 @@ export default function MessagesPage({
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-1">
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setThreadMenuOpen((value) => !value)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-                  aria-label="Conversation options"
-                  title="Conversation options"
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </button>
-                <AnimatePresence>
-                  {threadMenuOpen && (
-                    <motion.div
-                      initial={reduceMotion ? false : { opacity: 0, y: 4, scale: 0.98 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={reduceMotion ? undefined : { opacity: 0, y: 4, scale: 0.98 }}
-                      className="absolute right-0 z-30 mt-1 min-w-44 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg"
-                    >
-                      {inboxScope === 'archived' || active.is_archived ? (
-                        <button
-                          type="button"
-                          onClick={() => void restoreConversation(active.id)}
-                          className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                        >
-                          <ArchiveRestore className="h-3.5 w-3.5" />
-                          Restore conversation
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => void archiveConversation(active.id)}
-                          className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                        >
-                          <Archive className="h-3.5 w-3.5" />
-                          Archive conversation
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => void deleteConversation(active.id)}
-                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50"
+            <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+              {!isFloat && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setThreadMenuOpen((value) => !value)}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                    aria-label="Conversation options"
+                    title="Conversation options"
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </button>
+                  <AnimatePresence>
+                    {threadMenuOpen && (
+                      <motion.div
+                        initial={reduceMotion ? false : { opacity: 0, y: 4, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={reduceMotion ? undefined : { opacity: 0, y: 4, scale: 0.98 }}
+                        className="absolute right-0 z-30 mt-1 min-w-44 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Delete for me
-                      </button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-              {!isOverlay && (
+                        {inboxScope === 'archived' || active.is_archived ? (
+                          <button
+                            type="button"
+                            onClick={() => void restoreConversation(active.id)}
+                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                          >
+                            <ArchiveRestore className="h-3.5 w-3.5" />
+                            Restore conversation
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => void archiveConversation(active.id)}
+                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                          >
+                            <Archive className="h-3.5 w-3.5" />
+                            Archive conversation
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => void deleteConversation(active.id)}
+                          className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete for me
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+              {isFloat && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onMinimize?.()}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                    aria-label="Minimize chat"
+                    title="Minimize"
+                  >
+                    <Minimize2 className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onClose?.()}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                    aria-label="Close chat"
+                    title="Close"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </>
+              )}
+              {!isOverlay && !isFloat && !isMobileLayout && (
                 <button
                   type="button"
                   onClick={() => setMaximized((value) => !value)}
@@ -811,7 +896,7 @@ export default function MessagesPage({
                   {maximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                 </button>
               )}
-              {(maximized || isOverlay) && (
+              {(maximized || isOverlay) && !isFloat && (
                 <button
                   type="button"
                   onClick={() => {
@@ -992,7 +1077,11 @@ export default function MessagesPage({
             <div ref={bottomRef} />
           </div>
 
-          <form onSubmit={submit} className="border-t border-slate-200/80 bg-white/90 p-3 backdrop-blur sm:p-4">
+          <form
+            onSubmit={submit}
+            className="shrink-0 border-t border-slate-200/80 bg-white/90 p-2 backdrop-blur sm:p-3"
+            style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
+          >
             <div className="chat-composer flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50/90 p-2 transition focus-within:border-blue-300 focus-within:ring-2 focus-within:ring-blue-100">
               <textarea
                 ref={draftRef}
@@ -1013,7 +1102,7 @@ export default function MessagesPage({
                 }}
                 rows={1}
                 placeholder={`Message ${conversationTitle(active)}`}
-                className="max-h-32 min-h-[2.75rem] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-slate-800 outline-none"
+                className="max-h-28 min-h-[2.5rem] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-slate-800 outline-none sm:max-h-32 sm:min-h-[2.75rem]"
               />
               <motion.button
                 type="submit"
@@ -1033,12 +1122,12 @@ export default function MessagesPage({
 
   const inbox = (
     <aside
-      className={`relative flex min-h-0 flex-col border-b border-slate-200/80 transition-[width] duration-300 ease-out lg:border-b-0 lg:border-r ${
+      className={`relative flex h-full min-h-0 w-full flex-1 flex-col border-b border-slate-200/80 transition-[width] duration-300 ease-out lg:border-b-0 lg:border-r lg:flex-none ${
         sidebarCollapsed ? 'lg:w-[4.75rem]' : 'lg:w-[22rem]'
-      } ${isOverlay || maximized ? 'w-full lg:shrink-0' : ''}`}
+      }`}
     >
-      <div className={`border-b border-slate-200/80 ${sidebarCollapsed ? 'p-2' : 'p-4'}`}>
-        <div className={`mb-3 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between gap-2'}`}>
+      <div className={`border-b border-slate-200/80 ${sidebarCollapsed ? 'p-2' : 'p-3 sm:p-4'}`}>
+        <div className={`mb-2 flex items-center sm:mb-3 ${sidebarCollapsed ? 'justify-center' : 'justify-between gap-2'}`}>
           {!sidebarCollapsed && (
             <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Inbox</p>
           )}
@@ -1055,7 +1144,7 @@ export default function MessagesPage({
             <button
               type="button"
               onClick={() => setInboxScope((value) => (value === 'active' ? 'archived' : 'active'))}
-              className={`inline-flex h-9 w-9 items-center justify-center rounded-xl transition ${
+              className={`hidden h-9 w-9 items-center justify-center rounded-xl transition sm:inline-flex ${
                 inboxScope === 'archived'
                   ? 'bg-amber-50 text-amber-700'
                   : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
@@ -1128,7 +1217,7 @@ export default function MessagesPage({
 
       <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
         {!sidebarCollapsed && inboxScope === 'active' && !search.trim() && (
-          <div className="border-b border-slate-100 px-3 py-3">
+          <div className="hidden border-b border-slate-100 px-3 py-3 lg:block">
             <p className="mb-2 flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
               <Activity className="h-3.5 w-3.5" />
               Active now
@@ -1146,7 +1235,7 @@ export default function MessagesPage({
                   <button
                     key={`active-${user.id}`}
                     type="button"
-                    onClick={() => startChat(user)}
+                    onClick={() => void startChat(user)}
                     className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition hover:bg-slate-50"
                   >
                     <AvatarWithPresence
@@ -1264,7 +1353,7 @@ export default function MessagesPage({
                     key={conversation.id}
                     type="button"
                     layout={!reduceMotion}
-                    onClick={() => setActiveId(conversation.id)}
+                    onClick={() => openConversation(conversation.id)}
                     className={`relative mb-1.5 flex w-full items-center justify-center rounded-xl p-1.5 transition ${
                       selected ? 'bg-blue-50 ring-1 ring-blue-100' : 'hover:bg-slate-50'
                     }`}
@@ -1289,13 +1378,13 @@ export default function MessagesPage({
               return (
                 <div
                   key={conversation.id}
-                  className={`group/row mb-1 flex w-full items-start gap-2 rounded-xl px-2 py-2.5 transition ${
+                  className={`group/row mb-0.5 flex w-full items-start gap-2 rounded-xl px-2 py-2 transition sm:mb-1 sm:py-2.5 ${
                     selected ? 'bg-blue-50 ring-1 ring-blue-100' : 'hover:bg-slate-50'
                   }`}
                 >
                   <button
                     type="button"
-                    onClick={() => setActiveId(conversation.id)}
+                    onClick={() => openConversation(conversation.id)}
                     className="flex min-w-0 flex-1 items-start gap-3 text-left"
                   >
                     <AvatarWithPresence
@@ -1315,7 +1404,7 @@ export default function MessagesPage({
                         </span>
                       </div>
                       {!group && (
-                        <div className="mt-1 flex flex-wrap gap-1">
+                        <div className="mt-1 hidden flex-wrap gap-1 lg:flex">
                           <AssignmentChip label={conversation.peer?.assignment} />
                           <ClockedInChip
                             clockedIn={conversation.peer?.clocked_in}
@@ -1403,40 +1492,57 @@ export default function MessagesPage({
     </aside>
   );
 
-  const workspace = (
+  const workspace = isFloat ? (
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xl">
+      {conversationPane}
+    </div>
+  ) : (
     <motion.div
       ref={shellRef}
       layout={!reduceMotion}
       className={`flex min-h-0 flex-1 overflow-hidden bg-white ${
-        isOverlay || maximized
+        isOverlay || maximized || isMobileLayout
           ? 'h-full w-full rounded-none border-0 shadow-none'
           : 'rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]'
-      } ${sidebarCollapsed ? 'lg:flex-row' : 'lg:flex-row'} flex-col`}
+      } ${isMobileLayout ? 'flex-col' : 'flex-col lg:flex-row'}`}
     >
-      {inbox}
-      {(!maximized || isOverlay) && conversationPane}
-      {maximized && !isOverlay && null}
+      <div
+        className={`min-h-0 w-full flex-col lg:h-full lg:w-auto lg:flex-none ${
+          showMobileThread ? 'hidden' : 'flex flex-1'
+        }`}
+      >
+        {inbox}
+      </div>
+      <div
+        className={`min-h-0 min-w-0 flex-col ${showMobileInbox ? 'hidden' : 'flex flex-1'}`}
+      >
+        {(!maximized || isOverlay || isMobileLayout) && conversationPane}
+      </div>
     </motion.div>
   );
 
   return (
     <div
       className={
-        isOverlay
-          ? 'flex h-full min-h-0 w-full flex-col'
-          : 'flex h-full min-h-0 w-full max-w-none flex-col gap-2 p-2 sm:gap-3 sm:p-3'
+        isFloat || isOverlay
+          ? 'flex h-full min-h-0 w-full flex-col overflow-hidden'
+          : `flex h-full min-h-0 w-full max-w-none flex-col overflow-hidden ${
+              showMobileThread ? 'gap-0 p-0' : 'gap-1.5 p-2 sm:gap-3 sm:p-3'
+            }`
       }
     >
-      {!isOverlay && (
+      {!isOverlay && !isFloat && !showMobileThread && (
         <motion.div
           initial={reduceMotion ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease }}
-          className="shrink-0 px-1"
+          className="shrink-0 px-0.5 sm:px-1"
         >
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-600">Inbox</p>
-          <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">Messages</h1>
-          <p className="mt-0.5 text-sm text-slate-500">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-600 sm:text-[11px]">
+            Inbox
+          </p>
+          <h1 className="mt-0.5 text-lg font-semibold tracking-tight text-slate-900 sm:text-2xl">Messages</h1>
+          <p className="mt-0.5 hidden text-sm text-slate-500 sm:block">
             Message any signed-in TechHRM user, create group chats, and stay reachable from the chat heads on desktop.
           </p>
         </motion.div>
@@ -1448,7 +1554,7 @@ export default function MessagesPage({
             initial={reduceMotion ? false : { opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={reduceMotion ? undefined : { opacity: 0, y: -6 }}
-            className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+            className="mx-2 shrink-0 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 sm:mx-0 sm:px-4 sm:py-3"
           >
             {error}
           </motion.div>
@@ -1458,7 +1564,7 @@ export default function MessagesPage({
       {workspace}
 
       <AnimatePresence>
-        {maximized && !isOverlay && active && (
+        {maximized && !isOverlay && !isFloat && !isMobileLayout && active && (
           <motion.div
             key="chat-maximize"
             className="fixed inset-0 z-[80] flex bg-white"

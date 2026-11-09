@@ -1,9 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { MessageCircle, Plus, X } from 'lucide-react';
 import UserAvatar from './UserAvatar';
 import MessagesPage from './MessagesPage';
 import { chatService, type ChatConversation } from '../services/chatService';
+
+const WINDOW_WIDTH = 360;
+const WINDOW_HEIGHT = 500;
+const WINDOW_GAP = 12;
+const DOCK_WIDTH = 72;
+
+type FloatingWindow = {
+  id: number;
+  minimized: boolean;
+};
 
 function conversationLabel(conversation: ChatConversation): string {
   if (conversation.is_group || conversation.type === 'group') {
@@ -28,14 +39,17 @@ function isOnline(conversation: ChatConversation): boolean {
 
 /**
  * Desktop-only chat heads docked to the bottom-far-right of the app shell.
- * Hidden on mobile viewports.
+ * Opens compact floating chat windows instead of a full-page overlay.
  */
 export default function ChatHeads() {
+  const navigate = useNavigate();
   const reduceMotion = useReducedMotion();
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
-  const [open, setOpen] = useState(false);
-  const [focusId, setFocusId] = useState<number | null>(null);
+  const [windows, setWindows] = useState<FloatingWindow[]>([]);
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(() => new Set());
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth : 1440,
+  );
   const previousUnread = useRef<Record<number, number>>({});
 
   const load = async () => {
@@ -61,6 +75,12 @@ export default function ChatHeads() {
   }, []);
 
   useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  useEffect(() => {
     setHiddenIds((current) => {
       let changed = false;
       const next = new Set(current);
@@ -76,40 +96,81 @@ export default function ChatHeads() {
     });
   }, [conversations]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setOpen(false);
-        setFocusId(null);
-      }
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open]);
+  const openWindowIds = useMemo(() => new Set(windows.map((item) => item.id)), [windows]);
 
   const heads = useMemo(() => {
-    return conversations
+    const prioritized = conversations
       .filter((item) => !hiddenIds.has(item.id))
-      .filter((item) => item.unread_count > 0 || item.peer?.online || (item.is_group && item.participants?.some((p) => p.online)))
+      .filter(
+        (item) =>
+          openWindowIds.has(item.id) ||
+          item.unread_count > 0 ||
+          item.peer?.online ||
+          (item.is_group && item.participants?.some((member) => member.online)),
+      )
       .concat(
         conversations.filter(
           (item) =>
             !hiddenIds.has(item.id) &&
+            !openWindowIds.has(item.id) &&
             item.unread_count === 0 &&
             !item.peer?.online &&
-            !(item.is_group && item.participants?.some((p) => p.online)),
+            !(item.is_group && item.participants?.some((member) => member.online)),
         ),
       )
-      .filter((item, index, all) => all.findIndex((row) => row.id === item.id) === index)
-      .slice(0, 6);
-  }, [conversations, hiddenIds]);
+      .filter((item, index, all) => all.findIndex((row) => row.id === item.id) === index);
+
+    return prioritized.slice(0, 6);
+  }, [conversations, hiddenIds, openWindowIds]);
 
   const unreadTotal = conversations.reduce((sum, item) => sum + (item.unread_count || 0), 0);
 
-  const openChat = (conversationId?: number | null) => {
-    setFocusId(conversationId ?? null);
-    setOpen(true);
+  const visibleWindows = useMemo(() => windows.filter((item) => !item.minimized), [windows]);
+
+  const maxWindows = useMemo(() => {
+    const available = Math.max(WINDOW_WIDTH, viewportWidth - DOCK_WIDTH - 24);
+    return Math.max(1, Math.floor((available + WINDOW_GAP) / (WINDOW_WIDTH + WINDOW_GAP)));
+  }, [viewportWidth]);
+
+  const openChat = (conversationId: number) => {
+    setHiddenIds((current) => {
+      if (!current.has(conversationId)) return current;
+      const next = new Set(current);
+      next.delete(conversationId);
+      return next;
+    });
+
+    setWindows((current) => {
+      const existing = current.find((item) => item.id === conversationId);
+      if (existing) {
+        return current.map((item) =>
+          item.id === conversationId ? { ...item, minimized: false } : item,
+        );
+      }
+
+      const next = [...current, { id: conversationId, minimized: false }];
+      const openCount = next.filter((item) => !item.minimized).length;
+      if (openCount <= maxWindows) return next;
+
+      // Keep newest windows visible; minimize the oldest expanded ones.
+      let overflow = openCount - maxWindows;
+      return next.map((item) => {
+        if (item.id === conversationId || item.minimized || overflow <= 0) return item;
+        overflow -= 1;
+        return { ...item, minimized: true };
+      });
+    });
+  };
+
+  const minimizeWindow = (conversationId: number) => {
+    setWindows((current) =>
+      current.map((item) => (item.id === conversationId ? { ...item, minimized: true } : item)),
+    );
+  };
+
+  const closeWindow = (conversationId: number) => {
+    setWindows((current) => current.filter((item) => item.id !== conversationId));
+    void load();
   };
 
   const closeHead = (conversationId: number) => {
@@ -118,10 +179,7 @@ export default function ChatHeads() {
       next.add(conversationId);
       return next;
     });
-    if (focusId === conversationId) {
-      setOpen(false);
-      setFocusId(null);
-    }
+    setWindows((current) => current.filter((item) => item.id !== conversationId));
   };
 
   return (
@@ -132,9 +190,9 @@ export default function ChatHeads() {
             type="button"
             whileHover={reduceMotion ? undefined : { scale: 1.06 }}
             whileTap={reduceMotion ? undefined : { scale: 0.94 }}
-            onClick={() => openChat(null)}
+            onClick={() => navigate('/messages')}
             className="relative flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-600/25 ring-2 ring-white transition hover:bg-blue-700"
-            aria-label="Open messages"
+            aria-label="Open messages page"
             title="Messages"
           >
             <MessageCircle className="h-5 w-5" />
@@ -148,6 +206,8 @@ export default function ChatHeads() {
           {heads.map((conversation) => {
             const label = conversationLabel(conversation);
             const online = isOnline(conversation);
+            const windowState = windows.find((item) => item.id === conversation.id);
+            const isOpen = Boolean(windowState && !windowState.minimized);
             return (
               <div key={conversation.id} className="group relative">
                 <motion.button
@@ -156,7 +216,7 @@ export default function ChatHeads() {
                   whileHover={reduceMotion ? undefined : { scale: 1.06, x: -2 }}
                   whileTap={reduceMotion ? undefined : { scale: 0.94 }}
                   onClick={() => openChat(conversation.id)}
-                  className="relative"
+                  className={`relative ${isOpen ? 'ring-2 ring-blue-400 rounded-full' : ''}`}
                   title={label}
                   aria-label={`Open chat with ${label}`}
                 >
@@ -204,47 +264,36 @@ export default function ChatHeads() {
       </div>
 
       <AnimatePresence>
-        {open && (
-          <motion.div
-            key="chat-heads-overlay"
-            className="fixed inset-0 z-[80] hidden lg:flex print:hidden"
-            initial={reduceMotion ? false : { opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={reduceMotion ? undefined : { opacity: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <button
-              type="button"
-              className="absolute inset-0 bg-slate-950/40 backdrop-blur-[1px]"
-              aria-label="Close chat"
-              onClick={() => {
-                setOpen(false);
-                setFocusId(null);
-                void load();
-              }}
-            />
+        {visibleWindows.map((windowItem, index) => {
+          const right = DOCK_WIDTH + index * (WINDOW_WIDTH + WINDOW_GAP);
+          return (
             <motion.div
+              key={`float-${windowItem.id}`}
               role="dialog"
-              aria-modal="true"
-              aria-label="Messages"
-              initial={reduceMotion ? false : { opacity: 0, x: 40 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={reduceMotion ? undefined : { opacity: 0, x: 24 }}
-              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-              className="relative ml-auto flex h-full w-full max-w-none overflow-hidden bg-white shadow-2xl"
+              aria-label="Floating chat"
+              initial={reduceMotion ? false : { opacity: 0, y: 24, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={reduceMotion ? undefined : { opacity: 0, y: 16, scale: 0.98 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="fixed z-[80] hidden overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200/80 lg:block print:hidden"
+              style={{
+                width: WINDOW_WIDTH,
+                height: WINDOW_HEIGHT,
+                right,
+                bottom: 16,
+                maxWidth: `calc(100vw - ${DOCK_WIDTH + 16}px)`,
+                maxHeight: 'calc(100vh - 2rem)',
+              }}
             >
               <MessagesPage
-                variant="overlay"
-                initialConversationId={focusId}
-                onClose={() => {
-                  setOpen(false);
-                  setFocusId(null);
-                  void load();
-                }}
+                variant="float"
+                initialConversationId={windowItem.id}
+                onClose={() => closeWindow(windowItem.id)}
+                onMinimize={() => minimizeWindow(windowItem.id)}
               />
             </motion.div>
-          </motion.div>
-        )}
+          );
+        })}
       </AnimatePresence>
     </>
   );

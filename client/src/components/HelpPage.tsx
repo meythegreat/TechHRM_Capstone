@@ -187,7 +187,7 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Messages',
         summary: 'Chat with any signed-in TechHRM user.',
         about:
-            'Messages lets you send direct or group chats to supervisors, WSPO staff, or other students. Your messages show Delivered after they send, then Seen once the other person opens the conversation. Opening a chat also marks their messages as read and creates a notification. On desktop, chat heads at the bottom-right open messaging from any page; use the X on a head to dismiss it.',
+            'Messages lets you send direct or group chats to supervisors, WSPO staff, or other students. Your messages show Delivered after they send, then Seen once the other person opens the conversation. On phones, open a chat for a full-screen thread and use Back to return to the inbox. On desktop, chat heads open compact floating windows you can minimize or close.',
         audience: ['Student'],
         steps: [
             'Click Messages in the left menu, or use a chat head at the bottom-right (desktop).',
@@ -486,7 +486,7 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Messages',
         summary: 'Chat with students, supervisors, and other staff.',
         about:
-            'Messages supports direct and group chats for any signed-in TechHRM account. Sent messages show Delivered, then Seen when the other person opens the thread. Desktop chat heads at the bottom-right open messaging from anywhere; close a head with its X without leaving the page.',
+            'Messages supports direct and group chats for any signed-in TechHRM account. Sent messages show Delivered, then Seen when the other person opens the thread. Mobile shows inbox or chat one at a time. Desktop chat heads open compact floating windows (~360×500) without resizing the Messages page.',
         audience: ['Supervisor', 'WSPO Staff', 'Super Admin'],
         steps: [
             'Click Messages in the left menu, or open a chat head at the bottom-right (desktop only).',
