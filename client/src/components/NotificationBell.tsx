@@ -123,6 +123,8 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
 
         if (userRole === 'Supervisor' && notif.title.includes('Working Student Assigned')) {
             onNavigate('dashboard');
+        } else if (notif.title.includes('Message')) {
+            onNavigate('messages');
         } else if (notif.title.includes('Schedule') || notif.title.includes('Working Student') || notif.title.includes('Office Assignment')) {
             onNavigate(userRole === 'Student' ? 'schedule' : 'schedules');
         } else if (notif.title.includes('Timesheet') || notif.title.includes('Signed In') || notif.title.includes('Signed Out')) {
