@@ -86,6 +86,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/chat/users', [ChatController::class, 'directory']);
     Route::post('/chat/presence', [ChatController::class, 'heartbeat']);
+    Route::get('/chat/active-now', [ChatController::class, 'activeNow']);
     Route::get('/chat/conversations', [ChatController::class, 'conversations']);
     Route::post('/chat/conversations', [ChatController::class, 'open']);
     Route::get('/chat/conversations/{conversation}/messages', [ChatController::class, 'messages']);

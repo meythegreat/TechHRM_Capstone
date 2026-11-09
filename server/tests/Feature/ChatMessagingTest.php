@@ -2,10 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\Attendance;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\Notification;
 use App\Models\User;
+use App\Models\UserProfile;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Laravel\Sanctum\Sanctum;
@@ -256,6 +258,62 @@ class ChatMessagingTest extends TestCase
         ])->assertStatus(422);
     }
 
+    public function test_chat_exposes_assignment_clock_status_and_active_now(): void
+    {
+        $ana = User::create([
+            'name' => 'Ana Cruz',
+            'username' => 'ana.active',
+            'password' => 'password',
+            'role' => 'Student',
+        ]);
+        UserProfile::create([
+            'user_id' => $ana->id,
+            'assigned_office' => 'College of Computer Studies',
+            'assignment_area' => 'Laboratory',
+            'duty_type' => 'Clerical',
+        ]);
+        $ben = User::create([
+            'name' => 'Ben Reyes',
+            'username' => 'ben.active',
+            'password' => 'password',
+            'role' => 'Supervisor',
+        ]);
+
+        Attendance::create([
+            'user_id' => $ana->id,
+            'time_in' => now()->subHour(),
+            'time_out' => null,
+            'work_type' => 'Clerical',
+            'status' => 'Timed in',
+        ]);
+
+        Sanctum::actingAs($ben);
+
+        $this->getJson('/api/chat/users?q=Ana')
+            ->assertOk()
+            ->assertJsonPath('0.assignment', 'CCS - Laboratory')
+            ->assertJsonPath('0.clocked_in', true)
+            ->assertJsonPath('0.work_type', 'Clerical');
+
+        $this->getJson('/api/chat/active-now')
+            ->assertOk()
+            ->assertJsonPath('count', 1)
+            ->assertJsonPath('people.0.id', $ana->id)
+            ->assertJsonPath('people.0.clocked_in', true);
+
+        $conversationId = $this->postJson('/api/chat/conversations', ['user_id' => $ana->id])
+            ->assertOk()
+            ->assertJsonPath('peer.assignment', 'CCS - Laboratory')
+            ->assertJsonPath('peer.clocked_in', true)
+            ->json('id');
+
+        $this->getJson("/api/chat/conversations/{$conversationId}/state")
+            ->assertOk()
+            ->assertJsonPath('peer_assignment', 'CCS - Laboratory')
+            ->assertJsonPath('peer_clocked_in', true)
+            ->assertJsonPath('peer_work_type', 'Clerical');
+    }
+
     private function createSchema(): void
     {
         Schema::dropAllTables();
@@ -312,6 +370,46 @@ class ChatMessagingTest extends TestCase
             $table->text('abilities')->nullable();
             $table->timestamp('last_used_at')->nullable();
             $table->timestamp('expires_at')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('user_profiles', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->string('student_id_number')->nullable();
+            $table->string('course')->nullable();
+            $table->string('year_level')->nullable();
+            $table->string('gender')->nullable();
+            $table->string('assigned_office')->nullable();
+            $table->string('assignment_area')->nullable();
+            $table->boolean('special_hours_request')->default(false);
+            $table->json('supervised_departments')->nullable();
+            $table->json('secretary_departments')->nullable();
+            $table->date('supervisor_absent_on')->nullable();
+            $table->string('duty_type')->nullable();
+            $table->text('duty_request')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('attendances', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->string('attendance_type')->nullable();
+            $table->string('verification_code_used')->nullable();
+            $table->string('check_in_method')->nullable();
+            $table->foreignId('code_owner_id')->nullable();
+            $table->timestamp('time_in')->nullable();
+            $table->timestamp('time_out')->nullable();
+            $table->decimal('rendered_hours', 8, 2)->nullable();
+            $table->decimal('computed_hours', 8, 2)->nullable();
+            $table->string('work_type')->nullable();
+            $table->text('task_description')->nullable();
+            $table->string('status')->nullable();
+            $table->boolean('is_anomaly')->default(false);
+            $table->string('anomaly_reason')->nullable();
+            $table->unsignedBigInteger('rendered_hour_event_id')->nullable();
+            $table->float('activity_hours')->nullable();
+            $table->unsignedBigInteger('schedule_id')->nullable();
             $table->timestamps();
         });
     }

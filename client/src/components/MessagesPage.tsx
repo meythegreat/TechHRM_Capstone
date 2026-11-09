@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
+  Activity,
   Check,
+  MapPin,
   Maximize2,
   MessageCircle,
   Minimize2,
@@ -99,6 +101,38 @@ function conversationPreview(conversation: ChatConversation): string {
   return conversation.last_message?.body || 'No messages yet';
 }
 
+function AssignmentChip({ label }: { label?: string | null }) {
+  if (!label) return null;
+  return (
+    <span className="inline-flex max-w-full items-center gap-1 rounded-lg bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+      <MapPin className="h-3 w-3 shrink-0" />
+      <span className="truncate">{label}</span>
+    </span>
+  );
+}
+
+function ClockedInChip({
+  clockedIn,
+  workType,
+}: {
+  clockedIn?: boolean;
+  workType?: string | null;
+}) {
+  if (!clockedIn) {
+    return (
+      <span className="inline-flex items-center rounded-lg bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+        Not clocked in
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+      Clocked in{workType ? ` · ${workType}` : ''}
+    </span>
+  );
+}
+
 export default function MessagesPage() {
   const reduceMotion = useReducedMotion();
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
@@ -114,6 +148,10 @@ export default function MessagesPage() {
   const [peerTyping, setPeerTyping] = useState(false);
   const [peerOnline, setPeerOnline] = useState(false);
   const [peerLastSeenAt, setPeerLastSeenAt] = useState<string | null>(null);
+  const [peerAssignment, setPeerAssignment] = useState<string | null>(null);
+  const [peerClockedIn, setPeerClockedIn] = useState(false);
+  const [peerWorkType, setPeerWorkType] = useState<string | null>(null);
+  const [activeNow, setActiveNow] = useState<ChatUser[]>([]);
   const [maximized, setMaximized] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState('');
@@ -195,12 +233,24 @@ export default function MessagesPage() {
     }
   };
 
+  const loadActiveNow = async () => {
+    try {
+      const response = await chatService.listActiveNow();
+      setActiveNow(response.people);
+    } catch {
+      setActiveNow([]);
+    }
+  };
+
   const refreshState = async (conversationId: number) => {
     try {
       const state = await chatService.getState(conversationId);
       setPeerTyping(state.peer_typing);
       setPeerOnline(state.peer_online);
       setPeerLastSeenAt(state.peer_last_seen_at);
+      setPeerAssignment(state.peer_assignment ?? null);
+      setPeerClockedIn(Boolean(state.peer_clocked_in));
+      setPeerWorkType(state.peer_work_type ?? null);
       setConversations((current) =>
         current.map((item) =>
           item.id === conversationId
@@ -212,6 +262,10 @@ export default function MessagesPage() {
                       ...item.peer,
                       online: state.peer_online,
                       last_seen_at: state.peer_last_seen_at,
+                      assignment: state.peer_assignment ?? item.peer.assignment,
+                      clocked_in: Boolean(state.peer_clocked_in),
+                      clocked_in_since: state.peer_clocked_in_since ?? null,
+                      work_type: state.peer_work_type ?? null,
                     }
                   : item.peer,
               }
@@ -249,11 +303,18 @@ export default function MessagesPage() {
   useEffect(() => {
     loadInbox();
     loadDirectory('');
+    void loadActiveNow();
     void chatService.heartbeat().catch(() => undefined);
     const heartbeat = window.setInterval(() => {
       void chatService.heartbeat().catch(() => undefined);
     }, 20000);
-    return () => window.clearInterval(heartbeat);
+    const activeInterval = window.setInterval(() => {
+      void loadActiveNow();
+    }, 10000);
+    return () => {
+      window.clearInterval(heartbeat);
+      window.clearInterval(activeInterval);
+    };
   }, []);
 
   useEffect(() => {
@@ -267,6 +328,9 @@ export default function MessagesPage() {
       setPeerTyping(false);
       setPeerOnline(false);
       setPeerLastSeenAt(null);
+      setPeerAssignment(null);
+      setPeerClockedIn(false);
+      setPeerWorkType(null);
       setEditingId(null);
       setMenuId(null);
       return;
@@ -281,6 +345,7 @@ export default function MessagesPage() {
     const messagesInterval = window.setInterval(() => {
       loadThread(activeId, true);
       loadInbox(activeId);
+      void loadActiveNow();
     }, 5000);
     const stateInterval = window.setInterval(() => {
       void refreshState(activeId);
@@ -291,6 +356,7 @@ export default function MessagesPage() {
         loadThread(activeId, true);
         loadInbox(activeId);
         void refreshState(activeId);
+        void loadActiveNow();
         void chatService.heartbeat().catch(() => undefined);
       }
     };
@@ -478,6 +544,13 @@ export default function MessagesPage() {
                   )}
                 </motion.p>
               </AnimatePresence>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <AssignmentChip label={peerAssignment || active.peer?.assignment} />
+                <ClockedInChip
+                  clockedIn={peerClockedIn || active.peer?.clocked_in}
+                  workType={peerWorkType || active.peer?.work_type}
+                />
+              </div>
             </div>
             <div className="flex items-center gap-1">
               <button
@@ -540,7 +613,7 @@ export default function MessagesPage() {
                                 }
                               }}
                               rows={3}
-                              className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100"
+                              className="chat-composer w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
                             />
                             <div className="mt-2 flex items-center justify-end gap-2">
                               <button
@@ -654,7 +727,7 @@ export default function MessagesPage() {
           </div>
 
           <form onSubmit={submit} className="border-t border-slate-200/80 bg-white/90 p-3 backdrop-blur sm:p-4">
-            <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50/90 p-2 transition focus-within:border-blue-300 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-100">
+            <div className="chat-composer flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50/90 p-2 transition focus-within:border-blue-300 focus-within:ring-2 focus-within:ring-blue-100">
               <textarea
                 ref={draftRef}
                 value={draft}
@@ -731,12 +804,54 @@ export default function MessagesPage() {
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Find someone to message"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm text-slate-800 outline-none transition focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100"
+                className="chat-composer w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm text-slate-800 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
               />
             </label>
           </div>
 
           <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+            {!search.trim() && (
+              <div className="border-b border-slate-100 px-3 py-3">
+                <p className="mb-2 flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                  <Activity className="h-3.5 w-3.5" />
+                  Active now
+                  {activeNow.length > 0 && (
+                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">
+                      {activeNow.length}
+                    </span>
+                  )}
+                </p>
+                {activeNow.length === 0 ? (
+                  <p className="px-2 py-2 text-xs text-slate-500">Nobody is clocked in right now.</p>
+                ) : (
+                  <div className="space-y-1">
+                    {activeNow.slice(0, 8).map((user) => (
+                      <button
+                        key={`active-${user.id}`}
+                        type="button"
+                        onClick={() => startChat(user)}
+                        className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition hover:bg-slate-50"
+                      >
+                        <AvatarWithPresence
+                          name={user.name}
+                          picture={user.profile_picture}
+                          online={user.online}
+                          className="h-9 w-9 rounded-full bg-slate-100 text-sm text-slate-600"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-slate-900">{user.name}</p>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            <AssignmentChip label={user.assignment} />
+                            <ClockedInChip clockedIn={user.clocked_in} workType={user.work_type} />
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {search.trim() && (
               <div className="border-b border-slate-100 px-3 py-3">
                 <p className="mb-2 flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
@@ -761,9 +876,10 @@ export default function MessagesPage() {
                       />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-slate-900">{user.name}</p>
-                        <p className={`truncate text-xs ${user.online ? 'text-emerald-600' : 'text-slate-500'}`}>
-                          {user.online ? 'Online' : user.role}
-                        </p>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          <AssignmentChip label={user.assignment} />
+                          <ClockedInChip clockedIn={user.clocked_in} workType={user.work_type} />
+                        </div>
                       </div>
                     </button>
                   ))
@@ -837,6 +953,13 @@ export default function MessagesPage() {
                           <span className="shrink-0 text-[10px] text-slate-400">
                             {formatClock(conversation.last_message_at)}
                           </span>
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          <AssignmentChip label={conversation.peer?.assignment} />
+                          <ClockedInChip
+                            clockedIn={conversation.peer?.clocked_in}
+                            workType={conversation.peer?.work_type}
+                          />
                         </div>
                         <div className="mt-0.5 flex items-center justify-between gap-2">
                           <p
