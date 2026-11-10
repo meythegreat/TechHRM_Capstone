@@ -24,11 +24,11 @@ function cacheKey(files: string[]) {
 function phoneNotificationHandlers() {
   return `
 self.addEventListener('push', (event) => {
-  let payload = { title: 'TechHRM', message: 'You have a new notification.', url: '/' };
+  let payload = { title: 'WoSPIS', message: 'You have a new notification.', url: '/' };
   try {
     if (event.data) payload = Object.assign(payload, event.data.json());
   } catch (error) {}
-  event.waitUntil(self.registration.showNotification(payload.title || 'TechHRM', {
+  event.waitUntil(self.registration.showNotification(payload.title || 'WoSPIS', {
     body: payload.message || '',
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
@@ -53,7 +53,7 @@ self.addEventListener('notificationclick', (event) => {
 }
 
 function devWorkerSource() {
-  return `/* TechHRM dev worker: makes the site installable without caching Vite modules. */
+  return `/* WoSPIS dev worker: makes the site installable without caching Vite modules. */
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
 });
@@ -69,8 +69,8 @@ ${phoneNotificationHandlers()}
 }
 
 function productionWorkerSource(precache: string[]) {
-  const cacheName = `techhrm-shell-${cacheKey(precache)}`
-  return `/* TechHRM app shell. API calls stay on the network. */
+  const cacheName = `wospis-shell-${cacheKey(precache)}`
+  return `/* WoSPIS app shell. API calls stay on the network. */
 const CACHE = ${JSON.stringify(cacheName)};
 const PRECACHE = ${JSON.stringify(precache)};
 const SHELL = new Set(PRECACHE);
@@ -92,7 +92,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter((key) => key.startsWith('techhrm-shell-') && key !== CACHE).map((key) => caches.delete(key)));
+    await Promise.all(keys.filter((key) => key.startsWith('wospis-shell-') && key !== CACHE).map((key) => caches.delete(key)));
     await self.clients.claim();
   })());
 });
@@ -110,7 +110,7 @@ async function networkFirst(request, fallback) {
   }
   const cached = (await caches.match(request)) || (fallback ? await caches.match(fallback) : undefined);
   if (cached) return cached;
-  return new Response('TechHRM is offline. Reconnect and open it again.', {
+  return new Response('WoSPIS is offline. Reconnect and open it again.', {
     status: 503,
     headers: { 'Content-Type': 'text/plain; charset=utf-8' },
   });
@@ -141,7 +141,7 @@ function isServiceWorker(url: string | undefined) {
 
 export function pwaPlugin(): Plugin {
   return {
-    name: 'techhrm-pwa',
+    name: 'wospis-pwa',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         if (!isServiceWorker(req.url)) {

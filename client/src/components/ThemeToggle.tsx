@@ -14,8 +14,8 @@ export default function ThemeToggle({ layout = 'icon', expanded = true, classNam
 
   useEffect(() => {
     const sync = () => setTheme(resolveTheme());
-    window.addEventListener('techhrm-theme', sync);
-    return () => window.removeEventListener('techhrm-theme', sync);
+    window.addEventListener('wospis-theme', sync);
+    return () => window.removeEventListener('wospis-theme', sync);
   }, []);
 
   const reduceMotion = useReducedMotion();

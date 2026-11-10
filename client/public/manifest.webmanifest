@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "TechHRM",
-  "short_name": "TechHRM",
-  "description": "Work-Study Program Organization information system for Filamer Christian University.",
+  "name": "WoSPIS: A Work Study Program Information System for Filamer Christian University, Inc.",
+  "short_name": "WoSPIS",
+  "description": "WoSPIS — a Work Study Program Information System for Filamer Christian University, Inc.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

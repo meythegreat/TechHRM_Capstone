@@ -13,7 +13,7 @@ use Tests\TestCase;
 
 class ForgotPasswordEmailDeliveryTest extends TestCase
 {
-    private const WEBHOOK = 'http://n8n.test/webhook/techhrm/forgot-password';
+    private const WEBHOOK = 'http://n8n.test/webhook/wospis/forgot-password';
 
     protected function setUp(): void
     {
@@ -110,7 +110,7 @@ class ForgotPasswordEmailDeliveryTest extends TestCase
             'services.resend.key' => 're_test_key',
             'services.n8n.forgot_password_webhook' => self::WEBHOOK,
             'mail.from.address' => 'onboarding@resend.dev',
-            'mail.from.name' => 'TechHRM WSPO',
+            'mail.from.name' => 'WoSPIS WSPO',
         ]);
     }
 

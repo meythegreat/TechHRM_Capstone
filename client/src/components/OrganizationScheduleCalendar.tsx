@@ -349,7 +349,7 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
     const [clock, setClock] = useState(() => new Date());
     const [isExpanded, setIsExpanded] = useState(() => {
         if (typeof window === 'undefined') return true;
-        const key = personal ? 'techhrm-calendar-expanded-personal' : 'techhrm-calendar-expanded-org';
+        const key = personal ? 'wospis-calendar-expanded-personal' : 'wospis-calendar-expanded-org';
         const stored = window.localStorage.getItem(key);
         if (stored === '0') return false;
         if (stored === '1') return true;
@@ -522,7 +522,7 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
     const toggleExpanded = () => {
         setIsExpanded((current) => {
             const next = !current;
-            const key = personal ? 'techhrm-calendar-expanded-personal' : 'techhrm-calendar-expanded-org';
+            const key = personal ? 'wospis-calendar-expanded-personal' : 'wospis-calendar-expanded-org';
             window.localStorage.setItem(key, next ? '1' : '0');
             return next;
         });

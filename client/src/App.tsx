@@ -224,13 +224,13 @@ function App() {
 
   useEffect(() => {
     if (!hasToken) {
-      document.title = guestView === 'apply' ? 'Apply · TechHRM' : guestView === 'track' ? 'Track application · TechHRM' : 'Sign in · TechHRM';
+      document.title = guestView === 'apply' ? 'Apply · WoSPIS' : guestView === 'track' ? 'Track application · WoSPIS' : 'Sign in · WoSPIS';
       return;
     }
     const segment = firstPathSegment(location.pathname);
     const titles = userRole === 'Student' ? STUDENT_PAGE_TITLES : STAFF_PAGE_TITLES;
     const feature = titles[segment];
-    document.title = feature ? `${feature} · TechHRM` : 'TechHRM';
+    document.title = feature ? `${feature} · WoSPIS` : 'WoSPIS';
   }, [hasToken, guestView, userRole, location.pathname]);
 
   const handleLoginSuccess = (token: string, role: string, name: string, profilePic: string | null, mustChangePassword = false) => {

@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const ENDPOINT_KEY = 'techhrm-push-endpoint'
+const ENDPOINT_KEY = 'wospis-push-endpoint'
 
 function urlBase64ToUint8Array(value: string) {
   const padding = '='.repeat((4 - (value.length % 4)) % 4)

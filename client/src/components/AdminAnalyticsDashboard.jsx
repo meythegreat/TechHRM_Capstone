@@ -62,7 +62,7 @@ const AdminAnalyticsDashboard = () => {
         try {
             const doc = new jsPDF();
             doc.setFontSize(16);
-            doc.text('TechHRM: System Analytics & Workload Report', 14, 20);
+            doc.text('WoSPIS: System Analytics & Workload Report', 14, 20);
             
             doc.setFontSize(10);
             doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 28);
@@ -97,7 +97,7 @@ const AdminAnalyticsDashboard = () => {
                 });
             }
 
-            doc.save('TechHRM_Analytics_Report.pdf');
+            doc.save('WoSPIS_Analytics_Report.pdf');
         } catch (err) {
             console.error("PDF Export failed", err);
         } finally {

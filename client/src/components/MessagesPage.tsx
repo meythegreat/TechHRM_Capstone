@@ -1758,7 +1758,7 @@ export default function MessagesPage({
           </p>
           <h1 className="mt-0.5 text-lg font-semibold tracking-tight text-slate-900 sm:text-2xl">Messages</h1>
           <p className="mt-0.5 hidden text-sm text-slate-500 sm:block">
-            Message any signed-in TechHRM user, create group chats, and stay reachable from the chat heads on desktop.
+            Message any signed-in WoSPIS user, create group chats, and stay reachable from the chat heads on desktop.
           </p>
         </motion.div>
       )}

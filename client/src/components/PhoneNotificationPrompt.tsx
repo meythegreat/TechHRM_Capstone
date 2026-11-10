@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Bell, X } from 'lucide-react'
 import { enablePhoneNotifications, phoneNotificationsSupported, syncPhoneNotifications } from '../phoneNotifications'
 
-const DISMISS_KEY = 'techhrm-push-dismissed'
+const DISMISS_KEY = 'wospis-push-dismissed'
 const DISMISS_MS = 1000 * 60 * 60 * 24 * 30
 
 interface PhoneNotificationPromptProps {
@@ -65,7 +65,7 @@ const PhoneNotificationPrompt = ({ enabled }: PhoneNotificationPromptProps) => {
         setOpen(false)
         return
       }
-      setDetail('Notifications stay off until you allow them for TechHRM.')
+      setDetail('Notifications stay off until you allow them for WoSPIS.')
     } catch {
       setDetail('The phone could not turn notifications on. Try again from the home screen icon.')
     } finally {
@@ -87,7 +87,7 @@ const PhoneNotificationPrompt = ({ enabled }: PhoneNotificationPromptProps) => {
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-semibold text-slate-900">Phone notifications</h2>
           <p className="text-xs font-medium leading-relaxed text-slate-600">
-            {detail || 'Alerts can appear on this phone even when TechHRM is closed.'}
+            {detail || 'Alerts can appear on this phone even when WoSPIS is closed.'}
           </p>
         </div>
         <button

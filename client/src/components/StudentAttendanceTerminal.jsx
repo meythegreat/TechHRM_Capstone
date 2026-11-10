@@ -50,10 +50,10 @@ const cameraErrorMessage = (err) => {
     const text = String(err?.message || err || '');
     const denied = name === 'NotAllowedError' || name === 'PermissionDeniedError' || /not allowed|permission/i.test(text);
     if (denied && installedApp() && /iPad|iPhone|iPod/.test(navigator.userAgent)) {
-        return 'This installed app cannot use the camera yet. Open Settings, tap TechHRM, turn Camera on, then come back and tap Turn on camera.';
+        return 'This installed app cannot use the camera yet. Open Settings, tap WoSPIS, turn Camera on, then come back and tap Turn on camera.';
     }
     if (denied && installedApp()) {
-        return 'This installed app cannot use the camera yet. Open Settings, then Apps, TechHRM, Permissions, and allow Camera. Then tap Turn on camera.';
+        return 'This installed app cannot use the camera yet. Open Settings, then Apps, WoSPIS, Permissions, and allow Camera. Then tap Turn on camera.';
     }
     if (denied) {
         return 'Camera permission was blocked. Allow the camera for this site, then tap Turn on camera again.';
@@ -64,7 +64,7 @@ const cameraErrorMessage = (err) => {
     if (name === 'NotReadableError' || name === 'TrackStartError' || name === 'AbortError') {
         return 'The camera is busy in another app. Close that app, then tap Turn on camera again.';
     }
-    return 'The camera could not start. Allow camera access for TechHRM, or use the passcode instead.';
+    return 'The camera could not start. Allow camera access for WoSPIS, or use the passcode instead.';
 };
 
 let qrDetector;

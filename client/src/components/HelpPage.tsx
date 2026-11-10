@@ -185,7 +185,7 @@ const HELP_TOPICS: HelpTopic[] = [
     {
         id: 'student-messages',
         title: 'Messages',
-        summary: 'Chat with any signed-in TechHRM user.',
+        summary: 'Chat with any signed-in WoSPIS user.',
         about:
             'Messages lets you send direct or group chats to supervisors, WSPO staff, or other students. Outbound messages show Sent, then Delivered when the other person receives them in their inbox, then Seen when they open the chat. On phones, use search and New Message from the inbox list; open a chat for a full-screen thread and Back to return.',
         audience: ['Student'],
@@ -486,7 +486,7 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Messages',
         summary: 'Chat with students, supervisors, and other staff.',
         about:
-            'Messages supports direct and group chats for any signed-in TechHRM account. Receipts progress from Sent → Delivered (inbox received) → Seen (thread opened). Mobile uses a full inbox list with search and New Message; desktop keeps the split layout and floating chat heads.',
+            'Messages supports direct and group chats for any signed-in WoSPIS account. Receipts progress from Sent → Delivered (inbox received) → Seen (thread opened). Mobile uses a full inbox list with search and New Message; desktop keeps the split layout and floating chat heads.',
         audience: ['Supervisor', 'WSPO Staff', 'Super Admin'],
         steps: [
             'Click Messages in the left menu, or open a chat head at the bottom-right (desktop only).',
@@ -497,7 +497,7 @@ const HELP_TOPICS: HelpTopic[] = [
         ],
         tips: [
             'Direct chats stay private between the two people; group chats notify every member.',
-            'Online indicators light up while someone is signed in anywhere in TechHRM, not only when Messages is open.',
+            'Online indicators light up while someone is signed in anywhere in WoSPIS, not only when Messages is open.',
         ],
     },
     {
@@ -525,7 +525,7 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Password & first login',
         summary: 'How to sign in safely and reset your password.',
         about:
-            'TechHRM may ask you to change your password the first time you sign in. This protects your account. You can also reset a forgotten password from the login page without needing someone to open the system for you.',
+            'WoSPIS may ask you to change your password the first time you sign in. This protects your account. You can also reset a forgotten password from the login page without needing someone to open the system for you.',
         audience: ['all'],
         steps: [
             'Sign in with the username and temporary password given to you.',

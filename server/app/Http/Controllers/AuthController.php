@@ -253,9 +253,9 @@ class AuthController extends Controller
                 ->asJson()
                 ->post($webhook, [
                     'email' => $email,
-                    'subject' => 'Your TechHRM temporary password',
+                    'subject' => 'Your WoSPIS temporary password',
                     'message' => $this->resetEmailBody($user, $temporaryPassword),
-                    'from_name' => config('mail.from.name', 'TechHRM WSPO'),
+                    'from_name' => config('mail.from.name', 'WoSPIS WSPO'),
                 ]);
         } catch (\Throwable $e) {
             report($e);
@@ -323,8 +323,8 @@ class AuthController extends Controller
           <tr>
             <td style="background:#1D54D3;padding:28px 32px 22px;">
               <p style="margin:0;color:#4AECED;font-size:11px;letter-spacing:1.8px;font-weight:bold;">FILAMER CHRISTIAN UNIVERSITY</p>
-              <h1 style="margin:10px 0 0;color:#FFD500;font-size:30px;line-height:1.1;">TechHRM</h1>
-              <p style="margin:8px 0 0;color:#FFFFFF;font-size:14px;">Work-Study Program Organization</p>
+              <h1 style="margin:10px 0 0;color:#FFD500;font-size:30px;line-height:1.1;">WoSPIS</h1>
+              <p style="margin:8px 0 0;color:#FFFFFF;font-size:14px;">A Work Study Program Information System for Filamer Christian University, Inc.</p>
             </td>
           </tr>
           <tr>
@@ -341,7 +341,7 @@ class AuthController extends Controller
           <tr>
             <td style="padding:32px;background:#FFFFFF;">
               <p style="margin:0 0 14px;color:#102179;font-size:18px;font-weight:bold;">Hello {$name},</p>
-              <p style="margin:0 0 22px;color:#000000;font-size:15px;line-height:1.6;">A password reset was requested for your TechHRM account. Use the temporary password below to sign in. You will be asked to choose a new password before you can continue.</p>
+              <p style="margin:0 0 22px;color:#000000;font-size:15px;line-height:1.6;">A password reset was requested for your WoSPIS account. Use the temporary password below to sign in. You will be asked to choose a new password before you can continue.</p>
               <p style="margin:0 0 6px;color:#1D54D3;font-size:11px;font-weight:bold;letter-spacing:1.2px;">USERNAME</p>
               <p style="margin:0 0 18px;color:#102179;font-size:16px;font-weight:bold;">{$username}</p>
               <p style="margin:0 0 6px;color:#1D54D3;font-size:11px;font-weight:bold;letter-spacing:1.2px;">EMAIL</p>
@@ -353,7 +353,7 @@ class AuthController extends Controller
           </tr>
           <tr>
             <td style="padding:18px 32px;background:#102179;">
-              <p style="margin:0;color:#FFD500;font-size:13px;font-weight:bold;">TechHRM WSPO</p>
+              <p style="margin:0;color:#FFD500;font-size:13px;font-weight:bold;">WoSPIS WSPO</p>
               <p style="margin:4px 0 0;color:#4AECED;font-size:13px;">{$contactEmail}</p>
             </td>
           </tr>

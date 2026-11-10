@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Download, X } from 'lucide-react'
 
-const DISMISS_KEY = 'techhrm-install-dismissed'
+const DISMISS_KEY = 'wospis-install-dismissed'
 const DISMISS_MS = 1000 * 60 * 60 * 24 * 30
 
 interface BeforeInstallPromptEvent extends Event {
@@ -97,17 +97,17 @@ const InstallAppPrompt = () => {
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))] print:hidden">
       <section
-        aria-label="Install TechHRM"
+        aria-label="Install WoSPIS"
         className="pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_12px_40px_rgba(15,23,42,0.16)]"
       >
         <img src="/icons/icon-192.png" alt="" className="h-10 w-10 shrink-0 rounded-xl" />
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold text-slate-900">Install TechHRM</h2>
+          <h2 className="text-sm font-semibold text-slate-900">Install WoSPIS</h2>
           <p className="text-xs font-medium leading-relaxed text-slate-600">
             {mode === 'ios' && (isIosSafari()
               ? 'Tap Share, then Add to Home Screen. It opens as its own app.'
               : 'Open this page in Safari, tap Share, then Add to Home Screen.')}
-            {mode === 'native' && 'Adds a home screen icon that opens TechHRM as its own app.'}
+            {mode === 'native' && 'Adds a home screen icon that opens WoSPIS as its own app.'}
             {mode === 'menu' && 'In the browser menu, tap Install app or Add to Home screen.'}
           </p>
         </div>

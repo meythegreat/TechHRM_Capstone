@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Import and activate the TechHRM forgot-password n8n workflow.
+# Import and activate the WoSPIS forgot-password n8n workflow.
 # Requires: n8n CLI on PATH (or set N8N_BIN), and a writable N8N_USER_FOLDER.
 set -euo pipefail
 
@@ -35,7 +35,7 @@ PY
 echo "Importing into n8n..."
 "$N8N_BIN" import:workflow --input="$IMPORT_FILE"
 
-WF_ID="$("$N8N_BIN" list:workflow 2>/dev/null | awk -F'|' '/TechHRM Forgot Password/{print $1; exit}')"
+WF_ID="$("$N8N_BIN" list:workflow 2>/dev/null | awk -F'|' '/WoSPIS Forgot Password/{print $1; exit}')"
 if [[ -n "${WF_ID:-}" ]]; then
   echo "Activating workflow id=$WF_ID ..."
   "$N8N_BIN" update:workflow --id="$WF_ID" --active=true || true
@@ -46,12 +46,12 @@ fi
 
 echo
 echo "Required in the n8n UI (http://localhost:5678):"
-echo "  1. Open workflow: TechHRM Forgot Password"
+echo "  1. Open workflow: WoSPIS Forgot Password"
 echo "  2. On Send Gmail, connect Gmail OAuth for techhrmwspo@gmail.com"
 echo "  3. Save, keep the workflow Active, restart n8n if the webhook 404s"
-echo "  4. Laravel env: N8N_FORGOT_PASSWORD_WEBHOOK=http://localhost:5678/webhook/techhrm/forgot-password"
+echo "  4. Laravel env: N8N_FORGOT_PASSWORD_WEBHOOK=http://localhost:5678/webhook/wospis/forgot-password"
 echo
 echo "Smoke-test:"
-echo "  curl -s -X POST http://localhost:5678/webhook/techhrm/forgot-password \\"
+echo "  curl -s -X POST http://localhost:5678/webhook/wospis/forgot-password \\"
 echo "    -H 'Content-Type: application/json' \\"
-echo "    -d '{\"email\":\"you@example.com\",\"subject\":\"TechHRM test\",\"message\":\"<p>test</p>\",\"from_name\":\"TechHRM WSPO\"}'"
+echo "    -d '{\"email\":\"you@example.com\",\"subject\":\"WoSPIS test\",\"message\":\"<p>test</p>\",\"from_name\":\"WoSPIS WSPO\"}'"

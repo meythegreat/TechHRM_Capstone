@@ -276,7 +276,7 @@ class AttendanceController extends Controller
 
             // Add University & Office Headers
             fputcsv($file, ['Filamer Christian University, Inc.']);
-            fputcsv($file, ['Working Students Program Office - TechHRM System']);
+            fputcsv($file, ['Working Students Program Office - WoSPIS System']);
             fputcsv($file, ['Generated on: ' . now()->format('F j, Y, g:i a')]);
             fputcsv($file, []); // Blank row for spacing
 

@@ -169,7 +169,7 @@ const Login = ({ onLoginSuccess, onNavigateToApply, onNavigateToTrack }: LoginPr
                         className="bg-white p-3 rounded-3xl shadow-[0_0_40px_rgba(79,70,229,0.3)] mb-8 cursor-pointer relative group"
                     >
                         <div className="absolute inset-0 bg-indigo-500 rounded-3xl blur-xl opacity-0 group-hover:opacity-40 transition-opacity duration-500"></div>
-                        <img src="/logo.jpg" alt="TechHRM Logo" className="w-28 h-28 rounded-2xl relative z-10" />
+                        <img src="/logo.jpg" alt="WoSPIS Logo" className="w-28 h-28 rounded-2xl relative z-10" />
                     </motion.div>
                     
                     <motion.h1 
@@ -178,7 +178,7 @@ const Login = ({ onLoginSuccess, onNavigateToApply, onNavigateToTrack }: LoginPr
                         transition={{ delay: 0.3 }}
                         className="text-5xl font-semibold text-white tracking-tight mb-4 drop-shadow-lg"
                     >
-                        TechHRM
+                        WoSPIS
                     </motion.h1>
                     
                     <motion.p 
@@ -187,7 +187,7 @@ const Login = ({ onLoginSuccess, onNavigateToApply, onNavigateToTrack }: LoginPr
                         transition={{ delay: 0.5 }}
                         className="text-lg font-medium text-slate-300 max-w-md leading-relaxed"
                     >
-                        A Work-Study Program Organization Information System for Filamer Christian University, Inc.
+                        A Work Study Program Information System for Filamer Christian University, Inc.
                     </motion.p>
                 </div>
             </motion.div>
@@ -210,8 +210,8 @@ const Login = ({ onLoginSuccess, onNavigateToApply, onNavigateToTrack }: LoginPr
                 >
                     {/* Mobile Branding */}
                     <motion.div variants={itemVariants} className="flex flex-col items-center mb-10 lg:hidden text-center">
-                        <img src="/logo.jpg" alt="TechHRM Logo" className="w-20 h-20 rounded-2xl shadow-xl mb-4" />
-                        <h1 className="text-3xl font-semibold text-slate-900 tracking-tight">TechHRM</h1>
+                        <img src="/logo.jpg" alt="WoSPIS Logo" className="w-20 h-20 rounded-2xl shadow-xl mb-4" />
+                        <h1 className="text-3xl font-semibold text-slate-900 tracking-tight">WoSPIS</h1>
                         <p className="text-sm font-bold text-indigo-600 uppercase tracking-widest mt-2">FCU Work-Study Portal</p>
                     </motion.div>
 

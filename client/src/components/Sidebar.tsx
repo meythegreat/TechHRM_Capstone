@@ -131,13 +131,13 @@ const Sidebar: FC<SidebarProps> = ({ isSidebarOpen, setIsSidebarOpen, activeTab,
                     <div className="flex items-center justify-center gap-3 overflow-hidden whitespace-nowrap w-full relative z-10">
                         <img 
                             src="/logo.jpg" 
-                            alt="TechHRM" 
+                            alt="WoSPIS" 
                             className="w-10 h-10 rounded-xl shadow-md shrink-0 border border-white" 
                         />
                         <span className={`font-semibold bg-gradient-to-br from-slate-900 to-slate-700 bg-clip-text text-transparent text-xl tracking-tight transition-all duration-300 ${
                             isSidebarOpen ? 'opacity-100 w-auto' : 'opacity-0 w-0 lg:hidden'
                         }`}>
-                            TechHRM
+                            WoSPIS
                         </span>
                     </div>
                 </div>

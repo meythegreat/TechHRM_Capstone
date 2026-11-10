@@ -30,9 +30,9 @@ const PublicApplication = ({ onBackToLogin }: PublicApplicationProps) => {
             <div className="relative z-40 shrink-0 border-b border-slate-200/80 bg-white/80 shadow-sm backdrop-blur-md sticky top-0">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <img src="/logo.jpg" alt="TechHRM Logo" className="h-11 w-11 rounded-2xl border border-slate-100 shadow-sm" />
+                        <img src="/logo.jpg" alt="WoSPIS Logo" className="h-11 w-11 rounded-2xl border border-slate-100 shadow-sm" />
                         <div>
-                            <span className="block bg-gradient-to-br from-slate-900 to-slate-700 bg-clip-text text-lg font-semibold tracking-tight text-transparent">TechHRM</span>
+                            <span className="block bg-gradient-to-br from-slate-900 to-slate-700 bg-clip-text text-lg font-semibold tracking-tight text-transparent">WoSPIS</span>
                             <span className="hidden text-xs font-bold uppercase tracking-[0.18em] text-indigo-600 sm:block">Work-Study sign up</span>
                         </div>
                     </div>

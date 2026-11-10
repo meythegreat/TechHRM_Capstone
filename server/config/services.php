@@ -45,13 +45,13 @@ return [
         // Forgot-password mail is sent here. Resend is not used for resets.
         'forgot_password_webhook' => env(
             'N8N_FORGOT_PASSWORD_WEBHOOK',
-            'http://localhost:5678/webhook/techhrm/forgot-password'
+            'http://localhost:5678/webhook/wospis/forgot-password'
         ),
         // Application submission and status emails. Same local n8n host as password reset.
         // On Render, set N8N_APPLICATION_STATUS_WEBHOOK to the public n8n URL.
         'application_status_webhook' => env(
             'N8N_APPLICATION_STATUS_WEBHOOK',
-            'http://localhost:5678/webhook/techhrm/application-submitted'
+            'http://localhost:5678/webhook/wospis/application-submitted'
         ),
     ],
 

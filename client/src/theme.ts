@@ -2,7 +2,7 @@ import { nextSunChange, themeForSun } from './sunTimes';
 
 export type Theme = 'light' | 'dark';
 
-const OVERRIDE_KEY = 'techhrm-theme-override';
+const OVERRIDE_KEY = 'wospis-theme-override';
 
 interface ThemeOverride {
   theme: Theme;
@@ -32,13 +32,13 @@ export function applyTheme(theme: Theme) {
   const root = document.documentElement;
   const isDark = theme === 'dark';
   if (root.classList.contains('dark') === isDark) {
-    window.dispatchEvent(new Event('techhrm-theme'));
+    window.dispatchEvent(new Event('wospis-theme'));
     return;
   }
   root.classList.add('theme-animate');
   window.setTimeout(() => root.classList.remove('theme-animate'), 480);
   root.classList.toggle('dark', isDark);
-  window.dispatchEvent(new Event('techhrm-theme'));
+  window.dispatchEvent(new Event('wospis-theme'));
 }
 
 export function syncTheme(now = new Date()) {

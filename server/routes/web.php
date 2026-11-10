@@ -4,9 +4,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return response()->json([
-        'app' => config('app.name', 'TechHRM'),
+        'app' => config('app.name', 'WoSPIS'),
         'status' => 'ok',
-        'message' => 'TechHRM API is running.',
+        'message' => 'WoSPIS API is running.',
     ]);
 });
 

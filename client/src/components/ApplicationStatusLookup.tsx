@@ -78,8 +78,8 @@ const ApplicationStatusLookup = ({ onBackToLogin, onNavigateToApply }: Applicati
             <div className="bg-white/80 backdrop-blur-md border-b border-slate-200/80 shadow-sm relative z-40 shrink-0 sticky top-0">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <img src="/logo.jpg" alt="TechHRM Logo" className="w-10 h-10 rounded-xl border border-slate-100 shadow-sm" />
-                        <span className="font-semibold bg-gradient-to-br from-slate-900 to-slate-700 bg-clip-text text-transparent text-xl tracking-tight hidden sm:block">TechHRM</span>
+                        <img src="/logo.jpg" alt="WoSPIS Logo" className="w-10 h-10 rounded-xl border border-slate-100 shadow-sm" />
+                        <span className="font-semibold bg-gradient-to-br from-slate-900 to-slate-700 bg-clip-text text-transparent text-xl tracking-tight hidden sm:block">WoSPIS</span>
                     </div>
                     <div className="flex items-center gap-4">
                         <ThemeToggle />

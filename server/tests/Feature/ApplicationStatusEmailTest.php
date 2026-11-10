@@ -13,7 +13,7 @@ use Tests\TestCase;
 
 class ApplicationStatusEmailTest extends TestCase
 {
-    private const WEBHOOK = 'https://n8n.test/webhook/techhrm/application-submitted';
+    private const WEBHOOK = 'https://n8n.test/webhook/wospis/application-submitted';
 
     protected function setUp(): void
     {
@@ -21,7 +21,7 @@ class ApplicationStatusEmailTest extends TestCase
         $this->createSchema();
         config([
             'services.n8n.application_status_webhook' => self::WEBHOOK,
-            'mail.from.name' => 'TechHRM WSPO',
+            'mail.from.name' => 'WoSPIS WSPO',
         ]);
     }
 
