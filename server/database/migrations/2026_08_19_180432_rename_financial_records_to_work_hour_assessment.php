@@ -36,9 +36,12 @@ return new class extends Migration
                 ->where('status', 'Credited')
                 ->update(['status' => 'Forwarded to Finance']);
 
-            if (Schema::getConnection()->getDriverName() === 'mysql') {
+            $driver = Schema::getConnection()->getDriverName();
+            if ($driver === 'mysql') {
                 DB::statement("ALTER TABLE financial_records MODIFY status ENUM('Draft', 'Approved', 'Locked', 'Forwarded to Finance') NOT NULL DEFAULT 'Draft'");
-            } else {
+            } elseif ($driver === 'pgsql') {
+                // Postgres names the enum check. SQLite keeps it inline, and the
+                // create migration already allows "Forwarded to Finance".
                 DB::statement('ALTER TABLE financial_records DROP CONSTRAINT IF EXISTS financial_records_status_check');
             }
         }

@@ -16,9 +16,13 @@ return new class extends Migration
         $driver = Schema::getConnection()->getDriverName();
         if ($driver === 'mysql') {
             DB::statement('ALTER TABLE daily_tokens MODIFY type VARCHAR(40) NOT NULL');
-        } else {
+        } elseif ($driver === 'pgsql') {
             DB::statement('ALTER TABLE daily_tokens DROP CONSTRAINT IF EXISTS daily_tokens_type_check');
             DB::statement('ALTER TABLE daily_tokens ALTER COLUMN type TYPE VARCHAR(40)');
+        } else {
+            Schema::table('daily_tokens', function (Blueprint $table) {
+                $table->string('type', 40)->change();
+            });
         }
 
         Schema::table('daily_tokens', function (Blueprint $table) {

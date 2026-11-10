@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Traits\RecordsActivity;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Schema;
 
 class CampusSetting extends Model
 {
@@ -47,6 +48,10 @@ class CampusSetting extends Model
 
     public static function hourlyRate(): float
     {
+        if (! Schema::hasTable('campus_settings')) {
+            return 28.0;
+        }
+
         return round((float) static::current()->hourly_rate, 2);
     }
 

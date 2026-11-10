@@ -12,11 +12,15 @@ return new class extends Migration
 
         if ($driver === 'mysql') {
             DB::statement("ALTER TABLE tasks MODIFY status ENUM('Pending', 'Assigned', 'In Progress', 'Completed', 'For Verification', 'Verified') DEFAULT 'Pending'");
+
             return;
         }
 
-        // Postgres: drop enum check so the new status value is allowed.
-        DB::statement('ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check');
+        if ($driver === 'pgsql') {
+            // Postgres names the enum check. SQLite's inline check is removed
+            // with the tasks table itself in a later migration.
+            DB::statement('ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check');
+        }
     }
 
     public function down(): void

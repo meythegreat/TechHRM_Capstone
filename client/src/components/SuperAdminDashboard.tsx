@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
@@ -85,6 +85,7 @@ const SuperAdminDashboard = () => {
     const [onlineStaff, setOnlineStaff] = useState<OnlineStaff[]>([]);
     const [signedIn, setSignedIn] = useState<SignedInStudent[]>([]);
     const [popupLoading, setPopupLoading] = useState(false);
+    const loggedStatsError = useRef<string | null>(null);
 
     const openEnrolled = async () => {
         setEnrolledOpen(true);
@@ -200,12 +201,17 @@ const SuperAdminDashboard = () => {
 
     const fetchStats = async () => {
         try {
-            setError(null);
             const response = await axios.get('/api/admin/dashboard-stats');
             setStats(response.data);
+            setError(null);
+            loggedStatsError.current = null;
         } catch (err: any) {
-            console.error("Failed to load command center stats:", err);
-            setError(err.response?.data?.message || "Server Error: Could not load analytics.");
+            const message = err.response?.data?.message || "Server Error: Could not load analytics.";
+            if (loggedStatsError.current !== message) {
+                console.error("Failed to load command center stats:", err);
+                loggedStatsError.current = message;
+            }
+            setError(message);
         } finally {
             setIsLoading(false);
         }
