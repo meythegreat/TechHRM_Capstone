@@ -709,7 +709,7 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
             )}
 
             <div className="grid gap-0 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.8fr)] lg:items-stretch">
-                <div className="border-b border-slate-100 p-4 sm:p-6 lg:border-b-0 lg:border-r">
+                <div className="border-b border-slate-100 p-4 sm:p-6 lg:border-b-0 lg:border-r lg:min-h-0">
                     <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                         {WEEKDAYS.map((day) => (
                             <div key={day} className="py-1">{day.slice(0, 3)}</div>
@@ -805,7 +805,9 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
                     )}
                 </div>
 
-                <div className="flex min-h-72 flex-col overflow-hidden bg-slate-50/40 lg:h-full lg:min-h-0">
+                {/* Absolute fill on lg so the agenda matches calendar height and scrolls inside it. */}
+                <div className="relative min-h-72 bg-slate-50/40 lg:min-h-0">
+                    <div className="flex flex-col overflow-hidden lg:absolute lg:inset-0">
                     <div className="shrink-0 border-b border-slate-100 bg-white px-6 py-4">
                         <p className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
                             <span>
@@ -921,6 +923,7 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
                             })}
                         </ol>
                     )}
+                    </div>
                     </div>
                 </div>
             </div>
