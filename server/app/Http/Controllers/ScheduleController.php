@@ -7,7 +7,6 @@ use App\Models\Schedule;
 use Illuminate\Support\Facades\Schema;
 use App\Models\SemesterTerm;
 use App\Models\User;
-use App\Support\SuperAdminAudit;
 use Carbon\Carbon;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
@@ -203,7 +202,6 @@ class ScheduleController extends Controller
     // 3. For Assigning a New Shift (WITH SMART OVERLAP PREVENTION)
     public function store(Request $request)
     {
-        SuperAdminAudit::denyMutation($request);
         [$userId, $kind, $entries] = $this->validatedScheduleEntries($request);
 
         if (! SemesterTerm::current()) {
@@ -227,8 +225,8 @@ class ScheduleController extends Controller
             $accounts->canManageWorkSchedules($request->user()),
             403,
             $kind === 'class'
-                ? 'Only the WSPO coordinator or secretary can add a class schedule.'
-                : 'Only the WSPO coordinator or secretary can assign a work schedule.'
+                ? 'Only a super admin or the WSPO coordinator/secretary can add a class schedule.'
+                : 'Only a super admin or the WSPO coordinator/secretary can assign a work schedule.'
         );
 
         $department = $accounts->scheduleDepartment($student);
@@ -321,11 +319,10 @@ class ScheduleController extends Controller
     // 4. For editing one class or work row
     public function update(Request $request, int $id)
     {
-        SuperAdminAudit::denyMutation($request);
         abort_unless(
             app(UserController::class)->canManageWorkSchedules($request->user()),
             403,
-            'Only the WSPO coordinator or secretary can edit a schedule.'
+            'Only a super admin or the WSPO coordinator/secretary can edit a schedule.'
         );
 
         $schedule = Schedule::findOrFail($id);
@@ -385,11 +382,10 @@ class ScheduleController extends Controller
     // 5. For Removing a Shift
     public function destroy(Request $request, int $id)
     {
-        SuperAdminAudit::denyMutation($request);
         abort_unless(
             app(UserController::class)->canManageWorkSchedules($request->user()),
             403,
-            'Only the WSPO coordinator or secretary can remove a work schedule.'
+            'Only a super admin or the WSPO coordinator/secretary can remove a work schedule.'
         );
         $schedule = Schedule::findOrFail($id);
         $schedule->delete();
@@ -402,11 +398,10 @@ class ScheduleController extends Controller
     // Remove several schedules in one request (mass delete from Schedule Master).
     public function destroyMany(Request $request)
     {
-        SuperAdminAudit::denyMutation($request);
         abort_unless(
             app(UserController::class)->canManageWorkSchedules($request->user()),
             403,
-            'Only the WSPO coordinator or secretary can remove a work schedule.'
+            'Only a super admin or the WSPO coordinator/secretary can remove a work schedule.'
         );
 
         $validated = $request->validate([
@@ -468,11 +463,10 @@ class ScheduleController extends Controller
     // Clear the pending edit request badge
     public function resolveRequest(Request $request, $id)
     {
-        SuperAdminAudit::denyMutation($request);
         abort_unless(
             app(UserController::class)->canManageWorkSchedules($request->user()),
             403,
-            'Only the WSPO coordinator or secretary can resolve a schedule request.'
+            'Only a super admin or the WSPO coordinator/secretary can resolve a schedule request.'
         );
         $schedule = Schedule::findOrFail($id);
         $schedule->update([

@@ -247,7 +247,8 @@ const ScheduleManagement = () => {
     const [toastMsg, setToastMsg] = useState<{text: string, type: 'success' | 'error'} | null>(null);
     const currentUserRole = localStorage.getItem('user_role') || '';
     const assignedOffice = (localStorage.getItem('assigned_office') || '').trim().toLowerCase();
-    const canManageSchedules = currentUserRole === 'WSPO Staff' && ['', 'wspo', 'unassigned', 'wspo coordinator', 'wspo secretary'].includes(assignedOffice);
+    const canManageSchedules = currentUserRole === 'Super Admin'
+        || (currentUserRole === 'WSPO Staff' && ['', 'wspo', 'unassigned', 'wspo coordinator', 'wspo secretary'].includes(assignedOffice));
     const canSetSemester = currentUserRole === 'WSPO Staff' || currentUserRole === 'Super Admin';
     const isAudit = currentUserRole === 'Super Admin';
     const [semester, setSemester] = useState<SemesterTerm | null>(null);
@@ -1024,10 +1025,10 @@ const ScheduleManagement = () => {
                     </h1>
                     <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
                         {isAudit
-                            ? 'Set the semester window, then review department requests and assigned schedules. Other changes stay read-only.'
+                            ? 'Set the semester window, then add class schedules and work shifts campus-wide, or review department requests and assigned schedules.'
                             : canManageSchedules
                                 ? 'Set how long the semester runs, then assign or edit duty hours and class schedules. Those entries repeat each week until the semester ends.'
-                                : 'Work and class schedules are recorded by the WSPO coordinator or secretary. You can review the entries already set for your department.'}
+                                : 'Work and class schedules are recorded by the WSPO coordinator, secretary, or a super admin. You can review the entries already set for your department.'}
                     </p>
                 </div>
 
@@ -1699,7 +1700,7 @@ const ScheduleManagement = () => {
                                     <td colSpan={canManageSchedules ? 7 : 6} className="px-6 py-16 text-center text-slate-400">
                                         <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-20" />
                                         <p className="text-base font-semibold text-slate-600">{listFiltersActive ? 'No schedules match these filters' : 'No schedules found'}</p>
-                                        <p className="text-sm font-medium">{listFiltersActive ? 'Choose another name or day, or clear the filters.' : canManageSchedules ? 'Assign a work shift or add a class schedule.' : 'The WSPO coordinator or secretary has not recorded a schedule yet.'}</p>
+                                        <p className="text-sm font-medium">{listFiltersActive ? 'Choose another name or day, or clear the filters.' : canManageSchedules ? 'Assign a work shift or add a class schedule.' : 'The WSPO coordinator, secretary, or a super admin has not recorded a schedule yet.'}</p>
                                     </td>
                                 </tr>
                             ) : (

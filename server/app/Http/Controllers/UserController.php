@@ -502,9 +502,13 @@ class UserController extends Controller
             ->exists();
     }
 
-    /** Work schedules are assigned only by the WSPO coordinator or secretary. */
+    /** Work and class schedules are assigned by Super Admin or the WSPO coordinator/secretary. */
     public function canManageWorkSchedules(User $user): bool
     {
+        if ($user->role === 'Super Admin') {
+            return true;
+        }
+
         if ($user->role !== 'WSPO Staff') {
             return false;
         }

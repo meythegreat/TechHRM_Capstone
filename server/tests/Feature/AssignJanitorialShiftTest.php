@@ -52,6 +52,82 @@ class AssignJanitorialShiftTest extends TestCase
         ]);
     }
 
+    public function test_super_admin_can_assign_work_and_class_schedules(): void
+    {
+        $admin = User::create([
+            'name' => 'Campus Super Admin',
+            'username' => 'super.admin.'.uniqid(),
+            'password' => bcrypt('password'),
+            'role' => 'Super Admin',
+        ]);
+        UserProfile::create([
+            'user_id' => $admin->id,
+            'assigned_office' => null,
+        ]);
+
+        $student = User::create([
+            'name' => 'Library Worker',
+            'username' => 'library.worker.'.uniqid(),
+            'password' => bcrypt('password'),
+            'role' => 'Student',
+        ]);
+        UserProfile::create([
+            'user_id' => $student->id,
+            'assigned_office' => 'Library',
+            'course' => 'BSIT',
+            'year_level' => 2,
+        ]);
+
+        SemesterTerm::create([
+            'label' => '1st Semester',
+            'starts_on' => '2026-08-03',
+            'ends_on' => '2027-01-02',
+            'months' => 5,
+            'updated_by' => $admin->id,
+        ]);
+
+        Sanctum::actingAs($admin->load('profile'));
+
+        $work = $this->postJson('/api/schedules', [
+            'user_id' => $student->id,
+            'days' => ['Tuesday'],
+            'time' => '08:00 - 12:00',
+            'kind' => 'work',
+            'duty_type' => 'Janitorial',
+        ]);
+
+        $work->assertOk()
+            ->assertJsonPath('schedules.0.duty_type', 'Janitorial')
+            ->assertJsonPath('schedules.0.day', 'Tuesday');
+
+        $class = $this->postJson('/api/schedules', [
+            'user_id' => $student->id,
+            'kind' => 'class',
+            'days' => ['Thursday'],
+            'time' => '13:00 - 14:30',
+            'subject' => 'CS 101',
+            'room' => 'CCS 201',
+            'instructor' => 'Prof. Admin',
+        ]);
+
+        $class->assertOk()
+            ->assertJsonPath('schedules.0.kind', 'class')
+            ->assertJsonPath('schedules.0.subject', 'CS 101');
+
+        $this->assertDatabaseHas('schedules', [
+            'user_id' => $student->id,
+            'kind' => 'work',
+            'day' => 'Tuesday',
+            'duty_type' => 'Janitorial',
+        ]);
+        $this->assertDatabaseHas('schedules', [
+            'user_id' => $student->id,
+            'kind' => 'class',
+            'day' => 'Thursday',
+            'subject' => 'CS 101',
+        ]);
+    }
+
     public function test_wspo_can_assign_several_work_shifts_at_once(): void
     {
         [, $student] = $this->actingWspoWithStudent();

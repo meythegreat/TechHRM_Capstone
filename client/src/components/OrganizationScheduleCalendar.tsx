@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Clock, GraduationCap, Briefcase, Flag } from 'lucide-react';
 import { REALTIME_EVENT } from '../utils/realtime';
 import { compareSchedules, formatShiftEnd, formatShiftStart, happensNow, shiftWindow } from '../utils/scheduleTime';
+import { WEEKDAYS, monthCells } from '../utils/organizationCalendar';
 import UserAvatar from './UserAvatar';
 import ComboFilter from './ComboFilter';
 
@@ -106,25 +107,10 @@ function insideSemester(date: Date, semester: SemesterWindow | null) {
     return key >= semester.starts_on && key <= semester.ends_on;
 }
 
-const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-
 function sameDay(left: Date, right: Date) {
     return left.getFullYear() === right.getFullYear()
         && left.getMonth() === right.getMonth()
         && left.getDate() === right.getDate();
-}
-
-function monthCells(cursor: Date) {
-    const year = cursor.getFullYear();
-    const month = cursor.getMonth();
-    const first = new Date(year, month, 1);
-    const lead = (first.getDay() + 6) % 7;
-    const count = new Date(year, month + 1, 0).getDate();
-    const cells: Array<Date | null> = [];
-    for (let index = 0; index < lead; index += 1) cells.push(null);
-    for (let day = 1; day <= count; day += 1) cells.push(new Date(year, month, day));
-    while (cells.length % 7 !== 0) cells.push(null);
-    return cells;
 }
 
 function scheduleTitle(shift: OrgSchedule) {
@@ -722,7 +708,7 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
                 </div>
             )}
 
-            <div className="grid gap-0 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.8fr)]">
+            <div className="grid gap-0 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.8fr)] lg:items-stretch">
                 <div className="border-b border-slate-100 p-4 sm:p-6 lg:border-b-0 lg:border-r">
                     <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                         {WEEKDAYS.map((day) => (
@@ -819,8 +805,8 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
                     )}
                 </div>
 
-                <div className="flex min-h-72 flex-col bg-slate-50/40">
-                    <div className="border-b border-slate-100 bg-white px-6 py-4">
+                <div className="flex min-h-72 flex-col overflow-hidden bg-slate-50/40 lg:h-full lg:min-h-0">
+                    <div className="shrink-0 border-b border-slate-100 bg-white px-6 py-4">
                         <p className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
                             <span>
                                 {selected.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
@@ -845,7 +831,7 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
                             {category === 'break' && !selectedBreak && <span className="text-slate-500">No class break</span>}
                         </p>
                     </div>
-                    <div className="max-h-[28rem] overflow-y-auto">
+                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                     {showHoliday && selectedHoliday && (
                         <section className="border-b border-slate-100">
                             <div className="flex items-center gap-2 bg-amber-50/80 px-6 py-3 text-xs font-semibold uppercase tracking-wide text-amber-800">
