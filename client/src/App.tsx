@@ -165,8 +165,12 @@ function App() {
            localStorage.removeItem('profile_picture');
         }
       })
-      .catch(() => {
-        handleLogout();
+      .catch((error) => {
+        // A server or network failure is not an expired login. Signing out here
+        // deletes the session, so a reload after a failed save lands on the login page.
+        if (error?.response?.status === 401) {
+          handleLogout();
+        }
       })
       .finally(() => {
         setIsVerifying(false);

@@ -322,8 +322,9 @@ class SchedulesScreen extends StatelessWidget {
         final requests = asMaps(payload['staffing']);
         final people = asMaps(payload['people']);
         final office = (auth.userDepartment ?? '').trim().toLowerCase();
-        final canManageSchedules = auth.userRole == 'WSPO Staff' &&
-            ['', 'wspo', 'unassigned', 'wspo coordinator', 'wspo secretary', 'no department assigned'].contains(office);
+        final canManageSchedules = auth.userRole == 'Super Admin' ||
+            (auth.userRole == 'WSPO Staff' &&
+            ['', 'wspo', 'unassigned', 'wspo coordinator', 'wspo secretary', 'no department assigned'].contains(office));
         return PageBody(
           onRefresh: reload,
           children: [
