@@ -82,8 +82,11 @@ class _HomeShellState extends State<HomeShell> {
     notes.close();
     final role = context.read<AuthProvider>().userRole;
     final title = item.title;
+    final normalized = title.toLowerCase();
     String? label;
-    if (role == 'Supervisor' && title.contains('Working Student Assigned')) {
+    if (normalized.contains('clock in') || normalized.contains('clock out') || normalized.contains('overtime')) {
+      label = role == 'Student' ? 'Attendance / DTR' : 'Timesheets';
+    } else if (role == 'Supervisor' && title.contains('Working Student Assigned')) {
       label = 'Dashboard';
     } else if (title.contains('Schedule') || title.contains('Working Student') || title.contains('Office Assignment')) {
       label = role == 'Student' ? 'My Schedule' : 'Schedules';

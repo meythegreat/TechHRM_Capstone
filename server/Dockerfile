@@ -24,4 +24,5 @@ EXPOSE 10000
 CMD php artisan migrate --force \
     && php artisan db:seed --force \
     && php artisan config:cache \
+    && (nohup php artisan schedule:work --no-interaction > /tmp/shift-reminders.log 2>&1 &) \
     && php artisan serve --host=0.0.0.0 --port=${PORT:-10000}
