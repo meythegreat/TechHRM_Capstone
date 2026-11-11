@@ -46,6 +46,9 @@ interface UserRecord {
   profile?: {
     student_id_number?: string;
     assigned_office?: string;
+    work_department?: string | null;
+    organization_officer?: boolean;
+    officer_position?: string | null;
     assignment_area?: string | null;
     assignment_label?: string | null;
     special_hours_request?: boolean;
@@ -111,6 +114,9 @@ const UserManagement = () => {
     course: "",
     year_level: "",
     assigned_office: "",
+    work_department: "",
+    organization_officer: false,
+    officer_position: "",
     assignment_area: "",
     special_hours_request: false,
     supervised_departments: [] as string[],
@@ -272,6 +278,12 @@ const UserManagement = () => {
     e.preventDefault();
     setIsSubmitting(true);
 
+    if (formData.role === 'Student' && formData.organization_officer && !formData.officer_position) {
+      showToast('Select the organization position for this officer.', 'error');
+      setIsSubmitting(false);
+      return;
+    }
+
     if (formData.role === 'Department Secretary' && formData.secretary_departments.length === 0) {
       showToast('Select the office this secretary covers.', 'error');
       setIsSubmitting(false);
@@ -296,6 +308,8 @@ const UserManagement = () => {
             phone_number: formData.phone_number ? `+63${formData.phone_number}` : '',
             role: formData.role,
             assigned_office: formData.assigned_office,
+            organization_officer: formData.role === 'Student' && formData.organization_officer,
+            officer_position: formData.role === 'Student' && formData.organization_officer ? formData.officer_position : null,
             supervised_departments: formData.role === 'Supervisor' ? formData.supervised_departments : undefined,
             secretary_departments: formData.role === 'Department Secretary' ? formData.secretary_departments : undefined,
             duty_type: formData.duty_type,
@@ -333,6 +347,8 @@ const UserManagement = () => {
             phone_number: formData.phone_number ? `+63${formData.phone_number}` : '',
             role: formData.role,
             assigned_office: formData.assigned_office,
+            organization_officer: formData.role === 'Student' && formData.organization_officer,
+            officer_position: formData.role === 'Student' && formData.organization_officer ? formData.officer_position : null,
             supervised_departments: formData.role === 'Supervisor' ? formData.supervised_departments : undefined,
             secretary_departments: formData.role === 'Department Secretary' ? formData.secretary_departments : undefined,
             duty_type: formData.duty_type,
@@ -398,6 +414,9 @@ const UserManagement = () => {
       course: user.profile?.course || "",
       year_level: user.profile?.year_level?.toString() || "",
       assigned_office: user.profile?.assigned_office || "",
+      work_department: user.profile?.work_department || "",
+      organization_officer: Boolean(user.profile?.organization_officer),
+      officer_position: user.profile?.officer_position || "",
       assignment_area: user.profile?.assignment_area || "",
       special_hours_request: Boolean(user.profile?.special_hours_request),
       supervised_departments: user.profile?.supervised_departments || (user.role === 'Supervisor' && user.profile?.assigned_office ? [user.profile.assigned_office] : []),
@@ -415,7 +434,7 @@ const UserManagement = () => {
     setFormData({
       prefix: "", first_name: "", middle_initial: "", last_name: "",
       username: "", email: "", password: "", phone_number: "", role: "Student",
-      student_id_number: "", course: "", year_level: "", assigned_office: "", assignment_area: "", special_hours_request: false, supervised_departments: [], secretary_departments: [], supervisor_absent: false, duty_type: "Clerical", duty_request: "", gender: "",
+      student_id_number: "", course: "", year_level: "", assigned_office: "", work_department: "", organization_officer: false, officer_position: "", assignment_area: "", special_hours_request: false, supervised_departments: [], secretary_departments: [], supervisor_absent: false, duty_type: "Clerical", duty_request: "", gender: "",
     });
     setIsModalOpen(true);
   };
@@ -562,6 +581,9 @@ const UserManagement = () => {
                                                   <p className="text-xs font-semibold text-violet-700 mt-1">Special request · 100 hrs instead of 80</p>
                                               )}
                                               <p className="text-xs font-semibold text-indigo-700 mt-1">Supervisor: {(user.department_supervisors && user.department_supervisors.length > 0) ? user.department_supervisors.join(', ') : supervisorLabelForOffice(user.profile?.assigned_office)}</p>
+                                              {user.profile?.organization_officer && user.profile?.officer_position && (
+                                                <p className="text-xs font-semibold text-emerald-700 mt-1">✓ {user.profile.officer_position}</p>
+                                              )}
                                           </div>
                                       ) : user.role === 'Department Secretary' ? (
                                           <div>
@@ -580,10 +602,10 @@ const UserManagement = () => {
                                                   <p className="text-xs font-semibold text-indigo-700 mt-1">Coordinator access for WSPO</p>
                                               )}
                                               {user.profile?.assigned_office === 'WSPO Secretary' && (
-                                                  <p className="text-xs font-medium text-slate-500 mt-1">Also a working student who can receive duty schedules</p>
+                                                  <p className="text-xs font-medium text-slate-500 mt-1">Elected student{user.profile?.work_department ? ` · ${user.profile.work_department}` : ''}</p>
                                               )}
                                               {user.profile?.assigned_office === 'WSPO President' && (
-                                                  <p className="text-xs font-semibold text-indigo-700 mt-1">Working student · can receive duty schedules</p>
+                                                  <p className="text-xs font-semibold text-indigo-700 mt-1">Elected student{user.profile?.work_department ? ` · ${user.profile.work_department}` : ''}</p>
                                               )}
                                           </div>
                                       ) : (
@@ -818,6 +840,40 @@ const UserManagement = () => {
                           <p className="mt-2 text-xs font-medium text-slate-500">Shown after the department. Example: CCS - Laboratory.</p>
                         </div>
                         <div className="sm:col-span-2">
+                          <label className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.organization_officer}
+                              onChange={(event) => setFormData((current) => ({
+                                ...current,
+                                organization_officer: event.target.checked,
+                                officer_position: event.target.checked ? current.officer_position : "",
+                              }))}
+                              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600"
+                            />
+                            <span>
+                              <span className="block text-sm font-bold text-emerald-950">Officer of the organization</span>
+                              <span className="block text-xs font-medium text-emerald-800 mt-1">Elected students stay in their assigned department. Check this and choose the position they hold.</span>
+                            </span>
+                          </label>
+                          {formData.organization_officer && (
+                            <div className="mt-3">
+                              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Position</label>
+                              <select
+                                name="officer_position"
+                                value={formData.officer_position}
+                                onChange={handleInputChange}
+                                required
+                                className="w-full p-3.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-emerald-600 transition-all appearance-none cursor-pointer"
+                              >
+                                <option value="">-- Select position --</option>
+                                <option value="WSPO Secretary">WSPO Secretary</option>
+                                <option value="WSPO President">WSPO President</option>
+                              </select>
+                            </div>
+                          )}
+                        </div>
+                        <div className="sm:col-span-2">
                           <label className="flex items-start gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 cursor-pointer">
                             <input type="checkbox" checked={formData.special_hours_request} onChange={(event) => setFormData((current) => ({ ...current, special_hours_request: event.target.checked }))} className="mt-0.5 h-4 w-4 rounded border-slate-300 text-violet-700 focus:ring-violet-600" />
                             <span>
@@ -928,6 +984,7 @@ const UserManagement = () => {
                           <option value="WSPO President">WSPO President</option>
                           <option value="WSPO Secretary">WSPO Secretary</option>
                         </select>
+                        <p className="mt-2 text-xs text-slate-500">The coordinator is staff. Secretary and president who were elected are students: mark them with Officer of the organization on their student account, and keep their department assignment.</p>
                       </div>
                     )}
                   </div>

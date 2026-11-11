@@ -37,6 +37,16 @@ export interface MessagesPageProps {
   onMinimize?: () => void;
 }
 
+function OfficerMark({ user }: { user: ChatUser }) {
+  if (!user.organization_officer || !user.officer_position) return null;
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+      <Check className="h-3 w-3" />
+      {user.officer_position}
+    </span>
+  );
+}
+
 function useIsMobileLayout(breakpointPx = 1024) {
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth < breakpointPx : false,
@@ -1372,6 +1382,7 @@ export default function MessagesPage({
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-slate-900">{user.name}</p>
                       <div className="mt-1 flex flex-wrap gap-1">
+                        <OfficerMark user={user} />
                         <AssignmentChip label={user.assignment} />
                         <ClockedInChip clockedIn={user.clocked_in} workType={user.work_type} />
                       </div>
@@ -1407,9 +1418,12 @@ export default function MessagesPage({
                   />
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-slate-900">{user.name}</p>
-                    <p className={`truncate text-xs ${user.online ? 'text-emerald-600' : 'text-slate-500'}`}>
-                      {user.online ? 'Online' : user.role}
-                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                      <OfficerMark user={user} />
+                      <p className={`truncate text-xs ${user.online ? 'text-emerald-600' : 'text-slate-500'}`}>
+                        {user.online ? 'Online' : user.role}
+                      </p>
+                    </div>
                   </div>
                 </button>
               ))

@@ -153,13 +153,15 @@ class AttendanceController extends Controller
             return response()->json(['message' => 'You cannot view a student DTR.'], 403);
         }
 
-        $studentQuery = \App\Models\User::with('profile')->where('role', 'Student');
+        $accounts = app(\App\Http\Controllers\UserController::class);
+        $studentQuery = \App\Models\User::with('profile');
         if ($actor->role === 'Super Admin') {
             $studentQuery->withTrashed();
         }
+        $accounts->constrainSchedulableStudents($studentQuery);
         $student = $studentQuery->findOrFail($id);
 
-        if (app(\App\Http\Controllers\UserController::class)->usesSupervisorScope($actor) && !app(\App\Http\Controllers\UserController::class)->supervisorCanAccessStudent($actor, $student)) {
+        if ($accounts->usesSupervisorScope($actor) && !$accounts->supervisorCanAccessStudent($actor, $student)) {
             return response()->json(['message' => 'You can only view DTRs for working students in your department.'], 403);
         }
 
@@ -173,8 +175,8 @@ class AttendanceController extends Controller
             $query->whereDate('time_in', '<=', $request->end);
         }
 
-        $office = $student->profile?->assigned_office;
-        $supervisors = app(\App\Http\Controllers\UserController::class)->supervisorNamesForOffice($office);
+        $office = $accounts->placementOffice($student);
+        $supervisors = $accounts->supervisorNamesForOffice($office);
 
         return response()->json([
             'student' => [
@@ -237,8 +239,8 @@ class AttendanceController extends Controller
             if ($areas === []) {
                 $query->whereRaw('0 = 1');
             } else {
-                $query->whereHas('user.profile', function ($q) use ($areas) {
-                    $q->whereIn('assigned_office', $areas);
+                $query->whereHas('user', function ($owner) use ($areas, $accounts) {
+                    $accounts->constrainPlacedIn($owner, $areas);
                 });
             }
         }
@@ -390,7 +392,9 @@ class AttendanceController extends Controller
             'task_description' => 'nullable|string|max:1000',
         ]);
 
-        $student = \App\Models\User::with('profile')->where('role', 'Student')->findOrFail($validated['user_id']);
+        $studentQuery = \App\Models\User::with('profile');
+        app(\App\Http\Controllers\UserController::class)->constrainSchedulableStudents($studentQuery);
+        $student = $studentQuery->findOrFail($validated['user_id']);
         if (!$this->canEditStudentTimes($supervisor, $student)) {
             return response()->json(['message' => $this->dtrAccessMessage($supervisor)], 403);
         }

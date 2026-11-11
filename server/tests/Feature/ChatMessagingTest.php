@@ -263,6 +263,67 @@ class ChatMessagingTest extends TestCase
         ])->assertStatus(422);
     }
 
+    public function test_supervisor_can_find_an_elected_officer_assigned_to_their_department(): void
+    {
+        Schema::create('offices', function (Blueprint $table) {
+            $table->id();
+            $table->string('name')->unique();
+            $table->string('abbreviation', 32)->nullable();
+            $table->timestamps();
+        });
+
+        $supervisor = User::create([
+            'name' => 'CCS Supervisor',
+            'username' => 'ccs.supervisor',
+            'password' => 'password',
+            'role' => 'Supervisor',
+        ]);
+        UserProfile::create([
+            'user_id' => $supervisor->id,
+            'assigned_office' => 'College of Computer Studies',
+            'supervised_departments' => ['College of Computer Studies'],
+        ]);
+
+        $officer = User::create([
+            'name' => 'Quia de Felipe',
+            'username' => 'quia.felipe',
+            'password' => 'password',
+            'role' => 'Student',
+        ]);
+        UserProfile::create([
+            'user_id' => $officer->id,
+            'assigned_office' => 'College of Computer Studies',
+            'organization_officer' => true,
+            'officer_position' => 'WSPO Secretary',
+        ]);
+
+        $employee = User::create([
+            'name' => 'CCS Employee Secretary',
+            'username' => 'ccs.employee',
+            'password' => 'password',
+            'role' => 'Department Secretary',
+        ]);
+        UserProfile::create([
+            'user_id' => $employee->id,
+            'assigned_office' => 'College of Computer Studies',
+            'secretary_departments' => ['College of Computer Studies'],
+        ]);
+
+        Sanctum::actingAs($supervisor);
+
+        $this->getJson('/api/chat/users?q=Quia')
+            ->assertOk()
+            ->assertJsonPath('0.name', 'Quia de Felipe')
+            ->assertJsonPath('0.organization_officer', true)
+            ->assertJsonPath('0.officer_position', 'WSPO Secretary')
+            ->assertJsonPath('0.assignment', 'CCS · WSPO Secretary');
+
+        $this->getJson('/api/chat/users?q=Employee')
+            ->assertOk()
+            ->assertJsonPath('0.name', 'CCS Employee Secretary')
+            ->assertJsonPath('0.role', 'Department Secretary');
+    }
+
     public function test_chat_exposes_assignment_clock_status_and_active_now(): void
     {
         $ana = User::create([
@@ -529,6 +590,9 @@ class ChatMessagingTest extends TestCase
             $table->string('year_level')->nullable();
             $table->string('gender')->nullable();
             $table->string('assigned_office')->nullable();
+            $table->string('work_department')->nullable();
+            $table->boolean('organization_officer')->default(false);
+            $table->string('officer_position')->nullable();
             $table->string('assignment_area')->nullable();
             $table->boolean('special_hours_request')->default(false);
             $table->json('supervised_departments')->nullable();

@@ -94,6 +94,8 @@ interface StudentOption {
     profile_picture?: string | null;
     profile?: {
         assigned_office?: string | null;
+        organization_officer?: boolean;
+        officer_position?: string | null;
         student_id_number?: string | null;
         course?: string | null;
         year_level?: string | number | null;
@@ -432,6 +434,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                 student.name,
                 student.profile?.student_id_number,
                 student.profile?.assigned_office,
+                student.profile?.officer_position,
                 student.profile?.course,
                 student.profile?.year_level,
                 home?.shortName,
@@ -1165,7 +1168,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                 ) : (
                                     filteredStudents.map((student) => (
                                         <option key={student.id} value={student.id}>
-                                            {student.name} {student.profile?.student_id_number ? `(${student.profile.student_id_number})` : ''}
+                                            {student.name}{student.profile?.organization_officer && student.profile?.officer_position ? ` ✓ ${student.profile.officer_position}` : ''} {student.profile?.student_id_number ? `(${student.profile.student_id_number})` : ''}
                                         </option>
                                     ))
                                 )}
