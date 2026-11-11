@@ -9,6 +9,7 @@ use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Sleep;
 use Tests\TestCase;
 
 class ForgotPasswordEmailDeliveryTest extends TestCase
@@ -102,6 +103,76 @@ class ForgotPasswordEmailDeliveryTest extends TestCase
         $fresh = $user->fresh();
         $this->assertSame($original, $fresh->password);
         $this->assertFalse($fresh->must_change_password);
+        Http::assertSentCount(1);
+    }
+
+    public function test_a_short_gmail_rate_limit_is_retried_until_the_message_sends(): void
+    {
+        Sleep::fake();
+        Http::preventStrayRequests();
+        Http::fake([
+            self::WEBHOOK => Http::sequence()
+                ->push('Too many requests', 429)
+                ->push(['ok' => true], 200),
+        ]);
+
+        $user = $this->makeUser('student.three', 'student.three@school.edu');
+
+        $this->postJson('/api/forgot-password', ['username' => 'student.three@school.edu'])
+            ->assertOk()
+            ->assertJsonPath('masked_email', 'st***********@school.edu');
+
+        $this->assertTrue($user->fresh()->must_change_password);
+        $this->assertFalse(Hash::check('old-password', $user->fresh()->password));
+        Http::assertSentCount(2);
+        Sleep::assertSleptTimes(1);
+    }
+
+    public function test_password_is_unchanged_when_gmail_stays_rate_limited(): void
+    {
+        Sleep::fake();
+        Http::preventStrayRequests();
+        Http::fake([
+            self::WEBHOOK => Http::response('Too many requests', 429),
+        ]);
+
+        $user = $this->makeUser('student.four', 'student.four@school.edu');
+        $original = $user->password;
+
+        $this->postJson('/api/forgot-password', ['username' => 'student.four@school.edu'])
+            ->assertStatus(502)
+            ->assertJsonFragment([
+                'message' => 'Gmail is limiting password-reset emails right now (Too many requests). Wait a minute and try again. Your password was not changed.',
+            ]);
+
+        $fresh = $user->fresh();
+        $this->assertSame($original, $fresh->password);
+        $this->assertFalse($fresh->must_change_password);
+        Http::assertSentCount(3);
+        Sleep::assertSleptTimes(2);
+    }
+
+    public function test_a_long_retry_after_is_not_sent_again(): void
+    {
+        Sleep::fake();
+        Http::preventStrayRequests();
+        Http::fake([
+            self::WEBHOOK => Http::response('', 429, ['Retry-After' => '3600']),
+        ]);
+
+        $user = $this->makeUser('student.five', 'student.five@school.edu');
+        $original = $user->password;
+
+        $this->postJson('/api/forgot-password', ['username' => 'student.five'])
+            ->assertStatus(502)
+            ->assertJsonFragment([
+                'message' => 'Gmail is limiting password-reset emails right now. Wait a minute and try again. Your password was not changed.',
+            ]);
+
+        $this->assertSame($original, $user->fresh()->password);
+        $this->assertFalse($user->fresh()->must_change_password);
+        Http::assertSentCount(1);
+        Sleep::assertSleptTimes(0);
     }
 
     private function configureMail(): void

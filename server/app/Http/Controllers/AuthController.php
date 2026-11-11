@@ -6,6 +6,8 @@ use App\Models\ActivityLog; // Imported your new ActivityLog model!
 use App\Models\Application;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
@@ -248,9 +250,25 @@ class AuthController extends Controller
         }
 
         try {
-            $response = Http::timeout(20)
+            $response = Http::timeout(25)
                 ->acceptJson()
                 ->asJson()
+                ->retry(3, fn (int $attempt) => $attempt * 750, function ($exception) {
+                    // A plain 429 is a short Gmail or n8n limit. A long Retry-After is a
+                    // quota lock; another call would only push that lock further out.
+                    if (! $exception instanceof RequestException) {
+                        return false;
+                    }
+
+                    $response = $exception->response;
+                    if ($response->status() !== 429) {
+                        return false;
+                    }
+
+                    $retryAfter = $response->header('Retry-After');
+
+                    return ! (is_numeric($retryAfter) && (int) $retryAfter > 8);
+                }, throw: false)
                 ->post($webhook, [
                     'email' => $email,
                     'subject' => 'Your WoSPIS temporary password',
@@ -267,16 +285,39 @@ class AuthController extends Controller
             return null;
         }
 
-        $message = data_get($response->json(), 'message');
+        $message = $this->webhookErrorMessage($response);
         report(new \RuntimeException(
-            'Forgot-password webhook failed with HTTP '.$response->status().': '.(is_string($message) && $message !== '' ? $message : 'no message')
+            'Forgot-password webhook failed with HTTP '.$response->status().': '.($message ?? 'no message')
         ));
 
-        if (is_string($message) && $message !== '') {
+        if ($response->status() === 429) {
+            $detail = $message !== null ? ' ('.$message.')' : '';
+
+            return 'Gmail is limiting password-reset emails right now'.$detail.'. Wait a minute and try again. Your password was not changed.';
+        }
+
+        if ($message !== null) {
             return 'The Gmail password reset webhook rejected the message: '.$message;
         }
 
         return 'The Gmail password reset webhook rejected the message (HTTP '.$response->status().').';
+    }
+
+    private function webhookErrorMessage(Response $response): ?string
+    {
+        $decoded = $response->json();
+        foreach ([data_get($decoded, 'message'), data_get($decoded, 'error.message'), data_get($decoded, 'error')] as $candidate) {
+            if (is_string($candidate) && trim($candidate) !== '') {
+                return trim($candidate);
+            }
+        }
+
+        $body = trim($response->body());
+        if ($body !== '' && ! str_starts_with($body, '<') && ! str_starts_with($body, '{') && ! str_starts_with($body, '[')) {
+            return mb_substr($body, 0, 240);
+        }
+
+        return null;
     }
 
     private function resetDestination(User $user, string $identifier): ?string
