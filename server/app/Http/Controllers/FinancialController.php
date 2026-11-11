@@ -68,7 +68,9 @@ class FinancialController extends Controller
         $skipped = 0;
 
         DB::transaction(function () use ($request, $start, $end, $rate, &$assessed, &$skipped) {
-            $students = User::where('role', 'Student')->get();
+            $students = User::query();
+            app(UserController::class)->constrainSchedulableStudents($students);
+            $students = $students->get();
             $activityDeltas = RenderedHours::deltasBetween($start, $end);
 
             foreach ($students as $student) {

@@ -111,8 +111,8 @@ class AdvancedAttendanceController extends Controller
             if ($areas === []) {
                 $query->whereRaw('0 = 1');
             } else {
-                $query->whereHas('user.profile', function ($profile) use ($areas) {
-                    $profile->whereIn('assigned_office', $areas);
+                $query->whereHas('user', function ($owner) use ($areas, $accounts) {
+                    $accounts->constrainPlacedIn($owner, $areas);
                 });
             }
         }
@@ -207,6 +207,7 @@ class AdvancedAttendanceController extends Controller
         }
 
         $user = $request->user()->load('profile');
+        $accounts = app(UserController::class);
 
         $activeRecord = Attendance::where('user_id', $user->id)
             ->whereNull('time_out')
@@ -224,7 +225,9 @@ class AdvancedAttendanceController extends Controller
             return response()->json(['message' => 'You are already clocked in. Clock out of this shift before starting the next one.'], 422);
         }
 
-        $studentDepartment = trim((string) ($user->profile?->assigned_office ?? ''));
+        $studentDepartment = $accounts->isStudentOfficer($user)
+            ? $accounts->placementOffice($user)
+            : trim((string) ($user->profile?->assigned_office ?? ''));
         if ($studentDepartment === '') {
             return response()->json([
                 'message' => 'Your account has no assigned department. Contact your supervisor.',
@@ -297,7 +300,10 @@ class AdvancedAttendanceController extends Controller
             return $this->clockOutActivity($request, $attendance);
         }
 
-        $studentDepartment = trim((string) ($user->profile?->assigned_office ?? ''));
+        $accounts = app(UserController::class);
+        $studentDepartment = $accounts->isStudentOfficer($user)
+            ? $accounts->placementOffice($user)
+            : trim((string) ($user->profile?->assigned_office ?? ''));
         $dutyType = $attendance->attendance_type ?: ($attendance->work_type ?: 'Regular');
         $validToken = $this->authenticateToken($request, $dutyType, $studentDepartment);
         if ($validToken instanceof \Illuminate\Http\JsonResponse) {
@@ -600,7 +606,8 @@ class AdvancedAttendanceController extends Controller
         }
 
         $user = $request->user()->load('profile');
-        if ($user->role !== 'Student') {
+        $accounts = app(UserController::class);
+        if ($user->role !== 'Student' && !$accounts->isStudentOfficer($user)) {
             return response()->json(['message' => 'Only a working student can clock in for this activity.'], 403);
         }
 

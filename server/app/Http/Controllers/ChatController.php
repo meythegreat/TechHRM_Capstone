@@ -10,6 +10,7 @@ use App\Models\Notification;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -32,12 +33,41 @@ class ChatController extends Controller
             ->whereKeyNot($user->id)
             ->orderBy('name');
 
+        $accounts = app(UserController::class);
+        if ($accounts->usesSupervisorScope($user)) {
+            $areas = $accounts->supervisedOfficeAreas($user);
+            if ($areas !== []) {
+                $query->where(function ($people) use ($accounts, $areas) {
+                    $accounts->constrainPlacedIn($people, $areas);
+                    // School employees stay reachable as staff. Elected officers
+                    // are included only through the department placement above.
+                    $people->orWhere(fn ($staff) => $staff->whereNotIn('role', ['Student', 'WSPO Staff']));
+                    $people->orWhere(function ($coordinator) use ($accounts) {
+                        $coordinator->where('role', 'WSPO Staff')
+                            ->whereDoesntHave('profile', function ($profile) use ($accounts) {
+                                $profile->where(function ($office) use ($accounts) {
+                                    foreach ($accounts->studentOfficerPositions() as $position) {
+                                        $office->orWhereRaw('LOWER(TRIM(assigned_office)) = ?', [strtolower($position)]);
+                                    }
+                                });
+                            });
+                    });
+                });
+            }
+        }
+
         if ($request->filled('q')) {
             $term = trim((string) $request->query('q'));
             $query->where(function ($builder) use ($term) {
                 $builder->where('name', 'like', "%{$term}%")
                     ->orWhere('username', 'like', "%{$term}%")
-                    ->orWhere('role', 'like', "%{$term}%");
+                    ->orWhere('role', 'like', "%{$term}%")
+                    ->orWhereHas('profile', function ($profile) use ($term) {
+                        $profile->where('assigned_office', 'like', "%{$term}%");
+                        if (Schema::hasColumn('user_profiles', 'work_department')) {
+                            $profile->orWhere('work_department', 'like', "%{$term}%");
+                        }
+                    });
             });
         }
 
@@ -783,6 +813,8 @@ class ChatController extends Controller
             'last_seen_at' => $this->lastSeenAt($user->id),
             'assignment' => $assignment,
             'assigned_office' => trim((string) ($user->profile?->assigned_office ?? '')) ?: null,
+            'organization_officer' => app(UserController::class)->isStudentOfficer($user),
+            'officer_position' => app(UserController::class)->officerPosition($user) ?: null,
             'clocked_in' => $open !== null,
             'clocked_in_since' => optional($open?->time_in)?->toIso8601String(),
             'work_type' => $open
@@ -806,6 +838,25 @@ class ChatController extends Controller
             $departments = $profile->supervised_departments;
             if (is_array($departments) && count($departments) > 0) {
                 return implode(', ', $departments);
+            }
+        }
+
+        $accounts = app(UserController::class);
+        if ($accounts->isStudentOfficer($user)) {
+            $position = $accounts->officerPosition($user);
+            $placed = $user->role === 'Student'
+                ? trim((string) ($profile->assigned_office ?? ''))
+                : $accounts->workDepartment($user);
+            if ($placed !== '') {
+                $label = \App\Support\AssignmentLabel::format($placed, $profile->assignment_area);
+                if ($position !== '') {
+                    return $label !== '' ? $label.' · '.$position : $position;
+                }
+
+                return $label;
+            }
+            if ($position !== '') {
+                return $position;
             }
         }
 

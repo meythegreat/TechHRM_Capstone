@@ -18,6 +18,9 @@ class RenderedHours
     {
         $columns = ['id', 'user_id', 'student_id_number', 'year_level', 'course', 'assigned_office'];
         if (Schema::hasTable('user_profiles')) {
+            if (Schema::hasColumn('user_profiles', 'work_department')) {
+                $columns[] = 'work_department';
+            }
             if (Schema::hasColumn('user_profiles', 'assignment_area')) {
                 $columns[] = 'assignment_area';
             }
@@ -78,9 +81,9 @@ class RenderedHours
     {
         $students = User::query()
             ->with('profile:'.self::profileColumns())
-            ->where('role', 'Student')
-            ->orderBy('name')
-            ->get();
+            ->orderBy('name');
+        app(\App\Http\Controllers\UserController::class)->constrainSchedulableStudents($students);
+        $students = $students->get();
 
         $dtr = self::verifiedHoursByUser($start, $end);
         $duty = self::dutyHoursByUser($start->toDateString(), $end->toDateString());
@@ -100,7 +103,7 @@ class RenderedHours
             }
 
             $year = $student->profile?->year_level;
-            $officeName = trim((string) ($student->profile?->assigned_office ?? ''));
+            $officeName = app(\App\Http\Controllers\UserController::class)->placementOffice($student);
             $courseName = trim((string) ($student->profile?->course ?? ''));
             $rows[] = [
                 'user_id' => $student->id,

@@ -54,6 +54,35 @@ class DepartmentSecretaryAndWeekScheduleTest extends TestCase
         );
     }
 
+    public function test_elected_wspo_officer_appears_in_the_assigned_department_and_an_employee_secretary_does_not(): void
+    {
+        $supervisor = $this->makeUser('Supervisor', 'College of Computer Studies', 'CCS Supervisor');
+        $supervisor->profile->update(['supervised_departments' => ['College of Computer Studies']]);
+
+        $officer = $this->makeUser('Student', 'College of Computer Studies', 'Quia de Felipe');
+        $officer->profile->update([
+            'organization_officer' => true,
+            'officer_position' => 'WSPO Secretary',
+        ]);
+
+        $employee = $this->makeUser('Department Secretary', 'College of Computer Studies', 'CCS Employee Secretary');
+        $employee->profile->update(['secretary_departments' => ['College of Computer Studies']]);
+
+        $coordinator = $this->makeUser('WSPO Staff', 'WSPO Coordinator', 'WSPO Coordinator');
+
+        $accounts = app(UserController::class);
+        $this->assertTrue($accounts->supervisorCanAccessStudent($supervisor->fresh('profile'), $officer->fresh('profile')));
+        $this->assertFalse($accounts->isStudentOfficer($employee->fresh('profile')));
+        $this->assertFalse($accounts->supervisorCanAccessStudent($supervisor->fresh('profile'), $employee->fresh('profile')));
+        $this->assertFalse($accounts->supervisorCanAccessStudent($supervisor->fresh('profile'), $coordinator->fresh('profile')));
+
+        Sanctum::actingAs($supervisor->fresh('profile'));
+        $names = collect($this->getJson('/api/personnel')->assertOk()->json())->pluck('name');
+        $this->assertTrue($names->contains('Quia de Felipe'));
+        $this->assertFalse($names->contains('CCS Employee Secretary'));
+        $this->assertFalse($names->contains('WSPO Coordinator'));
+    }
+
     public function test_secretary_acts_only_while_the_supervisor_is_absent(): void
     {
         $supervisor = $this->makeUser('Supervisor', 'Library', 'Library Supervisor');
@@ -151,6 +180,9 @@ class DepartmentSecretaryAndWeekScheduleTest extends TestCase
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
             $table->string('student_id_number')->nullable();
             $table->string('assigned_office')->nullable();
+            $table->string('work_department')->nullable();
+            $table->boolean('organization_officer')->default(false);
+            $table->string('officer_position')->nullable();
             $table->string('assignment_area')->nullable();
             $table->boolean('special_hours_request')->default(false);
             $table->string('course')->nullable();

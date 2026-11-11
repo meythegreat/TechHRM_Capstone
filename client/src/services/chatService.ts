@@ -10,6 +10,8 @@ export interface ChatUser {
   last_seen_at?: string | null;
   assignment?: string | null;
   assigned_office?: string | null;
+  organization_officer?: boolean;
+  officer_position?: string | null;
   clocked_in?: boolean;
   clocked_in_since?: string | null;
   work_type?: string | null;

@@ -121,7 +121,8 @@ class RenderedHourEvent extends Model
             return $this->entries()->pluck('user_id')->map(fn ($id) => (int) $id)->all();
         }
 
-        $query = User::query()->where('role', 'Student');
+        $query = User::query();
+        app(\App\Http\Controllers\UserController::class)->constrainSchedulableStudents($query);
         if ($this->kind === self::GENERAL_CLEANING && $this->year_level) {
             $query->whereHas('profile', fn ($profile) => $profile->where('year_level', $this->year_level));
         }

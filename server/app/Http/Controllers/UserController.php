@@ -13,6 +13,7 @@ use App\Support\InfractionEscalation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
@@ -27,10 +28,16 @@ class UserController extends Controller
         if ($this->usesSupervisorScope($user)) {
             $departments = $this->supervisedOfficeAreas($user);
 
-            $query->whereHas('profile', function($q) use ($departments) {
-                $q->whereIn('assigned_office', $departments);
+            // Department secretaries are school employees. They stay on the
+            // staff list. Elected WSPO officers are students of a department.
+            $query->where(function ($people) use ($departments) {
+                $people->where(function ($regular) use ($departments) {
+                    $regular->whereHas('profile', function ($q) use ($departments) {
+                        $q->whereIn('assigned_office', $departments);
+                    })->whereNotIn('role', ['Super Admin', 'WSPO Staff']);
+                });
+                $this->orWhereOfficersPlacedIn($people, $departments);
             });
-            $query->whereNotIn('role', ['Super Admin', 'WSPO Staff']);
         }
 
         $roles = ['Student', 'Supervisor', 'Department Secretary', 'WSPO Staff', 'Super Admin'];
@@ -76,10 +83,11 @@ class UserController extends Controller
         $users = $query->paginate(10);
         $supervisorMap = $this->departmentSupervisorMap();
         $users->getCollection()->transform(function ($listedUser) use ($supervisorMap) {
-            if ($listedUser->role === 'Student') {
+            if ($listedUser->role === 'Student' || $this->isStudentOfficer($listedUser)) {
+                $office = $this->placementOffice($listedUser);
                 $listedUser->setAttribute(
                     'department_supervisors',
-                    $supervisorMap[$listedUser->profile?->assigned_office] ?? []
+                    $supervisorMap[$office] ?? $this->supervisorNamesForDepartment($office)
                 );
             }
             return $listedUser;
@@ -145,11 +153,13 @@ class UserController extends Controller
                 $departments
             ))));
 
-            $query->whereHas('profile', function ($q) use ($areas) {
-                $q->whereIn('assigned_office', $areas);
-            });
+            $this->constrainPlacedIn($query, $areas);
         } elseif ($request->filled('department')) {
-            $query->whereHas('profile', fn ($q) => $q->where('assigned_office', $request->department));
+            $department = $request->string('department')->trim()->toString();
+            $query->where(function ($people) use ($department) {
+                $people->whereHas('profile', fn ($q) => $q->where('assigned_office', $department));
+                $this->orWhereOfficersPlacedIn($people, $this->departmentAliases($department));
+            });
         }
 
         return response()->json($query->orderBy('name')->get());
@@ -226,6 +236,13 @@ class UserController extends Controller
         }
 
         $labels = $aliases;
+        if (!Schema::hasTable('offices')) {
+            return array_values(array_unique(array_filter(array_map(
+                fn ($label) => trim((string) $label),
+                $labels
+            ))));
+        }
+
         foreach (Office::query()->get(['name', 'abbreviation']) as $office) {
             $abbreviation = trim((string) $office->abbreviation);
             $nameKey = $this->normalizeDepartment($office->name);
@@ -291,15 +308,9 @@ class UserController extends Controller
         return ['WSPO Secretary', 'WSPO President'];
     }
 
-    /** Secretary and president keep a WSPO Staff login and still count as students. */
-    public function isStudentOfficer(User $user): bool
+    private function isOfficerTitle(?string $position): bool
     {
-        if ($user->role !== 'WSPO Staff') {
-            return false;
-        }
-
-        $position = strtolower(trim((string) ($user->profile?->assigned_office ?? '')));
-
+        $position = strtolower(trim((string) $position));
         foreach ($this->studentOfficerPositions() as $allowed) {
             if ($position === strtolower($allowed)) {
                 return true;
@@ -307,6 +318,40 @@ class UserController extends Controller
         }
 
         return false;
+    }
+
+    /**
+     * Elected organization officers are students in a department.
+     * Older accounts still store the title on a WSPO Staff login.
+     * A department secretary is a school employee and is not an officer.
+     */
+    public function isStudentOfficer(User $user): bool
+    {
+        $user->loadMissing('profile');
+
+        if ($user->role === 'Student' && $this->isOfficerTitle($user->profile?->officer_position)) {
+            return (bool) ($user->profile?->organization_officer ?? false);
+        }
+
+        if ($user->role !== 'WSPO Staff') {
+            return false;
+        }
+
+        return $this->isOfficerTitle($user->profile?->assigned_office);
+    }
+
+    public function officerPosition(User $user): string
+    {
+        if (!$this->isStudentOfficer($user)) {
+            return '';
+        }
+
+        $user->loadMissing('profile');
+        if ($user->role === 'Student') {
+            return trim((string) ($user->profile?->officer_position ?? ''));
+        }
+
+        return trim((string) ($user->profile?->assigned_office ?? ''));
     }
 
     /** Students, plus secretary and president, who can be given a duty schedule. */
@@ -321,16 +366,91 @@ class UserController extends Controller
     }
 
     /**
+     * Department where this person works as a student.
+     * Elected officers keep their title in assigned_office.
+     * A department secretary is an employee and is not placed this way.
+     */
+    public function placementOffice(User $student): string
+    {
+        $student->loadMissing('profile');
+        if ($this->isStudentOfficer($student) && $student->role !== 'Student') {
+            $placed = $this->workDepartment($student);
+
+            return $placed !== '' ? $placed : 'WSPO';
+        }
+
+        return trim((string) ($student->profile?->assigned_office ?? ''));
+    }
+
+    public function workDepartment(User $user): string
+    {
+        if (!$this->isStudentOfficer($user) || !Schema::hasColumn('user_profiles', 'work_department')) {
+            return '';
+        }
+
+        $user->loadMissing('profile');
+
+        return trim((string) ($user->profile?->work_department ?? ''));
+    }
+
+    /**
      * Office stored on a work or class row.
-     * An officer title is not a department, so those duties stay on the WSPO office.
+     * An officer title is not a department. An officer without a placement stays on WSPO.
      */
     public function scheduleDepartment(User $student): string
     {
         if ($this->isStudentOfficer($student)) {
-            return 'WSPO';
+            return $this->placementOffice($student);
         }
 
         return trim((string) ($student->profile?->assigned_office ?? ''));
+    }
+
+    /**
+     * Working students in these offices, including elected WSPO officers
+     * whose student assignment is one of them.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\User>  $query
+     * @param  list<string>  $areas
+     */
+    public function constrainPlacedIn($query, array $areas)
+    {
+        return $query->where(function ($people) use ($areas) {
+            $people->where(function ($students) use ($areas) {
+                $students->where('role', 'Student')
+                    ->whereHas('profile', fn ($profile) => $profile->whereIn('assigned_office', $areas));
+            });
+            $this->orWhereOfficersPlacedIn($people, $areas);
+        });
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\User>  $query
+     * @param  list<string>  $areas
+     */
+    public function constrainOfficersPlacedIn($query, array $areas)
+    {
+        return $query->where('role', 'WSPO Staff')->whereHas('profile', function ($profile) use ($areas) {
+            $profile->whereIn('work_department', $areas)
+                ->where(function ($office) {
+                    foreach ($this->studentOfficerPositions() as $position) {
+                        $office->orWhereRaw('LOWER(TRIM(assigned_office)) = ?', [strtolower($position)]);
+                    }
+                });
+        });
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\User>  $query
+     * @param  list<string>  $areas
+     */
+    private function orWhereOfficersPlacedIn($query, array $areas): void
+    {
+        if ($areas === [] || !Schema::hasColumn('user_profiles', 'work_department')) {
+            return;
+        }
+
+        $query->orWhere(fn ($officers) => $this->constrainOfficersPlacedIn($officers, $areas));
     }
 
     /** @param  \Illuminate\Database\Eloquent\Builder<\App\Models\User>  $query */
@@ -345,11 +465,28 @@ class UserController extends Controller
     /** @param  \Illuminate\Database\Eloquent\Builder<\App\Models\User>  $query */
     public function constrainStudentOfficers($query)
     {
-        return $query->where('role', 'WSPO Staff')->whereHas('profile', function ($profile) {
-            $profile->where(function ($office) {
-                foreach ($this->studentOfficerPositions() as $position) {
-                    $office->orWhereRaw('LOWER(TRIM(assigned_office)) = ?', [strtolower($position)]);
-                }
+        return $query->where(function ($people) {
+            if (Schema::hasColumn('user_profiles', 'organization_officer') && Schema::hasColumn('user_profiles', 'officer_position')) {
+                $people->where(function ($students) {
+                    $students->where('role', 'Student')->whereHas('profile', function ($profile) {
+                        $profile->where('organization_officer', true)
+                            ->where(function ($office) {
+                                foreach ($this->studentOfficerPositions() as $position) {
+                                    $office->orWhereRaw('LOWER(TRIM(officer_position)) = ?', [strtolower($position)]);
+                                }
+                            });
+                    });
+                });
+            }
+
+            $people->orWhere(function ($legacy) {
+                $legacy->where('role', 'WSPO Staff')->whereHas('profile', function ($profile) {
+                    $profile->where(function ($office) {
+                        foreach ($this->studentOfficerPositions() as $position) {
+                            $office->orWhereRaw('LOWER(TRIM(assigned_office)) = ?', [strtolower($position)]);
+                        }
+                    });
+                });
             });
         });
     }
@@ -697,8 +834,12 @@ class UserController extends Controller
 
     public function supervisorCanAccessStudent(User $supervisor, User $student): bool
     {
+        if ($student->role !== 'Student' && !$this->isStudentOfficer($student)) {
+            return false;
+        }
+
         $areas = $this->supervisedOfficeAreas($supervisor);
-        $office = trim((string) $student->profile?->assigned_office);
+        $office = $this->placementOffice($student);
 
         return $office !== '' && in_array($office, $areas, true);
     }
@@ -711,14 +852,21 @@ class UserController extends Controller
             'duty_type' => 'required|in:Clerical,Janitorial,Request',
             'duty_request' => 'required_if:duty_type,Request|nullable|string|max:1000',
         ]);
-        $student = User::where('role', 'Student')->with('profile')->findOrFail($id);
-        $previousOffice = trim((string) $student->profile?->assigned_office);
+        $studentQuery = User::with('profile');
+        $this->constrainSchedulableStudents($studentQuery);
+        $student = $studentQuery->findOrFail($id);
+        $previousOffice = $this->placementOffice($student);
         $office = trim($validated['department']);
-        $student->profile()->updateOrCreate(['user_id' => $student->id], [
-            'assigned_office' => $office,
+        $placement = [
             'duty_type' => $validated['duty_type'],
             'duty_request' => $validated['duty_type'] === 'Request' ? trim($validated['duty_request']) : null,
-        ]);
+        ];
+        if ($this->isStudentOfficer($student)) {
+            $placement['work_department'] = $office;
+        } else {
+            $placement['assigned_office'] = $office;
+        }
+        $student->profile()->updateOrCreate(['user_id' => $student->id], $placement);
 
         $dutyLabel = $validated['duty_type'] === 'Request'
             ? trim((string) $validated['duty_request'])
@@ -1048,6 +1196,11 @@ class UserController extends Controller
             && !in_array($request->input('assigned_office'), Office::names(), true)) {
             abort(422, 'Assigned Office / Dept must be selected from the university office list.');
         }
+
+        if ($request->filled('work_department')
+            && !in_array($request->input('work_department'), Office::names(), true)) {
+            abort(422, 'Assigned department must be selected from the university office list.');
+        }
     }
 
     private function profileAttributesForRole(string $role, Request $request): array
@@ -1055,7 +1208,7 @@ class UserController extends Controller
         $nullableString = fn (?string $value) => ($value === null || trim($value) === '') ? null : trim($value);
         $nullableInt = fn ($value) => ($value === null || $value === '') ? null : (int) $value;
 
-        return match ($role) {
+        $attributes = match ($role) {
             'Student' => [
                 'student_id_number' => $nullableString($request->input('student_id_number')),
                 'course' => $nullableString($request->input('course')),
@@ -1096,6 +1249,22 @@ class UserController extends Controller
             ],
             default => [],
         };
+
+        if (Schema::hasColumn('user_profiles', 'organization_officer') && Schema::hasColumn('user_profiles', 'officer_position')) {
+            $elected = $role === 'Student'
+                && $request->boolean('organization_officer')
+                && $this->isOfficerTitle($request->input('officer_position'));
+            $attributes['organization_officer'] = $elected;
+            $attributes['officer_position'] = $elected ? trim((string) $request->input('officer_position')) : null;
+        }
+
+        if (Schema::hasColumn('user_profiles', 'work_department') && $request->exists('work_department')) {
+            $attributes['work_department'] = $role === 'WSPO Staff' && $this->isOfficerTitle($request->input('assigned_office'))
+                ? $nullableString($request->input('work_department'))
+                : null;
+        }
+
+        return $attributes;
     }
 
     private function supervisedDepartmentsFromRequest(Request $request): array

@@ -22,9 +22,9 @@ class RenderedHourController extends Controller
     {
         $students = User::query()
             ->with('profile:id,user_id,student_id_number,year_level,course')
-            ->where('role', 'Student')
-            ->orderBy('name')
-            ->get()
+            ->orderBy('name');
+        app(UserController::class)->constrainSchedulableStudents($students);
+        $students = $students->get()
             ->map(fn (User $student) => [
                 'id' => $student->id,
                 'name' => $student->name,
@@ -64,7 +64,8 @@ class RenderedHourController extends Controller
         ]);
 
         $user = $request->user();
-        if ($user->role !== 'Student') {
+        $accounts = app(UserController::class);
+        if ($user->role !== 'Student' && !$accounts->isStudentOfficer($user)) {
             return response()->json(['message' => 'Only working students can view this summary.'], 403);
         }
 
@@ -658,7 +659,9 @@ class RenderedHourController extends Controller
             abort(422, 'Choose at least one student.');
         }
 
-        $students = User::query()->where('role', 'Student')->whereIn('id', $ids)->pluck('id');
+        $students = User::query()->whereIn('id', $ids);
+        app(UserController::class)->constrainSchedulableStudents($students);
+        $students = $students->pluck('id');
         if ($students->count() !== $ids->count()) {
             abort(422, 'Every person on this activity must be a working student.');
         }
