@@ -121,7 +121,10 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
     const handleNotificationClick = async (notif: Notification) => {
         await markAsRead(notif);
 
-        if (userRole === 'Supervisor' && notif.title.includes('Working Student Assigned')) {
+        const title = notif.title.toLowerCase();
+        if (title.includes('clock in') || title.includes('clock out') || title.includes('overtime')) {
+            onNavigate('attendance');
+        } else if (userRole === 'Supervisor' && notif.title.includes('Working Student Assigned')) {
             onNavigate('dashboard');
         } else if (notif.title.includes('Message')) {
             onNavigate('messages');

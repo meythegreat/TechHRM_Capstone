@@ -30,7 +30,7 @@ class PhonePush
         $payload = json_encode([
             'title' => $notification->title,
             'message' => $notification->message,
-            'url' => '/',
+            'url' => $this->openUrl($notification),
         ]);
 
         try {
@@ -60,6 +60,7 @@ class PhonePush
 
             if ($report->isSubscriptionExpired()) {
                 PushSubscription::query()->where('endpoint', $report->getEndpoint())->delete();
+
                 continue;
             }
 
@@ -68,6 +69,16 @@ class PhonePush
                 'reason' => $report->getReason(),
             ]);
         }
+    }
+
+    private function openUrl(Notification $notification): string
+    {
+        $title = strtolower($notification->title);
+        if (str_contains($title, 'clock in') || str_contains($title, 'clock out') || str_contains($title, 'overtime')) {
+            return '/attendance';
+        }
+
+        return '/';
     }
 
     public function publicKey(): string
