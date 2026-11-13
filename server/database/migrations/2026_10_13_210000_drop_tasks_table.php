@@ -12,6 +12,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        // Task Management was removed. Recreating the table is not supported.
+        // Task management was removed. This migration only drops a leftover table.
     }
 };
