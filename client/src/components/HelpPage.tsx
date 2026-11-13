@@ -106,7 +106,7 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'My Schedule',
         summary: 'See your work and class schedule, and request changes.',
         about:
-            'My Schedule lists your assigned work shifts and class blocks. Students cannot edit schedules directly. If a work shift is wrong, you can request an edit and wait for approval.',
+            'My Schedule lists your assigned work shifts and class blocks. Students cannot edit schedules directly. If a work shift is wrong, you can request an edit and wait for the WSPO office to approve or reject it.',
         audience: ['Student'],
         steps: [
             'Click My Schedule in the left menu.',
@@ -114,12 +114,12 @@ const HELP_TOPICS: HelpTopic[] = [
             'Review your class schedule for subject, room, and instructor when shown.',
             'If a work shift needs a change, click Request Edit.',
             'Choose the shift, write a short reason, then submit the request.',
-            'Watch for a pending badge while staff reviews your request.',
+            'Watch for a pending badge while staff reviews your request. It changes to approved or rejected when they decide.',
         ],
         tips: [
             'Request Edit is only available when you already have work shifts.',
             'Class schedules are usually managed by WSPO, not by students.',
-            'Keep following your current schedule until the request is approved.',
+            'Keep following your current schedule until the request is approved. An approval does not change the shift by itself; the office updates the day or time.',
         ],
     },
     {
