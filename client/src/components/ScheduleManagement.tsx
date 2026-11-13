@@ -852,11 +852,11 @@ const ScheduleManagement = () => {
 
     const handleEditAction = async (id: number, action: 'approve' | 'reject') => {
         try {
-            await axios.patch(`/api/schedules/${id}/edit-request`, { action });
-            showToast(`Edit request ${action}d successfully.`, "success");
+            const response = await axios.patch(`/api/schedules/${id}/resolve-request`, { action });
+            showToast(response.data?.message || (action === 'approve' ? 'Edit request approved.' : 'Edit request rejected.'), "success");
             fetchSchedules(currentPage);
-        } catch (error) {
-            showToast("Failed to process request.", "error");
+        } catch (error: any) {
+            showToast(error.response?.data?.message || "Failed to process request.", "error");
         }
     };
 

@@ -351,8 +351,10 @@ class SchedulesScreen extends StatelessWidget {
                   if (textOf(shift['edit_request_note'], '').isNotEmpty) Text(shift['edit_request_note'].toString()),
                   if (canManageSchedules)
                     Row(children: [
-                      if (textOf(shift['edit_request_status']) == 'pending')
-                        TextButton(onPressed: () => runAction(context, () => api.patch('/schedules/${shift['id']}/resolve-request'), success: 'Request cleared.', reload: reload), child: const Text('Clear request')),
+                      if (textOf(shift['edit_request_status']) == 'pending') ...[
+                        TextButton(onPressed: () => runAction(context, () => api.patch('/schedules/${shift['id']}/resolve-request', {'action': 'approve'}), success: 'Edit request approved.', reload: reload), child: const Text('Approve')),
+                        TextButton(onPressed: () => runAction(context, () => api.patch('/schedules/${shift['id']}/resolve-request', {'action': 'reject'}), success: 'Edit request rejected.', reload: reload), child: const Text('Reject')),
+                      ],
                       TextButton(
                         onPressed: () async {
                           if (!await confirm(context, 'Delete this shift?')) return;
@@ -621,115 +623,6 @@ class SchedulesScreen extends StatelessWidget {
         'student_ids': selected.toList(),
       }), success: 'Staffing request updated.', reload: reload);
     }
-  }
-}
-
-class TasksScreen extends StatelessWidget {
-  const TasksScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
-    final api = auth.api;
-    return FetchView(
-      loader: () async {
-        final tasks = await api.get('/tasks');
-        dynamic people = [];
-        if (auth.userRole == 'Supervisor') {
-          try {
-            people = await api.get('/personnel');
-          } catch (_) {}
-        }
-        return {'tasks': tasks, 'people': people};
-      },
-      builder: (context, data, reload) {
-        final payload = asMap(data);
-        final tasks = asMaps(payload['tasks']);
-        final people = asMaps(payload['people']);
-        return PageBody(
-          onRefresh: reload,
-          children: [
-            const SectionTitle('Task management'),
-            if (auth.userRole == 'Supervisor') FilledButton(onPressed: () => _assign(context, people, reload), child: const Text('Assign task')),
-            if (tasks.isEmpty) const EmptyNote('No tasks.'),
-            for (final task in tasks)
-              RecordCard(
-                title: textOf(task['title']),
-                subtitle: '${personName(task, 'student')} · ${textOf(task['description'], '')}',
-                trailing: textOf(task['status']),
-                children: [
-                  Text('Due ${whenOf(task['due_date'])} · ${textOf(task['priority'])}'),
-                  if (auth.userRole == 'Supervisor' && task['status'] != 'Verified')
-                    TextButton(
-                      onPressed: () async {
-                        final note = await promptText(context, 'Send for verification', label: 'Evaluation');
-                        if (note == null || !context.mounted) return;
-                        await runAction(context, () => api.put('/tasks/${task['id']}/notes', {'supervisor_notes': note}), success: 'Sent to WSPO.', reload: reload);
-                      },
-                      child: const Text('Send evaluation'),
-                    ),
-                  if (auth.userRole == 'WSPO Staff' && task['status'] == 'For Verification')
-                    TextButton(
-                      onPressed: () async {
-                        final note = await promptText(context, 'Verify task', label: 'Notes', required: false);
-                        if (note == null || !context.mounted) return;
-                        await runAction(context, () => api.put('/tasks/${task['id']}/verify', {'evaluation_notes': note}), success: 'Task verified.', reload: reload);
-                      },
-                      child: const Text('Verify'),
-                    ),
-                ],
-              ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _assign(BuildContext context, List<Map<String, dynamic>> people, Future<void> Function() reload) async {
-    if (people.isEmpty) {
-      toast(context, 'No students are in your office.', error: true);
-      return;
-    }
-    var studentId = people.first['id'].toString();
-    var priority = 'Medium';
-    final title = TextEditingController();
-    final description = TextEditingController();
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Assign task'),
-        content: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            DropdownButtonFormField<String>(
-              initialValue: studentId,
-              items: people.map((person) => DropdownMenuItem(value: person['id'].toString(), child: Text(textOf(person['name'])))).toList(),
-              onChanged: (value) => studentId = value ?? studentId,
-            ),
-            TextField(controller: title, decoration: const InputDecoration(labelText: 'Title')),
-            TextField(controller: description, decoration: const InputDecoration(labelText: 'Description')),
-            DropdownButtonFormField<String>(
-              initialValue: priority,
-              items: const ['Low', 'Medium', 'High'].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
-              onChanged: (value) => priority = value ?? priority,
-            ),
-          ]),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Assign')),
-        ],
-      ),
-    );
-    if (saved == true && context.mounted) {
-      await runAction(context, () => context.read<AuthProvider>().api.post('/tasks', {
-        'student_id': int.parse(studentId),
-        'title': title.text.trim(),
-        'description': description.text.trim(),
-        'priority': priority,
-      }), success: 'Task assigned.', reload: reload);
-    }
-    title.dispose();
-    description.dispose();
   }
 }
 

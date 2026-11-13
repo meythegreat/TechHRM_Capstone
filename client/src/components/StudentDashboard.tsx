@@ -537,6 +537,16 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                                                 <Clock className="w-3.5 h-3.5" /> Pending Edit
                                                             </span>
                                                         )}
+                                                        {shift.edit_request_status === 'approved' && (
+                                                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 uppercase tracking-wider">
+                                                                <CheckCircle2 className="w-3.5 h-3.5" /> Edit Approved
+                                                            </span>
+                                                        )}
+                                                        {shift.edit_request_status === 'rejected' && (
+                                                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-200 uppercase tracking-wider">
+                                                                <XCircle className="w-3.5 h-3.5" /> Edit Rejected
+                                                            </span>
+                                                        )}
                                                         <div className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
                                                             <Briefcase className="w-4 h-4 text-slate-400" /> {shift.department}
                                                         </div>

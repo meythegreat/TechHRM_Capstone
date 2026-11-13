@@ -291,7 +291,9 @@ class StudentScheduleScreen extends StatelessWidget {
               RecordCard(
                 title: '${textOf(shift['day'])} · ${textOf(shift['time'])}',
                 subtitle: '${textOf(shift['department'])} · ${textOf(shift['duty_type'])}',
-                trailing: textOf(shift['edit_request_status'], ''),
+                trailing: const {'pending', 'approved', 'rejected'}.contains(textOf(shift['edit_request_status']))
+                    ? textOf(shift['edit_request_status'])
+                    : '',
                 children: [
                   if (textOf(shift['edit_request_note'], '').isNotEmpty) Text('Request: ${shift['edit_request_note']}'),
                   Align(
@@ -481,46 +483,3 @@ class StudentApplicationScreen extends StatelessWidget {
   }
 }
 
-class StudentTasksScreen extends StatelessWidget {
-  const StudentTasksScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final api = context.read<AuthProvider>().api;
-    return FetchView(
-      loader: () => api.get('/tasks/my-tasks'),
-      builder: (context, data, reload) {
-        final tasks = asMaps(data);
-        return PageBody(
-          onRefresh: reload,
-          children: [
-            const SectionTitle('My tasks'),
-            if (tasks.isEmpty) const EmptyNote('No tasks assigned.'),
-            for (final task in tasks)
-              RecordCard(
-                title: textOf(task['title']),
-                subtitle: textOf(task['description'], ''),
-                trailing: textOf(task['status']),
-                children: [
-                  Text('Due: ${whenOf(task['due_date'])} · ${textOf(task['priority'])}'),
-                  Wrap(children: [
-                    if (task['status'] == 'Pending')
-                      TextButton(onPressed: () => runAction(context, () => api.put('/tasks/${task['id']}/status', {'status': 'In Progress'}), success: 'Task started.', reload: reload), child: const Text('Start')),
-                    if (task['status'] == 'In Progress' || task['status'] == 'Pending')
-                      TextButton(
-                        onPressed: () async {
-                          final log = await promptText(context, 'Completion log', label: 'What did you finish?');
-                          if (log == null || !context.mounted) return;
-                          await runAction(context, () => api.put('/tasks/${task['id']}/status', {'status': 'Completed', 'completion_log': log}), success: 'Task completed.', reload: reload);
-                        },
-                        child: const Text('Complete'),
-                      ),
-                  ]),
-                ],
-              ),
-          ],
-        );
-      },
-    );
-  }
-}

@@ -442,25 +442,20 @@ class ScheduleController extends Controller
             'edit_request_status' => 'pending'
         ]);
 
-        $schedule->update([
-            'edit_request_note' => $validated['note'],
-            'edit_request_status' => 'pending'
-        ]);
-
-        // --- NEW: NOTIFY ALL ADMINS/SUPERVISORS ---
-        $supervisors = \App\Models\User::whereIn('role', ['Super Admin', 'Supervisor'])->get();
-        foreach($supervisors as $sup) {
+        $reviewers = \App\Models\User::whereIn('role', ['Super Admin', 'WSPO Staff', 'Supervisor'])->get();
+        foreach ($reviewers as $reviewer) {
             \App\Models\Notification::create([
-                'user_id' => $sup->id,
+                'user_id' => $reviewer->id,
                 'title' => 'Schedule Edit Requested',
                 'message' => $request->user()->name . ' requested an edit for their ' . $schedule->day . ' shift.'
             ]);
         }
 
-        return response()->json(['message' => 'Edit request sent to your Supervisor!']);
+        return response()->json(['message' => 'Edit request sent. The WSPO office will review it.']);
     }
 
-    // Clear the pending edit request badge
+    // Approve or reject a student's work-schedule edit request.
+    // A call with no action still clears the badge for older clients.
     public function resolveRequest(Request $request, $id)
     {
         abort_unless(
@@ -468,13 +463,40 @@ class ScheduleController extends Controller
             403,
             'Only a super admin or the WSPO coordinator/secretary can resolve a schedule request.'
         );
-        $schedule = Schedule::findOrFail($id);
-        $schedule->update([
-            'edit_request_status' => 'none',
-            'edit_request_note' => null
+
+        $validated = $request->validate([
+            'action' => 'nullable|string|in:approve,reject',
         ]);
 
-        return response()->json(['message' => 'Student request acknowledged and cleared.']);
+        $schedule = Schedule::findOrFail($id);
+        $action = $validated['action'] ?? null;
+
+        if ($action === null) {
+            $schedule->update([
+                'edit_request_status' => 'none',
+                'edit_request_note' => null,
+            ]);
+
+            return response()->json(['message' => 'Student request acknowledged and cleared.']);
+        }
+
+        $status = $action === 'approve' ? 'approved' : 'rejected';
+        $schedule->update(['edit_request_status' => $status]);
+
+        $decision = $status === 'approved' ? 'approved' : 'rejected';
+        \App\Models\Notification::create([
+            'user_id' => $schedule->user_id,
+            'title' => 'Schedule edit '.$decision,
+            'message' => 'Your request to change the '.$schedule->day.' shift was '.$decision.'.'
+                .($status === 'approved' ? ' The office will update the shift if the day or time should change.' : ''),
+        ]);
+
+        return response()->json([
+            'message' => $status === 'approved'
+                ? 'Edit request approved. Update the shift if the day or time should change.'
+                : 'Edit request rejected.',
+            'edit_request_status' => $status,
+        ]);
     }
 
     /**

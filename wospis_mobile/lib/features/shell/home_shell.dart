@@ -23,7 +23,6 @@ List<Destination> destinationsFor(String? role) {
       Destination('Attendance / DTR', Icons.access_time, StudentAttendanceScreen()),
       Destination('Hours Rendered', Icons.payments_outlined, StudentHoursScreen()),
       Destination('My Schedule', Icons.calendar_month_outlined, StudentScheduleScreen()),
-      Destination('My Tasks', Icons.task_alt, StudentTasksScreen()),
       Destination('Requirements', Icons.description_outlined, StudentRequirementsScreen()),
       Destination('Disciplinary Records', Icons.gavel_outlined, StudentDisciplinaryScreen()),
       Destination('Application Status', Icons.assignment_outlined, StudentApplicationScreen()),
@@ -38,7 +37,6 @@ List<Destination> destinationsFor(String? role) {
     const Destination('Schedules', Icons.calendar_month_outlined, SchedulesScreen()),
     if (role == 'Super Admin') const Destination('Document Review', Icons.folder_open_outlined, DocumentReviewScreen()),
     if (admin) const Destination('Applications', Icons.how_to_reg_outlined, ApplicationsScreen()),
-    const Destination('Task Management', Icons.task_alt, TasksScreen()),
     const Destination('Attendance Hub', Icons.qr_code_2, AttendanceHubScreen()),
     const Destination('Compliance', Icons.gavel_outlined, ComplianceScreen()),
     if (admin) ...[
