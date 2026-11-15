@@ -250,7 +250,7 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Timesheets',
         summary: 'Review and manage student daily time records.',
         about:
-            'Timesheets shows student attendance logs. A student clock-out is approved immediately, so supervisors do not accept each one. Manual time entries can still be pending. Students may also submit offline manual attendance requests when an office had no internet; those stay pending until you approve or reject them. Approving credits closed shifts on the student DTR. Supervisors and WSPO staff can accept or reject pending rows, print monthly DTRs, and process Extra Hours letters that raise the weekly cap from 20 to 25. Super Admins can browse and filter records, but usually cannot approve or reject from this page.',
+            'Timesheets shows student attendance logs. A student clock-out is approved immediately, so supervisors do not accept each one. Manual time entries can still be pending. Students may also submit offline manual attendance requests when an office had no internet; those stay pending until you approve or reject them. Approving credits closed shifts on the student DTR. Supervisors and WSPO staff can accept or reject pending rows, print monthly DTRs, and process Extra Hours letters that raise the weekly cap from 20 to 25. Super Admins can browse and filter records, and can force clock-out forgotten open regular-duty and group-activity sessions (selected or bulk).',
         audience: ['Supervisor', 'WSPO Staff', 'Super Admin'],
         steps: [
             'Click Timesheets in the left menu.',
@@ -262,11 +262,12 @@ const HELP_TOPICS: HelpTopic[] = [
             'Open a student monthly DTR when you need to review or print the full sheet.',
             'Use Manual Timesheet Override to add or edit time in and time out, including a date that has no DTR yet. Each shift is saved as its own row.',
             'WSPO or Super Admin users can also manage holidays and class breaks when that tool is shown.',
+            'Super Admins: use Force clock-out at the top of Timesheets to select specific open sessions or bulk-close every open regular and activity row.',
         ],
         tips: [
             'Supervisors usually handle students in their own department.',
             'WSPO staff can add or edit DTR times for any working student, even when that day has no recorded time yet.',
-            'Super Admin timesheet views are mostly read-only.',
+            'Super Admin history filters stay audit-oriented; force clock-out is the documented write exception for forgotten open sessions.',
             'Students are limited to 20 hours/week unless you approve an extension. 100 hours/month is a hard stop.',
             'Offline requests are for no-internet offices. Prefer passcode or QR when connectivity is available.',
         ],

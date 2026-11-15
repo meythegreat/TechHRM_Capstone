@@ -328,6 +328,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/admin/enrolled-roster', [AdminController::class, 'enrolledRoster']);
         Route::delete('/offices/{office}', [OfficeController::class, 'destroy']);
 
+        // Super Admin force clock-out (explicit SuperAdminAudit mutation exception).
+        // Bulk closes every open regular + activity session; selected closes chosen IDs.
+        Route::get('/admin/open-sessions', [\App\Http\Controllers\ForceClockOutController::class, 'openSessions']);
+        Route::post('/admin/force-clock-out', [\App\Http\Controllers\ForceClockOutController::class, 'store']);
+
         // =================================================
         // REQUIREMENTS MANAGEMENT
         // =================================================
