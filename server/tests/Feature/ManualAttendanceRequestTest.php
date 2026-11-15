@@ -239,12 +239,15 @@ class ManualAttendanceRequestTest extends TestCase
             $table->unsignedBigInteger('rendered_hour_event_id')->nullable();
             $table->float('activity_hours')->nullable();
             $table->unsignedBigInteger('schedule_id')->nullable();
+            $table->unsignedBigInteger('janitorial_group_id')->nullable();
+            $table->string('janitorial_area', 120)->nullable();
             $table->timestamps();
         });
 
         Schema::create('manual_attendance_requests', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->string('request_type', 40)->default('regular');
             $table->string('reason', 1000)->default('Office had no internet; submitted for supervisor approval.');
             $table->string('status', 20)->default('Pending');
             $table->text('decision_note')->nullable();
@@ -261,6 +264,8 @@ class ManualAttendanceRequestTest extends TestCase
             $table->date('work_date');
             $table->string('time_in', 5);
             $table->string('time_out', 5);
+            $table->string('janitorial_area', 120)->nullable();
+            $table->unsignedBigInteger('janitorial_group_id')->nullable();
             $table->unsignedSmallInteger('sort_order')->default(0);
             $table->foreignId('attendance_id')->nullable()->constrained('attendances')->nullOnDelete();
             $table->timestamps();

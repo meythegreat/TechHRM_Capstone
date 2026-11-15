@@ -21,7 +21,7 @@ class RenderedHourController extends Controller
     public function students()
     {
         $students = User::query()
-            ->with('profile:id,user_id,student_id_number,year_level,course')
+            ->with('profile:id,user_id,student_id_number,year_level,course,assigned_office')
             ->orderBy('name');
         app(UserController::class)->constrainSchedulableStudents($students);
         $students = $students->get()
@@ -32,6 +32,7 @@ class RenderedHourController extends Controller
                 'year_level' => $student->profile?->year_level,
                 'year_label' => RenderedHours::yearLabel($student->profile?->year_level ? (int) $student->profile->year_level : null),
                 'course' => $student->profile?->course,
+                'assigned_office' => $student->profile?->assigned_office,
             ]);
 
         return response()->json(['students' => $students]);

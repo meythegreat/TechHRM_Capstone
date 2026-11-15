@@ -255,16 +255,21 @@ const StudentAttendanceTerminal = () => {
         await clockInWith(tokenInput.trim().toUpperCase(), 'passcode');
     };
 
-    const clockOutWith = async (code, method) => {
+    const clockOutWith = async (code, method, options = {}) => {
         if (!activeShift) return;
         setErrorMsg('');
         setSuccessMsg('');
         setIsLoading(true);
 
         try {
-            await submitSecureClockOut(activeShift.id, code, method);
+            const res = await submitSecureClockOut(activeShift.id, code, method, options);
             playAccessAcceptedSound();
-            setSuccessMsg(method === 'qr' ? 'QR clock-out accepted. Your shift has ended.' : 'Shift ended successfully! Great job today.');
+            const fallback = method === 'qr'
+                ? 'QR clock-out accepted. Your shift has ended.'
+                : (options.auto_clock_out
+                    ? 'Auto clock-out saved at your scheduled end time.'
+                    : 'Shift ended successfully! Great job today.');
+            setSuccessMsg(res.data?.message || fallback);
             setTokenInput('');
             await loadSummary();
             await loadDtr();
@@ -284,6 +289,18 @@ const StudentAttendanceTerminal = () => {
         e.preventDefault();
         await clockOutWith(tokenInput.trim().toUpperCase(), 'passcode');
     };
+
+    const handleAutoClockOut = async () => {
+        await clockOutWith(tokenInput.trim().toUpperCase(), 'passcode', { auto_clock_out: true });
+    };
+
+    const isJanitorialShift = Boolean(
+        activeShift
+        && (
+            String(activeShift.attendance_type || activeShift.work_type || '').toLowerCase() === 'janitorial'
+            || activeShift.janitorial_group_id
+        )
+    );
 
     const timeOutActivity = async (code, method) => {
         if (!openActivity) return;
@@ -878,6 +895,19 @@ const StudentAttendanceTerminal = () => {
                                                         </>
                                                     )}
                                                 </motion.button>
+                                                {!isJanitorialShift && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleAutoClockOut}
+                                                        disabled={isLoading || !tokenInput}
+                                                        className="w-full py-3 bg-white border border-emerald-200 hover:border-emerald-400 text-emerald-800 font-bold rounded-xl transition-all disabled:opacity-50"
+                                                    >
+                                                        Auto clock-out at scheduled end
+                                                        <span className="block text-[11px] font-medium text-emerald-700/80 mt-0.5">
+                                                            Available within 10 minutes of shift end
+                                                        </span>
+                                                    </button>
+                                                )}
                                             </>
                                         ) : (
                                             <div className="space-y-3">

@@ -20,10 +20,11 @@ export const submitSecureClockIn = async (tokenCode, method = 'passcode') =>
         method,
     });
 
-export const submitSecureClockOut = async (attendanceId, tokenCode, method = 'passcode') =>
+export const submitSecureClockOut = async (attendanceId, tokenCode, method = 'passcode', options = {}) =>
     axios.put(`/api/attendance/secure-clock-out/${attendanceId}`, {
         token_code: tokenCode,
         method,
+        auto_clock_out: options.auto_clock_out ? true : undefined,
     });
 
 export const fetchWorkHourSummary = async () => axios.get('/api/attendance/hours-summary');

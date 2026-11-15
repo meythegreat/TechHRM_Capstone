@@ -7,6 +7,8 @@ import { financialService } from '../services/financialService';
 import { ActivityQrCard } from './hours/ActivityQrCard';
 import { AddActivityHoursDialog } from './hours/AddActivityHoursDialog';
 import { CleaningGroupsDialog } from './hours/CleaningGroupsDialog';
+import { JanitorialGroupsDialog } from './hours/JanitorialGroupsDialog';
+import { AssemblyYearRepsDialog } from './hours/AssemblyYearRepsDialog';
 import { 
     KeyRound, 
     QrCode,
@@ -30,6 +32,8 @@ const SupervisorAttendanceHub = () => {
     const [activityEventId, setActivityEventId] = useState('');
     const [activityFormOpen, setActivityFormOpen] = useState(false);
     const [groupsOpen, setGroupsOpen] = useState(false);
+    const [janitorialGroupsOpen, setJanitorialGroupsOpen] = useState(false);
+    const [assemblyRepsOpen, setAssemblyRepsOpen] = useState(false);
     const [activityNotice, setActivityNotice] = useState('');
     const [descInput, setDescInput] = useState('');
     const [activeToken, setActiveToken] = useState(null);
@@ -51,6 +55,7 @@ const SupervisorAttendanceHub = () => {
     const storedOffice = localStorage.getItem('assigned_office') || 'Unassigned';
     const canIssueActivity = userRole === 'WSPO Staff' && ['WSPO Coordinator', 'WSPO Secretary', 'WSPO President', 'WSPO', 'Unassigned', ''].includes(storedOffice);
     const canManageCleaningGroups = userRole === 'WSPO Staff' && ['WSPO Coordinator', 'WSPO Secretary', 'WSPO', ''].includes(storedOffice);
+    const canManageJanitorialGroups = userRole === 'Supervisor' || userRole === 'WSPO Staff';
     const supervisorDepartment = userRole === 'WSPO Staff' && ['WSPO Coordinator', 'WSPO Secretary', 'WSPO', 'Unassigned', ''].includes(storedOffice)
         ? 'WSPO'
         : storedOffice;
@@ -289,15 +294,35 @@ const SupervisorAttendanceHub = () => {
                     </p>
                 </div>
 
-                <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${anomalies.length > 0 ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                        {anomalies.length > 0 ? <ShieldAlert className="w-5 h-5 animate-pulse" /> : <ShieldCheck className="w-5 h-5" />}
-                    </div>
-                    <div className="flex flex-col text-left">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">System Integrity</span>
-                        <span className={`text-sm font-semibold ${anomalies.length > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                            {anomalies.length > 0 ? `${anomalies.length} Anomalies Found` : 'All Clear'}
-                        </span>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+                    {canManageJanitorialGroups && (
+                        <button
+                            type="button"
+                            onClick={() => setJanitorialGroupsOpen(true)}
+                            className="px-4 py-3 rounded-2xl border border-slate-200/80 bg-white text-slate-800 text-sm font-bold shadow-[0_1px_2px_rgba(15,23,42,0.04)] inline-flex items-center justify-center gap-2 hover:border-emerald-300"
+                        >
+                            <Users className="w-4 h-4" /> Janitorial groups
+                        </button>
+                    )}
+                    {canManageCleaningGroups && (
+                        <button
+                            type="button"
+                            onClick={() => setAssemblyRepsOpen(true)}
+                            className="px-4 py-3 rounded-2xl border border-slate-200/80 bg-white text-slate-800 text-sm font-bold shadow-[0_1px_2px_rgba(15,23,42,0.04)] inline-flex items-center justify-center gap-2 hover:border-blue-300"
+                        >
+                            <Users className="w-4 h-4" /> Assembly reps
+                        </button>
+                    )}
+                    <div className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex items-center gap-4">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${anomalies.length > 0 ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                            {anomalies.length > 0 ? <ShieldAlert className="w-5 h-5 animate-pulse" /> : <ShieldCheck className="w-5 h-5" />}
+                        </div>
+                        <div className="flex flex-col text-left">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">System Integrity</span>
+                            <span className={`text-sm font-semibold ${anomalies.length > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                {anomalies.length > 0 ? `${anomalies.length} Anomalies Found` : 'All Clear'}
+                            </span>
+                        </div>
                     </div>
                 </div>
             </motion.div>
@@ -506,6 +531,8 @@ const SupervisorAttendanceHub = () => {
                 )}
 
                 {groupsOpen && <CleaningGroupsDialog onClose={() => setGroupsOpen(false)} />}
+                {janitorialGroupsOpen && <JanitorialGroupsDialog onClose={() => setJanitorialGroupsOpen(false)} />}
+                {assemblyRepsOpen && <AssemblyYearRepsDialog onClose={() => setAssemblyRepsOpen(false)} />}
 
                 {activityFormOpen && (
                     <AddActivityHoursDialog

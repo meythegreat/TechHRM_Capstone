@@ -12,6 +12,8 @@ class ManualAttendanceRequestShift extends Model
         'work_date',
         'time_in',
         'time_out',
+        'janitorial_area',
+        'janitorial_group_id',
         'sort_order',
         'attendance_id',
     ];

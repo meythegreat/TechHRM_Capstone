@@ -86,6 +86,7 @@ class RenderedHours
         $students = $students->get();
 
         $dtr = self::verifiedHoursByUser($start, $end);
+        $janitorial = self::janitorialHoursByUser($start, $end);
         $duty = self::dutyHoursByUser($start->toDateString(), $end->toDateString());
         $deltas = self::deltasBetween($start, $end);
         $abbreviations = self::officeAbbreviations();
@@ -93,11 +94,12 @@ class RenderedHours
         $rows = [];
         foreach ($students as $student) {
             $dtrHours = round((float) ($dtr[$student->id] ?? 0), 2);
+            $janitorialHours = round((float) ($janitorial[$student->id] ?? 0), 2);
             $dutyHours = round(min($dtrHours, (float) ($duty[$student->id] ?? 0)), 2);
             $kinds = $deltas[$student->id] ?? [];
             $activity = self::activityTotal($kinds);
             $grand = round($dtrHours - $dutyHours + $activity, 2);
-            $involved = $dtrHours > 0 || $dutyHours > 0 || $kinds !== [];
+            $involved = $dtrHours > 0 || $janitorialHours > 0 || $dutyHours > 0 || $kinds !== [];
             if (!$involved) {
                 continue;
             }
@@ -123,6 +125,7 @@ class RenderedHours
                 'office_abbreviation' => self::abbreviationFor($officeName, $abbreviations),
                 'year_level' => $year ? (int) $year : null,
                 'dtr_hours' => $dtrHours,
+                'janitorial_hrs' => $janitorialHours,
                 'duty_deduction' => $dutyHours,
                 'special_request' => round((float) ($kinds[RenderedHourEvent::SPECIAL] ?? 0), 2),
                 'daily_cleaning' => round((float) ($kinds[RenderedHourEvent::DAILY_CLEANING] ?? 0), 2),
@@ -274,6 +277,29 @@ class RenderedHours
             ->whereNull('rendered_hour_event_id')
             ->whereNotNull('time_out')
             ->whereIn('status', self::VERIFIED_STATUSES)
+            ->whereBetween('time_in', [$start->copy()->startOfDay(), $end->copy()->endOfDay()])
+            ->selectRaw('user_id, COALESCE(SUM(CASE WHEN computed_hours > 0 THEN computed_hours ELSE COALESCE(rendered_hours, 0) END), 0) as hours')
+            ->groupBy('user_id')
+            ->pluck('hours', 'user_id')
+            ->map(fn ($hours) => (float) $hours)
+            ->all();
+    }
+
+    /**
+     * Verified janitorial attendance hours (also included in dtr_hours).
+     *
+     * @return array<int, float>
+     */
+    private static function janitorialHoursByUser(Carbon $start, Carbon $end): array
+    {
+        return Attendance::query()
+            ->whereNull('rendered_hour_event_id')
+            ->whereNotNull('time_out')
+            ->whereIn('status', self::VERIFIED_STATUSES)
+            ->where(function ($query) {
+                $query->where('attendance_type', 'Janitorial')
+                    ->orWhere('work_type', 'Janitorial');
+            })
             ->whereBetween('time_in', [$start->copy()->startOfDay(), $end->copy()->endOfDay()])
             ->selectRaw('user_id, COALESCE(SUM(CASE WHEN computed_hours > 0 THEN computed_hours ELSE COALESCE(rendered_hours, 0) END), 0) as hours')
             ->groupBy('user_id')

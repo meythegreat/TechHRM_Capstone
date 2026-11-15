@@ -1,9 +1,13 @@
 import axios from 'axios';
 
+export type ManualAttendanceRequestType = 'regular' | 'janitorial' | 'class_hours';
+
 export type ManualAttendanceShiftInput = {
   date: string;
   time_in: string;
   time_out: string;
+  janitorial_area?: string;
+  janitorial_group_id?: number;
 };
 
 export type ManualAttendanceShiftRow = ManualAttendanceShiftInput & {
@@ -15,6 +19,7 @@ export type ManualAttendanceShiftRow = ManualAttendanceShiftInput & {
 export type ManualAttendanceRequestRow = {
   id: number;
   user_id: number;
+  request_type?: ManualAttendanceRequestType | string;
   reason: string;
   status: 'Pending' | 'Approved' | 'Rejected' | string;
   decision_note?: string | null;
@@ -42,7 +47,11 @@ export const manualAttendanceRequestService = {
     return Array.isArray(data?.requests) ? data.requests : [];
   },
 
-  async submit(payload: { reason?: string; shifts: ManualAttendanceShiftInput[] }) {
+  async submit(payload: {
+    request_type?: ManualAttendanceRequestType;
+    reason?: string;
+    shifts: ManualAttendanceShiftInput[];
+  }) {
     const { data } = await axios.post('/api/attendance/manual-requests', payload);
     return data as { message: string; request: ManualAttendanceRequestRow };
   },

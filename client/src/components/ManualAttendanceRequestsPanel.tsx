@@ -81,9 +81,9 @@ const ManualAttendanceRequestsPanel = ({ readOnly = false, onToast, onChanged }:
       <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/50 flex items-start gap-3">
         <WifiOff className="w-5 h-5 text-slate-500 mt-0.5 shrink-0" />
         <div>
-          <h3 className="text-base font-semibold text-slate-900">Offline attendance requests</h3>
+          <h3 className="text-base font-semibold text-slate-900">Attendance approval requests</h3>
           <p className="text-sm text-slate-500 mt-1 leading-relaxed">
-            Students submit these when the office had no internet. Approving credits closed shifts on their DTR.
+            Regular / janitorial offline (no office internet) and class-hours duty requests. Approving credits closed shifts on their DTR.
           </p>
         </div>
         {pending.length > 0 && (
@@ -108,6 +108,9 @@ const ManualAttendanceRequestsPanel = ({ readOnly = false, onToast, onChanged }:
                       <p className="font-semibold text-slate-900">{row.student_name || 'Student'}</p>
                       <span className={`inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${statusTone(row.status)}`}>
                         {row.status}
+                      </span>
+                      <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border border-slate-200 bg-white text-slate-600">
+                        {(row.request_type || 'regular').replace('_', ' ')}
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 mt-1">
