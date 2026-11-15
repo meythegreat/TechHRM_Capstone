@@ -496,6 +496,48 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
         ])->assertCreated();
     }
 
+    public function test_wspo_secretary_can_record_own_activity_attendance_without_group_membership(): void
+    {
+        $secretary = $this->makeStudent('Elected Secretary', 3, '2026-8810');
+        $secretary->profile->update([
+            'organization_officer' => true,
+            'officer_position' => 'WSPO Secretary',
+            'assigned_office' => 'College of Computer Studies',
+        ]);
+        $worker = $this->makeStudent('Group Worker', 2, '2026-8811');
+        $group = DailyCleaningGroup::create(['name' => 'Self Attend']);
+        $this->attachMembers($group, [$worker->id], $worker->id);
+
+        Sanctum::actingAs($secretary->fresh('profile'));
+        $eventId = (int) $this->postJson('/api/financial/hour-events', [
+            'kind' => 'devotional',
+            'title' => 'Campus devotion',
+            'event_date' => '2026-10-28',
+            'group_id' => $group->id,
+            'starts_at' => '05:00',
+            'ends_at' => '06:00',
+        ])->assertCreated()->json('event.id');
+
+        $roster = $this->getJson('/api/financial/hour-events?period_start=2026-10-28&period_end=2026-10-28')
+            ->assertOk()
+            ->json('events');
+        $event = collect($roster)->firstWhere('id', $eventId);
+        $this->assertNotNull($event);
+        $rosterIds = collect($event['entries'] ?? [])->pluck('user_id')->map(fn ($id) => (int) $id)->all();
+        $this->assertContains((int) $secretary->id, $rosterIds);
+        $this->assertContains((int) $worker->id, $rosterIds);
+
+        $this->patchJson('/api/financial/hour-events/'.$eventId.'/time', [
+            'user_id' => $secretary->id,
+            'time' => '05:05',
+        ])->assertOk();
+
+        $this->patchJson('/api/financial/hour-events/'.$eventId.'/timeout', [
+            'user_id' => $secretary->id,
+            'time' => '06:00',
+        ])->assertOk();
+    }
+
     public function test_manual_timeout_requires_clock_in_and_rejects_absent(): void
     {
         $staff = $this->makeUser('WSPO Staff', 'WSPO Secretary');

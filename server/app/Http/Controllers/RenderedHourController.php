@@ -864,7 +864,20 @@ class RenderedHourController extends Controller
      */
     private function eligibleIds(RenderedHourEvent $event): array
     {
-        return $event->assignedUserIds();
+        $ids = $event->assignedUserIds();
+        if (! $event->usesAttendance() || $event->kind === RenderedHourEvent::SPECIAL) {
+            return $ids;
+        }
+
+        // WSPO Secretary is a working student who also oversees campus activities.
+        // Include her on every group activity roster so she can record her own time.
+        foreach (app(UserController::class)->wspoSecretaryUserIds() as $secretaryId) {
+            if (! in_array($secretaryId, $ids, true)) {
+                $ids[] = $secretaryId;
+            }
+        }
+
+        return $ids;
     }
 
     private function present(RenderedHourEvent $event): array

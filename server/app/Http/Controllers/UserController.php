@@ -363,6 +363,45 @@ class UserController extends Controller
         return trim((string) ($user->profile?->assigned_office ?? ''));
     }
 
+    /** Elected WSPO Secretary (Student officer or legacy WSPO Staff title). */
+    public function isWspoSecretary(User $user): bool
+    {
+        $title = strtolower($this->officerPosition($user));
+        if ($title === 'wspo secretary' || str_contains($title, 'wspo secretary')) {
+            return true;
+        }
+
+        $user->loadMissing('profile');
+        $office = strtolower(trim((string) ($user->profile?->assigned_office ?? '')));
+
+        return str_contains($office, 'wspo secretary');
+    }
+
+    /**
+     * Working-student secretaries who may appear on campus activity rosters
+     * even when they are not members of the activity's cleaning group.
+     *
+     * @return list<int>
+     */
+    public function wspoSecretaryUserIds(): array
+    {
+        $ids = [];
+        $candidates = User::query()
+            ->with('profile:id,user_id,assigned_office,officer_position,organization_officer,work_department')
+            ->where(function ($people) {
+                $people->where('role', 'Student')->orWhere('role', 'WSPO Staff');
+            })
+            ->get();
+
+        foreach ($candidates as $candidate) {
+            if ($this->isWspoSecretary($candidate)) {
+                $ids[] = (int) $candidate->id;
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+
     /** Students, plus secretary and president, who can be given a duty schedule. */
     public function findSchedulableStudent(int|string $id): User
     {

@@ -1054,6 +1054,10 @@ class AdvancedAttendanceController extends Controller
             $ids = array_merge($ids, $sibling->assignedUserIds());
         }
 
+        if ($event->usesAttendance() && $event->kind !== RenderedHourEvent::SPECIAL) {
+            $ids = array_merge($ids, app(UserController::class)->wspoSecretaryUserIds());
+        }
+
         return array_values(array_unique(array_map('intval', $ids)));
     }
 
@@ -1074,6 +1078,13 @@ class AdvancedAttendanceController extends Controller
         }
 
         if ($event->group_id && $this->studentInGroup((int) $user->id, (int) $event->group_id)) {
+            return $event;
+        }
+
+        // Elected WSPO Secretary may scan campus activities even when not on the group roster.
+        if ($event->usesAttendance()
+            && $event->kind !== RenderedHourEvent::SPECIAL
+            && app(UserController::class)->isWspoSecretary($user)) {
             return $event;
         }
 

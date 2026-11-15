@@ -125,12 +125,13 @@ class DailyCleaningGroupController extends Controller
             ->push($leaderId)
             ->unique()
             ->values();
-        $students = User::query()
+        // Working students plus elected student officers (Secretary / President),
+        // including legacy WSPO Staff secretary accounts that still clock as students.
+        $studentsQuery = User::query()
             ->with('profile:id,user_id,year_level')
-            ->where('role', 'Student')
-            ->whereIn('id', $ids)
-            ->get()
-            ->keyBy('id');
+            ->whereIn('id', $ids);
+        app(UserController::class)->constrainSchedulableStudents($studentsQuery);
+        $students = $studentsQuery->get()->keyBy('id');
 
         if ($students->count() !== $ids->count()) {
             abort(422, 'Every person in a group must be a working student.');
