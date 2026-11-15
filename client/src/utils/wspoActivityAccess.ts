@@ -48,14 +48,10 @@ export function canManageActivityGroups(role?: string | null, office?: string | 
   return !resolvedOffice.includes('wspo president');
 }
 
-/** Janitorial duty rosters: WSPO Secretary and Coordinator only (same people as activity Groups). */
+/** Janitorial duty rosters: same people as activity Groups (Secretary + Coordinator). */
 export function canManageJanitorialGroups(role?: string | null, office?: string | null): boolean {
-  const storedFlag = localStorage.getItem('can_manage_janitorial_groups');
-  if (storedFlag === '1') return true;
-  if (storedFlag === '0') return false;
-
-  // When the API flag is not stored yet (old session / backend not restarted),
-  // match Groups: Secretary + Coordinator may manage, President may not.
+  // Keep in lockstep with Groups. A stale can_manage_janitorial_groups=0 from an
+  // older login must not hide the button when Groups is already allowed.
   return canManageActivityGroups(role, office);
 }
 
