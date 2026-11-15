@@ -168,6 +168,12 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: () => _offlineRequest(context, reload),
+              icon: const Icon(Icons.wifi_off),
+              label: const Text('Offline manual attendance'),
+            ),
+            const SizedBox(height: 16),
             const SectionTitle('Daily time record'),
             if (dtr.isEmpty) const EmptyNote('No attendance yet.'),
             for (final row in dtr)
@@ -180,6 +186,109 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
         );
       },
     );
+  }
+
+  Future<void> _offlineRequest(BuildContext context, Future<void> Function() reload) async {
+    final shifts = <Map<String, TextEditingController>>[
+      {
+        'date': TextEditingController(text: DateTime.now().toIso8601String().split('T').first),
+        'time_in': TextEditingController(text: '08:00'),
+        'time_out': TextEditingController(text: '12:00'),
+      },
+    ];
+    final reason = TextEditingController(text: 'Office had no internet; submitted for supervisor approval.');
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setLocal) => AlertDialog(
+            title: const Text('Offline manual attendance'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Use this when the office had no internet. Submit when you are online again. Hours appear on your DTR only after supervisor approval.',
+                  ),
+                  const SizedBox(height: 12),
+                  for (var i = 0; i < shifts.length; i++) ...[
+                    Align(alignment: Alignment.centerLeft, child: Text('Shift ${i + 1}', style: const TextStyle(fontWeight: FontWeight.w700))),
+                    TextField(controller: shifts[i]['date'], decoration: const InputDecoration(labelText: 'Date (YYYY-MM-DD)')),
+                    TextField(controller: shifts[i]['time_in'], decoration: const InputDecoration(labelText: 'Time in (HH:mm)')),
+                    TextField(controller: shifts[i]['time_out'], decoration: const InputDecoration(labelText: 'Time out (HH:mm)')),
+                    if (shifts.length > 1)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () {
+                            setLocal(() {
+                              for (final c in shifts[i].values) {
+                                c.dispose();
+                              }
+                              shifts.removeAt(i);
+                            });
+                          },
+                          child: const Text('Remove shift'),
+                        ),
+                      ),
+                    const SizedBox(height: 8),
+                  ],
+                  if (shifts.length < 10)
+                    TextButton(
+                      onPressed: () {
+                        setLocal(() {
+                          shifts.add({
+                            'date': TextEditingController(text: DateTime.now().toIso8601String().split('T').first),
+                            'time_in': TextEditingController(text: '13:00'),
+                            'time_out': TextEditingController(text: '17:00'),
+                          });
+                        });
+                      },
+                      child: const Text('Add another shift'),
+                    ),
+                  TextField(controller: reason, decoration: const InputDecoration(labelText: 'Reason'), maxLines: 2),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+              FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Submit')),
+            ],
+          ),
+        );
+      },
+    );
+    if (saved != true || !context.mounted) {
+      for (final shift in shifts) {
+        for (final c in shift.values) {
+          c.dispose();
+        }
+      }
+      reason.dispose();
+      return;
+    }
+    await runAction(
+      context,
+      () => context.read<AuthProvider>().api.post('/attendance/manual-requests', {
+        'reason': reason.text.trim(),
+        'shifts': [
+          for (final shift in shifts)
+            {
+              'date': shift['date']!.text.trim(),
+              'time_in': shift['time_in']!.text.trim(),
+              'time_out': shift['time_out']!.text.trim(),
+            },
+        ],
+      }),
+      success: 'Request submitted for supervisor approval.',
+      reload: reload,
+    );
+    for (final shift in shifts) {
+      for (final c in shift.values) {
+        c.dispose();
+      }
+    }
+    reason.dispose();
   }
 }
 

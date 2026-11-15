@@ -20,6 +20,7 @@ use App\Http\Controllers\HolidayController;
 use App\Http\Controllers\SemesterTermController;
 use App\Http\Controllers\HourLimitController;
 use App\Http\Controllers\ExtraHoursController;
+use App\Http\Controllers\ManualAttendanceRequestController;
 
 // =========================================================
 // PUBLIC ROUTES
@@ -117,6 +118,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/attendance/my-history', [AttendanceController::class, 'myHistory']);
 
+    Route::get('/attendance/manual-requests/mine', [ManualAttendanceRequestController::class, 'mine']);
+    Route::post('/attendance/manual-requests', [ManualAttendanceRequestController::class, 'store']);
+    Route::delete('/attendance/manual-requests/{manualAttendanceRequest}', [ManualAttendanceRequestController::class, 'destroy']);
+
     Route::get('/holidays', [HolidayController::class, 'index']);
 
     Route::get('/student/dashboard', [DashboardController::class, 'studentOverview']);
@@ -166,6 +171,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::post('/attendance/manual', [AttendanceController::class, 'storeManual']);
         Route::patch('/attendance/{id}/times', [AttendanceController::class, 'updateTimes']);
+        Route::get('/attendance/manual-requests', [ManualAttendanceRequestController::class, 'index']);
+        Route::patch('/attendance/manual-requests/{manualAttendanceRequest}', [ManualAttendanceRequestController::class, 'decide']);
 
         Route::post('/attendance/generate-token', [\App\Http\Controllers\AdvancedAttendanceController::class, 'generateToken']);
         Route::get('/attendance/passcode', [\App\Http\Controllers\AdvancedAttendanceController::class, 'currentPasscode']);

@@ -31,6 +31,7 @@ import TimesheetPrintView from './TimesheetPrintView';
 import AuditPager, { pageSlice } from './AuditPager';
 import { formatYearLevel, homeDepartment } from '../utils/studentAssignment';
 import { HourLimitApprovalsPanel } from './hours/HourLimitApprovalsPanel';
+import ManualAttendanceRequestsPanel from './ManualAttendanceRequestsPanel';
 
 const padMonth = (n: number) => String(n).padStart(2, '0');
 const localIsoDate = (date = new Date()) =>
@@ -741,6 +742,16 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
             />
 
             <HourLimitApprovalsPanel readOnly={userRole === 'Super Admin'} userRole={userRole} />
+
+            <ManualAttendanceRequestsPanel
+                readOnly={userRole === 'Super Admin'}
+                onToast={(message, type = 'success') => setToastMsg({ text: message, type })}
+                onChanged={() => {
+                    fetchAttendance(filterDate);
+                    fetchPendingDates();
+                    setDtrReloadKey((key) => key + 1);
+                }}
+            />
 
             {/* MAIN ATTENDANCE TABLE */}
             <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden relative">
