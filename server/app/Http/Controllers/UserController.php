@@ -712,41 +712,12 @@ class UserController extends Controller
     }
 
     /**
-     * Department janitorial duty rosters: WSPO Secretary and Coordinator only
-     * (not department supervisors, President, or other staff).
+     * Department janitorial duty rosters: same eligibility as activity Groups
+     * (WSPO Secretary and Coordinator only — not President or department supervisors).
      */
     public function canManageJanitorialGroups(User $user): bool
     {
-        $user->loadMissing('profile');
-
-        if ($user->role === 'Student' && $this->isStudentOfficer($user)) {
-            return strtolower($this->officerPosition($user)) === 'wspo secretary';
-        }
-
-        if ($user->role !== 'WSPO Staff') {
-            return false;
-        }
-
-        $office = trim((string) ($user->profile?->assigned_office ?? ''));
-        $normalized = strtolower($office);
-
-        if (str_contains($normalized, 'wspo president')) {
-            return false;
-        }
-
-        if (str_contains($normalized, 'wspo secretary')) {
-            return true;
-        }
-
-        if ($office === ''
-            || strcasecmp($office, 'WSPO') === 0
-            || strcasecmp($office, 'Unassigned') === 0
-            || strcasecmp($office, 'WSPO Coordinator') === 0
-            || str_contains($normalized, 'wspo coordinator')) {
-            return true;
-        }
-
-        return false;
+        return $this->canManageActivityGroups($user);
     }
 
     /** Year-level leader or representative assigned by the WSPO coordinator. */

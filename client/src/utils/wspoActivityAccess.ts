@@ -48,32 +48,15 @@ export function canManageActivityGroups(role?: string | null, office?: string | 
   return !resolvedOffice.includes('wspo president');
 }
 
-/** Janitorial duty rosters: WSPO Secretary and Coordinator only. */
+/** Janitorial duty rosters: WSPO Secretary and Coordinator only (same people as activity Groups). */
 export function canManageJanitorialGroups(role?: string | null, office?: string | null): boolean {
   const storedFlag = localStorage.getItem('can_manage_janitorial_groups');
   if (storedFlag === '1') return true;
   if (storedFlag === '0') return false;
 
-  const resolvedRole = role ?? localStorage.getItem('user_role') ?? '';
-  const resolvedOffice = (office ?? localStorage.getItem('assigned_office') ?? '').trim().toLowerCase();
-  const officer = (localStorage.getItem('officer_position') ?? '').trim().toLowerCase();
-
-  if (resolvedRole === 'Student') {
-    return officer === 'wspo secretary';
-  }
-
-  if (resolvedRole !== 'WSPO Staff') return false;
-
-  if (resolvedOffice.includes('wspo president')) return false;
-  if (resolvedOffice.includes('wspo secretary')) return true;
-
-  return (
-    resolvedOffice === ''
-    || resolvedOffice === 'wspo'
-    || resolvedOffice === 'unassigned'
-    || resolvedOffice === 'wspo coordinator'
-    || resolvedOffice.includes('wspo coordinator')
-  );
+  // When the API flag is not stored yet (old session / backend not restarted),
+  // match Groups: Secretary + Coordinator may manage, President may not.
+  return canManageActivityGroups(role, office);
 }
 
 export function canIssueDailyAttendance(): boolean {
