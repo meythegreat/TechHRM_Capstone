@@ -790,7 +790,15 @@ class ChatController extends Controller
             ->whereNull('unsent_at');
 
         if ($lastReadAt) {
-            $query->where('created_at', '>', $lastReadAt);
+            // Include same-second replies: sending updates last_read_at to now(), and a peer
+            // reply in that same second would otherwise be missed by a strict ">" comparison.
+            $query->where(function ($inner) use ($lastReadAt) {
+                $inner->where('created_at', '>', $lastReadAt)
+                    ->orWhere(function ($sameSecond) use ($lastReadAt) {
+                        $sameSecond->where('created_at', '=', $lastReadAt)
+                            ->whereNull('read_at');
+                    });
+            });
         } else {
             $query->whereNull('read_at');
         }
