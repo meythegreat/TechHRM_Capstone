@@ -130,7 +130,13 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
             onNavigate('messages');
         } else if (notif.title.includes('Schedule') || notif.title.includes('Working Student') || notif.title.includes('Office Assignment')) {
             onNavigate(userRole === 'Student' ? 'schedule' : 'schedules');
-        } else if (notif.title.includes('Timesheet') || notif.title.includes('Signed In') || notif.title.includes('Signed Out')) {
+        } else if (
+            notif.title.includes('Timesheet')
+            || notif.title.includes('Signed In')
+            || notif.title.includes('Signed Out')
+            || notif.title.includes('Offline attendance')
+            || notif.title.includes('offline attendance')
+        ) {
             onNavigate('attendance');
         } else if (notif.title.includes('Requirement')) {
             onNavigate('requirements');

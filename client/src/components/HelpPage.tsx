@@ -41,7 +41,7 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Attendance / DTR',
         summary: 'Clock in and clock out for your duty.',
         about:
-            'Attendance / DTR is where you record your daily time. You can clock in and out using a supervisor passcode or a live QR code. If you have more than one shift in the morning or afternoon, clock out of the current shift before the next one. Each shift is recorded on the DTR. You can also preview your DTR and check recent logs with statuses like Accepted, Rejected, Pending, or Timed in.',
+            'Attendance / DTR is where you record your daily time. You can clock in and out using a supervisor passcode or a live QR code. If you have more than one shift in the morning or afternoon, clock out of the current shift before the next one. Each shift is recorded on the DTR. When the office had no internet, use Offline manual attendance to request time in and time out; hours appear on your DTR only after your supervisor approves. You can also preview your DTR and check recent logs with statuses like Accepted, Rejected, Pending, or Timed in.',
         audience: ['Student'],
         steps: [
             'Click Attendance / DTR in the left menu.',
@@ -49,6 +49,8 @@ const HELP_TOPICS: HelpTopic[] = [
             'Ask your supervisor for the current passcode, or scan the QR code they show.',
             'Click Clock In when your duty starts.',
             'Click Clock Out any time after you clock in. The recorded time is that moment, and the entry is approved right away.',
+            'If the office had no internet, open Offline manual attendance, enter time in and time out (add more shifts if needed), then submit when you are online again.',
+            'Wait for supervisor approval. Approved shifts are credited on your DTR.',
             'Open DTR Preview to review your recorded times.',
             'Check Recent Logs. An open shift shows Timed in. After you clock out, it shows Accepted.',
         ],
@@ -58,6 +60,7 @@ const HELP_TOPICS: HelpTopic[] = [
             'Cleaning, devotionals, and assemblies use their own passcode or QR. Clock in, then time out the same way. Hours are added only when you time out, and only if the clock-in was on time.',
             'If you have no work schedule yet, follow the attendance rules set by WSPO.',
             'You may work up to 20 hours per week by default. Past 20 hours needs administrator approval (up to 25). The monthly maximum is 100 hours.',
+            'Offline requests do not replace normal passcode or QR clock-in when the office is online.',
         ],
     },
     {
@@ -247,13 +250,14 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Timesheets',
         summary: 'Review and manage student daily time records.',
         about:
-            'Timesheets shows student attendance logs. A student clock-out is approved immediately, so supervisors do not accept each one. Manual time entries can still be pending. Supervisors and WSPO staff can accept or reject those, print monthly DTRs, and process Extra Hours letters that raise the weekly cap from 20 to 25. Super Admins can browse and filter records, but usually cannot approve or reject from this page.',
+            'Timesheets shows student attendance logs. A student clock-out is approved immediately, so supervisors do not accept each one. Manual time entries can still be pending. Students may also submit offline manual attendance requests when an office had no internet; those stay pending until you approve or reject them. Approving credits closed shifts on the student DTR. Supervisors and WSPO staff can accept or reject pending rows, print monthly DTRs, and process Extra Hours letters that raise the weekly cap from 20 to 25. Super Admins can browse and filter records, but usually cannot approve or reject from this page.',
         audience: ['Supervisor', 'WSPO Staff', 'Super Admin'],
         steps: [
             'Click Timesheets in the left menu.',
             'Use the date controls (previous, next, Today, or jump) to find the day you need.',
             'Filter or search by student, department, or office when available.',
             'Student clock-outs are already approved. For a manual entry that is still pending, click Accept if the time is correct, or Reject if it is not.',
+            'Review Offline attendance requests. Approve to credit the listed shifts on the student DTR, or Reject if the times are wrong.',
             'Review Extra Hours near the top. Supervisors Save & Print the letter, collect wet signatures, then upload the signed scan. WSPO records Approve 25 or Decline.',
             'Open a student monthly DTR when you need to review or print the full sheet.',
             'Use Manual Timesheet Override to add or edit time in and time out, including a date that has no DTR yet. Each shift is saved as its own row.',
@@ -264,6 +268,7 @@ const HELP_TOPICS: HelpTopic[] = [
             'WSPO staff can add or edit DTR times for any working student, even when that day has no recorded time yet.',
             'Super Admin timesheet views are mostly read-only.',
             'Students are limited to 20 hours/week unless you approve an extension. 100 hours/month is a hard stop.',
+            'Offline requests are for no-internet offices. Prefer passcode or QR when connectivity is available.',
         ],
     },
     {

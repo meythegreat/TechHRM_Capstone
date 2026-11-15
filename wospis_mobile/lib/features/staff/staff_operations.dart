@@ -131,7 +131,11 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
         try {
           people = await api.get('/personnel');
         } catch (_) {}
-        return {'rows': rows, 'pending': pending, 'holidays': holidays, 'people': people};
+        dynamic offline = {'requests': []};
+        try {
+          offline = await api.get('/attendance/manual-requests');
+        } catch (_) {}
+        return {'rows': rows, 'pending': pending, 'holidays': holidays, 'people': people, 'offline': offline};
       },
       builder: (context, data, reload) {
         final payload = asMap(data);
@@ -139,6 +143,10 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
         final pending = asMaps(payload['pending']);
         final holidays = asMaps(payload['holidays']);
         final people = asMaps(payload['people']);
+        final offlinePayload = asMap(payload['offline']);
+        final offlineRequests = asMaps(offlinePayload['requests']);
+        final offlinePending = offlineRequests.where((row) => textOf(row['status']) == 'Pending').toList();
+        final canDecideOffline = auth.userRole == 'Supervisor' || auth.userRole == 'WSPO Staff';
         return PageBody(
           onRefresh: reload,
           children: [
@@ -159,6 +167,39 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
             ]),
             const SizedBox(height: 8),
             OutlinedButton(onPressed: () => _manual(context, people, reload), child: const Text('Add manual time')),
+            const SectionTitle('Offline attendance requests'),
+            if (offlinePending.isEmpty) const EmptyNote('No pending offline requests.'),
+            for (final request in offlinePending)
+              RecordCard(
+                title: textOf(request['student_name'], 'Student'),
+                subtitle: textOf(request['reason']),
+                trailing: textOf(request['status']),
+                children: [
+                  for (final shift in asMaps(request['shifts']))
+                    Text('${textOf(shift['date'])} · ${textOf(shift['time_in'])}–${textOf(shift['time_out'])}'),
+                  if (canDecideOffline)
+                    Row(children: [
+                      TextButton(
+                        onPressed: () => runAction(
+                          context,
+                          () => api.patch('/attendance/manual-requests/${request['id']}', {'status': 'Approved'}),
+                          success: 'Approved and credited to DTR.',
+                          reload: reload,
+                        ),
+                        child: const Text('Approve'),
+                      ),
+                      TextButton(
+                        onPressed: () => runAction(
+                          context,
+                          () => api.patch('/attendance/manual-requests/${request['id']}', {'status': 'Rejected'}),
+                          success: 'Rejected.',
+                          reload: reload,
+                        ),
+                        child: const Text('Reject'),
+                      ),
+                    ]),
+                ],
+              ),
             if (rows.isEmpty) const EmptyNote('No attendance for this date.'),
             for (final row in rows)
               RecordCard(

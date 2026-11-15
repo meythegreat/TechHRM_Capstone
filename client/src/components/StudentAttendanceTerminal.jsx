@@ -24,6 +24,7 @@ import {
     submitSecureClockOut,
 } from '../services/advancedAttendanceService';
 import TimesheetPrintView from './TimesheetPrintView';
+import ManualAttendanceRequestForm from './ManualAttendanceRequestForm';
 import Toast from './Toast';
 import { playAccessAcceptedSound, playAccessRejectedSound } from '../sounds';
 
@@ -550,6 +551,18 @@ const StudentAttendanceTerminal = () => {
                 onClose={() => {
                     setErrorMsg('');
                     setSuccessMsg('');
+                }}
+            />
+
+            <ManualAttendanceRequestForm
+                onToast={(message, type) => {
+                    if (type === 'error') {
+                        setSuccessMsg('');
+                        setErrorMsg(message);
+                    } else {
+                        setErrorMsg('');
+                        setSuccessMsg(message);
+                    }
                 }}
             />
 
