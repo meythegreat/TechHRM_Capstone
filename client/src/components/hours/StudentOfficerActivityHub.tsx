@@ -25,6 +25,15 @@ export function StudentOfficerActivityHub() {
     return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   };
 
+  const monthBounds = () => {
+    const now = new Date();
+    const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+    const start = `${local.toISOString().slice(0, 8)}01`;
+    const endDate = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth() + 1, 0));
+    const end = endDate.toISOString().slice(0, 10);
+    return { start, end };
+  };
+
   const loadActivityEvents = (preferId?: number | string) => {
     const day = today();
     return financialService.getHourEvents(day, day)
@@ -148,7 +157,12 @@ export function StudentOfficerActivityHub() {
         )}
       </section>
 
-      <HoursActivityBoard />
+      <HoursActivityBoard
+        readOnly={false}
+        periodStart={monthBounds().start}
+        periodEnd={monthBounds().end}
+        onChanged={() => loadActivityEvents()}
+      />
 
       {groupsOpen && <CleaningGroupsDialog onClose={() => setGroupsOpen(false)} />}
       {janitorialGroupsOpen && <JanitorialGroupsDialog onClose={() => setJanitorialGroupsOpen(false)} />}
