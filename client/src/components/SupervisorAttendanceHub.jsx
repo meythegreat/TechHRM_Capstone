@@ -309,15 +309,6 @@ const SupervisorAttendanceHub = () => {
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
-                    {canManageJanitorialGroups && (
-                        <button
-                            type="button"
-                            onClick={() => setJanitorialGroupsOpen(true)}
-                            className="px-4 py-3 rounded-2xl border border-slate-200/80 bg-white text-slate-800 text-sm font-bold shadow-[0_1px_2px_rgba(15,23,42,0.04)] inline-flex items-center justify-center gap-2 hover:border-emerald-300"
-                        >
-                            <Users className="w-4 h-4" /> Janitorial groups
-                        </button>
-                    )}
                     {canManageCleaningGroups && (
                         <button
                             type="button"
@@ -517,6 +508,15 @@ const SupervisorAttendanceHub = () => {
                                         className="px-4 py-2.5 bg-white border border-slate-200 hover:border-blue-300 text-slate-800 text-sm font-bold rounded-xl inline-flex items-center gap-2"
                                     >
                                         <Users className="w-4 h-4" /> Groups
+                                    </button>
+                                )}
+                                {canManageJanitorialGroups && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setJanitorialGroupsOpen(true)}
+                                        className="px-4 py-2.5 bg-white border border-slate-200 hover:border-emerald-300 text-slate-800 text-sm font-bold rounded-xl inline-flex items-center gap-2"
+                                    >
+                                        <Users className="w-4 h-4" /> Janitorial groups
                                     </button>
                                 )}
                                 <button
