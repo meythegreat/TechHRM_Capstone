@@ -1092,7 +1092,7 @@ class AdvancedAttendanceController extends Controller
             return $this->isAssemblyYearRepresentative($issuer, $event);
         }
 
-        return $accounts->canIssueActivityAttendance($issuer) || $accounts->isYearLeaderFor($issuer, $event);
+        return $accounts->canCheckActivityAttendance($issuer) || $accounts->isYearLeaderFor($issuer, $event);
     }
 
     private function isAssemblyYearRepresentative(\App\Models\User $issuer, ?RenderedHourEvent $event = null): bool

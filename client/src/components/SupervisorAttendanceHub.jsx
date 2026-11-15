@@ -5,10 +5,12 @@ import QRCode from 'qrcode';
 import { fetchAnomalyLogs, fetchLivePasscode, fetchLiveQr } from '../services/advancedAttendanceService';
 import { financialService } from '../services/financialService';
 import { ActivityQrCard } from './hours/ActivityQrCard';
+import { ActivityAttendanceChecker } from './hours/ActivityAttendanceChecker';
 import { AddActivityHoursDialog } from './hours/AddActivityHoursDialog';
 import { CleaningGroupsDialog } from './hours/CleaningGroupsDialog';
 import { JanitorialGroupsDialog } from './hours/JanitorialGroupsDialog';
 import { AssemblyYearRepsDialog } from './hours/AssemblyYearRepsDialog';
+import { canCheckActivityAttendance } from '../utils/wspoActivityAccess';
 import { 
     KeyRound, 
     QrCode,
@@ -53,12 +55,10 @@ const SupervisorAttendanceHub = () => {
     const descRef = useRef('');
     const userRole = localStorage.getItem('user_role') || '';
     const storedOffice = localStorage.getItem('assigned_office') || 'Unassigned';
-    const canIssueActivity = userRole === 'WSPO Staff' && ['WSPO Coordinator', 'WSPO Secretary', 'WSPO President', 'WSPO', 'Unassigned', ''].includes(storedOffice);
-    const canManageCleaningGroups = userRole === 'WSPO Staff' && ['WSPO Coordinator', 'WSPO Secretary', 'WSPO', ''].includes(storedOffice);
+    const canIssueActivity = canCheckActivityAttendance(userRole, storedOffice);
+    const canManageCleaningGroups = canIssueActivity && !String(storedOffice).toLowerCase().includes('president');
     const canManageJanitorialGroups = userRole === 'Supervisor' || userRole === 'WSPO Staff';
-    const supervisorDepartment = userRole === 'WSPO Staff' && ['WSPO Coordinator', 'WSPO Secretary', 'WSPO', 'Unassigned', ''].includes(storedOffice)
-        ? 'WSPO'
-        : storedOffice;
+    const supervisorDepartment = canIssueActivity ? 'WSPO' : storedOffice;
     const [tokenScope, setTokenScope] = useState(supervisorDepartment);
 
     const formatHours = (value) => Number(value || 0).toFixed(2);
@@ -524,7 +524,16 @@ const SupervisorAttendanceHub = () => {
                                         ))}
                                     </select>
                                 </label>
-                                {activityEventId && <ActivityQrCard eventId={Number(activityEventId)} />}
+                                {activityEventId && (
+                                    <div className="space-y-4">
+                                        <ActivityQrCard eventId={Number(activityEventId)} />
+                                        <ActivityAttendanceChecker
+                                            eventId={Number(activityEventId)}
+                                            eventDate={activityEvents.find((event) => String(event.id) === String(activityEventId))?.event_date}
+                                            onChanged={() => loadActivityEvents(Number(activityEventId))}
+                                        />
+                                    </div>
+                                )}
                             </div>
                         )}
                     </section>
