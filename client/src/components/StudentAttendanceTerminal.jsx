@@ -554,6 +554,18 @@ const StudentAttendanceTerminal = () => {
                 }}
             />
 
+            <ManualAttendanceRequestForm
+                onToast={(message, type) => {
+                    if (type === 'error') {
+                        setSuccessMsg('');
+                        setErrorMsg(message);
+                    } else {
+                        setErrorMsg('');
+                        setSuccessMsg(message);
+                    }
+                }}
+            />
+
             <motion.div 
                 variants={containerVariants}
                 initial="hidden"
@@ -1002,18 +1014,6 @@ const StudentAttendanceTerminal = () => {
                     </div>
                 </motion.div>
             </motion.div>
-
-            <ManualAttendanceRequestForm
-                onToast={(message, type) => {
-                    if (type === 'error') {
-                        setSuccessMsg('');
-                        setErrorMsg(message);
-                    } else {
-                        setErrorMsg('');
-                        setSuccessMsg(message);
-                    }
-                }}
-            />
 
             <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
                 <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
