@@ -27,7 +27,14 @@ const formatShift = (shift) => {
  * Working-student form: request manual DTR credit when the office had no internet.
  * Submits when the device is online again; hours appear on DTR only after supervisor approval.
  */
+const TYPE_LABELS = {
+  regular: 'Regular offline',
+  janitorial: 'Janitorial offline',
+  class_hours: 'Class-hours duty',
+};
+
 const ManualAttendanceRequestForm = ({ onToast }) => {
+  const [requestType, setRequestType] = useState('regular');
   const [shifts, setShifts] = useState([emptyShift()]);
   const [reason, setReason] = useState('Office had no internet; submitted for supervisor approval.');
   const [rows, setRows] = useState([]);
@@ -59,11 +66,13 @@ const ManualAttendanceRequestForm = ({ onToast }) => {
     setSaving(true);
     try {
       const res = await manualAttendanceRequestService.submit({
+        request_type: requestType,
         reason: reason.trim() || undefined,
         shifts: shifts.map((shift) => ({
           date: shift.date,
           time_in: shift.time_in,
           time_out: shift.time_out,
+          janitorial_area: requestType === 'janitorial' ? (shift.janitorial_area || undefined) : undefined,
         })),
       });
       onToast?.(res.message || 'Request submitted.', 'success');
@@ -91,69 +100,106 @@ const ManualAttendanceRequestForm = ({ onToast }) => {
       <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-start gap-3">
         <WifiOff className="w-5 h-5 text-slate-500 mt-0.5 shrink-0" />
         <div>
-          <h3 className="text-lg font-semibold text-slate-900">Offline manual attendance</h3>
+          <h3 className="text-lg font-semibold text-slate-900">Offline / special attendance requests</h3>
           <p className="text-sm text-slate-500 mt-1 leading-relaxed">
-            Use this when your office had no internet and you could not clock in with a passcode or QR.
-            Submit when you are back online. Your supervisor must approve before hours appear on your DTR.
+            Regular or janitorial offline when the office had no internet, or class-hours duty when your
+            work time overlaps a class block. Supervisor approval credits DTR (and janitorial hours when applicable).
           </p>
         </div>
       </div>
 
       <form onSubmit={submit} className="p-6 space-y-5">
+        <div>
+          <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Request type</label>
+          <select
+            value={requestType}
+            onChange={(e) => {
+              const next = e.target.value;
+              setRequestType(next);
+              if (next === 'janitorial') {
+                setReason('Janitorial offline duty; office had no internet.');
+              } else if (next === 'class_hours') {
+                setReason('Duty during class hours; submitted for supervisor approval.');
+              } else {
+                setReason('Office had no internet; submitted for supervisor approval.');
+              }
+            }}
+            className="w-full max-w-md px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-600"
+          >
+            <option value="regular">Regular offline attendance</option>
+            <option value="janitorial">Janitorial offline attendance</option>
+            <option value="class_hours">Class-hours duty (needs approval)</option>
+          </select>
+        </div>
+
         {shifts.map((shift, index) => (
-          <div key={index} className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Date</label>
-              <input
-                type="date"
-                required
-                max={todayIso()}
-                value={shift.date}
-                onChange={(e) => updateShift(index, 'date', e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-600"
-              />
+          <div key={index} className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Date</label>
+                <input
+                  type="date"
+                  required
+                  max={todayIso()}
+                  value={shift.date}
+                  onChange={(e) => updateShift(index, 'date', e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Time in</label>
+                <input
+                  type="time"
+                  required
+                  value={shift.time_in}
+                  onChange={(e) => updateShift(index, 'time_in', e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Time out</label>
+                <input
+                  type="time"
+                  required
+                  value={shift.time_out}
+                  onChange={(e) => updateShift(index, 'time_out', e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+              <div className="flex gap-2">
+                {shifts.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setShifts((current) => current.filter((_, i) => i !== index))}
+                    className="h-10.5 px-3 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
+                    aria-label={`Remove shift ${index + 1}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+                {index === shifts.length - 1 && shifts.length < 10 && (
+                  <button
+                    type="button"
+                    onClick={() => setShifts((current) => [...current, emptyShift()])}
+                    className="h-10.5 flex-1 inline-flex items-center justify-center gap-1.5 px-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                  >
+                    <Plus className="w-4 h-4" /> Add shift
+                  </button>
+                )}
+              </div>
             </div>
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Time in</label>
-              <input
-                type="time"
-                required
-                value={shift.time_in}
-                onChange={(e) => updateShift(index, 'time_in', e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-600"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Time out</label>
-              <input
-                type="time"
-                required
-                value={shift.time_out}
-                onChange={(e) => updateShift(index, 'time_out', e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-600"
-              />
-            </div>
-            <div className="flex gap-2">
-              {shifts.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => setShifts((current) => current.filter((_, i) => i !== index))}
-                  className="h-10.5 px-3 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
-                  aria-label={`Remove shift ${index + 1}`}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              )}
-              {index === shifts.length - 1 && shifts.length < 10 && (
-                <button
-                  type="button"
-                  onClick={() => setShifts((current) => [...current, emptyShift()])}
-                  className="h-10.5 flex-1 inline-flex items-center justify-center gap-1.5 px-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50"
-                >
-                  <Plus className="w-4 h-4" /> Add shift
-                </button>
-              )}
-            </div>
+            {requestType === 'janitorial' && (
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Area (optional override)</label>
+                <input
+                  type="text"
+                  value={shift.janitorial_area || ''}
+                  onChange={(e) => updateShift(index, 'janitorial_area', e.target.value)}
+                  placeholder="Defaults to your group area"
+                  className="w-full max-w-md px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+            )}
           </div>
         ))}
 
@@ -189,9 +235,14 @@ const ManualAttendanceRequestForm = ({ onToast }) => {
             {rows.map((row) => (
               <li key={row.id} className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className={`inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${statusTone(row.status)}`}>
-                    {row.status}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${statusTone(row.status)}`}>
+                      {row.status}
+                    </span>
+                    <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border border-slate-200 bg-white text-slate-600">
+                      {TYPE_LABELS[row.request_type] || row.request_type || 'Regular offline'}
+                    </span>
+                  </div>
                   {row.status === 'Pending' && (
                     <button
                       type="button"

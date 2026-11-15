@@ -77,6 +77,7 @@ class ManualDtrEntry
     /**
      * Create a closed DTR row for one shift, applying weekly/monthly caps.
      *
+     * @param  array{attendance_type?: string, work_type?: string, janitorial_group_id?: int|null, janitorial_area?: string|null, skip_schedule_match?: bool, apply_lunch?: bool, cap_at_schedule_end?: bool}  $options
      * @return array{ok: true, attendance: Attendance, hour_limits: array}|array{ok: false, message: string, status: int, hour_limits?: array}
      */
     public static function createClosedShift(
@@ -87,6 +88,7 @@ class ManualDtrEntry
         string $note,
         string $status = 'pending',
         ?string $checkInMethod = null,
+        array $options = [],
     ): array {
         [$timeIn, $timeOut, $error] = self::resolveTimes($date, $timeInHm, $timeOutHm);
         if ($error) {
@@ -101,7 +103,22 @@ class ManualDtrEntry
             ];
         }
 
-        $hours = round($timeIn->diffInMinutes($timeOut) / 60, 2);
+        $attendanceType = $options['attendance_type'] ?? 'Regular';
+        $isJanitorial = strcasecmp($attendanceType, 'Janitorial') === 0;
+        $skipSchedule = (bool) ($options['skip_schedule_match'] ?? $isJanitorial);
+        $applyLunch = (bool) ($options['apply_lunch'] ?? ! $isJanitorial);
+        $capAtEnd = (bool) ($options['cap_at_schedule_end'] ?? ! $isJanitorial);
+
+        $shift = $skipSchedule ? null : self::matchingShift((int) $student->id, $timeIn);
+        if ($capAtEnd && $shift) {
+            $timeOut = DutyHours::cappedClockOut($timeIn, $timeOut, $shift);
+        }
+
+        $office = trim((string) ($student->profile?->assigned_office ?? ''));
+        $hours = $applyLunch
+            ? DutyHours::creditedHours($timeIn, $timeOut, $office)
+            : DutyHours::rawHours($timeIn, $timeOut);
+
         $fit = HourLimits::fitHours((int) $student->id, $hours, $timeIn);
         if ($fit['allowed'] <= 0) {
             return [
@@ -119,7 +136,7 @@ class ManualDtrEntry
                     .' hours, but only '
                     .HourLimits::hoursLabel($fit['allowed'])
                     .' hours remain under the weekly/monthly limits'
-                    .(!$fit['denial'] && !HourLimits::approvedForWeek((int) $student->id, $timeIn)
+                    .(! $fit['denial'] && ! HourLimits::approvedForWeek((int) $student->id, $timeIn)
                         ? ' (approve an extension up to '.HourLimits::hoursLabel(HourLimits::status((int) $student->id, $timeIn)['weekly_extended']).' hours/week first)'
                         : '')
                     .'.',
@@ -129,18 +146,26 @@ class ManualDtrEntry
         }
 
         $note = trim($note);
-        $shift = self::matchingShift((int) $student->id, $timeIn);
+        $workType = $options['work_type']
+            ?? ($isJanitorial ? 'Janitorial' : ($student->profile?->duty_type ?: 'Manual Entry'));
+        $area = isset($options['janitorial_area']) ? trim((string) $options['janitorial_area']) : null;
 
         $attendance = Attendance::create([
             'user_id' => $student->id,
-            'attendance_type' => 'Regular',
+            'attendance_type' => $attendanceType,
             'time_in' => $timeIn,
             'time_out' => $timeOut,
             'schedule_id' => $shift?->id,
+            'janitorial_group_id' => $options['janitorial_group_id'] ?? null,
+            'janitorial_area' => $area !== '' ? $area : null,
             'rendered_hours' => $fit['allowed'],
             'computed_hours' => $fit['allowed'],
-            'work_type' => $student->profile?->duty_type ?: 'Manual Entry',
-            'task_description' => $note !== '' ? $note : 'Manually entered by supervisor.',
+            'work_type' => $workType,
+            'task_description' => $note !== ''
+                ? $note
+                : ($isJanitorial
+                    ? ('Janitorial duty'.($area ? ' — '.$area : '').'.')
+                    : 'Manually entered by supervisor.'),
             'status' => $status,
             'check_in_method' => $checkInMethod,
             'is_anomaly' => $fit['allowed'] > 8,

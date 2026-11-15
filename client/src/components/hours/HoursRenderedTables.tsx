@@ -20,6 +20,7 @@ export interface HourStudentRow {
   office_abbreviation?: string | null;
   year_level?: number | null;
   dtr_hours: number;
+  janitorial_hrs?: number;
   duty_deduction: number;
   special_request: number;
   daily_cleaning: number;
@@ -144,6 +145,7 @@ export function YearLevelBreakdown({ report, rate }: { report: HoursReport | nul
                 <tr>
                   <th className="px-4 py-3 font-semibold">Student</th>
                   <th className="px-3 py-3 font-semibold text-right">DTR</th>
+                  <th className="px-3 py-3 font-semibold text-right">Janitorial</th>
                   <th className="px-3 py-3 font-semibold text-right">Duty deduction</th>
                   <th className="px-3 py-3 font-semibold text-right">Special</th>
                   <th className="px-3 py-3 font-semibold text-right">Daily cleaning</th>
@@ -160,6 +162,7 @@ export function YearLevelBreakdown({ report, rate }: { report: HoursReport | nul
                       <p className="text-xs text-slate-500">{student.student_id_number || 'No ID'}</p>
                     </td>
                     <HourCell value={student.dtr_hours} />
+                    <HourCell value={student.janitorial_hrs || 0} />
                     <HourCell value={student.duty_deduction === 0 ? 0 : -student.duty_deduction} />
                     <HourCell value={student.special_request} />
                     <HourCell value={student.daily_cleaning} />
@@ -233,15 +236,16 @@ export function HoursSummarySheet({ report, rate }: { report: HoursReport | null
 
         <table className="w-full border-collapse table-fixed" style={{ borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <colgroup>
-            <col style={{ width: '26%' }} />
-            <col style={{ width: '14%' }} />
-            <col style={{ width: '9%' }} />
-            <col style={{ width: '11%' }} />
-            <col style={{ width: '9%' }} />
-            <col style={{ width: '9%' }} />
+            <col style={{ width: '22%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '8%' }} />
             <col style={{ width: '10%' }} />
-            <col style={{ width: '6%' }} />
-            <col style={{ width: '6%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '9%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '8%' }} />
           </colgroup>
           <thead>
             <tr>
@@ -249,6 +253,7 @@ export function HoursSummarySheet({ report, rate }: { report: HoursReport | null
               <th className={cell}>Area of assignment</th>
               <th className={cell}>Course/Year</th>
               <th className={cell}>Hours rendered for the month</th>
+              <th className={cell}>Janitorial hrs</th>
               <th className={cell}>Special request hrs</th>
               <th className={cell}>Daily cleaning hrs</th>
               <th className={cell}>General meeting hrs</th>
@@ -259,12 +264,12 @@ export function HoursSummarySheet({ report, rate }: { report: HoursReport | null
           <tbody>
             {!report || students.length === 0 ? (
               <tr>
-                <td className={cell} colSpan={9}>No hours rendered for this period.</td>
+                <td className={cell} colSpan={10}>No hours rendered for this period.</td>
               </tr>
             ) : groups.map((group) => (
               <Fragment key={group.label}>
                 <tr>
-                  <td className={`${cell} font-bold`} colSpan={9}>{group.label}</td>
+                  <td className={`${cell} font-bold`} colSpan={10}>{group.label}</td>
                 </tr>
                 {group.students.map((student) => (
                   <tr key={student.user_id}>
@@ -275,6 +280,7 @@ export function HoursSummarySheet({ report, rate }: { report: HoursReport | null
                     <td className={cell}>{assignmentArea(student)}</td>
                     <td className={cell} title={student.course || undefined}>{courseYear(student)}</td>
                     <td className={`${cell} text-right`}>{hoursText(renderedHours(student))}</td>
+                    <td className={`${cell} text-right`}>{hoursText(student.janitorial_hrs || 0)}</td>
                     <td className={`${cell} text-right`}>{hoursText(student.special_request)}</td>
                     <td className={`${cell} text-right`}>{hoursText(student.daily_cleaning)}</td>
                     <td className={`${cell} text-right`}>{hoursText(meetingHours(student))}</td>
@@ -285,6 +291,7 @@ export function HoursSummarySheet({ report, rate }: { report: HoursReport | null
                 <tr>
                   <td className={`${cell} font-bold`} colSpan={3}>{group.label} sum</td>
                   <td className={`${cell} text-right font-bold`}>{hoursText(columnSum(renderedHours, group.students))}</td>
+                  <td className={`${cell} text-right font-bold`}>{hoursText(columnSum((student) => student.janitorial_hrs || 0, group.students))}</td>
                   <td className={`${cell} text-right font-bold`}>{hoursText(columnSum((student) => student.special_request, group.students))}</td>
                   <td className={`${cell} text-right font-bold`}>{hoursText(columnSum((student) => student.daily_cleaning, group.students))}</td>
                   <td className={`${cell} text-right font-bold`}>{hoursText(columnSum(meetingHours, group.students))}</td>
@@ -297,6 +304,7 @@ export function HoursSummarySheet({ report, rate }: { report: HoursReport | null
               <tr>
                 <td className={`${cell} font-bold`} colSpan={3}>Sum</td>
                 <td className={`${cell} text-right font-bold`}>{hoursText(columnSum(renderedHours))}</td>
+                <td className={`${cell} text-right font-bold`}>{hoursText(columnSum((student) => student.janitorial_hrs || 0))}</td>
                 <td className={`${cell} text-right font-bold`}>{hoursText(columnSum((student) => student.special_request))}</td>
                 <td className={`${cell} text-right font-bold`}>{hoursText(columnSum((student) => student.daily_cleaning))}</td>
                 <td className={`${cell} text-right font-bold`}>{hoursText(columnSum(meetingHours))}</td>

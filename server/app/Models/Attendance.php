@@ -28,6 +28,8 @@ class Attendance extends Model
         'rendered_hour_event_id',
         'activity_hours',
         'schedule_id',
+        'janitorial_group_id',
+        'janitorial_area',
     ];
 
     protected $casts = [

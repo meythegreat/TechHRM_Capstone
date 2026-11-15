@@ -15,10 +15,17 @@ class ManualAttendanceRequest extends Model
     public const APPROVED = 'Approved';
     public const REJECTED = 'Rejected';
 
+    public const TYPE_REGULAR = 'regular';
+    public const TYPE_JANITORIAL = 'janitorial';
+    public const TYPE_CLASS_HOURS = 'class_hours';
+
     public const DEFAULT_REASON = 'Office had no internet; submitted for supervisor approval.';
+
+    public const CLASS_HOURS_REASON = 'Duty during class hours; submitted for supervisor approval.';
 
     protected $fillable = [
         'user_id',
+        'request_type',
         'reason',
         'status',
         'decision_note',

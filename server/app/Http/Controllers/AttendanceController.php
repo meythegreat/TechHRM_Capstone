@@ -88,7 +88,19 @@ class AttendanceController extends Controller
         if ($timeOut->lt($timeIn)) {
             return response()->json(['message' => 'Clock out must be after you clock in.'], 422);
         }
-        $hours = round($timeIn->diffInMinutes($timeOut) / 60, 2);
+
+        $isJanitorial = strcasecmp((string) ($attendance->attendance_type ?: $attendance->work_type), 'Janitorial') === 0
+            || (int) ($attendance->janitorial_group_id ?? 0) > 0;
+        $shift = $attendance->schedule_id
+            ? \App\Models\Schedule::query()->find($attendance->schedule_id)
+            : null;
+        if (! $isJanitorial && $shift) {
+            $timeOut = \App\Support\DutyHours::cappedClockOut($timeIn, $timeOut, $shift);
+        }
+        $office = trim((string) ($user->profile?->assigned_office ?? ''));
+        $hours = $isJanitorial
+            ? \App\Support\DutyHours::rawHours($timeIn, $timeOut)
+            : \App\Support\DutyHours::creditedHours($timeIn, $timeOut, $office);
         $fit = HourLimits::fitHours($user->id, $hours, $timeOut, (int) $attendance->id);
         if ($fit['allowed'] <= 0) {
             return response()->json([

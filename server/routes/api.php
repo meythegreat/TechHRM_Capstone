@@ -122,6 +122,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/attendance/manual-requests', [ManualAttendanceRequestController::class, 'store']);
     Route::delete('/attendance/manual-requests/{manualAttendanceRequest}', [ManualAttendanceRequestController::class, 'destroy']);
 
+    Route::get('/attendance/janitorial-groups', [\App\Http\Controllers\JanitorialGroupController::class, 'index']);
+    Route::get('/attendance/janitorial-passcode', [\App\Http\Controllers\AdvancedAttendanceController::class, 'janitorialPasscode']);
+    Route::get('/attendance/janitorial-qr', [\App\Http\Controllers\AdvancedAttendanceController::class, 'janitorialQr']);
+
     Route::get('/holidays', [HolidayController::class, 'index']);
 
     Route::get('/student/dashboard', [DashboardController::class, 'studentOverview']);
@@ -173,6 +177,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/attendance/{id}/times', [AttendanceController::class, 'updateTimes']);
         Route::get('/attendance/manual-requests', [ManualAttendanceRequestController::class, 'index']);
         Route::patch('/attendance/manual-requests/{manualAttendanceRequest}', [ManualAttendanceRequestController::class, 'decide']);
+
+        Route::post('/attendance/janitorial-groups', [\App\Http\Controllers\JanitorialGroupController::class, 'store']);
+        Route::put('/attendance/janitorial-groups/{janitorialGroup}', [\App\Http\Controllers\JanitorialGroupController::class, 'update']);
+        Route::delete('/attendance/janitorial-groups/{janitorialGroup}', [\App\Http\Controllers\JanitorialGroupController::class, 'destroy']);
 
         Route::post('/attendance/generate-token', [\App\Http\Controllers\AdvancedAttendanceController::class, 'generateToken']);
         Route::get('/attendance/passcode', [\App\Http\Controllers\AdvancedAttendanceController::class, 'currentPasscode']);

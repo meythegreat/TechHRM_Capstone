@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\JanitorialGroup;
 use App\Models\ManualAttendanceRequest;
 use App\Models\ManualAttendanceRequestShift;
 use App\Models\Notification;
 use App\Models\User;
+use App\Support\ClassHoursDuty;
 use App\Support\ManualDtrEntry;
 use App\Support\SuperAdminAudit;
 use Illuminate\Http\Request;
@@ -81,12 +83,31 @@ class ManualAttendanceRequestController extends Controller
         }
 
         $validated = $request->validate([
+            'request_type' => 'nullable|in:regular,janitorial,class_hours',
             'reason' => 'nullable|string|max:1000',
             'shifts' => 'required|array|min:1|max:10',
             'shifts.*.date' => 'required|date_format:Y-m-d',
             'shifts.*.time_in' => ['required', 'regex:/^\d{2}:\d{2}$/'],
             'shifts.*.time_out' => ['required', 'regex:/^\d{2}:\d{2}$/'],
+            'shifts.*.janitorial_area' => 'nullable|string|max:120',
+            'shifts.*.janitorial_group_id' => 'nullable|integer|exists:janitorial_groups,id',
         ]);
+
+        $requestType = $validated['request_type'] ?? ManualAttendanceRequest::TYPE_REGULAR;
+        $janitorialGroup = null;
+        if ($requestType === ManualAttendanceRequest::TYPE_JANITORIAL) {
+            $janitorialGroup = JanitorialGroup::query()
+                ->where(function ($query) use ($user) {
+                    $query->where('supervisor_user_id', $user->id)
+                        ->orWhereHas('members', fn ($members) => $members->where('users.id', $user->id));
+                })
+                ->first();
+            if (! $janitorialGroup) {
+                return response()->json([
+                    'message' => 'You must be assigned to a janitorial group before submitting a janitorial offline request.',
+                ], 422);
+            }
+        }
 
         $shiftRows = [];
         foreach (array_values($validated['shifts']) as $index => $shift) {
@@ -115,10 +136,48 @@ class ManualAttendanceRequestController extends Controller
                 ], 422);
             }
 
+            $area = trim((string) ($shift['janitorial_area'] ?? ''));
+            $groupId = isset($shift['janitorial_group_id']) ? (int) $shift['janitorial_group_id'] : null;
+            if ($requestType === ManualAttendanceRequest::TYPE_JANITORIAL) {
+                if ($area === '') {
+                    $area = (string) $janitorialGroup->area;
+                }
+                if (! $groupId) {
+                    $groupId = (int) $janitorialGroup->id;
+                }
+                if ($groupId !== (int) $janitorialGroup->id) {
+                    return response()->json([
+                        'message' => 'Shift '.($index + 1).': use your assigned janitorial group.',
+                    ], 422);
+                }
+            }
+
+            if ($requestType === ManualAttendanceRequest::TYPE_CLASS_HOURS) {
+                $block = null;
+                $cursor = $timeIn->copy();
+                while ($cursor->lt($timeOut)) {
+                    $block = ClassHoursDuty::overlappingClass((int) $user->id, $cursor);
+                    if ($block) {
+                        break;
+                    }
+                    $cursor->addMinutes(15);
+                }
+                if (! $block) {
+                    $block = ClassHoursDuty::overlappingClass((int) $user->id, $timeOut->copy()->subMinute());
+                }
+                if (! $block) {
+                    return response()->json([
+                        'message' => 'Shift '.($index + 1).': class-hours duty requests are only for times that overlap your class schedule.',
+                    ], 422);
+                }
+            }
+
             $shiftRows[] = [
                 'work_date' => $shift['date'],
                 'time_in' => $shift['time_in'],
                 'time_out' => $shift['time_out'],
+                'janitorial_area' => $area !== '' ? $area : null,
+                'janitorial_group_id' => $groupId,
                 'sort_order' => $index,
                 'time_in_at' => $timeIn,
                 'time_out_at' => $timeOut,
@@ -127,12 +186,17 @@ class ManualAttendanceRequestController extends Controller
 
         $reason = trim((string) ($validated['reason'] ?? ''));
         if ($reason === '') {
-            $reason = ManualAttendanceRequest::DEFAULT_REASON;
+            $reason = match ($requestType) {
+                ManualAttendanceRequest::TYPE_CLASS_HOURS => ManualAttendanceRequest::CLASS_HOURS_REASON,
+                ManualAttendanceRequest::TYPE_JANITORIAL => 'Janitorial offline duty; office had no internet.',
+                default => ManualAttendanceRequest::DEFAULT_REASON,
+            };
         }
 
-        $row = DB::transaction(function () use ($user, $reason, $shiftRows) {
+        $row = DB::transaction(function () use ($user, $reason, $shiftRows, $requestType) {
             $requestRow = ManualAttendanceRequest::create([
                 'user_id' => $user->id,
+                'request_type' => $requestType,
                 'reason' => $reason,
                 'status' => ManualAttendanceRequest::PENDING,
             ]);
@@ -143,6 +207,8 @@ class ManualAttendanceRequestController extends Controller
                     'work_date' => $shift['work_date'],
                     'time_in' => $shift['time_in'],
                     'time_out' => $shift['time_out'],
+                    'janitorial_area' => $shift['janitorial_area'],
+                    'janitorial_group_id' => $shift['janitorial_group_id'],
                     'sort_order' => $shift['sort_order'],
                 ]);
             }
@@ -150,15 +216,26 @@ class ManualAttendanceRequestController extends Controller
             return $requestRow->load(['shifts', 'reviewer:id,name']);
         });
 
+        $title = match ($requestType) {
+            ManualAttendanceRequest::TYPE_JANITORIAL => 'Janitorial offline attendance request',
+            ManualAttendanceRequest::TYPE_CLASS_HOURS => 'Class-hours duty request',
+            default => 'Offline attendance request',
+        };
         $this->notifyReviewers(
             $user,
-            'Offline attendance request',
-            $user->name.' submitted a manual attendance request (no office internet) with '
+            $title,
+            $user->name.' submitted a '.$requestType.' attendance request with '
                 .count($shiftRows).(count($shiftRows) === 1 ? ' shift' : ' shifts').' for approval.',
         );
 
+        $message = match ($requestType) {
+            ManualAttendanceRequest::TYPE_JANITORIAL => 'Janitorial offline request submitted. Hours appear on DTR after supervisor approval.',
+            ManualAttendanceRequest::TYPE_CLASS_HOURS => 'Class-hours duty request submitted. Hours appear on DTR after supervisor approval.',
+            default => 'Offline attendance request submitted. It will appear on your DTR after your supervisor approves it.',
+        };
+
         return response()->json([
-            'message' => 'Offline attendance request submitted. It will appear on your DTR after your supervisor approves it.',
+            'message' => $message,
             'request' => $this->serialize($row),
         ], 201);
     }
@@ -229,13 +306,32 @@ class ManualAttendanceRequestController extends Controller
             ]);
         }
 
+        $requestType = $manualAttendanceRequest->request_type ?: ManualAttendanceRequest::TYPE_REGULAR;
         $noteBase = trim((string) ($manualAttendanceRequest->reason ?: ManualAttendanceRequest::DEFAULT_REASON));
         $createdIds = [];
 
         try {
-            DB::transaction(function () use ($manualAttendanceRequest, $student, $reviewer, $validated, $noteBase, &$createdIds) {
+            DB::transaction(function () use ($manualAttendanceRequest, $student, $reviewer, $validated, $noteBase, $requestType, &$createdIds) {
                 foreach ($manualAttendanceRequest->shifts as $index => $shift) {
                     $date = $shift->work_date->toDateString();
+                    $options = match ($requestType) {
+                        ManualAttendanceRequest::TYPE_JANITORIAL => [
+                            'attendance_type' => 'Janitorial',
+                            'work_type' => 'Janitorial',
+                            'janitorial_group_id' => $shift->janitorial_group_id,
+                            'janitorial_area' => $shift->janitorial_area,
+                            'skip_schedule_match' => true,
+                            'apply_lunch' => false,
+                            'cap_at_schedule_end' => false,
+                        ],
+                        ManualAttendanceRequest::TYPE_CLASS_HOURS => [
+                            'attendance_type' => 'Regular',
+                            'apply_lunch' => true,
+                            'cap_at_schedule_end' => false,
+                        ],
+                        default => [],
+                    };
+
                     $created = ManualDtrEntry::createClosedShift(
                         $student,
                         $date,
@@ -243,9 +339,11 @@ class ManualAttendanceRequestController extends Controller
                         $shift->time_out,
                         $noteBase,
                         'accepted',
+                        null,
+                        $options,
                     );
 
-                    if (!$created['ok']) {
+                    if (! $created['ok']) {
                         throw new \RuntimeException(
                             'Shift '.($index + 1).' ('.$date.' '.$shift->time_in.'–'.$shift->time_out.'): '.$created['message']
                         );
@@ -266,16 +364,22 @@ class ManualAttendanceRequestController extends Controller
             return response()->json(['message' => $exception->getMessage()], 422);
         }
 
+        $approvedTitle = match ($requestType) {
+            ManualAttendanceRequest::TYPE_JANITORIAL => 'Janitorial offline attendance approved',
+            ManualAttendanceRequest::TYPE_CLASS_HOURS => 'Class-hours duty approved',
+            default => 'Offline attendance approved',
+        };
+
         Notification::create([
             'user_id' => $student->id,
-            'title' => 'Offline attendance approved',
-            'message' => 'Your offline manual attendance was approved. '
+            'title' => $approvedTitle,
+            'message' => 'Your '.$requestType.' attendance request was approved. '
                 .count($createdIds).(count($createdIds) === 1 ? ' shift was' : ' shifts were')
                 .' credited on your DTR.',
         ]);
 
         return response()->json([
-            'message' => 'Offline attendance approved. Hours were credited on the student DTR.',
+            'message' => 'Request approved. Hours were credited on the student DTR.',
             'request' => $this->serialize($manualAttendanceRequest->fresh(['shifts', 'student.profile', 'reviewer:id,name']), true),
             'attendance_ids' => $createdIds,
         ]);
@@ -319,6 +423,7 @@ class ManualAttendanceRequestController extends Controller
         $payload = [
             'id' => $row->id,
             'user_id' => $row->user_id,
+            'request_type' => $row->request_type ?: ManualAttendanceRequest::TYPE_REGULAR,
             'reason' => $row->reason,
             'status' => $row->status,
             'decision_note' => $row->decision_note,
@@ -331,6 +436,8 @@ class ManualAttendanceRequestController extends Controller
                 'date' => $shift->work_date?->toDateString(),
                 'time_in' => $shift->time_in,
                 'time_out' => $shift->time_out,
+                'janitorial_area' => $shift->janitorial_area,
+                'janitorial_group_id' => $shift->janitorial_group_id,
                 'sort_order' => (int) $shift->sort_order,
                 'attendance_id' => $shift->attendance_id,
             ])->values()->all(),
