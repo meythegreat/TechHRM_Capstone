@@ -416,12 +416,21 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
 
         $accounts = app(\App\Http\Controllers\UserController::class);
         $this->assertTrue($accounts->canCheckActivityAttendance($secretary->fresh('profile')));
+        $this->assertTrue($accounts->mustClockAsStudent($secretary->fresh('profile')));
+        $this->assertFalse($accounts->isWspoDepartmentSupervisor($secretary->fresh('profile')));
+        $this->assertFalse($accounts->canIssueDailyAttendance($secretary->fresh('profile')));
+        $this->assertFalse($accounts->canManageWorkSchedules($secretary->fresh('profile')));
 
         Sanctum::actingAs($secretary->fresh('profile'));
         $this->getJson('/api/user')
             ->assertOk()
             ->assertJsonPath('can_check_activity_attendance', true)
-            ->assertJsonPath('assigned_office', 'CCS · WSPO Secretary');
+            ->assertJsonPath('assigned_office', 'CCS · WSPO Secretary')
+            ->assertJsonPath('must_clock_as_student', true)
+            ->assertJsonPath('can_issue_daily_attendance', false);
+
+        $this->getJson('/api/attendance/passcode?type=Daily%20Clock')
+            ->assertStatus(422);
 
         $eventId = (int) $this->postJson('/api/financial/hour-events', [
             'kind' => 'devotional',
@@ -447,6 +456,44 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
         ])->assertOk();
 
         $this->postJson('/api/financial/hour-events/'.$eventId.'/mark-absent')->assertOk();
+    }
+
+    public function test_student_officer_secretary_manages_activities_and_clocks_as_student(): void
+    {
+        $secretary = $this->makeStudent('Elected Secretary', 3, '2026-8801');
+        $secretary->profile->update([
+            'organization_officer' => true,
+            'officer_position' => 'WSPO Secretary',
+            'assigned_office' => 'College of Computer Studies',
+        ]);
+        $worker = $this->makeStudent('Activity Worker', 2, '2026-8802');
+        $group = DailyCleaningGroup::create(['name' => 'Officer Group']);
+        $this->attachMembers($group, [$worker->id], $worker->id);
+
+        $accounts = app(\App\Http\Controllers\UserController::class);
+        $fresh = $secretary->fresh('profile');
+        $this->assertTrue($accounts->isStudentOfficer($fresh));
+        $this->assertTrue($accounts->canCheckActivityAttendance($fresh));
+        $this->assertTrue($accounts->canManageActivityGroups($fresh));
+        $this->assertTrue($accounts->mustClockAsStudent($fresh));
+        $this->assertFalse($accounts->isWspoDepartmentSupervisor($fresh));
+        $this->assertFalse($accounts->canIssueDailyAttendance($fresh));
+
+        Sanctum::actingAs($fresh);
+        $this->getJson('/api/user')
+            ->assertOk()
+            ->assertJsonPath('can_check_activity_attendance', true)
+            ->assertJsonPath('must_clock_as_student', true)
+            ->assertJsonPath('officer_position', 'WSPO Secretary');
+
+        $this->postJson('/api/financial/hour-events', [
+            'kind' => 'devotional',
+            'title' => 'Officer devotion',
+            'event_date' => '2026-10-28',
+            'group_id' => $group->id,
+            'starts_at' => '05:00',
+            'ends_at' => '06:00',
+        ])->assertCreated();
     }
 
     public function test_manual_timeout_requires_clock_in_and_rejects_absent(): void
@@ -756,6 +803,8 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
             $table->string('student_id_number')->nullable();
             $table->string('assigned_office')->nullable();
             $table->string('work_department')->nullable();
+            $table->boolean('organization_officer')->default(false);
+            $table->string('officer_position')->nullable();
             $table->string('course')->nullable();
             $table->integer('year_level')->nullable();
             $table->string('gender')->nullable();

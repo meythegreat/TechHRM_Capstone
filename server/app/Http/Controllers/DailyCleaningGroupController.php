@@ -11,8 +11,15 @@ use Illuminate\Support\Facades\DB;
 
 class DailyCleaningGroupController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        $user = $request->user()->loadMissing('profile');
+        $accounts = app(UserController::class);
+        if (!in_array($user->role, ['WSPO Staff', 'Super Admin'], true)
+            && !$accounts->canCheckActivityAttendance($user)) {
+            abort(403, 'Only the WSPO secretary (or coordinator/president) can view activity groups.');
+        }
+
         $groups = DailyCleaningGroup::query()
             ->with(['students.profile:id,user_id,student_id_number,year_level'])
             ->orderBy('name')
@@ -71,8 +78,8 @@ class DailyCleaningGroupController extends Controller
     {
         SuperAdminAudit::denyMutation($request);
         $user = $request->user()->loadMissing('profile');
-        if (!app(UserController::class)->isWspoDepartmentSupervisor($user)) {
-            abort(403, 'Only the WSPO coordinator can change groups.');
+        if (!app(UserController::class)->canManageActivityGroups($user)) {
+            abort(403, 'Only the WSPO coordinator or secretary can change activity groups.');
         }
     }
 

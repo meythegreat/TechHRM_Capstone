@@ -16,36 +16,42 @@ class Destination {
   final Widget page;
 }
 
-List<Destination> destinationsFor(String? role) {
+List<Destination> destinationsFor(String? role, {bool mustClockAsStudent = false, bool canCheckActivities = false}) {
   if (role == 'Student') {
-    return const [
-      Destination('Dashboard', Icons.dashboard_outlined, StudentOverviewScreen()),
-      Destination('Attendance / DTR', Icons.access_time, StudentAttendanceScreen()),
-      Destination('Hours Rendered', Icons.payments_outlined, StudentHoursScreen()),
-      Destination('My Schedule', Icons.calendar_month_outlined, StudentScheduleScreen()),
-      Destination('Requirements', Icons.description_outlined, StudentRequirementsScreen()),
-      Destination('Disciplinary Records', Icons.gavel_outlined, StudentDisciplinaryScreen()),
-      Destination('Application Status', Icons.assignment_outlined, StudentApplicationScreen()),
-      Destination('Settings', Icons.settings_outlined, ProfileSettingsScreen()),
+    return [
+      const Destination('Dashboard', Icons.dashboard_outlined, StudentOverviewScreen()),
+      const Destination('Attendance / DTR', Icons.access_time, StudentAttendanceScreen()),
+      if (canCheckActivities)
+        const Destination('Campus Activities', Icons.groups_outlined, AttendanceHubScreen()),
+      const Destination('Hours Rendered', Icons.payments_outlined, StudentHoursScreen()),
+      const Destination('My Schedule', Icons.calendar_month_outlined, StudentScheduleScreen()),
+      const Destination('Requirements', Icons.description_outlined, StudentRequirementsScreen()),
+      const Destination('Disciplinary Records', Icons.gavel_outlined, StudentDisciplinaryScreen()),
+      const Destination('Application Status', Icons.assignment_outlined, StudentApplicationScreen()),
+      const Destination('Settings', Icons.settings_outlined, ProfileSettingsScreen()),
     ];
   }
 
   final admin = role == 'WSPO Staff' || role == 'Super Admin';
   return [
     const Destination('Dashboard', Icons.dashboard_outlined, StaffDashboardScreen()),
-    const Destination('Timesheets', Icons.fact_check_outlined, TimesheetsScreen()),
-    const Destination('Schedules', Icons.calendar_month_outlined, SchedulesScreen()),
+    if (mustClockAsStudent)
+      const Destination('My Attendance / DTR', Icons.access_time, StudentAttendanceScreen()),
+    if (!mustClockAsStudent) const Destination('Timesheets', Icons.fact_check_outlined, TimesheetsScreen()),
+    if (!mustClockAsStudent) const Destination('Schedules', Icons.calendar_month_outlined, SchedulesScreen()),
     if (role == 'Super Admin') const Destination('Document Review', Icons.folder_open_outlined, DocumentReviewScreen()),
-    if (admin) const Destination('Applications', Icons.how_to_reg_outlined, ApplicationsScreen()),
+    if (admin && !mustClockAsStudent) const Destination('Applications', Icons.how_to_reg_outlined, ApplicationsScreen()),
     const Destination('Attendance Hub', Icons.qr_code_2, AttendanceHubScreen()),
-    const Destination('Compliance', Icons.gavel_outlined, ComplianceScreen()),
-    if (admin) ...[
+    if (!mustClockAsStudent) const Destination('Compliance', Icons.gavel_outlined, ComplianceScreen()),
+    if (admin && !mustClockAsStudent) ...[
       const Destination('Audit Trail', Icons.history, AuditLogsScreen()),
       const Destination('User Management', Icons.group_outlined, UsersScreen()),
       const Destination('Offices', Icons.apartment_outlined, OfficesScreen()),
       const Destination('Reports & Analytics', Icons.insights_outlined, AnalyticsScreen()),
       const Destination('Hours Rendered', Icons.payments_outlined, FinancialScreen()),
     ],
+    if (admin && mustClockAsStudent)
+      const Destination('Hours Rendered', Icons.payments_outlined, FinancialScreen()),
     const Destination('Profile Settings', Icons.settings_outlined, ProfileSettingsScreen()),
   ];
 }
@@ -100,7 +106,12 @@ class _HomeShellState extends State<HomeShell> {
       label = role == 'Student' ? 'Disciplinary Records' : 'Compliance';
     }
     if (label == null) return;
-    final next = destinationsFor(role).indexWhere((destination) => destination.label == label);
+    final auth = context.read<AuthProvider>();
+    final next = destinationsFor(
+      role,
+      mustClockAsStudent: auth.mustClockAsStudent,
+      canCheckActivities: auth.canCheckActivityAttendance,
+    ).indexWhere((destination) => destination.label == label);
     if (next >= 0) setState(() => _index = next);
   }
 
@@ -110,7 +121,11 @@ class _HomeShellState extends State<HomeShell> {
     final theme = context.watch<ThemeController>();
     final notes = _notes!;
     final scheme = Theme.of(context).colorScheme;
-    final items = destinationsFor(auth.userRole);
+    final items = destinationsFor(
+      auth.userRole,
+      mustClockAsStudent: auth.mustClockAsStudent,
+      canCheckActivities: auth.canCheckActivityAttendance,
+    );
     final index = _index >= items.length ? 0 : _index;
     final current = items[index];
 

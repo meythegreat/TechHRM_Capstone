@@ -248,7 +248,9 @@ const ScheduleManagement = () => {
     const currentUserRole = localStorage.getItem('user_role') || '';
     const assignedOffice = (localStorage.getItem('assigned_office') || '').trim().toLowerCase();
     const canManageSchedules = currentUserRole === 'Super Admin'
-        || (currentUserRole === 'WSPO Staff' && ['', 'wspo', 'unassigned', 'wspo coordinator', 'wspo secretary'].includes(assignedOffice));
+        || (currentUserRole === 'WSPO Staff'
+            && localStorage.getItem('is_student_officer') !== '1'
+            && ['', 'wspo', 'unassigned', 'wspo coordinator'].includes(assignedOffice));
     const canSetSemester = currentUserRole === 'WSPO Staff' || currentUserRole === 'Super Admin';
     const isAudit = currentUserRole === 'Super Admin';
     const [semester, setSemester] = useState<SemesterTerm | null>(null);

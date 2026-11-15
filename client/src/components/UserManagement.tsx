@@ -598,14 +598,20 @@ const UserManagement = () => {
                                       ) : user.role === 'WSPO Staff' ? (
                                           <div>
                                               <p className="text-sm font-bold text-slate-800">{user.profile?.assigned_office || 'WSPO Coordinator'}</p>
-                                              {(!user.profile?.assigned_office || user.profile.assigned_office === 'WSPO Coordinator' || user.profile.assigned_office === 'WSPO' || user.profile.assigned_office === 'WSPO Secretary') && (
+                                              {(!user.profile?.assigned_office || user.profile.assigned_office === 'WSPO Coordinator' || user.profile.assigned_office === 'WSPO') && (
                                                   <p className="text-xs font-semibold text-indigo-700 mt-1">Coordinator access for WSPO</p>
                                               )}
                                               {user.profile?.assigned_office === 'WSPO Secretary' && (
-                                                  <p className="text-xs font-medium text-slate-500 mt-1">Elected student{user.profile?.work_department ? ` · ${user.profile.work_department}` : ''}</p>
+                                                  <p className="text-xs font-medium text-slate-500 mt-1">
+                                                    Student officer · activity tools only · clocks in as a working student
+                                                    {user.profile?.work_department ? ` · ${user.profile.work_department}` : ''}
+                                                  </p>
                                               )}
                                               {user.profile?.assigned_office === 'WSPO President' && (
-                                                  <p className="text-xs font-semibold text-indigo-700 mt-1">Elected student{user.profile?.work_department ? ` · ${user.profile.work_department}` : ''}</p>
+                                                  <p className="text-xs font-semibold text-indigo-700 mt-1">
+                                                    Student officer · clocks in as a working student
+                                                    {user.profile?.work_department ? ` · ${user.profile.work_department}` : ''}
+                                                  </p>
                                               )}
                                           </div>
                                       ) : (

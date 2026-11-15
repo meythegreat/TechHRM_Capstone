@@ -102,6 +102,10 @@ class JanitorialGroupController extends Controller
     {
         SuperAdminAudit::denyMutation($request);
         $actor = $request->user()->loadMissing('profile');
+        $accounts = app(UserController::class);
+        if ($accounts->mustClockAsStudent($actor)) {
+            abort(403, 'WSPO Secretary and President clock duty hours as students and cannot manage janitorial duty groups.');
+        }
         if (! in_array($actor->role, ['Supervisor', 'WSPO Staff'], true)) {
             abort(403, 'Only a supervisor or WSPO staff can manage janitorial groups.');
         }

@@ -10,7 +10,13 @@ import { AddActivityHoursDialog } from './hours/AddActivityHoursDialog';
 import { CleaningGroupsDialog } from './hours/CleaningGroupsDialog';
 import { JanitorialGroupsDialog } from './hours/JanitorialGroupsDialog';
 import { AssemblyYearRepsDialog } from './hours/AssemblyYearRepsDialog';
-import { canCheckActivityAttendance } from '../utils/wspoActivityAccess';
+import {
+    canCheckActivityAttendance,
+    canIssueDailyAttendance,
+    canManageActivityGroups,
+    mustClockAsStudent,
+} from '../utils/wspoActivityAccess';
+import StudentAttendanceTerminal from './StudentAttendanceTerminal';
 import { 
     KeyRound, 
     QrCode,
@@ -56,9 +62,12 @@ const SupervisorAttendanceHub = () => {
     const userRole = localStorage.getItem('user_role') || '';
     const storedOffice = localStorage.getItem('assigned_office') || 'Unassigned';
     const canIssueActivity = canCheckActivityAttendance(userRole, storedOffice);
-    const canManageCleaningGroups = canIssueActivity && !String(storedOffice).toLowerCase().includes('president');
-    const canManageJanitorialGroups = userRole === 'Supervisor' || userRole === 'WSPO Staff';
-    const supervisorDepartment = canIssueActivity ? 'WSPO' : storedOffice;
+    const canManageCleaningGroups = canManageActivityGroups(userRole, storedOffice);
+    const canIssueDaily = canIssueDailyAttendance();
+    const clocksAsStudent = mustClockAsStudent();
+    // Janitorial duty groups are department supervision — not for student officers.
+    const canManageJanitorialGroups = (userRole === 'Supervisor' || userRole === 'WSPO Staff') && !clocksAsStudent;
+    const supervisorDepartment = canIssueDaily ? storedOffice : (canIssueActivity ? 'Activities' : storedOffice);
     const [tokenScope, setTokenScope] = useState(supervisorDepartment);
 
     const formatHours = (value) => Number(value || 0).toFixed(2);
@@ -94,7 +103,7 @@ const SupervisorAttendanceHub = () => {
     }, [descInput]);
 
     useEffect(() => {
-        if (accessMode !== 'passcode') return undefined;
+        if (!canIssueDaily || accessMode !== 'passcode') return undefined;
 
         let cancelled = false;
         let refreshTimer;
@@ -134,7 +143,7 @@ const SupervisorAttendanceHub = () => {
     }, [accessMode, selectedType]);
 
     useEffect(() => {
-        if (accessMode !== 'qr') return undefined;
+        if (!canIssueDaily || accessMode !== 'qr') return undefined;
 
         let cancelled = false;
         let refreshTimer;
@@ -287,11 +296,15 @@ const SupervisorAttendanceHub = () => {
                         Attendance Hub
                     </h1>
                     <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
-                        Daily clock-in can use a passcode or a QR code. Cleaning, devotional, and assembly attendance use their own code. Students time out the same way they clocked in, and the hours are added only then.
+                        {canIssueDaily
+                            ? 'Daily clock-in can use a passcode or a QR code. Cleaning, devotional, and assembly attendance use their own code. Students time out the same way they clocked in, and the hours are added only then.'
+                            : 'Manage campus group activities and check activity attendance here. Your own duty hours use the working-student clock-in (passcode or QR from your department supervisor).'}
                     </p>
-                    <p className="mt-2 inline-flex max-w-lg flex-wrap items-center gap-x-2 gap-y-1 rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">
-                        Token scope: <span className="font-semibold text-slate-900">{tokenScope}</span> students only
-                    </p>
+                    {canIssueDaily && (
+                        <p className="mt-2 inline-flex max-w-lg flex-wrap items-center gap-x-2 gap-y-1 rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">
+                            Token scope: <span className="font-semibold text-slate-900">{tokenScope}</span> students only
+                        </p>
+                    )}
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
@@ -333,9 +346,22 @@ const SupervisorAttendanceHub = () => {
                 </div>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+            {clocksAsStudent && (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 sm:p-6">
+                    <h2 className="text-lg font-semibold text-slate-900 tracking-tight">My duty attendance</h2>
+                    <p className="mt-1 text-sm text-slate-600">
+                        Clock in and out with your department supervisor&apos;s passcode or QR like any working student. Hours go on your student DTR.
+                    </p>
+                    <div className="mt-4 rounded-2xl border border-slate-200 bg-white overflow-hidden">
+                        <StudentAttendanceTerminal />
+                    </div>
+                </div>
+            )}
+
+            <div className={`grid grid-cols-1 ${canIssueDaily ? 'lg:grid-cols-3' : ''} gap-8 items-start`}>
                 
-                {/* LEFT COLUMN: TOKEN GENERATOR */}
+                {/* LEFT COLUMN: TOKEN GENERATOR (department supervisors / coordinator only) */}
+                {canIssueDaily && (
                 <motion.div 
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -468,9 +494,10 @@ const SupervisorAttendanceHub = () => {
                         )}
                     </AnimatePresence>
                 </motion.div>
+                )}
 
                 {canIssueActivity && (
-                    <section className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] p-6 sm:p-8 space-y-4">
+                    <section className={`${canIssueDaily ? 'lg:col-span-2' : ''} bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] p-6 sm:p-8 space-y-4`}>
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <h2 className="text-xl font-semibold text-slate-900 flex items-center gap-2">

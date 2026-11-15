@@ -677,21 +677,30 @@ class AttendanceHubScreen extends StatelessWidget {
     final auth = context.watch<AuthProvider>();
     final api = auth.api;
     final canCheckActivities = auth.canCheckActivityAttendance;
+    final canIssueDaily = auth.canIssueDailyAttendance;
+    final clocksAsStudent = auth.mustClockAsStudent;
     return FetchView(
       loader: () async {
         dynamic passcode;
         dynamic qr;
-        try {
-          passcode = await api.get('/attendance/passcode', {'type': 'Daily Clock'});
-        } catch (error) {
-          passcode = {'error': errorText(error)};
+        if (canIssueDaily) {
+          try {
+            passcode = await api.get('/attendance/passcode', {'type': 'Daily Clock'});
+          } catch (error) {
+            passcode = {'error': errorText(error)};
+          }
+          try {
+            qr = await api.get('/attendance/qr-code', {'type': 'Daily Clock'});
+          } catch (error) {
+            qr = {'error': errorText(error)};
+          }
         }
-        try {
-          qr = await api.get('/attendance/qr-code', {'type': 'Daily Clock'});
-        } catch (error) {
-          qr = {'error': errorText(error)};
+        dynamic anomalies = [];
+        if (canIssueDaily) {
+          try {
+            anomalies = await api.get('/attendance/anomalies');
+          } catch (_) {}
         }
-        final anomalies = await api.get('/attendance/anomalies');
         dynamic activities = {'events': []};
         if (canCheckActivities) {
           try {
@@ -712,20 +721,24 @@ class AttendanceHubScreen extends StatelessWidget {
           onRefresh: reload,
           children: [
             const SectionTitle('Attendance hub'),
-            RecordCard(
-              title: 'Live passcode',
-              subtitle: textOf(passcode['token_code'] ?? passcode['error']),
-              trailing: passcode['seconds_remaining'] == null ? '' : '${passcode['seconds_remaining']}s',
-            ),
-            RecordCard(
-              title: 'Live QR payload',
-              subtitle: textOf(qr['payload'] ?? qr['error']),
-              trailing: qr['seconds_remaining'] == null ? '' : '${qr['seconds_remaining']}s',
-            ),
-            const Text('Students enter this passcode or scan the QR code shown on the desktop hub.'),
+            if (clocksAsStudent)
+              const Text('Your duty hours use My Attendance / DTR with a supervisor passcode or QR. This hub is for campus group activities only.'),
+            if (canIssueDaily) ...[
+              RecordCard(
+                title: 'Live passcode',
+                subtitle: textOf(passcode['token_code'] ?? passcode['error']),
+                trailing: passcode['seconds_remaining'] == null ? '' : '${passcode['seconds_remaining']}s',
+              ),
+              RecordCard(
+                title: 'Live QR payload',
+                subtitle: textOf(qr['payload'] ?? qr['error']),
+                trailing: qr['seconds_remaining'] == null ? '' : '${qr['seconds_remaining']}s',
+              ),
+              const Text('Students enter this passcode or scan the QR code shown on the desktop hub.'),
+            ],
             if (canCheckActivities) ...[
               const SectionTitle('Activity attendance'),
-              const Text('WSPO Secretary tools: verify/correct campus activity attendance, close open sessions, and mark unmarked students absent.'),
+              const Text('WSPO Secretary tools: add/edit group activities, verify/correct campus activity attendance, and mark unmarked students absent.'),
               if (activityRows.isEmpty) const EmptyNote('No activity attendance scheduled for today.'),
               for (final event in activityRows)
                 RecordCard(
@@ -745,10 +758,12 @@ class AttendanceHubScreen extends StatelessWidget {
                   ],
                 ),
             ],
-            const SectionTitle('Anomalies'),
-            if (anomalies.isEmpty) const EmptyNote('No attendance anomalies.'),
-            for (final row in anomalies)
-              RecordCard(title: personName(row), subtitle: textOf(row['anomaly_reason']), trailing: whenOf(row['time_in'])),
+            if (canIssueDaily) ...[
+              const SectionTitle('Anomalies'),
+              if (anomalies.isEmpty) const EmptyNote('No attendance anomalies.'),
+              for (final row in anomalies)
+                RecordCard(title: personName(row), subtitle: textOf(row['anomaly_reason']), trailing: whenOf(row['time_in'])),
+            ],
           ],
         );
       },

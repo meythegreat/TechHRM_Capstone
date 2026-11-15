@@ -73,6 +73,11 @@ class AuthController extends Controller
             'assigned_office' => $user->profile?->assigned_office,
             'can_check_activity_attendance' => $accounts->canCheckActivityAttendance($user),
             'can_issue_activity_attendance' => $accounts->canCheckActivityAttendance($user),
+            'can_manage_activity_groups' => $accounts->canManageActivityGroups($user),
+            'can_issue_daily_attendance' => $accounts->canIssueDailyAttendance($user),
+            'is_student_officer' => $accounts->isStudentOfficer($user),
+            'officer_position' => $accounts->officerPosition($user) ?: null,
+            'must_clock_as_student' => $accounts->mustClockAsStudent($user),
             'profile_picture' => $user->profile_picture,
             'must_change_password' => (bool) $user->must_change_password,
             'acting' => $user->role === 'Department Secretary' ? $accounts->isActingDepartmentSecretary($user) : null,
@@ -199,6 +204,11 @@ class AuthController extends Controller
         $payload['assigned_office'] = $user->profile?->assigned_office;
         $payload['can_check_activity_attendance'] = $accounts->canCheckActivityAttendance($user);
         $payload['can_issue_activity_attendance'] = $payload['can_check_activity_attendance'];
+        $payload['can_manage_activity_groups'] = $accounts->canManageActivityGroups($user);
+        $payload['can_issue_daily_attendance'] = $accounts->canIssueDailyAttendance($user);
+        $payload['is_student_officer'] = $accounts->isStudentOfficer($user);
+        $payload['officer_position'] = $accounts->officerPosition($user) ?: null;
+        $payload['must_clock_as_student'] = $accounts->mustClockAsStudent($user);
 
         return response()->json([
             'token' => $token,

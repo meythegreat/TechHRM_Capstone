@@ -14,6 +14,9 @@ class AuthProvider with ChangeNotifier {
   int? _userId;
   bool _mustChangePassword = false;
   bool _canCheckActivityAttendance = false;
+  bool _canIssueDailyAttendance = false;
+  bool _mustClockAsStudent = false;
+  String? _officerPosition;
 
   bool get ready => _ready;
   bool get isLoading => _isLoading;
@@ -24,6 +27,9 @@ class AuthProvider with ChangeNotifier {
   int? get userId => _userId;
   bool get mustChangePassword => _mustChangePassword;
   bool get canCheckActivityAttendance => _canCheckActivityAttendance;
+  bool get canIssueDailyAttendance => _canIssueDailyAttendance;
+  bool get mustClockAsStudent => _mustClockAsStudent;
+  String? get officerPosition => _officerPosition;
   bool get isAuthenticated => _userRole != null;
   ApiClient get api => _api;
 
@@ -129,11 +135,38 @@ class AuthProvider with ChangeNotifier {
       office = user['assigned_office'].toString().trim();
       _userDepartment = office;
     }
+    final officer = (user['officer_position'] ?? (profile is Map ? profile['officer_position'] : null))?.toString() ?? '';
+    _officerPosition = officer.trim().isEmpty ? null : officer.trim();
     final flagged = user['can_check_activity_attendance'] == true || user['can_issue_activity_attendance'] == true;
-    _canCheckActivityAttendance = flagged || _looksLikeActivityChecker(_userRole, office);
+    _canCheckActivityAttendance = flagged || _looksLikeActivityChecker(_userRole, office, _officerPosition);
+    _canIssueDailyAttendance = user['can_issue_daily_attendance'] == true
+        || (_userRole == 'Supervisor')
+        || (_userRole == 'WSPO Staff' && !_mustClockAsStudentFlag(user) && _looksLikeCoordinator(office));
+    _mustClockAsStudent = user['must_clock_as_student'] == true
+        || user['is_student_officer'] == true
+        || _userRole == 'Student'
+        || _mustClockAsStudentFlag(user);
   }
 
-  bool _looksLikeActivityChecker(String? role, String office) {
+  bool _mustClockAsStudentFlag(Map<String, dynamic> user) {
+    if (user['is_student_officer'] == true) return true;
+    final office = (user['assigned_office'] ?? '').toString().trim().toLowerCase();
+    return office == 'wspo secretary'
+        || office == 'wspo president'
+        || office.contains('wspo secretary')
+        || office.contains('wspo president');
+  }
+
+  bool _looksLikeCoordinator(String office) {
+    final normalized = office.trim().toLowerCase();
+    return normalized.isEmpty || normalized == 'wspo' || normalized == 'unassigned' || normalized == 'wspo coordinator';
+  }
+
+  bool _looksLikeActivityChecker(String? role, String office, String? officer) {
+    final officerNorm = (officer ?? '').trim().toLowerCase();
+    if (role == 'Student') {
+      return officerNorm == 'wspo secretary' || officerNorm == 'wspo president';
+    }
     if (role != 'WSPO Staff') return false;
     final normalized = office.trim().toLowerCase();
     if (normalized.isEmpty || normalized == 'wspo' || normalized == 'unassigned') return true;
@@ -153,5 +186,8 @@ class AuthProvider with ChangeNotifier {
     _userId = null;
     _mustChangePassword = false;
     _canCheckActivityAttendance = false;
+    _canIssueDailyAttendance = false;
+    _mustClockAsStudent = false;
+    _officerPosition = null;
   }
 }

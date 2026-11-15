@@ -73,8 +73,7 @@ class DepartmentAssignmentNotifier
         $departments = is_array($configured) ? $configured : [];
 
         if ($supervisor->role === 'WSPO Staff') {
-            $position = trim((string) ($supervisor->profile?->assigned_office ?? ''));
-            if ($position === '' || strcasecmp($position, 'WSPO Coordinator') === 0 || strcasecmp($position, 'WSPO Secretary') === 0 || strcasecmp($position, 'WSPO') === 0) {
+            if (app(UserController::class)->isWspoDepartmentSupervisor($supervisor)) {
                 $departments[] = 'WSPO';
             }
         } elseif ($departments === [] && $supervisor->profile?->assigned_office) {
