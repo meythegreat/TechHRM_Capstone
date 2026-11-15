@@ -18,6 +18,7 @@ import {
 import Toast from './Toast';
 import ThemeToggle from './ThemeToggle';
 import { normalizeFilePath } from '../utils/secureFile';
+import { storeActivityAttendanceCapability } from '../utils/wspoActivityAccess';
 
 interface LoginProps {
     onLoginSuccess: (token: string, role: string, name: string, profilePic: string | null, mustChangePassword: boolean) => void;
@@ -103,7 +104,10 @@ const Login = ({ onLoginSuccess, onNavigateToApply, onNavigateToTrack }: LoginPr
             localStorage.setItem('user_role', role);
             localStorage.setItem('user_name', name || username);
             localStorage.setItem('profile_picture', normalizeFilePath(profile_picture) || '');
-            localStorage.setItem('assigned_office', office || 'System Administrator');
+            storeActivityAttendanceCapability(response.data);
+            if (!localStorage.getItem('assigned_office')) {
+                localStorage.setItem('assigned_office', office || 'System Administrator');
+            }
             if (role === 'Department Secretary') {
                 localStorage.setItem('secretary_acting', acting ? '1' : '0');
             } else {

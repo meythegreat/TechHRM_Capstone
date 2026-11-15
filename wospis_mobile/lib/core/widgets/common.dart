@@ -346,13 +346,13 @@ Future<bool> confirm(BuildContext context, String message) async {
   return result ?? false;
 }
 
-Future<String?> promptText(BuildContext context, String title, {String label = 'Note', bool required = true}) async {
-  final controller = TextEditingController();
+Future<String?> promptText(BuildContext context, String title, {String label = 'Note', bool required = true, String initial = ''}) async {
+  final controller = TextEditingController(text: initial);
   final value = await showDialog<String>(
     context: context,
     builder: (context) => AlertDialog(
       title: Text(title),
-      content: TextField(controller: controller, decoration: InputDecoration(labelText: label), maxLines: 3),
+      content: TextField(controller: controller, decoration: InputDecoration(labelText: label), maxLines: initial.contains(':') ? 1 : 3),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         FilledButton(

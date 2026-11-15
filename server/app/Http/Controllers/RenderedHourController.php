@@ -207,6 +207,7 @@ class RenderedHourController extends Controller
     public function store(Request $request)
     {
         SuperAdminAudit::denyMutation($request);
+        $this->assertActivityIssuer($request);
         $validated = $this->validateEvent($request);
         $studentIds = $this->rosterIds($request, $validated['kind']);
         $this->assertSpecialRequestWithinLimits($validated, $studentIds);
@@ -230,6 +231,7 @@ class RenderedHourController extends Controller
     public function update(Request $request, RenderedHourEvent $event)
     {
         SuperAdminAudit::denyMutation($request);
+        $this->assertActivityIssuer($request);
         $validated = $this->validateEvent($request, $event);
         $studentIds = $this->rosterIds($request, $validated['kind'], $event);
         $this->assertSpecialRequestWithinLimits($validated, $studentIds);
@@ -253,6 +255,7 @@ class RenderedHourController extends Controller
     public function destroy(Request $request, RenderedHourEvent $event)
     {
         SuperAdminAudit::denyMutation($request);
+        $this->assertActivityIssuer($request);
         $event->delete();
 
         return response()->json(['message' => 'Activity removed.']);
@@ -824,21 +827,21 @@ class RenderedHourController extends Controller
     private function assertActivityIssuer(Request $request): void
     {
         $user = $request->user()->loadMissing('profile');
-        if (!app(UserController::class)->canIssueActivityAttendance($user)) {
-            abort(403, 'Only the WSPO coordinator, secretary, and president can change this attendance.');
+        if (!app(UserController::class)->canCheckActivityAttendance($user)) {
+            abort(403, 'Only the WSPO secretary (or coordinator/president) can change this attendance.');
         }
     }
 
-    /** Clock-in / time-out corrections: WSPO issuer roles, or the leader of this activity's group. */
+    /** Clock-in / time-out corrections: WSPO activity checkers, or the leader of this activity's group. */
     private function assertActivityTimeEditor(Request $request, RenderedHourEvent $event): void
     {
         $user = $request->user()->loadMissing('profile');
         $accounts = app(UserController::class);
-        if ($accounts->canIssueActivityAttendance($user) || $accounts->isYearLeaderFor($user, $event)) {
+        if ($accounts->canCheckActivityAttendance($user) || $accounts->isYearLeaderFor($user, $event)) {
             return;
         }
 
-        abort(403, 'Only WSPO staff or this group\'s leader can change this attendance time.');
+        abort(403, 'Only the WSPO secretary (or coordinator/president) or this group\'s leader can change this attendance time.');
     }
 
     /**

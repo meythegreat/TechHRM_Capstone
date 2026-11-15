@@ -299,19 +299,38 @@ class AdvancedAttendanceController extends Controller
 
         $shift = WorkSchedule::matchingShift($user->id, $now, 'in');
 
-        $attendance = Attendance::create([
-            'user_id' => $user->id,
-            'time_in' => $now,
-            'schedule_id' => $shift?->id,
-            'attendance_type' => $attendanceType,
-            'verification_code_used' => $method === 'qr' ? null : $validToken->token_code,
-            'check_in_method' => $method,
-            'code_owner_id' => $validToken->generated_by,
-            'work_type' => $attendanceType,
-            'status' => 'pending',
-            'is_anomaly' => $isAnomaly,
-            'anomaly_reason' => $anomalyReason,
-        ]);
+        try {
+            $attendance = Cache::lock('attendance-open:'.$user->id, 10)->block(5, function () use ($user, $now, $shift, $attendanceType, $method, $validToken, $isAnomaly, $anomalyReason) {
+                $stillOpen = Attendance::where('user_id', $user->id)
+                    ->whereNull('time_out')
+                    ->whereNull('rendered_hour_event_id')
+                    ->first();
+
+                if ($stillOpen) {
+                    return null;
+                }
+
+                return Attendance::create([
+                    'user_id' => $user->id,
+                    'time_in' => $now,
+                    'schedule_id' => $shift?->id,
+                    'attendance_type' => $attendanceType,
+                    'verification_code_used' => $method === 'qr' ? null : $validToken->token_code,
+                    'check_in_method' => $method,
+                    'code_owner_id' => $validToken->generated_by,
+                    'work_type' => $attendanceType,
+                    'status' => 'pending',
+                    'is_anomaly' => $isAnomaly,
+                    'anomaly_reason' => $anomalyReason,
+                ]);
+            });
+        } catch (LockTimeoutException) {
+            return response()->json(['message' => 'Clock-in is busy. Wait a moment and try again.'], 429);
+        }
+
+        if (! $attendance) {
+            return response()->json(['message' => 'You are already clocked in. Clock out of this shift before starting the next one.'], 422);
+        }
 
         $this->notifyCodeOwner($validToken->generated_by, $user->name, $attendanceType, $method, false);
 
@@ -787,24 +806,6 @@ class AdvancedAttendanceController extends Controller
             return response()->json(['message' => 'You are not assigned to this activity.'], 422);
         }
 
-        $openActivity = Attendance::query()
-            ->where('user_id', $user->id)
-            ->whereNull('time_out')
-            ->whereNotNull('rendered_hour_event_id')
-            ->first();
-        if ($openActivity) {
-            $sameActivity = in_array((int) $openActivity->rendered_hour_event_id, $this->siblingActivityEventIds($event), true);
-            if ($sameActivity) {
-                return $this->clockOutActivity($request, $openActivity, $token);
-            }
-
-            $openLabel = $openActivity->attendance_type ?: 'this activity';
-
-            return response()->json([
-                'message' => "Time out of {$openLabel} before clocking in for another activity.",
-            ], 422);
-        }
-
         if (!$now->isSameDay($tokenEvent->event_date)) {
             return response()->json([
                 'message' => 'This QR code is for '.$tokenEvent->event_date->toFormattedDateString().'.',
@@ -839,34 +840,64 @@ class AdvancedAttendanceController extends Controller
             ? 'Clock-in saved as late. Time out when you leave. No hours will be added.'
             : "Clock-in accepted. Time out with this activity's passcode or QR code to receive {$hours} hours.";
 
-        $attendance = DB::transaction(function () use ($user, $event, $token, $now, $label, $message, $method) {
-            $record = Attendance::create([
-                'user_id' => $user->id,
-                'time_in' => $now,
-                'attendance_type' => $label,
-                'check_in_method' => $method,
-                'code_owner_id' => $token->generated_by,
-                'work_type' => $label,
-                'rendered_hours' => 0,
-                'computed_hours' => 0,
-                'activity_hours' => 0,
-                'rendered_hour_event_id' => $event->id,
-                'status' => 'pending',
-                'task_description' => $message,
-            ]);
+        try {
+            $attendance = Cache::lock('attendance-activity:'.$user->id, 10)->block(5, function () use ($user, $event, $token, $now, $label, $message, $method) {
+                return DB::transaction(function () use ($user, $event, $token, $now, $label, $message, $method) {
+                    $openActivity = Attendance::query()
+                        ->where('user_id', $user->id)
+                        ->whereNull('time_out')
+                        ->whereNotNull('rendered_hour_event_id')
+                        ->first();
+                    if ($openActivity) {
+                        $sameActivity = in_array((int) $openActivity->rendered_hour_event_id, $this->siblingActivityEventIds($event), true);
+                        if ($sameActivity) {
+                            return ['clock_out' => $openActivity];
+                        }
 
-            $entry = RenderedHourEntry::firstOrNew([
-                'event_id' => $event->id,
-                'user_id' => $user->id,
-            ]);
-            $entry->status = RenderedHourEntry::TIMED_IN;
-            $entry->scanned_at = $now;
-            $entry->hours_delta = 0;
-            $entry->attendance_id = $record->id;
-            $entry->save();
+                        return ['error' => response()->json([
+                            'message' => 'Time out of '.($openActivity->attendance_type ?: 'this activity').' before clocking in for another activity.',
+                        ], 422)];
+                    }
 
-            return $record;
-        });
+                    $record = Attendance::create([
+                        'user_id' => $user->id,
+                        'time_in' => $now,
+                        'attendance_type' => $label,
+                        'check_in_method' => $method,
+                        'code_owner_id' => $token->generated_by,
+                        'work_type' => $label,
+                        'rendered_hours' => 0,
+                        'computed_hours' => 0,
+                        'activity_hours' => 0,
+                        'rendered_hour_event_id' => $event->id,
+                        'status' => 'pending',
+                        'task_description' => $message,
+                    ]);
+
+                    $entry = RenderedHourEntry::firstOrNew([
+                        'event_id' => $event->id,
+                        'user_id' => $user->id,
+                    ]);
+                    $entry->status = RenderedHourEntry::TIMED_IN;
+                    $entry->scanned_at = $now;
+                    $entry->hours_delta = 0;
+                    $entry->attendance_id = $record->id;
+                    $entry->save();
+
+                    return ['attendance' => $record];
+                });
+            });
+        } catch (LockTimeoutException) {
+            return response()->json(['message' => 'Clock-in is busy. Wait a moment and try again.'], 429);
+        }
+
+        if (isset($attendance['error'])) {
+            return $attendance['error'];
+        }
+        if (isset($attendance['clock_out'])) {
+            return $this->clockOutActivity($request, $attendance['clock_out'], $token);
+        }
+        $attendance = $attendance['attendance'];
 
         $this->notifyCodeOwner($token->generated_by, $user->name, $label, $method, false);
 
@@ -1092,7 +1123,7 @@ class AdvancedAttendanceController extends Controller
             return $this->isAssemblyYearRepresentative($issuer, $event);
         }
 
-        return $accounts->canIssueActivityAttendance($issuer) || $accounts->isYearLeaderFor($issuer, $event);
+        return $accounts->canCheckActivityAttendance($issuer) || $accounts->isYearLeaderFor($issuer, $event);
     }
 
     private function isAssemblyYearRepresentative(\App\Models\User $issuer, ?RenderedHourEvent $event = null): bool
@@ -1336,21 +1367,39 @@ class AdvancedAttendanceController extends Controller
         }
 
         $method = $request->input('method', 'passcode');
-        $attendance = Attendance::create([
-            'user_id' => $user->id,
-            'time_in' => $now,
-            'attendance_type' => 'Janitorial',
-            'work_type' => 'Janitorial',
-            'janitorial_group_id' => $group->id,
-            'janitorial_area' => $group->area,
-            'verification_code_used' => $method === 'qr' ? null : $validToken->token_code,
-            'check_in_method' => $method,
-            'code_owner_id' => $validToken->generated_by,
-            'task_description' => 'Janitorial duty — '.$group->area.' ('.$group->department.')',
-            'status' => 'pending',
-            'is_anomaly' => false,
-            'anomaly_reason' => null,
-        ]);
+        try {
+            $attendance = Cache::lock('attendance-open:'.$user->id, 10)->block(5, function () use ($user, $now, $group, $method, $validToken) {
+                $stillOpen = Attendance::where('user_id', $user->id)
+                    ->whereNull('time_out')
+                    ->whereNull('rendered_hour_event_id')
+                    ->first();
+                if ($stillOpen) {
+                    return null;
+                }
+
+                return Attendance::create([
+                    'user_id' => $user->id,
+                    'time_in' => $now,
+                    'attendance_type' => 'Janitorial',
+                    'work_type' => 'Janitorial',
+                    'janitorial_group_id' => $group->id,
+                    'janitorial_area' => $group->area,
+                    'verification_code_used' => $method === 'qr' ? null : $validToken->token_code,
+                    'check_in_method' => $method,
+                    'code_owner_id' => $validToken->generated_by,
+                    'task_description' => 'Janitorial duty — '.$group->area.' ('.$group->department.')',
+                    'status' => 'pending',
+                    'is_anomaly' => false,
+                    'anomaly_reason' => null,
+                ]);
+            });
+        } catch (LockTimeoutException) {
+            return response()->json(['message' => 'Clock-in is busy. Wait a moment and try again.'], 429);
+        }
+
+        if (! $attendance) {
+            return response()->json(['message' => 'You are already clocked in. Clock out of this shift before starting the next one.'], 422);
+        }
 
         $this->notifyCodeOwner($validToken->generated_by, $user->name, 'Janitorial', $method, false);
 
