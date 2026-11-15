@@ -670,9 +670,13 @@ class SchedulesScreen extends StatelessWidget {
 class AttendanceHubScreen extends StatelessWidget {
   const AttendanceHubScreen({super.key});
 
+  String _today() => DateTime.now().toIso8601String().split('T').first;
+
   @override
   Widget build(BuildContext context) {
-    final api = context.read<AuthProvider>().api;
+    final auth = context.watch<AuthProvider>();
+    final api = auth.api;
+    final canCheckActivities = auth.canCheckActivityAttendance;
     return FetchView(
       loader: () async {
         dynamic passcode;
@@ -688,13 +692,22 @@ class AttendanceHubScreen extends StatelessWidget {
           qr = {'error': errorText(error)};
         }
         final anomalies = await api.get('/attendance/anomalies');
-        return {'passcode': passcode, 'qr': qr, 'anomalies': anomalies};
+        dynamic activities = {'events': []};
+        if (canCheckActivities) {
+          try {
+            activities = await api.get('/financial/hour-events', {'period_start': _today(), 'period_end': _today()});
+          } catch (_) {}
+        }
+        return {'passcode': passcode, 'qr': qr, 'anomalies': anomalies, 'activities': activities};
       },
       builder: (context, data, reload) {
         final payload = asMap(data);
         final passcode = asMap(payload['passcode']);
         final qr = asMap(payload['qr']);
         final anomalies = asMaps(payload['anomalies']);
+        final activityRows = asMaps(asMap(payload['activities'])['events'])
+            .where((row) => row['uses_attendance'] == true)
+            .toList();
         return PageBody(
           onRefresh: reload,
           children: [
@@ -710,6 +723,28 @@ class AttendanceHubScreen extends StatelessWidget {
               trailing: qr['seconds_remaining'] == null ? '' : '${qr['seconds_remaining']}s',
             ),
             const Text('Students enter this passcode or scan the QR code shown on the desktop hub.'),
+            if (canCheckActivities) ...[
+              const SectionTitle('Activity attendance'),
+              const Text('WSPO Secretary tools: verify/correct campus activity attendance, close open sessions, and mark unmarked students absent.'),
+              if (activityRows.isEmpty) const EmptyNote('No activity attendance scheduled for today.'),
+              for (final event in activityRows)
+                RecordCard(
+                  title: textOf(event['title'], 'Activity'),
+                  subtitle: '${textOf(event['kind_label'])} · ${textOf(event['group_name'], 'All groups')} · ${event['marked_count']}/${event['eligible_count']} marked',
+                  trailing: textOf(event['event_date']),
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ActivityAttendanceScreen(eventId: numOf(event['id']).toInt(), title: textOf(event['title'], 'Activity')),
+                        ),
+                      ),
+                      child: const Text('Check attendance'),
+                    ),
+                  ],
+                ),
+            ],
             const SectionTitle('Anomalies'),
             if (anomalies.isEmpty) const EmptyNote('No attendance anomalies.'),
             for (final row in anomalies)
@@ -717,6 +752,144 @@ class AttendanceHubScreen extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class ActivityAttendanceScreen extends StatefulWidget {
+  const ActivityAttendanceScreen({super.key, required this.eventId, required this.title});
+  final int eventId;
+  final String title;
+
+  @override
+  State<ActivityAttendanceScreen> createState() => _ActivityAttendanceScreenState();
+}
+
+class _ActivityAttendanceScreenState extends State<ActivityAttendanceScreen> {
+  String _search = '';
+
+  Future<Map<String, dynamic>> _load(AuthProvider auth) async {
+    final today = DateTime.now().toIso8601String().split('T').first;
+    final start = DateTime.now().subtract(const Duration(days: 14)).toIso8601String().split('T').first;
+    final end = DateTime.now().add(const Duration(days: 14)).toIso8601String().split('T').first;
+    final payload = asMap(await auth.api.get('/financial/hour-events', {'period_start': start, 'period_end': end}));
+    final events = asMaps(payload['events']);
+    Map<String, dynamic> event = {};
+    for (final row in events) {
+      if (numOf(row['id']).toInt() == widget.eventId) {
+        event = row;
+        break;
+      }
+    }
+    dynamic passcode = {'error': 'Unavailable'};
+    try {
+      passcode = await auth.api.get('/attendance/activity-passcode', {'event_id': '${widget.eventId}'});
+    } catch (error) {
+      passcode = {'error': errorText(error)};
+    }
+    return {'event': event, 'passcode': asMap(passcode), 'as_of': today};
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.title)),
+      body: FetchView(
+        loader: () => _load(auth),
+        builder: (context, data, reload) {
+          final payload = asMap(data);
+          final event = asMap(payload['event']);
+          final passcode = asMap(payload['passcode']);
+          final entries = asMaps(event['entries']);
+          final needle = _search.trim().toLowerCase();
+          final roster = needle.isEmpty
+              ? entries
+              : entries.where((row) {
+                  final hay = '${textOf(row['name'])} ${textOf(row['student_id_number'])}'.toLowerCase();
+                  return hay.contains(needle);
+                }).toList();
+          final endsAt = textOf(event['ends_at']);
+          return PageBody(
+            onRefresh: reload,
+            children: [
+              RecordCard(
+                title: 'Activity passcode',
+                subtitle: textOf(passcode['token_code'] ?? passcode['error']),
+                trailing: passcode['seconds_remaining'] == null ? '' : '${passcode['seconds_remaining']}s',
+              ),
+              Text('${event['marked_count'] ?? 0}/${event['eligible_count'] ?? 0} marked · Hours credit at time-out when clock-in was on time.'),
+              FilledButton(
+                onPressed: () => runAction(
+                  context,
+                  () => auth.api.post('/financial/hour-events/${widget.eventId}/mark-absent', {}),
+                  success: 'Unmarked students marked absent.',
+                  reload: reload,
+                ),
+                child: const Text('Mark unmarked absent'),
+              ),
+              TextField(
+                decoration: const InputDecoration(labelText: 'Search roster'),
+                onChanged: (value) => setState(() => _search = value),
+              ),
+              if (roster.isEmpty) const EmptyNote('No students match.'),
+              for (final entry in roster)
+                RecordCard(
+                  title: textOf(entry['name'], 'Student'),
+                  subtitle: '${textOf(entry['student_id_number'], 'No ID')} · ${textOf(entry['status'], 'Not marked')} · ${numOf(entry['hours_delta']).toStringAsFixed(2)} hrs',
+                  children: [
+                    Text('In ${textOf(entry['time_in'], '—')} · Out ${textOf(entry['time_out'], '—')}'),
+                    Wrap(spacing: 8, children: [
+                      TextButton(
+                        onPressed: () => _saveTime(context, auth, reload, entry, inTime: true, fallback: textOf(entry['time_in'])),
+                        child: const Text('Save time in'),
+                      ),
+                      TextButton(
+                        onPressed: () => _saveTime(context, auth, reload, entry, inTime: false, fallback: textOf(entry['time_out'], endsAt)),
+                        child: const Text('Save time out'),
+                      ),
+                      TextButton(
+                        onPressed: () => runAction(
+                          context,
+                          () => auth.api.post('/financial/hour-events/${widget.eventId}/marks', {
+                            'marks': [
+                              {'user_id': numOf(entry['user_id']).toInt(), 'status': 'absent'},
+                            ],
+                          }),
+                          success: 'Marked absent.',
+                          reload: reload,
+                        ),
+                        child: const Text('Absent'),
+                      ),
+                    ]),
+                  ],
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _saveTime(
+    BuildContext context,
+    AuthProvider auth,
+    Future<void> Function() reload,
+    Map<String, dynamic> entry, {
+    required bool inTime,
+    required String fallback,
+  }) async {
+    final time = await promptText(context, inTime ? 'Clock-in time (HH:MM)' : 'Time-out (HH:MM)', initial: fallback, label: 'Time');
+    if (time == null || !context.mounted) return;
+    final path = inTime ? 'time' : 'timeout';
+    await runAction(
+      context,
+      () => auth.api.patch('/financial/hour-events/${widget.eventId}/$path', {
+        'user_id': numOf(entry['user_id']).toInt(),
+        'time': time.trim(),
+      }),
+      success: inTime ? 'Clock-in saved.' : 'Time-out saved.',
+      reload: reload,
     );
   }
 }

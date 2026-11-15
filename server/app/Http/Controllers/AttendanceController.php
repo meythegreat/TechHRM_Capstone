@@ -6,8 +6,10 @@ use App\Models\Attendance;
 use App\Support\HourLimits;
 use App\Support\ManualDtrEntry;
 use App\Support\WorkSchedule;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class AttendanceController extends Controller
@@ -17,7 +19,7 @@ class AttendanceController extends Controller
     {
         $user = $request->user();
 
-        // 1. PREVENT DOUBLE CLOCK-INS
+        // 1. PREVENT DOUBLE CLOCK-INS (cheap pre-check; re-checked under lock below)
         $activeRecord = \App\Models\Attendance::where('user_id', $user->id)
             ->whereNull('time_out')
             ->whereNull('rendered_hour_event_id')
@@ -47,13 +49,32 @@ class AttendanceController extends Controller
 
         $shift = WorkSchedule::matchingShift($user->id, $now, 'in');
 
-        // 3. IF THEY PASS THE CHECK, SAVE THE ATTENDANCE
-        $attendance = \App\Models\Attendance::create([
-            'user_id' => $user->id,
-            'time_in' => $now,
-            'schedule_id' => $shift?->id,
-            'work_type' => $request->work_type ?? 'Unspecified',
-        ]);
+        // Per-user lock: lockForUpdate alone cannot serialize inserts when no open row exists yet.
+        try {
+            $attendance = Cache::lock('attendance-open:'.$user->id, 10)->block(5, function () use ($user, $request, $now, $shift) {
+                $stillOpen = \App\Models\Attendance::where('user_id', $user->id)
+                    ->whereNull('time_out')
+                    ->whereNull('rendered_hour_event_id')
+                    ->first();
+
+                if ($stillOpen) {
+                    return null;
+                }
+
+                return \App\Models\Attendance::create([
+                    'user_id' => $user->id,
+                    'time_in' => $now,
+                    'schedule_id' => $shift?->id,
+                    'work_type' => $request->work_type ?? 'Unspecified',
+                ]);
+            });
+        } catch (LockTimeoutException) {
+            return response()->json(['message' => 'Clock-in is busy. Wait a moment and try again.'], 429);
+        }
+
+        if (! $attendance) {
+            return response()->json(['message' => 'You are already clocked in. Clock out of this shift before starting the next one.'], 422);
+        }
 
         return response()->json([
             'message' => 'Successfully clocked in! Have a great shift.',

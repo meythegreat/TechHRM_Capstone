@@ -26,6 +26,7 @@ import SecureImage from './components/SecureImage';
 import ScheduleManagement from './components/ScheduleManagement';
 import { normalizeFilePath } from './utils/secureFile';
 import { firstPathSegment, resolveStaffPath } from './config/routes';
+import { storeActivityAttendanceCapability } from './utils/wspoActivityAccess';
 
 const STAFF_PAGE_TITLES: Record<string, string> = {
   dashboard: 'Dashboard',
@@ -154,6 +155,7 @@ function App() {
         } else {
           localStorage.removeItem('secretary_acting');
         }
+        storeActivityAttendanceCapability(response.data);
         setMustChangePassword(Boolean(response.data.must_change_password));
         
         if (response.data.profile_picture) {
@@ -189,6 +191,7 @@ function App() {
           if (response.data.role === 'Department Secretary') {
             localStorage.setItem('secretary_acting', response.data.acting ? '1' : '0');
           }
+          storeActivityAttendanceCapability(response.data);
           if (response.data.profile_picture) {
             const path = normalizeFilePath(response.data.profile_picture);
             setAdminAvatar(path);
@@ -266,6 +269,9 @@ function App() {
       localStorage.removeItem('user_role');
       localStorage.removeItem('user_name');
       localStorage.removeItem('profile_picture');
+      localStorage.removeItem('can_check_activity_attendance');
+      localStorage.removeItem('assigned_office');
+      localStorage.removeItem('secretary_acting');
       setHasToken(false);
       setUserRole(null);
       setAdminAvatar(null);

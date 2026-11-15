@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Calendar, Clock, Search, ShieldCheck } from 'lucide-react';
 import AuditPager, { pageSlice } from './AuditPager';
 import ComboFilter from './ComboFilter';
+import SuperAdminForceClockOut from './SuperAdminForceClockOut';
 import Toast from './Toast';
 
 interface AttendanceRecord {
@@ -41,6 +42,7 @@ const SuperAdminTimesheets = () => {
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
     const [error, setError] = useState<string | null>(null);
+    const [historyTick, setHistoryTick] = useState(0);
 
     useEffect(() => {
         axios.get('/api/offices')
@@ -60,7 +62,7 @@ const SuperAdminTimesheets = () => {
             .then((response) => setRecords(Array.isArray(response.data) ? response.data : []))
             .catch(() => setError('Could not load attendance records.'))
             .finally(() => setIsLoading(false));
-    }, [date]);
+    }, [date, historyTick]);
 
     const filtered = useMemo(() => {
         const query = search.trim().toLowerCase();
@@ -90,15 +92,17 @@ const SuperAdminTimesheets = () => {
             >
                 <div className="flex items-center gap-2 mb-2">
                     <ShieldCheck className="w-5 h-5 text-blue-400" />
-                    <span className="text-sm font-medium text-slate-500">Read only</span>
+                    <span className="text-sm font-medium text-slate-500">Audit + force clock-out</span>
                 </div>
                 <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Recent Attendances</h1>
                 <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-500">
-                    Attendance records from every office. Filters and search are for audit review only.
+                    Attendance records from every office. Force clock-out below can close forgotten open regular and activity sessions. History filters remain for audit review.
                 </p>
             </motion.div>
 
             <Toast message={error} type="error" onClose={() => setError(null)} />
+
+            <SuperAdminForceClockOut onClosed={() => setHistoryTick((tick) => tick + 1)} />
 
             <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-3">
                 <label className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl">

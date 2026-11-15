@@ -402,6 +402,53 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
         ])->assertForbidden();
     }
 
+    public function test_wspo_secretary_can_check_activity_attendance_campus_wide(): void
+    {
+        $secretary = $this->makeUser('WSPO Staff', 'WSPO Secretary');
+        // Legacy profile shape still identifies the secretary for activity tools.
+        $secretary->profile->update([
+            'assigned_office' => 'CCS · WSPO Secretary',
+            'work_department' => 'College of Computer Studies',
+        ]);
+        $student = $this->makeStudent('Campus Worker', 2, '2026-7001');
+        $group = DailyCleaningGroup::create(['name' => 'Campus Check']);
+        $this->attachMembers($group, [$student->id], $student->id);
+
+        $accounts = app(\App\Http\Controllers\UserController::class);
+        $this->assertTrue($accounts->canCheckActivityAttendance($secretary->fresh('profile')));
+
+        Sanctum::actingAs($secretary->fresh('profile'));
+        $this->getJson('/api/user')
+            ->assertOk()
+            ->assertJsonPath('can_check_activity_attendance', true)
+            ->assertJsonPath('assigned_office', 'CCS · WSPO Secretary');
+
+        $eventId = (int) $this->postJson('/api/financial/hour-events', [
+            'kind' => 'devotional',
+            'title' => 'Campus devotion',
+            'event_date' => '2026-10-28',
+            'group_id' => $group->id,
+            'starts_at' => '05:00',
+            'ends_at' => '06:00',
+        ])->assertCreated()->json('event.id');
+
+        $this->patchJson('/api/financial/hour-events/'.$eventId.'/time', [
+            'user_id' => $student->id,
+            'time' => '05:05',
+        ])->assertOk();
+
+        $this->patchJson('/api/financial/hour-events/'.$eventId.'/timeout', [
+            'user_id' => $student->id,
+            'time' => '05:55',
+        ])->assertOk();
+
+        $this->postJson('/api/financial/hour-events/'.$eventId.'/marks', [
+            'marks' => [['user_id' => $student->id, 'status' => 'absent']],
+        ])->assertOk();
+
+        $this->postJson('/api/financial/hour-events/'.$eventId.'/mark-absent')->assertOk();
+    }
+
     public function test_manual_timeout_requires_clock_in_and_rejects_absent(): void
     {
         $staff = $this->makeUser('WSPO Staff', 'WSPO Secretary');
@@ -708,6 +755,7 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
             $table->string('student_id_number')->nullable();
             $table->string('assigned_office')->nullable();
+            $table->string('work_department')->nullable();
             $table->string('course')->nullable();
             $table->integer('year_level')->nullable();
             $table->string('gender')->nullable();

@@ -70,6 +70,9 @@ class AuthController extends Controller
             'role' => $user->role,
             'name' => $user->name,
             'office' => $office,
+            'assigned_office' => $user->profile?->assigned_office,
+            'can_check_activity_attendance' => $accounts->canCheckActivityAttendance($user),
+            'can_issue_activity_attendance' => $accounts->canCheckActivityAttendance($user),
             'profile_picture' => $user->profile_picture,
             'must_change_password' => (bool) $user->must_change_password,
             'acting' => $user->role === 'Department Secretary' ? $accounts->isActingDepartmentSecretary($user) : null,
@@ -191,10 +194,15 @@ class AuthController extends Controller
 
         // Load the profile so the mobile app has their department/course info
         $user->load('profile');
+        $accounts = app(\App\Http\Controllers\UserController::class);
+        $payload = $user->toArray();
+        $payload['assigned_office'] = $user->profile?->assigned_office;
+        $payload['can_check_activity_attendance'] = $accounts->canCheckActivityAttendance($user);
+        $payload['can_issue_activity_attendance'] = $payload['can_check_activity_attendance'];
 
         return response()->json([
             'token' => $token,
-            'user' => $user,
+            'user' => $payload,
         ], 200);
     }
 

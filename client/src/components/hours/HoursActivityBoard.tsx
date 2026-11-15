@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import { financialService } from '../../services/financialService';
+import { canCheckActivityAttendance } from '../../utils/wspoActivityAccess';
 import { AddActivityHoursDialog, type EditableHourEvent } from './AddActivityHoursDialog';
 
 interface HourEntry {
@@ -38,11 +39,7 @@ interface HourEvent {
   entries: HourEntry[];
 }
 
-const canIssueActivity = () => {
-  const role = localStorage.getItem('user_role') || '';
-  const office = localStorage.getItem('assigned_office') || '';
-  return role === 'WSPO Staff' && ['', 'WSPO', 'WSPO Coordinator', 'WSPO Secretary', 'WSPO President'].includes(office);
-};
+const canIssueActivity = () => canCheckActivityAttendance();
 
 const apiError = (error: unknown, fallback: string) => {
   const data = (error as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } })?.response?.data;
@@ -161,8 +158,8 @@ export function HoursActivityBoard({
         <div>
           <h2 className="text-xl font-semibold text-slate-900">Activity hours</h2>
           <p className="text-sm text-slate-500 mt-1 max-w-2xl">
-            Create these activities in the Attendance Hub for a group and, if needed, one year level. The selected students receive that meeting's hours immediately. Marking someone absent or late removes those hours. An on-time scan keeps them.
-            The group leader can show that activity&apos;s QR code and passcode, which works for every year level in the group, and can also correct clock-in and time-out from Group activities. WSPO staff can correct times below. Every activity stays on time for 1 hour after the official time in.
+            Create these activities in the Attendance Hub for a group and, if needed, one year level. The WSPO Secretary is the primary campus checker for activity attendance (Coordinator/President share the same tools). Marking someone absent removes those hours. An on-time scan keeps them.
+            The group leader can show that activity&apos;s QR code and passcode, which works for every year level in the group, and can also correct clock-in and time-out from Group activities. Every activity stays on time for 1 hour after the official time in.
           </p>
         </div>
       </div>
@@ -206,7 +203,7 @@ export function HoursActivityBoard({
                     </p>
                   </div>
                   <span className="text-xs font-bold text-slate-500">{item.marked_count}/{item.eligible_count} marked</span>
-                  {!readOnly && (
+                  {!readOnly && issuer && (
                     <span
                       role="button"
                       tabIndex={0}
@@ -226,7 +223,7 @@ export function HoursActivityBoard({
                       <Pencil className="w-4 h-4" />
                     </span>
                   )}
-                  {!readOnly && (
+                  {!readOnly && issuer && (
                     <span
                       role="button"
                       tabIndex={0}

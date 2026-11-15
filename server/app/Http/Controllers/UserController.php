@@ -120,6 +120,9 @@ class UserController extends Controller
             $data['acting'] = $data['acting_departments'] !== [];
         }
 
+        $data['assigned_office'] = $user->profile?->assigned_office;
+        $data['can_check_activity_attendance'] = $this->canCheckActivityAttendance($user);
+        $data['can_issue_activity_attendance'] = $data['can_check_activity_attendance'];
         $data['required_hours'] = \App\Support\WorkRequirement::hoursFor($user);
         $data['special_hours_request'] = (bool) $user->profile?->special_hours_request;
 
@@ -588,23 +591,42 @@ class UserController extends Controller
     }
 
     /**
-     * WSPO activity issuer roles (coordinator / secretary / president).
-     * A blank position is the original coordinator account.
+     * WSPO activity attendance checker / issuer.
+     * Product intent: WSPO Secretary is the primary campus-wide activity checker;
+     * Coordinator and President share the same issue/correct tools.
+     * A blank / WSPO / Unassigned position is the original coordinator account.
      * Group leaders may also correct times for their own group's activities.
      */
     public function canIssueActivityAttendance(User $user): bool
+    {
+        return $this->canCheckActivityAttendance($user);
+    }
+
+    /** Alias used by clients: can view/verify/correct activity attendance campus-wide. */
+    public function canCheckActivityAttendance(User $user): bool
     {
         if ($user->role !== 'WSPO Staff') {
             return false;
         }
 
+        $user->loadMissing('profile');
         $position = trim((string) ($user->profile?->assigned_office ?? ''));
-        if ($position === '' || strcasecmp($position, 'WSPO') === 0) {
+        if ($position === ''
+            || strcasecmp($position, 'WSPO') === 0
+            || strcasecmp($position, 'Unassigned') === 0) {
             return true;
         }
 
         foreach (['WSPO Coordinator', 'WSPO Secretary', 'WSPO President'] as $allowed) {
             if (strcasecmp($position, $allowed) === 0) {
+                return true;
+            }
+        }
+
+        // Legacy labels may look like "CCS · WSPO Secretary" when work_department is set.
+        $normalized = strtolower($position);
+        foreach (['wspo secretary', 'wspo coordinator', 'wspo president'] as $needle) {
+            if (str_contains($normalized, $needle)) {
                 return true;
             }
         }

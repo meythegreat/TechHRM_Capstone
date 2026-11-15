@@ -13,6 +13,7 @@ class AuthProvider with ChangeNotifier {
   String? _phone;
   int? _userId;
   bool _mustChangePassword = false;
+  bool _canCheckActivityAttendance = false;
 
   bool get ready => _ready;
   bool get isLoading => _isLoading;
@@ -22,6 +23,7 @@ class AuthProvider with ChangeNotifier {
   String? get phone => _phone;
   int? get userId => _userId;
   bool get mustChangePassword => _mustChangePassword;
+  bool get canCheckActivityAttendance => _canCheckActivityAttendance;
   bool get isAuthenticated => _userRole != null;
   ApiClient get api => _api;
 
@@ -114,13 +116,33 @@ class AuthProvider with ChangeNotifier {
     _userId = user['id'] is int ? user['id'] as int : int.tryParse('${user['id']}');
     _mustChangePassword = user['must_change_password'] == true;
     final profile = user['profile'];
+    String office = '';
     if (profile is Map) {
-      _userDepartment = profile['assigned_office']?.toString() ?? 'No Department Assigned';
+      office = profile['assigned_office']?.toString() ?? '';
+      _userDepartment = office.isEmpty ? 'No Department Assigned' : office;
     } else if (_userRole == 'Super Admin') {
       _userDepartment = 'Management';
     } else {
       _userDepartment = 'No Department Assigned';
     }
+    if (user['assigned_office'] != null && user['assigned_office'].toString().trim().isNotEmpty) {
+      office = user['assigned_office'].toString().trim();
+      _userDepartment = office;
+    }
+    final flagged = user['can_check_activity_attendance'] == true || user['can_issue_activity_attendance'] == true;
+    _canCheckActivityAttendance = flagged || _looksLikeActivityChecker(_userRole, office);
+  }
+
+  bool _looksLikeActivityChecker(String? role, String office) {
+    if (role != 'WSPO Staff') return false;
+    final normalized = office.trim().toLowerCase();
+    if (normalized.isEmpty || normalized == 'wspo' || normalized == 'unassigned') return true;
+    return normalized == 'wspo secretary'
+        || normalized == 'wspo coordinator'
+        || normalized == 'wspo president'
+        || normalized.contains('wspo secretary')
+        || normalized.contains('wspo coordinator')
+        || normalized.contains('wspo president');
   }
 
   void _clear() {
@@ -130,5 +152,6 @@ class AuthProvider with ChangeNotifier {
     _phone = null;
     _userId = null;
     _mustChangePassword = false;
+    _canCheckActivityAttendance = false;
   }
 }
