@@ -74,7 +74,8 @@ class ManualAttendanceRequestTest extends TestCase
             ->assertJsonPath('request.status', 'Approved');
 
         $this->assertSame(2, Attendance::query()->where('user_id', $student->id)->count());
-        $this->assertEquals(4.0, (float) Attendance::query()->where('user_id', $student->id)->sum('rendered_hours'));
+        // Two credited shifts: 08:00–12:00 and 13:00–17:00 → 8 hours total.
+        $this->assertEquals(8.0, (float) Attendance::query()->where('user_id', $student->id)->sum('rendered_hours'));
         $this->assertSame(
             ['accepted', 'accepted'],
             Attendance::query()->where('user_id', $student->id)->orderBy('time_in')->pluck('status')->all()

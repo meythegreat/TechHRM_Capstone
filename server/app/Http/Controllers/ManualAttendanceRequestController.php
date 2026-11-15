@@ -102,7 +102,7 @@ class ManualAttendanceRequestController extends Controller
             }
 
             foreach ($shiftRows as $prior) {
-                if ($prior['time_in']->lt($timeOut) && $prior['time_out']->gt($timeIn)) {
+                if ($prior['time_in_at']->lt($timeOut) && $prior['time_out_at']->gt($timeIn)) {
                     return response()->json([
                         'message' => 'Shift '.($index + 1).' overlaps another shift in this request.',
                     ], 422);
