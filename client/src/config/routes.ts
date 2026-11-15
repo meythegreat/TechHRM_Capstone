@@ -3,6 +3,7 @@ export const STUDENT_PATHS = new Set([
   'dashboard',
   'attendance',
   'year-activities',
+  'campus-activities',
   'hours',
   'schedule',
   'requirements',

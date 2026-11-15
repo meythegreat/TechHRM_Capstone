@@ -230,15 +230,6 @@ class AdminController extends Controller
 
     private function isCoordinator(User $user): bool
     {
-        if ($user->role !== 'WSPO Staff') {
-            return false;
-        }
-
-        $position = trim((string) ($user->profile?->assigned_office ?? ''));
-
-        return $position === ''
-            || strcasecmp($position, 'WSPO Coordinator') === 0
-            || strcasecmp($position, 'WSPO Secretary') === 0
-            || strcasecmp($position, 'WSPO') === 0;
+        return app(UserController::class)->isWspoDepartmentSupervisor($user);
     }
 }

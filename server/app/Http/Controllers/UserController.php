@@ -123,6 +123,11 @@ class UserController extends Controller
         $data['assigned_office'] = $user->profile?->assigned_office;
         $data['can_check_activity_attendance'] = $this->canCheckActivityAttendance($user);
         $data['can_issue_activity_attendance'] = $data['can_check_activity_attendance'];
+        $data['can_manage_activity_groups'] = $this->canManageActivityGroups($user);
+        $data['can_issue_daily_attendance'] = $this->canIssueDailyAttendance($user);
+        $data['is_student_officer'] = $this->isStudentOfficer($user);
+        $data['officer_position'] = $this->officerPosition($user) ?: null;
+        $data['must_clock_as_student'] = $this->mustClockAsStudent($user);
         $data['required_hours'] = \App\Support\WorkRequirement::hoursFor($user);
         $data['special_hours_request'] = (bool) $user->profile?->special_hours_request;
 
@@ -494,10 +499,18 @@ class UserController extends Controller
         });
     }
 
-    /** WSPO Coordinator supervises working students placed in the WSPO office. */
+    /**
+     * WSPO Coordinator supervises working students placed in the WSPO office.
+     * WSPO Secretary is a student officer: she manages group activities and clocks
+     * in like any working student — she is not a department duty supervisor.
+     */
     public function isWspoDepartmentSupervisor(User $user): bool
     {
         if ($user->role !== 'WSPO Staff') {
+            return false;
+        }
+
+        if ($this->mustClockAsStudent($user)) {
             return false;
         }
 
@@ -505,8 +518,37 @@ class UserController extends Controller
 
         return $position === ''
             || strcasecmp($position, 'WSPO Coordinator') === 0
-            || strcasecmp($position, 'WSPO Secretary') === 0
             || strcasecmp($position, 'WSPO') === 0;
+    }
+
+    /** May issue daily duty passcodes/QR for supervised offices (not activity codes). */
+    public function canIssueDailyAttendance(User $user): bool
+    {
+        return $this->usesSupervisorScope($user) || $this->isWspoDepartmentSupervisor($user);
+    }
+
+    /**
+     * Secretary / President (and every Student) record duty hours through the
+     * working-student clock-in flow — never as a department supervisor.
+     */
+    public function mustClockAsStudent(User $user): bool
+    {
+        if ($user->role === 'Student') {
+            return true;
+        }
+
+        if ($this->isStudentOfficer($user)) {
+            return true;
+        }
+
+        if ($user->role !== 'WSPO Staff') {
+            return false;
+        }
+
+        $user->loadMissing('profile');
+        $office = strtolower(trim((string) ($user->profile?->assigned_office ?? '')));
+
+        return str_contains($office, 'wspo secretary') || str_contains($office, 'wspo president');
     }
 
     /** Department secretary covers a supervisor only while that supervisor is absent today. */
@@ -592,8 +634,10 @@ class UserController extends Controller
 
     /**
      * WSPO activity attendance checker / issuer.
-     * Product intent: WSPO Secretary is the primary campus-wide activity checker;
-     * Coordinator and President share the same issue/correct tools.
+     * Product intent: WSPO Secretary is the primary campus-wide activity checker
+     * (add/edit group activities + verify attendance). Coordinator and President
+     * share the same issue/correct tools. Secretary still clocks duty hours as a
+     * working student — this capability is activity-only, not department DTR.
      * A blank / WSPO / Unassigned position is the original coordinator account.
      * Group leaders may also correct times for their own group's activities.
      */
@@ -605,11 +649,19 @@ class UserController extends Controller
     /** Alias used by clients: can view/verify/correct activity attendance campus-wide. */
     public function canCheckActivityAttendance(User $user): bool
     {
+        $user->loadMissing('profile');
+
+        // Preferred account: Student + organization officer (Secretary / President).
+        if ($user->role === 'Student' && $this->isStudentOfficer($user)) {
+            $position = strtolower($this->officerPosition($user));
+
+            return $position === 'wspo secretary' || $position === 'wspo president';
+        }
+
         if ($user->role !== 'WSPO Staff') {
             return false;
         }
 
-        $user->loadMissing('profile');
         $position = trim((string) ($user->profile?->assigned_office ?? ''));
         if ($position === ''
             || strcasecmp($position, 'WSPO') === 0
@@ -632,6 +684,30 @@ class UserController extends Controller
         }
 
         return false;
+    }
+
+    /**
+     * Cleaning / activity group roster edits: Coordinator and Secretary only
+     * (President may check attendance but not change groups).
+     */
+    public function canManageActivityGroups(User $user): bool
+    {
+        if (!$this->canCheckActivityAttendance($user)) {
+            return false;
+        }
+
+        $title = strtolower($this->officerPosition($user));
+        if ($title === 'wspo president') {
+            return false;
+        }
+
+        $user->loadMissing('profile');
+        $office = strtolower(trim((string) ($user->profile?->assigned_office ?? '')));
+        if (str_contains($office, 'wspo president') || $office === 'wspo president') {
+            return false;
+        }
+
+        return true;
     }
 
     /** Year-level leader or representative assigned by the WSPO coordinator. */
@@ -661,7 +737,7 @@ class UserController extends Controller
             ->exists();
     }
 
-    /** Work and class schedules are assigned by Super Admin or the WSPO coordinator/secretary. */
+    /** Work and class schedules are assigned by Super Admin or the WSPO coordinator. */
     public function canManageWorkSchedules(User $user): bool
     {
         if ($user->role === 'Super Admin') {
@@ -672,18 +748,17 @@ class UserController extends Controller
             return false;
         }
 
+        // Student officers (Secretary / President) only manage group activities.
+        if ($this->mustClockAsStudent($user)) {
+            return false;
+        }
+
         $position = trim((string) ($user->profile?->assigned_office ?? ''));
         if ($position === '' || strcasecmp($position, 'WSPO') === 0 || strcasecmp($position, 'Unassigned') === 0) {
             return true;
         }
 
-        foreach (['WSPO Coordinator', 'WSPO Secretary'] as $allowed) {
-            if (strcasecmp($position, $allowed) === 0) {
-                return true;
-            }
-        }
-
-        return false;
+        return strcasecmp($position, 'WSPO Coordinator') === 0;
     }
 
     /** First office, kept for callers that still expect a single name. */

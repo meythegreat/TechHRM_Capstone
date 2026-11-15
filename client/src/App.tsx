@@ -270,6 +270,11 @@ function App() {
       localStorage.removeItem('user_name');
       localStorage.removeItem('profile_picture');
       localStorage.removeItem('can_check_activity_attendance');
+      localStorage.removeItem('can_manage_activity_groups');
+      localStorage.removeItem('can_issue_daily_attendance');
+      localStorage.removeItem('is_student_officer');
+      localStorage.removeItem('must_clock_as_student');
+      localStorage.removeItem('officer_position');
       localStorage.removeItem('assigned_office');
       localStorage.removeItem('secretary_acting');
       setHasToken(false);

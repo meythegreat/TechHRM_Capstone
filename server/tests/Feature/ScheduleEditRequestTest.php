@@ -54,6 +54,7 @@ class ScheduleEditRequestTest extends TestCase
     {
         $student = $this->makeUser('Student', 'Library', 'Ben Santos');
         $supervisor = $this->makeUser('Supervisor', 'Library', 'Library Supervisor');
+        $coordinator = $this->makeUser('WSPO Staff', 'WSPO Coordinator', 'WSPO Coordinator');
         $secretary = $this->makeUser('WSPO Staff', 'WSPO Secretary', 'WSPO Secretary');
         $schedule = $this->makeSchedule($student);
         $schedule->update([
@@ -67,7 +68,14 @@ class ScheduleEditRequestTest extends TestCase
         ])->assertForbidden();
         $this->assertSame('pending', $schedule->fresh()->edit_request_status);
 
+        // Secretary is a student officer — activity tools only, not schedule decisions.
         Sanctum::actingAs($secretary);
+        $this->patchJson('/api/schedules/'.$schedule->id.'/resolve-request', [
+            'action' => 'reject',
+        ])->assertForbidden();
+        $this->assertSame('pending', $schedule->fresh()->edit_request_status);
+
+        Sanctum::actingAs($coordinator);
         $this->patchJson('/api/schedules/'.$schedule->id.'/resolve-request', [
             'action' => 'reject',
         ])->assertOk()

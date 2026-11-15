@@ -18,8 +18,9 @@ use Illuminate\Validation\Rule;
 
 class RenderedHourController extends Controller
 {
-    public function students()
+    public function students(Request $request)
     {
+        $this->assertActivityRosterReader($request);
         $students = User::query()
             ->with('profile:id,user_id,student_id_number,year_level,course,assigned_office')
             ->orderBy('name');
@@ -40,6 +41,7 @@ class RenderedHourController extends Controller
 
     public function index(Request $request)
     {
+        $this->assertActivityRosterReader($request);
         $request->validate([
             'period_start' => 'required|date',
             'period_end' => 'required|date|after_or_equal:period_start',
@@ -822,6 +824,19 @@ class RenderedHourController extends Controller
                     .' hours remain under the weekly or monthly limit).');
             }
         }
+    }
+
+    private function assertActivityRosterReader(Request $request): void
+    {
+        $user = $request->user()->loadMissing('profile');
+        if (in_array($user->role, ['WSPO Staff', 'Super Admin'], true)) {
+            return;
+        }
+        if (app(UserController::class)->canCheckActivityAttendance($user)) {
+            return;
+        }
+
+        abort(403, 'Only the WSPO secretary (or coordinator/president) can view campus activity rosters.');
     }
 
     private function assertActivityIssuer(Request $request): void

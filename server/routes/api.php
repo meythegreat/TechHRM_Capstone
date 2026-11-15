@@ -248,6 +248,26 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // =====================================================
+    // GROUP ACTIVITY MANAGEMENT (Coordinator / Secretary / President)
+    // Preferred Secretary/President accounts are Students with officer titles;
+    // legacy WSPO Staff officer logins still work. Controllers enforce capability.
+    // =====================================================
+    Route::middleware(['role:Student,WSPO Staff,Super Admin'])->group(function () {
+        Route::get('/financial/cleaning-groups', [\App\Http\Controllers\DailyCleaningGroupController::class, 'index']);
+        Route::post('/financial/cleaning-groups', [\App\Http\Controllers\DailyCleaningGroupController::class, 'store']);
+        Route::put('/financial/cleaning-groups/{group}', [\App\Http\Controllers\DailyCleaningGroupController::class, 'update']);
+        Route::delete('/financial/cleaning-groups/{group}', [\App\Http\Controllers\DailyCleaningGroupController::class, 'destroy']);
+        Route::get('/financial/hour-events/students', [\App\Http\Controllers\RenderedHourController::class, 'students']);
+        Route::get('/financial/hour-events', [\App\Http\Controllers\RenderedHourController::class, 'index']);
+        Route::post('/financial/hour-events', [\App\Http\Controllers\RenderedHourController::class, 'store']);
+        Route::put('/financial/hour-events/{event}', [\App\Http\Controllers\RenderedHourController::class, 'update']);
+        Route::delete('/financial/hour-events/{event}', [\App\Http\Controllers\RenderedHourController::class, 'destroy']);
+        Route::post('/financial/hour-events/{event}/marks', [\App\Http\Controllers\RenderedHourController::class, 'mark']);
+        Route::post('/financial/hour-events/{event}/scan', [\App\Http\Controllers\RenderedHourController::class, 'scan']);
+        Route::post('/financial/hour-events/{event}/mark-absent', [\App\Http\Controllers\RenderedHourController::class, 'markRemainingAbsent']);
+    });
+
+    // =====================================================
     // WSPO STAFF + SUPER ADMIN
     // =====================================================
     Route::middleware(['role:WSPO Staff,Super Admin'])->group(function () {
@@ -276,19 +296,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Stage 1: work-hour assessment records with disciplinary penalty deductions
         Route::get('/financial/records', [FinancialController::class, 'index']);
-        Route::get('/financial/cleaning-groups', [\App\Http\Controllers\DailyCleaningGroupController::class, 'index']);
-        Route::post('/financial/cleaning-groups', [\App\Http\Controllers\DailyCleaningGroupController::class, 'store']);
-        Route::put('/financial/cleaning-groups/{group}', [\App\Http\Controllers\DailyCleaningGroupController::class, 'update']);
-        Route::delete('/financial/cleaning-groups/{group}', [\App\Http\Controllers\DailyCleaningGroupController::class, 'destroy']);
-        Route::get('/financial/hour-events/students', [\App\Http\Controllers\RenderedHourController::class, 'students']);
-        Route::get('/financial/hour-events', [\App\Http\Controllers\RenderedHourController::class, 'index']);
         Route::get('/financial/hours-report', [\App\Http\Controllers\RenderedHourController::class, 'report']);
-        Route::post('/financial/hour-events', [\App\Http\Controllers\RenderedHourController::class, 'store']);
-        Route::put('/financial/hour-events/{event}', [\App\Http\Controllers\RenderedHourController::class, 'update']);
-        Route::delete('/financial/hour-events/{event}', [\App\Http\Controllers\RenderedHourController::class, 'destroy']);
-        Route::post('/financial/hour-events/{event}/marks', [\App\Http\Controllers\RenderedHourController::class, 'mark']);
-        Route::post('/financial/hour-events/{event}/scan', [\App\Http\Controllers\RenderedHourController::class, 'scan']);
-        Route::post('/financial/hour-events/{event}/mark-absent', [\App\Http\Controllers\RenderedHourController::class, 'markRemainingAbsent']);
         Route::post('/financial/compute-period', [FinancialController::class, 'computePeriod']);
         Route::put('/financial/records/{id}/adjustments', [FinancialController::class, 'updateAdjustments']);
         Route::delete('/financial/records/{id}', [FinancialController::class, 'destroy']);
