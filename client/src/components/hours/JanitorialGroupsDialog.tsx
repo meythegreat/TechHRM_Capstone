@@ -103,7 +103,7 @@ export function JanitorialGroupsDialog({ onClose }: { onClose: () => void }) {
   const toggleMember = (id: number) => {
     if (id === supervisorId) return;
     setMemberIds((current) => (
-      current.includes(id) ? current.filter((value) => value !== id) : [...current, id].slice(0, 5)
+      current.includes(id) ? current.filter((value) => value !== id) : [...current, id].slice(0, 6)
     ));
   };
 
@@ -121,7 +121,7 @@ export function JanitorialGroupsDialog({ onClose }: { onClose: () => void }) {
         name: name.trim(),
         area: area.trim(),
         supervisor_user_id: supervisorId,
-        member_ids: memberIds.filter((id) => id !== supervisorId).slice(0, 5),
+        member_ids: memberIds.filter((id) => id !== supervisorId).slice(0, 6),
       });
       setNoticeError(false);
       setNotice(res.message || 'Saved.');
@@ -156,7 +156,7 @@ export function JanitorialGroupsDialog({ onClose }: { onClose: () => void }) {
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Janitorial groups</h2>
             <p className="text-sm text-slate-500 mt-1">
-              Up to 5 groups per department. Each group has 1 student supervisor and up to 5 members, with a cleaning area.
+              One student supervisor may cover up to 3 departments (own pass/QR each). Each department roster has up to 6 members and an area. Completing duty credits a fixed 4h overall shift (5–9pm).
             </p>
           </div>
           <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-800 text-sm font-bold">Close</button>
@@ -231,7 +231,7 @@ export function JanitorialGroupsDialog({ onClose }: { onClose: () => void }) {
                   </ul>
                 </div>
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Members (up to 5)</p>
+                  <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Members (up to 6)</p>
                   <ul className="max-h-48 overflow-y-auto space-y-1 border border-slate-100 rounded-xl p-2">
                     {pool.filter((student) => student.id !== supervisorId).map((student) => (
                       <li key={`mem-${student.id}`}>
@@ -239,7 +239,7 @@ export function JanitorialGroupsDialog({ onClose }: { onClose: () => void }) {
                           <input
                             type="checkbox"
                             checked={memberIds.includes(student.id)}
-                            disabled={!memberIds.includes(student.id) && memberIds.length >= 5}
+                            disabled={!memberIds.includes(student.id) && memberIds.length >= 6}
                             onChange={() => toggleMember(student.id)}
                           />
                           <span className="font-medium text-slate-800">{student.name}</span>

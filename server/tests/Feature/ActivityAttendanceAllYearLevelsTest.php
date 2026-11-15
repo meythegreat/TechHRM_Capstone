@@ -213,14 +213,16 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
         ]);
     }
 
-    public function test_group_leader_can_issue_passcode_for_all_years(): void
+    public function test_assembly_year_representative_issues_passcode_for_their_year(): void
     {
         $staff = $this->makeUser('WSPO Staff', 'WSPO Coordinator');
-        $leader = $this->makeStudent('Group Leader', 3, '2026-2001');
+        $rep = $this->makeStudent('Year One Rep', 1, '2026-2001');
         $yearOne = $this->makeStudent('Member One', 1, '2026-2002');
+        $yearTwo = $this->makeStudent('Member Two', 2, '2026-2003');
 
         $group = DailyCleaningGroup::create(['name' => 'Bravo']);
-        $this->attachMembers($group, [$leader->id, $yearOne->id], $leader->id);
+        $this->attachMembers($group, [$rep->id, $yearOne->id, $yearTwo->id], $rep->id);
+        $this->assignAssemblyRep(1, $rep->id);
 
         Sanctum::actingAs($staff);
         $eventId = (int) $this->postJson('/api/financial/hour-events', [
@@ -231,7 +233,7 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
             'starts_at' => '05:00',
         ])->assertCreated()->json('event.id');
 
-        Sanctum::actingAs($leader);
+        Sanctum::actingAs($rep);
         $passcode = $this->getJson('/api/attendance/activity-passcode?event_id='.$eventId)
             ->assertOk()
             ->json('token_code');
@@ -251,6 +253,13 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
             ->assertJsonPath('timed_out', true)
             ->assertJsonPath('status', 'on_time')
             ->assertJsonPath('hours_delta', 5);
+
+        Sanctum::actingAs($yearTwo);
+        $this->postJson('/api/attendance/secure-clock-in', [
+            'token_code' => $passcode,
+            'method' => 'passcode',
+        ])->assertForbidden()
+            ->assertJsonPath('requires_year_representative', true);
 
         $this->assertNotNull($clockIn->json('attendance.id'));
     }
@@ -515,9 +524,11 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
     {
         Carbon::setTestNow(Carbon::parse('2026-10-28 13:20:00'));
         $staff = $this->makeUser('WSPO Staff', 'WSPO Coordinator');
+        $rep = $this->makeStudent('Year One Rep', 1, '2026-6002');
         $student = $this->makeStudent('Qr End Student', 1, '2026-6003');
         $group = DailyCleaningGroup::create(['name' => 'Qr End']);
-        $this->attachMembers($group, [$student->id], $student->id);
+        $this->attachMembers($group, [$rep->id, $student->id], $rep->id);
+        $this->assignAssemblyRep(1, $rep->id);
 
         Sanctum::actingAs($staff);
         $eventId = (int) $this->postJson('/api/financial/hour-events', [
@@ -528,6 +539,8 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
             'starts_at' => '13:00',
             'ends_at' => '17:00',
         ])->assertCreated()->json('event.id');
+
+        Sanctum::actingAs($rep);
         $code = $this->getJson('/api/attendance/activity-passcode?event_id='.$eventId)
             ->assertOk()
             ->json('token_code');
@@ -539,7 +552,7 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
         ])->assertOk();
 
         Carbon::setTestNow(Carbon::parse('2026-10-28 14:20:00'));
-        Sanctum::actingAs($staff);
+        Sanctum::actingAs($rep);
         $code = $this->getJson('/api/attendance/activity-passcode?event_id='.$eventId)
             ->assertOk()
             ->json('token_code');
@@ -652,6 +665,14 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
         $group->students()->sync($sync);
     }
 
+    private function assignAssemblyRep(int $yearLevel, int $userId): void
+    {
+        DB::table('assembly_year_representatives')->updateOrInsert(
+            ['year_level' => $yearLevel],
+            ['user_id' => $userId, 'created_at' => now(), 'updated_at' => now()]
+        );
+    }
+
     private function createSchema(): void
     {
         Schema::dropAllTables();
@@ -694,6 +715,15 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
             $table->string('duty_type')->nullable();
             $table->text('duty_request')->nullable();
             $table->timestamps();
+        });
+
+        Schema::create('assembly_year_representatives', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedTinyInteger('year_level');
+            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->timestamps();
+            $table->unique('year_level');
+            $table->unique('user_id');
         });
 
         Schema::create('daily_cleaning_groups', function (Blueprint $table) {

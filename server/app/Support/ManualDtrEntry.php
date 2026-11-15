@@ -115,34 +115,55 @@ class ManualDtrEntry
         }
 
         $office = trim((string) ($student->profile?->assigned_office ?? ''));
-        $hours = $applyLunch
-            ? DutyHours::creditedHours($timeIn, $timeOut, $office)
-            : DutyHours::rawHours($timeIn, $timeOut);
-
-        $fit = HourLimits::fitHours((int) $student->id, $hours, $timeIn);
-        if ($fit['allowed'] <= 0) {
-            return [
-                'ok' => false,
-                'message' => $fit['denial'] ?? 'This entry would exceed the student\'s weekly or monthly hour limit.',
-                'status' => 422,
-                'hour_limits' => HourLimits::status((int) $student->id, $timeIn),
-            ];
+        if ($isJanitorial) {
+            $already = Attendance::query()
+                ->where('user_id', $student->id)
+                ->whereNull('rendered_hour_event_id')
+                ->where(function ($query) {
+                    $query->where('attendance_type', 'Janitorial')
+                        ->orWhere('work_type', 'Janitorial');
+                })
+                ->whereNotNull('time_out')
+                ->whereDate('time_in', $timeIn->toDateString())
+                ->where(function ($query) {
+                    $query->where('computed_hours', '>', 0)->orWhere('rendered_hours', '>', 0);
+                })
+                ->exists();
+            $hours = DutyHours::janitorialShiftHours($already);
+        } else {
+            $hours = $applyLunch
+                ? DutyHours::creditedHours($timeIn, $timeOut, $office)
+                : DutyHours::rawHours($timeIn, $timeOut);
         }
-        if ($fit['capped'] && $fit['allowed'] < $hours) {
-            return [
-                'ok' => false,
-                'message' => 'This entry is '
-                    .HourLimits::hoursLabel($hours)
-                    .' hours, but only '
-                    .HourLimits::hoursLabel($fit['allowed'])
-                    .' hours remain under the weekly/monthly limits'
-                    .(! $fit['denial'] && ! HourLimits::approvedForWeek((int) $student->id, $timeIn)
-                        ? ' (approve an extension up to '.HourLimits::hoursLabel(HourLimits::status((int) $student->id, $timeIn)['weekly_extended']).' hours/week first)'
-                        : '')
-                    .'.',
-                'status' => 422,
-                'hour_limits' => HourLimits::status((int) $student->id, $timeIn),
-            ];
+
+        if ($isJanitorial && $hours <= 0) {
+            $fit = ['allowed' => 0.0, 'capped' => false, 'message' => null];
+        } else {
+            $fit = HourLimits::fitHours((int) $student->id, $hours, $timeIn);
+            if ($fit['allowed'] <= 0) {
+                return [
+                    'ok' => false,
+                    'message' => $fit['denial'] ?? 'This entry would exceed the student\'s weekly or monthly hour limit.',
+                    'status' => 422,
+                    'hour_limits' => HourLimits::status((int) $student->id, $timeIn),
+                ];
+            }
+            if ($fit['capped'] && $fit['allowed'] < $hours) {
+                return [
+                    'ok' => false,
+                    'message' => 'This entry is '
+                        .HourLimits::hoursLabel($hours)
+                        .' hours, but only '
+                        .HourLimits::hoursLabel($fit['allowed'])
+                        .' hours remain under the weekly/monthly limits'
+                        .(! $fit['denial'] && ! HourLimits::approvedForWeek((int) $student->id, $timeIn)
+                            ? ' (approve an extension up to '.HourLimits::hoursLabel(HourLimits::status((int) $student->id, $timeIn)['weekly_extended']).' hours/week first)'
+                            : '')
+                        .'.',
+                    'status' => 422,
+                    'hour_limits' => HourLimits::status((int) $student->id, $timeIn),
+                ];
+            }
         }
 
         $note = trim($note);
@@ -164,7 +185,8 @@ class ManualDtrEntry
             'task_description' => $note !== ''
                 ? $note
                 : ($isJanitorial
-                    ? ('Janitorial duty'.($area ? ' — '.$area : '').'.')
+                    ? ('Janitorial duty'.($area ? ' — '.$area : '')
+                        .'. Fixed '.DutyHours::JANITORIAL_FIXED_HOURS.'h credit (5–9pm overall shift).')
                     : 'Manually entered by supervisor.'),
             'status' => $status,
             'check_in_method' => $checkInMethod,

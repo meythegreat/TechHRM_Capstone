@@ -125,6 +125,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/attendance/janitorial-groups', [\App\Http\Controllers\JanitorialGroupController::class, 'index']);
     Route::get('/attendance/janitorial-passcode', [\App\Http\Controllers\AdvancedAttendanceController::class, 'janitorialPasscode']);
     Route::get('/attendance/janitorial-qr', [\App\Http\Controllers\AdvancedAttendanceController::class, 'janitorialQr']);
+    Route::get('/attendance/assembly-year-representatives', [\App\Http\Controllers\AssemblyYearRepresentativeController::class, 'index']);
 
     Route::get('/holidays', [HolidayController::class, 'index']);
 
@@ -181,6 +182,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/attendance/janitorial-groups', [\App\Http\Controllers\JanitorialGroupController::class, 'store']);
         Route::put('/attendance/janitorial-groups/{janitorialGroup}', [\App\Http\Controllers\JanitorialGroupController::class, 'update']);
         Route::delete('/attendance/janitorial-groups/{janitorialGroup}', [\App\Http\Controllers\JanitorialGroupController::class, 'destroy']);
+        Route::put('/attendance/assembly-year-representatives', [\App\Http\Controllers\AssemblyYearRepresentativeController::class, 'upsert']);
+        Route::delete('/attendance/assembly-year-representatives/{yearLevel}', [\App\Http\Controllers\AssemblyYearRepresentativeController::class, 'destroy']);
 
         Route::post('/attendance/generate-token', [\App\Http\Controllers\AdvancedAttendanceController::class, 'generateToken']);
         Route::get('/attendance/passcode', [\App\Http\Controllers\AdvancedAttendanceController::class, 'currentPasscode']);

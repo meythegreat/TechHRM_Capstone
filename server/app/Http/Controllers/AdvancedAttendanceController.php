@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AssemblyYearRepresentative;
 use App\Models\Attendance;
 use App\Models\JanitorialGroup;
 use App\Models\RenderedHourEntry;
@@ -135,9 +136,11 @@ class AdvancedAttendanceController extends Controller
 
         $event = RenderedHourEvent::findOrFail($validated['event_id']);
         if (!$this->canIssueActivityCode($issuer, $event)) {
-            return response()->json([
-                'message' => 'Only the WSPO coordinator, secretary, president, or this group\'s leader can issue these QR codes.',
-            ], 403);
+            $message = $event->kind === RenderedHourEvent::ASSEMBLY
+                ? 'Only the assembly representative for this year level can issue these QR codes.'
+                : 'Only the WSPO coordinator, secretary, president, or this group\'s leader can issue these QR codes.';
+
+            return response()->json(['message' => $message], 403);
         }
         if (!$event->usesAttendance()) {
             return response()->json(['message' => 'Special requests do not use a QR code.'], 422);
@@ -175,9 +178,11 @@ class AdvancedAttendanceController extends Controller
 
         $event = RenderedHourEvent::findOrFail($validated['event_id']);
         if (!$this->canIssueActivityCode($issuer, $event)) {
-            return response()->json([
-                'message' => 'Only the WSPO coordinator, secretary, president, or this group\'s leader can issue this passcode.',
-            ], 403);
+            $message = $event->kind === RenderedHourEvent::ASSEMBLY
+                ? 'Only the assembly representative for this year level can issue this passcode.'
+                : 'Only the WSPO coordinator, secretary, president, or this group\'s leader can issue this passcode.';
+
+            return response()->json(['message' => $message], 403);
         }
         if (!$event->usesAttendance()) {
             return response()->json(['message' => 'Special requests do not use a passcode.'], 422);
@@ -349,12 +354,16 @@ class AdvancedAttendanceController extends Controller
             : trim((string) ($user->profile?->assigned_office ?? ''));
 
         if ($isJanitorial) {
-            $validToken = $this->authenticateJanitorialToken($request, $user);
+            $janitorialAuth = $this->authenticateJanitorialToken($request, $user);
+            if ($janitorialAuth instanceof \Illuminate\Http\JsonResponse) {
+                return $janitorialAuth;
+            }
+            $validToken = $janitorialAuth['token'];
         } else {
             $validToken = $this->authenticateToken($request, $dutyType, $studentDepartment);
-        }
-        if ($validToken instanceof \Illuminate\Http\JsonResponse) {
-            return $validToken;
+            if ($validToken instanceof \Illuminate\Http\JsonResponse) {
+                return $validToken;
+            }
         }
 
         $method = $request->input('method', 'passcode');
@@ -378,7 +387,7 @@ class AdvancedAttendanceController extends Controller
         $clockOutTime = $now->copy();
 
         if ($isJanitorial) {
-            // Janitorial: free clock-out whenever cleaning is done — no schedule end cap.
+            // Janitorial: free clock-out whenever cleaning is done — fixed 4h overall shift credit.
         } elseif ($auto) {
             if (! $shift || ! DutyHours::withinAutoClockOutWindow($now, $shift)) {
                 return response()->json([
@@ -406,29 +415,55 @@ class AdvancedAttendanceController extends Controller
         }
 
         $office = $studentDepartment;
-        $computedHours = $isJanitorial
-            ? DutyHours::rawHours($clockInTime, $clockOutTime)
-            : DutyHours::creditedHours($clockInTime, $clockOutTime, $office);
-
-        if (! $isJanitorial && ! DutyHours::isLibrary($office)) {
-            $lunch = DutyHours::lunchOverlapMinutes($clockInTime, $clockOutTime);
-            if ($lunch > 0) {
-                $notes[] = 'Unpaid lunch break deducted (Library has no lunch break).';
+        if ($isJanitorial) {
+            $alreadyCredited = Attendance::query()
+                ->where('user_id', $user->id)
+                ->where('id', '!=', $attendance->id)
+                ->whereNull('rendered_hour_event_id')
+                ->where(function ($query) {
+                    $query->where('attendance_type', 'Janitorial')
+                        ->orWhere('work_type', 'Janitorial');
+                })
+                ->whereNotNull('time_out')
+                ->whereDate('time_in', $clockInTime->toDateString())
+                ->where(function ($query) {
+                    $query->where('computed_hours', '>', 0)->orWhere('rendered_hours', '>', 0);
+                })
+                ->exists();
+            $computedHours = DutyHours::janitorialShiftHours($alreadyCredited);
+            if ($alreadyCredited) {
+                $notes[] = 'Additional janitorial segment — overall shift already credited '
+                    .DutyHours::JANITORIAL_FIXED_HOURS.'h (5–9pm).';
+            } else {
+                $notes[] = 'Janitorial overall shift credited '
+                    .DutyHours::JANITORIAL_FIXED_HOURS.'h (5–9pm block), even if finished early.';
+            }
+        } else {
+            $computedHours = DutyHours::creditedHours($clockInTime, $clockOutTime, $office);
+            if (! DutyHours::isLibrary($office)) {
+                $lunch = DutyHours::lunchOverlapMinutes($clockInTime, $clockOutTime);
+                if ($lunch > 0) {
+                    $notes[] = 'Unpaid lunch break deducted (Library has no lunch break).';
+                }
             }
         }
 
-        $fit = HourLimits::fitHours($user->id, $computedHours, $clockOutTime, (int) $attendance->id);
-        if ($fit['allowed'] <= 0) {
-            return response()->json([
-                'message' => $fit['denial'] ?? 'No hours remain under your weekly or monthly limit.',
-                'hour_limits' => HourLimits::status($user->id, $clockOutTime, (int) $attendance->id),
-            ], 403);
+        if ($isJanitorial && $computedHours <= 0) {
+            $fit = ['allowed' => 0.0, 'capped' => false, 'message' => null];
+            $credited = 0.0;
+        } else {
+            $fit = HourLimits::fitHours($user->id, $computedHours, $clockOutTime, (int) $attendance->id);
+            if ($fit['allowed'] <= 0) {
+                return response()->json([
+                    'message' => $fit['denial'] ?? 'No hours remain under your weekly or monthly limit.',
+                    'hour_limits' => HourLimits::status($user->id, $clockOutTime, (int) $attendance->id),
+                ], 403);
+            }
+            $credited = $fit['allowed'];
         }
-
-        $credited = $fit['allowed'];
         $isAnomaly = $attendance->is_anomaly;
         $anomalyReason = $attendance->anomaly_reason;
-        if ($computedHours > 8.00) {
+        if (! $isJanitorial && $computedHours > 8.00) {
             $isAnomaly = true;
             $anomalyReason = ($anomalyReason ? $anomalyReason.' • ' : '').'Extended continuous shifts (Exceeded 8 hours).';
         }
@@ -734,6 +769,18 @@ class AdvancedAttendanceController extends Controller
             return response()->json(['message' => 'This QR code is no longer linked to an activity.'], 422);
         }
 
+        if ($tokenEvent->kind === RenderedHourEvent::ASSEMBLY) {
+            $studentYear = (int) ($user->profile?->year_level ?? 0);
+            $rep = AssemblyYearRepresentative::forYear($studentYear);
+            if (! $rep || (int) $token->generated_by !== (int) $rep->user_id) {
+                return response()->json([
+                    'message' => 'Scan the passcode or QR from your year-level assembly representative only.',
+                    'requires_year_representative' => true,
+                    'year_level' => $studentYear ?: null,
+                ], 403);
+            }
+        }
+
         $now = Carbon::now();
         $event = $this->resolveActivityEventForStudent($tokenEvent, $user);
         if (!$event) {
@@ -869,6 +916,18 @@ class AdvancedAttendanceController extends Controller
             return response()->json([
                 'message' => "Use this activity's passcode or QR code to time out.",
             ], 422);
+        }
+
+        if ($event->kind === RenderedHourEvent::ASSEMBLY) {
+            $student = $attendance->user()->with('profile')->first() ?? request()->user()?->loadMissing('profile');
+            $studentYear = (int) ($student?->profile?->year_level ?? 0);
+            $rep = AssemblyYearRepresentative::forYear($studentYear);
+            if (! $rep || (int) $token->generated_by !== (int) $rep->user_id) {
+                return response()->json([
+                    'message' => 'Time out with the passcode or QR from your year-level assembly representative only.',
+                    'requires_year_representative' => true,
+                ], 403);
+            }
         }
 
         $entry = RenderedHourEntry::query()
@@ -1028,8 +1087,35 @@ class AdvancedAttendanceController extends Controller
     private function canIssueActivityCode(\App\Models\User $issuer, RenderedHourEvent $event): bool
     {
         $accounts = app(UserController::class);
+        if ($event->kind === RenderedHourEvent::ASSEMBLY) {
+            // Assembly: year representatives issue codes (rep-only for student scanning).
+            return $this->isAssemblyYearRepresentative($issuer, $event);
+        }
 
         return $accounts->canIssueActivityAttendance($issuer) || $accounts->isYearLeaderFor($issuer, $event);
+    }
+
+    private function isAssemblyYearRepresentative(\App\Models\User $issuer, ?RenderedHourEvent $event = null): bool
+    {
+        if ($issuer->role !== 'Student') {
+            return false;
+        }
+
+        $rep = AssemblyYearRepresentative::forUser((int) $issuer->id);
+        if (! $rep) {
+            return false;
+        }
+
+        if (! $event) {
+            return true;
+        }
+
+        if ($event->year_level) {
+            return (int) $event->year_level === (int) $rep->year_level;
+        }
+
+        // Campus-wide assembly event: any year rep may issue a year-scoped code.
+        return true;
     }
 
     /**
@@ -1123,9 +1209,29 @@ class AdvancedAttendanceController extends Controller
             return response()->json(['message' => 'Only a janitorial student supervisor can show this code.'], 403);
         }
 
-        $group = JanitorialGroup::query()->where('supervisor_user_id', $user->id)->first();
-        if (! $group) {
+        $groups = JanitorialGroup::query()
+            ->where('supervisor_user_id', $user->id)
+            ->orderBy('department')
+            ->get();
+        if ($groups->isEmpty()) {
             return response()->json(['message' => 'You are not assigned as a janitorial group supervisor.'], 403);
+        }
+
+        $groupId = (int) $request->query('group_id', $request->input('group_id', 0));
+        if ($groupId <= 0 && $groups->count() === 1) {
+            $groupId = (int) $groups->first()->id;
+        }
+        $group = $groups->firstWhere('id', $groupId);
+        if (! $group) {
+            return response()->json([
+                'message' => 'Choose which department roster to show a code for (group_id).',
+                'groups' => $groups->map(fn (JanitorialGroup $row) => [
+                    'id' => $row->id,
+                    'department' => $row->department,
+                    'name' => $row->name,
+                    'area' => $row->area,
+                ])->values()->all(),
+            ], 422);
         }
 
         $scopeKey = 'janitorial-group:'.$group->id;
@@ -1134,6 +1240,7 @@ class AdvancedAttendanceController extends Controller
                 ->where('type', self::JANITORIAL_TOKEN_TYPE)
                 ->where('channel', $channel)
                 ->where('generated_by', $user->id)
+                ->where('description', $scopeKey)
                 ->where('expires_at', '>', Carbon::now())
                 ->where('created_at', '>', Carbon::now()->subSeconds(self::ACCESS_TTL_SECONDS))
                 ->orderByDesc('id')
@@ -1146,6 +1253,7 @@ class AdvancedAttendanceController extends Controller
                 ->where('type', self::JANITORIAL_TOKEN_TYPE)
                 ->where('channel', $channel)
                 ->where('generated_by', $user->id)
+                ->where('description', $scopeKey)
                 ->update(['expires_at' => Carbon::now()]);
 
             return DailyToken::create([
@@ -1173,11 +1281,19 @@ class AdvancedAttendanceController extends Controller
             'ttl_seconds' => self::ACCESS_TTL_SECONDS,
             'type' => self::JANITORIAL_TOKEN_TYPE,
             'department' => $group->department,
+            'fixed_hours' => DutyHours::JANITORIAL_FIXED_HOURS,
             'group' => [
                 'id' => $group->id,
                 'name' => $group->name,
                 'area' => $group->area,
+                'department' => $group->department,
             ],
+            'supervised_groups' => $groups->map(fn (JanitorialGroup $row) => [
+                'id' => $row->id,
+                'department' => $row->department,
+                'name' => $row->name,
+                'area' => $row->area,
+            ])->values()->all(),
         ];
 
         if ($channel === 'qr') {
@@ -1205,15 +1321,13 @@ class AdvancedAttendanceController extends Controller
             return response()->json(['message' => 'You are already clocked in. Clock out of this shift before starting the next one.'], 422);
         }
 
-        $validToken = $this->authenticateJanitorialToken($request, $user);
-        if ($validToken instanceof \Illuminate\Http\JsonResponse) {
-            return $validToken;
+        $auth = $this->authenticateJanitorialToken($request, $user);
+        if ($auth instanceof \Illuminate\Http\JsonResponse) {
+            return $auth;
         }
-
-        $group = JanitorialGroup::query()->where('supervisor_user_id', $validToken->generated_by)->first();
-        if (! $group || ! $group->includesStudent((int) $user->id)) {
-            return response()->json(['message' => 'This janitorial code is not for your group.'], 403);
-        }
+        /** @var array{token: DailyToken, group: JanitorialGroup} $auth */
+        $validToken = $auth['token'];
+        $group = $auth['group'];
 
         $now = Carbon::now();
         $limitDenial = HourLimits::jsonDenial($user->id, $now);
@@ -1232,7 +1346,7 @@ class AdvancedAttendanceController extends Controller
             'verification_code_used' => $method === 'qr' ? null : $validToken->token_code,
             'check_in_method' => $method,
             'code_owner_id' => $validToken->generated_by,
-            'task_description' => 'Janitorial duty — '.$group->area,
+            'task_description' => 'Janitorial duty — '.$group->area.' ('.$group->department.')',
             'status' => 'pending',
             'is_anomaly' => false,
             'anomaly_reason' => null,
@@ -1241,19 +1355,22 @@ class AdvancedAttendanceController extends Controller
         $this->notifyCodeOwner($validToken->generated_by, $user->name, 'Janitorial', $method, false);
 
         return response()->json([
-            'message' => 'Janitorial clock-in verified. Clock out anytime when the area is finished.',
+            'message' => 'Janitorial clock-in verified. Clock out anytime when finished; the overall shift credits '
+                .DutyHours::JANITORIAL_FIXED_HOURS.'h (5–9pm block).',
             'attendance' => $attendance,
             'hour_limits' => HourLimits::status($user->id, $now),
             'janitorial' => [
                 'group_id' => $group->id,
                 'group_name' => $group->name,
+                'department' => $group->department,
                 'area' => $group->area,
+                'fixed_hours' => DutyHours::JANITORIAL_FIXED_HOURS,
             ],
         ]);
     }
 
     /**
-     * @return DailyToken|\Illuminate\Http\JsonResponse
+     * @return array{token: DailyToken, group: JanitorialGroup}|\Illuminate\Http\JsonResponse
      */
     private function authenticateJanitorialToken(Request $request, \App\Models\User $student)
     {
@@ -1281,17 +1398,26 @@ class AdvancedAttendanceController extends Controller
             ], 422);
         }
 
-        $group = JanitorialGroup::query()->where('supervisor_user_id', $matched->generated_by)->first();
-        if (! $group) {
-            return response()->json(['message' => 'This janitorial code is not linked to an active group.'], 422);
+        $group = $this->janitorialGroupFromToken($matched);
+        if (! $group || ! $group->isSupervisedBy((int) $matched->generated_by)) {
+            return response()->json(['message' => 'This janitorial code is not linked to an active department roster.'], 422);
         }
 
         if (! $group->includesStudent((int) $student->id)) {
             return response()->json([
-                'message' => 'This code is only for members of '.$group->name.'.',
+                'message' => 'This code is only for '.$group->department.' members of '.$group->name.'.',
             ], 403);
         }
 
-        return $matched;
+        return ['token' => $matched, 'group' => $group];
+    }
+
+    private function janitorialGroupFromToken(DailyToken $token): ?JanitorialGroup
+    {
+        if (preg_match('/^janitorial-group:(\d+)$/', (string) $token->description, $matches)) {
+            return JanitorialGroup::query()->find((int) $matches[1]);
+        }
+
+        return JanitorialGroup::query()->where('supervisor_user_id', $token->generated_by)->first();
     }
 }

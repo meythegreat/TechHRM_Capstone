@@ -8,6 +8,7 @@ import { ActivityQrCard } from './hours/ActivityQrCard';
 import { AddActivityHoursDialog } from './hours/AddActivityHoursDialog';
 import { CleaningGroupsDialog } from './hours/CleaningGroupsDialog';
 import { JanitorialGroupsDialog } from './hours/JanitorialGroupsDialog';
+import { AssemblyYearRepsDialog } from './hours/AssemblyYearRepsDialog';
 import { 
     KeyRound, 
     QrCode,
@@ -32,6 +33,7 @@ const SupervisorAttendanceHub = () => {
     const [activityFormOpen, setActivityFormOpen] = useState(false);
     const [groupsOpen, setGroupsOpen] = useState(false);
     const [janitorialGroupsOpen, setJanitorialGroupsOpen] = useState(false);
+    const [assemblyRepsOpen, setAssemblyRepsOpen] = useState(false);
     const [activityNotice, setActivityNotice] = useState('');
     const [descInput, setDescInput] = useState('');
     const [activeToken, setActiveToken] = useState(null);
@@ -302,6 +304,15 @@ const SupervisorAttendanceHub = () => {
                             <Users className="w-4 h-4" /> Janitorial groups
                         </button>
                     )}
+                    {canManageCleaningGroups && (
+                        <button
+                            type="button"
+                            onClick={() => setAssemblyRepsOpen(true)}
+                            className="px-4 py-3 rounded-2xl border border-slate-200/80 bg-white text-slate-800 text-sm font-bold shadow-[0_1px_2px_rgba(15,23,42,0.04)] inline-flex items-center justify-center gap-2 hover:border-blue-300"
+                        >
+                            <Users className="w-4 h-4" /> Assembly reps
+                        </button>
+                    )}
                     <div className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex items-center gap-4">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center ${anomalies.length > 0 ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
                             {anomalies.length > 0 ? <ShieldAlert className="w-5 h-5 animate-pulse" /> : <ShieldCheck className="w-5 h-5" />}
@@ -521,6 +532,7 @@ const SupervisorAttendanceHub = () => {
 
                 {groupsOpen && <CleaningGroupsDialog onClose={() => setGroupsOpen(false)} />}
                 {janitorialGroupsOpen && <JanitorialGroupsDialog onClose={() => setJanitorialGroupsOpen(false)} />}
+                {assemblyRepsOpen && <AssemblyYearRepsDialog onClose={() => setAssemblyRepsOpen(false)} />}
 
                 {activityFormOpen && (
                     <AddActivityHoursDialog

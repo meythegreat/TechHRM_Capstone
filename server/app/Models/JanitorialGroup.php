@@ -8,9 +8,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class JanitorialGroup extends Model
 {
-    public const MAX_PER_DEPARTMENT = 5;
+    /** A janitorial student supervisor may cover at most this many departments. */
+    public const MAX_DEPARTMENTS_PER_SUPERVISOR = 3;
 
-    public const MAX_MEMBERS = 5;
+    /** Members per department roster under that supervisor. */
+    public const MAX_MEMBERS = 6;
 
     protected $fillable = [
         'department',
@@ -32,10 +34,11 @@ class JanitorialGroup extends Model
 
     public function includesStudent(int $userId): bool
     {
-        if ((int) $this->supervisor_user_id === $userId) {
-            return true;
-        }
-
         return $this->members()->where('users.id', $userId)->exists();
+    }
+
+    public function isSupervisedBy(int $userId): bool
+    {
+        return (int) $this->supervisor_user_id === $userId;
     }
 }

@@ -14,9 +14,29 @@ class DutyHours
     /** Minutes before/after scheduled end when auto clock-out is offered. */
     public const AUTO_CLOCK_OUT_WINDOW_MINUTES = 10;
 
+    /**
+     * Janitorial evening block credit (5:00pm–9:00pm).
+     * Completing janitorial duty credits this fixed amount once per overall shift,
+     * even if the student clocks out early; extra segments the same day add 0 hours.
+     */
+    public const JANITORIAL_FIXED_HOURS = 4.0;
+
+    public const JANITORIAL_WINDOW_START = '17:00';
+
+    public const JANITORIAL_WINDOW_END = '21:00';
+
     public const LUNCH_START = '12:00';
 
     public const LUNCH_END = '13:00';
+
+    /**
+     * Hours to credit for one overall janitorial shift (fixed 4h evening block).
+     * Pass $alreadyCreditedToday=true for additional segments of the same overall shift.
+     */
+    public static function janitorialShiftHours(bool $alreadyCreditedToday = false): float
+    {
+        return $alreadyCreditedToday ? 0.0 : self::JANITORIAL_FIXED_HOURS;
+    }
 
     public static function isLibrary(?string $office): bool
     {

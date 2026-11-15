@@ -51,12 +51,6 @@ class JanitorialGroupController extends Controller
         $this->assertCanManage($request);
         $payload = $this->validatedPayload($request);
 
-        if (JanitorialGroup::query()->where('department', $payload['department'])->count() >= JanitorialGroup::MAX_PER_DEPARTMENT) {
-            return response()->json([
-                'message' => 'Each department may have at most '.JanitorialGroup::MAX_PER_DEPARTMENT.' janitorial groups.',
-            ], 422);
-        }
-
         $group = DB::transaction(function () use ($payload) {
             $group = JanitorialGroup::create([
                 'department' => $payload['department'],
@@ -200,22 +194,33 @@ class JanitorialGroupController extends Controller
             abort(422, 'Every person in a janitorial group must be a working student.');
         }
 
-        foreach ($students as $student) {
-            $office = trim((string) ($student->profile?->assigned_office ?? ''));
+        foreach ($memberIds as $memberId) {
+            $student = $students->get($memberId);
+            $office = trim((string) ($student?->profile?->assigned_office ?? ''));
             if ($office === '' || ! $accounts->officesMatch($department, $office)) {
-                abort(422, $student->name.' must be assigned to '.$department.' to join this group.');
+                abort(422, ($student?->name ?? 'Member').' must be assigned to '.$department.' to join this group.');
             }
         }
 
-        $conflict = JanitorialGroup::query()
+        // Supervisor may cover up to 3 departments (one group roster per department).
+        $otherForSupervisor = JanitorialGroup::query()
+            ->where('supervisor_user_id', $supervisorId)
+            ->when($existing, fn ($query) => $query->where('id', '!=', $existing->id));
+        if ((clone $otherForSupervisor)->where('department', $department)->exists()) {
+            abort(422, 'This janitorial supervisor already has a roster for '.$department.'.');
+        }
+        if ((clone $otherForSupervisor)->count() >= JanitorialGroup::MAX_DEPARTMENTS_PER_SUPERVISOR) {
+            abort(422, 'A janitorial supervisor may cover at most '
+                .JanitorialGroup::MAX_DEPARTMENTS_PER_SUPERVISOR.' departments.');
+        }
+
+        // Members cannot belong to another janitorial roster; supervisor cannot be a member elsewhere.
+        $memberConflict = JanitorialGroup::query()
             ->when($existing, fn ($query) => $query->where('id', '!=', $existing->id))
-            ->where(function ($query) use ($allIds) {
-                $query->whereIn('supervisor_user_id', $allIds)
-                    ->orWhereHas('members', fn ($members) => $members->whereIn('users.id', $allIds));
-            })
+            ->whereHas('members', fn ($members) => $members->whereIn('users.id', $allIds))
             ->first();
-        if ($conflict) {
-            abort(422, 'A student can only belong to one janitorial group at a time (conflict: '.$conflict->name.').');
+        if ($memberConflict) {
+            abort(422, 'A student can only be a janitorial member of one department roster (conflict: '.$memberConflict->name.').');
         }
 
         return [
@@ -245,7 +250,8 @@ class JanitorialGroupController extends Controller
             'members' => $members,
             'member_count' => $members->count(),
             'max_members' => JanitorialGroup::MAX_MEMBERS,
-            'max_per_department' => JanitorialGroup::MAX_PER_DEPARTMENT,
+            'max_departments_per_supervisor' => JanitorialGroup::MAX_DEPARTMENTS_PER_SUPERVISOR,
+            'fixed_hours' => \App\Support\DutyHours::JANITORIAL_FIXED_HOURS,
         ];
     }
 

@@ -4,8 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\Attendance;
 use App\Models\DailyToken;
-use App\Models\JanitorialGroup;
 use App\Models\ManualAttendanceRequest;
+use App\Models\RenderedHourEntry;
+use App\Models\RenderedHourEvent;
 use App\Models\Schedule;
 use App\Models\User;
 use App\Models\UserProfile;
@@ -32,76 +33,99 @@ class AttendanceDutyFeaturesTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_janitorial_group_caps_and_early_clock_out_credit_janitorial_hours(): void
+    public function test_janitorial_supervisor_multi_dept_fixed_four_hour_shift(): void
     {
-        $supervisor = $this->makeUser('Supervisor', 'Registrar', 'Reg Supervisor');
+        $wspo = $this->makeUser('WSPO Staff', 'WSPO Coordinator', 'WSPO Coord');
         $lead = $this->makeUser('Student', 'Registrar', 'Jan Lead');
-        $member = $this->makeUser('Student', 'Registrar', 'Jan Member');
-        $extra = [];
-        for ($i = 0; $i < 5; $i++) {
-            $extra[] = $this->makeUser('Student', 'Registrar', 'Extra '.$i);
-        }
+        $regMember = $this->makeUser('Student', 'Registrar', 'Reg Member');
+        $libMember = $this->makeUser('Student', 'Library', 'Lib Member');
+        $ccsMember = $this->makeUser('Student', 'CCS Office', 'Ccs Member');
+        $fourthDeptMember = $this->makeUser('Student', 'Clinic', 'Clinic Member');
 
-        Sanctum::actingAs($supervisor);
-        $this->postJson('/api/attendance/janitorial-groups', [
+        Sanctum::actingAs($wspo);
+        $regGroupId = $this->postJson('/api/attendance/janitorial-groups', [
             'department' => 'Registrar',
-            'name' => 'Wing A',
+            'name' => 'Registrar clean',
             'area' => 'East hallways',
             'supervisor_user_id' => $lead->id,
-            'member_ids' => [$member->id],
+            'member_ids' => [$regMember->id],
         ])->assertCreated()
-            ->assertJsonPath('group.area', 'East hallways')
-            ->assertJsonPath('group.member_count', 1);
+            ->assertJsonPath('group.max_members', 6)
+            ->assertJsonPath('group.max_departments_per_supervisor', 3)
+            ->json('group.id');
 
-        // Cap: 5 groups per department
-        for ($i = 2; $i <= 5; $i++) {
-            $this->postJson('/api/attendance/janitorial-groups', [
-                'department' => 'Registrar',
-                'name' => 'Wing '.$i,
-                'area' => 'Area '.$i,
-                'supervisor_user_id' => $extra[$i - 2]->id,
-                'member_ids' => [],
-            ])->assertCreated();
-        }
+        // Same supervisor may cover up to 3 departments with different membership.
         $this->postJson('/api/attendance/janitorial-groups', [
-            'department' => 'Registrar',
-            'name' => 'Wing Overflow',
-            'area' => 'Overflow',
-            'supervisor_user_id' => $extra[4]->id,
-            'member_ids' => [],
+            'department' => 'Library',
+            'name' => 'Library clean',
+            'area' => 'Stacks',
+            'supervisor_user_id' => $lead->id,
+            'member_ids' => [$libMember->id],
+        ])->assertCreated();
+        $this->postJson('/api/attendance/janitorial-groups', [
+            'department' => 'CCS Office',
+            'name' => 'CCS clean',
+            'area' => 'Labs',
+            'supervisor_user_id' => $lead->id,
+            'member_ids' => [$ccsMember->id],
+        ])->assertCreated();
+        $this->postJson('/api/attendance/janitorial-groups', [
+            'department' => 'Clinic',
+            'name' => 'Clinic clean',
+            'area' => 'Lobby',
+            'supervisor_user_id' => $lead->id,
+            'member_ids' => [$fourthDeptMember->id],
         ])->assertStatus(422);
 
+        // Per-department passcode (own code per group).
         Sanctum::actingAs($lead);
-        $passcode = $this->getJson('/api/attendance/janitorial-passcode')
+        $regCode = $this->getJson('/api/attendance/janitorial-passcode?group_id='.$regGroupId)
             ->assertOk()
             ->json('token_code');
-        $this->assertNotEmpty($passcode);
+        $this->assertNotEmpty($regCode);
 
-        Carbon::setTestNow(Carbon::parse('2026-11-13 14:00:00'));
-        Sanctum::actingAs($member);
+        Carbon::setTestNow(Carbon::parse('2026-11-13 17:15:00'));
+        Sanctum::actingAs($regMember);
         $clockIn = $this->postJson('/api/attendance/secure-clock-in', [
-            'token_code' => $passcode,
+            'token_code' => $regCode,
             'method' => 'passcode',
         ])->assertOk();
         $attendanceId = $clockIn->json('attendance.id');
-        $this->assertSame('Janitorial', $clockIn->json('attendance.attendance_type'));
-        $this->assertSame('East hallways', $clockIn->json('attendance.janitorial_area'));
 
-        // Early free clock-out after 90 minutes (no schedule wait).
-        Carbon::setTestNow(Carbon::parse('2026-11-13 15:30:00'));
+        // Early clock-out still credits fixed 4h (5–9pm overall shift).
+        Carbon::setTestNow(Carbon::parse('2026-11-13 18:00:00'));
         Sanctum::actingAs($lead);
-        $passcodeOut = $this->getJson('/api/attendance/janitorial-passcode')->json('token_code');
-        Sanctum::actingAs($member);
+        $passcodeOut = $this->getJson('/api/attendance/janitorial-passcode?group_id='.$regGroupId)->json('token_code');
+        Sanctum::actingAs($regMember);
         $this->putJson('/api/attendance/secure-clock-out/'.$attendanceId, [
             'token_code' => $passcodeOut,
             'method' => 'passcode',
         ])->assertOk()
-            ->assertJsonPath('hours_rendered', 1.5);
+            ->assertJsonPath('hours_rendered', 4);
 
-        $row = Attendance::query()->find($attendanceId);
-        $this->assertSame('approved', $row->status);
-        $this->assertSame('Janitorial', $row->attendance_type);
-        $this->assertEquals(1.5, (float) $row->rendered_hours);
+        // Second segment same day counts as one overall shift → 0 additional hours.
+        Carbon::setTestNow(Carbon::parse('2026-11-13 19:00:00'));
+        Sanctum::actingAs($lead);
+        $code2 = $this->getJson('/api/attendance/janitorial-passcode?group_id='.$regGroupId)->json('token_code');
+        Sanctum::actingAs($regMember);
+        $seg2 = $this->postJson('/api/attendance/secure-clock-in', [
+            'token_code' => $code2,
+            'method' => 'passcode',
+        ])->assertOk()->json('attendance.id');
+        Carbon::setTestNow(Carbon::parse('2026-11-13 19:30:00'));
+        Sanctum::actingAs($lead);
+        $code2Out = $this->getJson('/api/attendance/janitorial-passcode?group_id='.$regGroupId)->json('token_code');
+        Sanctum::actingAs($regMember);
+        $this->putJson('/api/attendance/secure-clock-out/'.$seg2, [
+            'token_code' => $code2Out,
+            'method' => 'passcode',
+        ])->assertOk()
+            ->assertJsonPath('hours_rendered', 0);
+
+        $this->assertEquals(
+            4.0,
+            (float) Attendance::query()->where('user_id', $regMember->id)->sum('rendered_hours')
+        );
     }
 
     public function test_janitorial_offline_request_credits_janitorial_type(): void
@@ -139,7 +163,68 @@ class AttendanceDutyFeaturesTest extends TestCase
         $this->assertSame('Janitorial', $attendance->attendance_type);
         $this->assertSame((int) $groupId, (int) $attendance->janitorial_group_id);
         $this->assertSame('Second floor stacks', $attendance->janitorial_area);
-        $this->assertEquals(2.0, (float) $attendance->rendered_hours);
+        $this->assertEquals(4.0, (float) $attendance->rendered_hours);
+    }
+
+    public function test_assembly_students_must_use_year_representative_code(): void
+    {
+        $staff = $this->makeUser('WSPO Staff', 'WSPO Coordinator', 'WSPO Coord');
+        $repY1 = $this->makeUser('Student', 'Library', 'Year One Rep');
+        $repY1->profile->update(['year_level' => '1']);
+        $studentY1 = $this->makeUser('Student', 'Library', 'Year One Student');
+        $studentY1->profile->update(['year_level' => '1']);
+        $studentY2 = $this->makeUser('Student', 'Library', 'Year Two Student');
+        $studentY2->profile->update(['year_level' => '2']);
+
+        Sanctum::actingAs($staff);
+        $this->putJson('/api/attendance/assembly-year-representatives', [
+            'year_level' => 1,
+            'user_id' => $repY1->id,
+        ])->assertOk();
+
+        $event = RenderedHourEvent::create([
+            'kind' => RenderedHourEvent::ASSEMBLY,
+            'title' => 'General assembly',
+            'event_date' => '2026-11-13',
+            'hours' => 5,
+            'starts_at' => '08:00',
+            'ends_at' => '12:00',
+            'created_by' => $staff->id,
+        ]);
+        foreach ([$studentY1->id, $studentY2->id, $repY1->id] as $uid) {
+            RenderedHourEntry::create([
+                'event_id' => $event->id,
+                'user_id' => $uid,
+                'hours_delta' => 0,
+                'status' => RenderedHourEntry::SELECTED,
+            ]);
+        }
+        $eventId = $event->id;
+
+        // Staff cannot issue assembly codes (rep-only).
+        Sanctum::actingAs($staff);
+        $this->getJson('/api/attendance/activity-passcode?event_id='.$eventId)
+            ->assertForbidden();
+
+        Carbon::setTestNow(Carbon::parse('2026-11-13 08:15:00'));
+        Sanctum::actingAs($repY1);
+        $code = $this->getJson('/api/attendance/activity-passcode?event_id='.$eventId)
+            ->assertOk()
+            ->json('token_code');
+
+        Sanctum::actingAs($studentY1);
+        $this->postJson('/api/attendance/secure-clock-in', [
+            'token_code' => $code,
+            'method' => 'passcode',
+        ])->assertOk()
+            ->assertJsonPath('activity', true);
+
+        Sanctum::actingAs($studentY2);
+        $this->postJson('/api/attendance/secure-clock-in', [
+            'token_code' => $code,
+            'method' => 'passcode',
+        ])->assertForbidden()
+            ->assertJsonPath('requires_year_representative', true);
     }
 
     public function test_regular_auto_clock_out_window_and_overtime_cap_and_library_no_lunch(): void
@@ -515,18 +600,40 @@ class AttendanceDutyFeaturesTest extends TestCase
 
         Schema::create('rendered_hour_events', function (Blueprint $table) {
             $table->id();
-            $table->date('event_date')->nullable();
             $table->string('kind')->nullable();
+            $table->string('title')->nullable();
+            $table->date('event_date')->nullable();
+            $table->decimal('hours', 8, 2)->default(0);
+            $table->string('direction')->nullable();
+            $table->unsignedTinyInteger('year_level')->nullable();
+            $table->string('group_name')->nullable();
+            $table->unsignedBigInteger('group_id')->nullable();
+            $table->time('starts_at')->nullable();
+            $table->time('ends_at')->nullable();
+            $table->time('valid_until')->nullable();
+            $table->text('notes')->nullable();
+            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
         });
 
         Schema::create('rendered_hour_entries', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('rendered_hour_event_id')->constrained('rendered_hour_events')->cascadeOnDelete();
+            $table->foreignId('event_id')->constrained('rendered_hour_events')->cascadeOnDelete();
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
             $table->float('hours_delta')->default(0);
             $table->string('status')->nullable();
+            $table->timestamp('scanned_at')->nullable();
+            $table->unsignedBigInteger('attendance_id')->nullable();
             $table->timestamps();
+        });
+
+        Schema::create('assembly_year_representatives', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedTinyInteger('year_level');
+            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->timestamps();
+            $table->unique('year_level');
+            $table->unique('user_id');
         });
     }
 }
