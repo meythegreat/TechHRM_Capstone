@@ -14,6 +14,7 @@ import {
     canCheckActivityAttendance,
     canIssueDailyAttendance,
     canManageActivityGroups,
+    canManageJanitorialGroups as canManageJanitorialGroupsAccess,
     mustClockAsStudent,
 } from '../utils/wspoActivityAccess';
 import StudentAttendanceTerminal from './StudentAttendanceTerminal';
@@ -65,8 +66,8 @@ const SupervisorAttendanceHub = () => {
     const canManageCleaningGroups = canManageActivityGroups(userRole, storedOffice);
     const canIssueDaily = canIssueDailyAttendance();
     const clocksAsStudent = mustClockAsStudent();
-    // Janitorial duty groups are department supervision — not for student officers.
-    const canManageJanitorialGroups = (userRole === 'Supervisor' || userRole === 'WSPO Staff') && !clocksAsStudent;
+    // Janitorial duty groups: WSPO Secretary and Coordinator only.
+    const canManageJanitorialGroups = canManageJanitorialGroupsAccess(userRole, storedOffice);
     const supervisorDepartment = canIssueDaily ? storedOffice : (canIssueActivity ? 'Activities' : storedOffice);
     const [tokenScope, setTokenScope] = useState(supervisorDepartment);
 

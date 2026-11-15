@@ -124,6 +124,7 @@ class UserController extends Controller
         $data['can_check_activity_attendance'] = $this->canCheckActivityAttendance($user);
         $data['can_issue_activity_attendance'] = $data['can_check_activity_attendance'];
         $data['can_manage_activity_groups'] = $this->canManageActivityGroups($user);
+        $data['can_manage_janitorial_groups'] = $this->canManageJanitorialGroups($user);
         $data['can_issue_daily_attendance'] = $this->canIssueDailyAttendance($user);
         $data['is_student_officer'] = $this->isStudentOfficer($user);
         $data['officer_position'] = $this->officerPosition($user) ?: null;
@@ -708,6 +709,44 @@ class UserController extends Controller
         }
 
         return true;
+    }
+
+    /**
+     * Department janitorial duty rosters: WSPO Secretary and Coordinator only
+     * (not department supervisors, President, or other staff).
+     */
+    public function canManageJanitorialGroups(User $user): bool
+    {
+        $user->loadMissing('profile');
+
+        if ($user->role === 'Student' && $this->isStudentOfficer($user)) {
+            return strtolower($this->officerPosition($user)) === 'wspo secretary';
+        }
+
+        if ($user->role !== 'WSPO Staff') {
+            return false;
+        }
+
+        $office = trim((string) ($user->profile?->assigned_office ?? ''));
+        $normalized = strtolower($office);
+
+        if (str_contains($normalized, 'wspo president')) {
+            return false;
+        }
+
+        if (str_contains($normalized, 'wspo secretary')) {
+            return true;
+        }
+
+        if ($office === ''
+            || strcasecmp($office, 'WSPO') === 0
+            || strcasecmp($office, 'Unassigned') === 0
+            || strcasecmp($office, 'WSPO Coordinator') === 0
+            || str_contains($normalized, 'wspo coordinator')) {
+            return true;
+        }
+
+        return false;
     }
 
     /** Year-level leader or representative assigned by the WSPO coordinator. */

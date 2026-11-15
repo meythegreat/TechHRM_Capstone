@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Plus, QrCode, Users } from 'lucide-react';
 import { financialService } from '../../services/financialService';
-import { canManageActivityGroups } from '../../utils/wspoActivityAccess';
+import { canManageActivityGroups, canManageJanitorialGroups } from '../../utils/wspoActivityAccess';
 import { ActivityAttendanceChecker } from './ActivityAttendanceChecker';
 import { ActivityQrCard } from './ActivityQrCard';
 import { AddActivityHoursDialog } from './AddActivityHoursDialog';
 import { CleaningGroupsDialog } from './CleaningGroupsDialog';
 import { HoursActivityBoard } from './HoursActivityBoard';
+import { JanitorialGroupsDialog } from './JanitorialGroupsDialog';
 
 /** Campus activity tools for Student accounts that hold WSPO Secretary / President. */
 export function StudentOfficerActivityHub() {
@@ -14,8 +15,10 @@ export function StudentOfficerActivityHub() {
   const [activityEventId, setActivityEventId] = useState('');
   const [activityFormOpen, setActivityFormOpen] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(false);
+  const [janitorialGroupsOpen, setJanitorialGroupsOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const canManageGroups = canManageActivityGroups();
+  const canManageJanitorial = canManageJanitorialGroups();
 
   const today = () => {
     const now = new Date();
@@ -81,6 +84,15 @@ export function StudentOfficerActivityHub() {
                 <Users className="h-4 w-4" /> Groups
               </button>
             )}
+            {canManageJanitorial && (
+              <button
+                type="button"
+                onClick={() => setJanitorialGroupsOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 hover:border-blue-300"
+              >
+                <Users className="h-4 w-4" /> Janitorial groups
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -139,6 +151,7 @@ export function StudentOfficerActivityHub() {
       <HoursActivityBoard />
 
       {groupsOpen && <CleaningGroupsDialog onClose={() => setGroupsOpen(false)} />}
+      {janitorialGroupsOpen && <JanitorialGroupsDialog onClose={() => setJanitorialGroupsOpen(false)} />}
       {activityFormOpen && (
         <AddActivityHoursDialog
           onClose={() => setActivityFormOpen(false)}

@@ -20,25 +20,28 @@ class JanitorialGroupController extends Controller
             ->orderBy('department')
             ->orderBy('name');
 
-        if ($accounts->usesSupervisorScope($actor)) {
-            $areas = $accounts->supervisedOfficeAreas($actor);
-            if ($areas === []) {
-                $query->whereRaw('0 = 1');
-            } else {
-                $query->where(function ($builder) use ($areas, $accounts) {
-                    foreach ($areas as $area) {
-                        $aliases = $accounts->officeNames($area);
-                        $builder->orWhereIn('department', $aliases);
-                    }
+        // Managers (Secretary / Coordinator) see every department roster.
+        if (! $accounts->canManageJanitorialGroups($actor)) {
+            if ($accounts->usesSupervisorScope($actor)) {
+                $areas = $accounts->supervisedOfficeAreas($actor);
+                if ($areas === []) {
+                    $query->whereRaw('0 = 1');
+                } else {
+                    $query->where(function ($builder) use ($areas, $accounts) {
+                        foreach ($areas as $area) {
+                            $aliases = $accounts->officeNames($area);
+                            $builder->orWhereIn('department', $aliases);
+                        }
+                    });
+                }
+            }
+
+            if ($actor->role === 'Student') {
+                $query->where(function ($builder) use ($actor) {
+                    $builder->where('supervisor_user_id', $actor->id)
+                        ->orWhereHas('members', fn ($members) => $members->where('users.id', $actor->id));
                 });
             }
-        }
-
-        if ($actor->role === 'Student') {
-            $query->where(function ($builder) use ($actor) {
-                $builder->where('supervisor_user_id', $actor->id)
-                    ->orWhereHas('members', fn ($members) => $members->where('users.id', $actor->id));
-            });
         }
 
         $groups = $query->get()->map(fn (JanitorialGroup $group) => $this->present($group));
@@ -102,26 +105,8 @@ class JanitorialGroupController extends Controller
     {
         SuperAdminAudit::denyMutation($request);
         $actor = $request->user()->loadMissing('profile');
-        $accounts = app(UserController::class);
-        if ($accounts->mustClockAsStudent($actor)) {
-            abort(403, 'WSPO Secretary and President clock duty hours as students and cannot manage janitorial duty groups.');
-        }
-        if (! in_array($actor->role, ['Supervisor', 'WSPO Staff'], true)) {
-            abort(403, 'Only a supervisor or WSPO staff can manage janitorial groups.');
-        }
-
-        if ($group && app(UserController::class)->usesSupervisorScope($actor)) {
-            $areas = app(UserController::class)->supervisedOfficeAreas($actor);
-            $allowed = false;
-            foreach ($areas as $area) {
-                if (app(UserController::class)->officesMatch($area, $group->department)) {
-                    $allowed = true;
-                    break;
-                }
-            }
-            if (! $allowed) {
-                abort(403, 'You can only manage janitorial groups in your supervised departments.');
-            }
+        if (! app(UserController::class)->canManageJanitorialGroups($actor)) {
+            abort(403, 'Only the WSPO Secretary or Coordinator can manage janitorial groups.');
         }
     }
 
@@ -146,21 +131,7 @@ class JanitorialGroupController extends Controller
             abort(422, 'Department, group name, and area are required.');
         }
 
-        $actor = $request->user()->loadMissing('profile');
         $accounts = app(UserController::class);
-        if ($accounts->usesSupervisorScope($actor)) {
-            $areas = $accounts->supervisedOfficeAreas($actor);
-            $allowed = false;
-            foreach ($areas as $supervised) {
-                if ($accounts->officesMatch($supervised, $department)) {
-                    $allowed = true;
-                    break;
-                }
-            }
-            if (! $allowed) {
-                abort(403, 'You can only create groups for your supervised departments.');
-            }
-        }
 
         $duplicate = JanitorialGroup::query()
             ->where('department', $department)

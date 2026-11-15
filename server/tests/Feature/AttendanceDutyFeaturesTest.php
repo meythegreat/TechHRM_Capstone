@@ -78,13 +78,13 @@ class AttendanceDutyFeaturesTest extends TestCase
         ])->assertStatus(422);
 
         // Per-department passcode (own code per group).
+        Carbon::setTestNow(Carbon::parse('2026-11-13 17:15:00'));
         Sanctum::actingAs($lead);
         $regCode = $this->getJson('/api/attendance/janitorial-passcode?group_id='.$regGroupId)
             ->assertOk()
             ->json('token_code');
         $this->assertNotEmpty($regCode);
 
-        Carbon::setTestNow(Carbon::parse('2026-11-13 17:15:00'));
         Sanctum::actingAs($regMember);
         $clockIn = $this->postJson('/api/attendance/secure-clock-in', [
             'token_code' => $regCode,
@@ -130,11 +130,12 @@ class AttendanceDutyFeaturesTest extends TestCase
 
     public function test_janitorial_offline_request_credits_janitorial_type(): void
     {
+        $coordinator = $this->makeUser('WSPO Staff', 'WSPO Coordinator', 'WSPO Coord');
         $officeSupervisor = $this->makeUser('Supervisor', 'Library', 'Lib Supervisor');
         $lead = $this->makeUser('Student', 'Library', 'Lib Lead');
         $member = $this->makeUser('Student', 'Library', 'Lib Member');
 
-        Sanctum::actingAs($officeSupervisor);
+        Sanctum::actingAs($coordinator);
         $groupId = $this->postJson('/api/attendance/janitorial-groups', [
             'department' => 'Library',
             'name' => 'Stacks',
@@ -164,6 +165,58 @@ class AttendanceDutyFeaturesTest extends TestCase
         $this->assertSame((int) $groupId, (int) $attendance->janitorial_group_id);
         $this->assertSame('Second floor stacks', $attendance->janitorial_area);
         $this->assertEquals(4.0, (float) $attendance->rendered_hours);
+    }
+
+    public function test_only_secretary_and_coordinator_can_manage_janitorial_groups(): void
+    {
+        $coordinator = $this->makeUser('WSPO Staff', 'WSPO Coordinator', 'Coord');
+        $secretary = $this->makeUser('WSPO Staff', 'WSPO Secretary', 'Secretary');
+        $president = $this->makeUser('WSPO Staff', 'WSPO President', 'President');
+        $supervisor = $this->makeUser('Supervisor', 'Library', 'Lib Supervisor');
+        $lead = $this->makeUser('Student', 'Library', 'Lib Lead');
+        $member = $this->makeUser('Student', 'Library', 'Lib Member');
+        $payload = [
+            'department' => 'Library',
+            'name' => 'Stacks',
+            'area' => 'Second floor',
+            'supervisor_user_id' => $lead->id,
+            'member_ids' => [$member->id],
+        ];
+
+        $accounts = app(\App\Http\Controllers\UserController::class);
+        $this->assertTrue($accounts->canManageJanitorialGroups($coordinator));
+        $this->assertTrue($accounts->canManageJanitorialGroups($secretary));
+        $this->assertFalse($accounts->canManageJanitorialGroups($president));
+        $this->assertFalse($accounts->canManageJanitorialGroups($supervisor));
+
+        Sanctum::actingAs($supervisor);
+        $this->postJson('/api/attendance/janitorial-groups', $payload)->assertForbidden();
+
+        Sanctum::actingAs($president);
+        $this->postJson('/api/attendance/janitorial-groups', $payload)->assertForbidden();
+
+        Sanctum::actingAs($secretary);
+        $this->getJson('/api/user')
+            ->assertOk()
+            ->assertJsonPath('can_manage_janitorial_groups', true);
+        $groupId = $this->postJson('/api/attendance/janitorial-groups', $payload)
+            ->assertCreated()
+            ->json('group.id');
+
+        Sanctum::actingAs($coordinator);
+        $this->putJson('/api/attendance/janitorial-groups/'.$groupId, [
+            'department' => 'Library',
+            'name' => 'Stacks East',
+            'area' => 'East wing',
+            'supervisor_user_id' => $lead->id,
+            'member_ids' => [$member->id],
+        ])->assertOk();
+
+        Sanctum::actingAs($supervisor);
+        $this->deleteJson('/api/attendance/janitorial-groups/'.$groupId)->assertForbidden();
+
+        Sanctum::actingAs($secretary);
+        $this->deleteJson('/api/attendance/janitorial-groups/'.$groupId)->assertOk();
     }
 
     public function test_assembly_students_must_use_year_representative_code(): void

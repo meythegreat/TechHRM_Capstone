@@ -48,6 +48,34 @@ export function canManageActivityGroups(role?: string | null, office?: string | 
   return !resolvedOffice.includes('wspo president');
 }
 
+/** Janitorial duty rosters: WSPO Secretary and Coordinator only. */
+export function canManageJanitorialGroups(role?: string | null, office?: string | null): boolean {
+  const storedFlag = localStorage.getItem('can_manage_janitorial_groups');
+  if (storedFlag === '1') return true;
+  if (storedFlag === '0') return false;
+
+  const resolvedRole = role ?? localStorage.getItem('user_role') ?? '';
+  const resolvedOffice = (office ?? localStorage.getItem('assigned_office') ?? '').trim().toLowerCase();
+  const officer = (localStorage.getItem('officer_position') ?? '').trim().toLowerCase();
+
+  if (resolvedRole === 'Student') {
+    return officer === 'wspo secretary';
+  }
+
+  if (resolvedRole !== 'WSPO Staff') return false;
+
+  if (resolvedOffice.includes('wspo president')) return false;
+  if (resolvedOffice.includes('wspo secretary')) return true;
+
+  return (
+    resolvedOffice === ''
+    || resolvedOffice === 'wspo'
+    || resolvedOffice === 'unassigned'
+    || resolvedOffice === 'wspo coordinator'
+    || resolvedOffice.includes('wspo coordinator')
+  );
+}
+
 export function canIssueDailyAttendance(): boolean {
   const storedFlag = localStorage.getItem('can_issue_daily_attendance');
   if (storedFlag === '1') return true;
@@ -81,6 +109,7 @@ export function storeActivityAttendanceCapability(payload: {
   can_check_activity_attendance?: boolean | null;
   can_issue_activity_attendance?: boolean | null;
   can_manage_activity_groups?: boolean | null;
+  can_manage_janitorial_groups?: boolean | null;
   can_issue_daily_attendance?: boolean | null;
   is_student_officer?: boolean | null;
   must_clock_as_student?: boolean | null;
@@ -97,6 +126,12 @@ export function storeActivityAttendanceCapability(payload: {
     localStorage.setItem('can_manage_activity_groups', payload.can_manage_activity_groups ? '1' : '0');
   } else {
     localStorage.removeItem('can_manage_activity_groups');
+  }
+
+  if (payload.can_manage_janitorial_groups !== undefined && payload.can_manage_janitorial_groups !== null) {
+    localStorage.setItem('can_manage_janitorial_groups', payload.can_manage_janitorial_groups ? '1' : '0');
+  } else {
+    localStorage.removeItem('can_manage_janitorial_groups');
   }
 
   if (payload.can_issue_daily_attendance !== undefined && payload.can_issue_daily_attendance !== null) {

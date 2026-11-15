@@ -271,6 +271,7 @@ function App() {
       localStorage.removeItem('profile_picture');
       localStorage.removeItem('can_check_activity_attendance');
       localStorage.removeItem('can_manage_activity_groups');
+      localStorage.removeItem('can_manage_janitorial_groups');
       localStorage.removeItem('can_issue_daily_attendance');
       localStorage.removeItem('is_student_officer');
       localStorage.removeItem('must_clock_as_student');
