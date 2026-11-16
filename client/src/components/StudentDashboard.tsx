@@ -540,48 +540,49 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                     </div>
                                 </motion.div>
 
-                                <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-8">
-                                    <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2"><Briefcase className="w-5 h-5 text-blue-600" /> Work schedule</h2>
+                                <div className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-2">
+                                <div className="@container flex h-full flex-col rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-8">
+                                    <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-900"><Briefcase className="w-5 h-5 text-blue-600" /> Work schedule</h2>
                                     {schedule.filter((shift) => shift.kind !== 'class').length === 0 ? (
-                                        <div className="py-16 flex flex-col items-center justify-center text-center text-slate-400">
-                                            <CalendarRange className="w-16 h-16 mb-4 opacity-20" />
+                                        <div className="flex flex-1 flex-col items-center justify-center py-16 text-center text-slate-400">
+                                            <CalendarRange className="mb-4 h-16 w-16 opacity-20" />
                                             <p className="text-lg font-bold text-slate-600">No shifts assigned yet</p>
-                                            <p className="text-sm mt-1">Wait for your department supervisor to finalize your schedule.</p>
+                                            <p className="mt-1 text-sm">Wait for your department supervisor to finalize your schedule.</p>
                                         </div>
                                     ) : (
                                         <div className="space-y-4">
                                             {schedule.filter((shift) => shift.kind !== 'class').map((shift) => (
-                                                <motion.div variants={cardVariants} key={shift.id} className={`flex flex-col sm:flex-row sm:items-center justify-between p-5 rounded-2xl border transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 ${shift.edit_request_status === 'pending' ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200 hover:border-blue-300'}`}>
-                                                    <div className="flex items-center gap-5 mb-4 sm:mb-0">
-                                                        <div className="w-16 h-16 rounded-xl bg-blue-50 flex flex-col items-center justify-center text-blue-700 border border-blue-100 shadow-inner">
+                                                <motion.div variants={cardVariants} key={shift.id} className={`flex flex-col gap-4 rounded-2xl border p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md @md:flex-row @md:items-center @md:justify-between ${shift.edit_request_status === 'pending' ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white hover:border-blue-300'}`}>
+                                                    <div className="flex min-w-0 items-center gap-4">
+                                                        <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl border border-blue-100 bg-blue-50 text-blue-700 shadow-inner">
                                                             <span className="text-sm font-semibold uppercase tracking-wider">{shift.day.substring(0, 3)}</span>
                                                         </div>
-                                                        <div>
-                                                            <div className="font-semibold text-slate-900 text-xl tracking-tight">{shift.time}</div>
-                                                            <div className="text-xs font-bold text-blue-600 uppercase tracking-widest mt-0.5">{shift.duty_type}</div>
+                                                        <div className="min-w-0">
+                                                            <div className="text-lg font-semibold tracking-tight text-slate-900">{shift.time}</div>
+                                                            <div className="mt-0.5 text-xs font-bold uppercase tracking-widest text-blue-600">{shift.duty_type}</div>
                                                         </div>
                                                     </div>
-                                                    <div className="flex flex-col items-start sm:items-end gap-1.5 pl-20 sm:pl-0">
+                                                    <div className="flex flex-col items-start gap-1.5 pl-[4.5rem] @md:items-end @md:pl-0">
                                                         {shift.edit_request_status === 'pending' && (
-                                                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200 uppercase tracking-wider animate-pulse">
-                                                                <Clock className="w-3.5 h-3.5" /> Pending Edit
+                                                            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-xs font-bold uppercase tracking-wider text-amber-800 animate-pulse">
+                                                                <Clock className="h-3.5 w-3.5" /> Pending Edit
                                                             </span>
                                                         )}
                                                         {shift.edit_request_status === 'approved' && (
-                                                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 uppercase tracking-wider">
-                                                                <CheckCircle2 className="w-3.5 h-3.5" /> Edit Approved
+                                                            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-100 px-3 py-1 text-xs font-bold uppercase tracking-wider text-emerald-800">
+                                                                <CheckCircle2 className="h-3.5 w-3.5" /> Edit Approved
                                                             </span>
                                                         )}
                                                         {shift.edit_request_status === 'rejected' && (
-                                                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-200 uppercase tracking-wider">
-                                                                <XCircle className="w-3.5 h-3.5" /> Edit Rejected
+                                                            <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-100 px-3 py-1 text-xs font-bold uppercase tracking-wider text-red-800">
+                                                                <XCircle className="h-3.5 w-3.5" /> Edit Rejected
                                                             </span>
                                                         )}
-                                                        <div className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
-                                                            <Briefcase className="w-4 h-4 text-slate-400" /> {shift.department}
+                                                        <div className="flex items-center gap-1.5 text-sm font-bold text-slate-900">
+                                                            <Briefcase className="h-4 w-4 text-slate-400" /> {shift.department}
                                                         </div>
-                                                        <div className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
-                                                            <UserCircle className="w-4 h-4 text-slate-400" /> Supervisor: {shift.supervisor}
+                                                        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                                                            <UserCircle className="h-4 w-4 text-slate-400" /> Supervisor: {shift.supervisor}
                                                         </div>
                                                     </div>
                                                 </motion.div>
@@ -590,28 +591,28 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                     )}
                                 </div>
 
-                                <div className="bg-white rounded-2xl border border-violet-100 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-8">
-                                    <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2"><GraduationCap className="w-5 h-5 text-violet-600" /> Class schedule</h2>
+                                <div className="@container flex h-full flex-col rounded-2xl border border-violet-100 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-8">
+                                    <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-900"><GraduationCap className="h-5 w-5 text-violet-600" /> Class schedule</h2>
                                     {schedule.filter((shift) => shift.kind === 'class').length === 0 ? (
-                                        <div className="py-10 flex flex-col items-center justify-center text-center text-slate-400">
-                                            <GraduationCap className="w-12 h-12 mb-3 opacity-20" />
+                                        <div className="flex flex-1 flex-col items-center justify-center py-16 text-center text-slate-400">
+                                            <GraduationCap className="mb-3 h-12 w-12 opacity-20" />
                                             <p className="text-base font-bold text-slate-600">No class schedule yet</p>
-                                            <p className="text-sm mt-1">The WSPO coordinator or secretary can add your class hours beside your work schedule.</p>
+                                            <p className="mt-1 text-sm">The WSPO coordinator or secretary can add your class hours beside your work schedule.</p>
                                         </div>
                                     ) : (
                                         <div className="space-y-4">
                                             {schedule.filter((shift) => shift.kind === 'class').map((shift) => (
-                                                <motion.div variants={cardVariants} key={shift.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-5 rounded-2xl border border-violet-100 bg-violet-50/40">
-                                                    <div className="flex items-center gap-5 mb-4 sm:mb-0">
-                                                        <div className="w-16 h-16 rounded-xl bg-white flex flex-col items-center justify-center text-violet-700 border border-violet-100">
+                                                <motion.div variants={cardVariants} key={shift.id} className="flex flex-col gap-4 rounded-2xl border border-violet-100 bg-violet-50/40 p-4 @md:flex-row @md:items-center @md:justify-between">
+                                                    <div className="flex min-w-0 items-center gap-4">
+                                                        <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl border border-violet-100 bg-white text-violet-700">
                                                             <span className="text-sm font-semibold uppercase tracking-wider">{shift.day.substring(0, 3)}</span>
                                                         </div>
-                                                        <div>
-                                                            <div className="font-semibold text-slate-900 text-xl tracking-tight">{shift.time}</div>
-                                                            <div className="text-xs font-bold text-violet-700 uppercase tracking-widest mt-0.5">{shift.subject || shift.duty_type}</div>
+                                                        <div className="min-w-0">
+                                                            <div className="text-lg font-semibold tracking-tight text-slate-900">{shift.time}</div>
+                                                            <div className="mt-0.5 text-xs font-bold uppercase tracking-widest text-violet-700">{shift.subject || shift.duty_type}</div>
                                                         </div>
                                                     </div>
-                                                    <div className="flex flex-col items-start sm:items-end gap-1.5 pl-20 sm:pl-0">
+                                                    <div className="flex flex-col items-start gap-1.5 pl-[4.5rem] @md:items-end @md:pl-0">
                                                         {shift.room && <div className="text-sm font-bold text-slate-900">{shift.room}</div>}
                                                         {(shift.instructor || shift.supervisor) && (
                                                             <div className="text-xs font-medium text-slate-500">Instructor: {shift.instructor || shift.supervisor}</div>
@@ -621,6 +622,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                             ))}
                                         </div>
                                     )}
+                                </div>
                                 </div>
                             </motion.div>
                         )}
