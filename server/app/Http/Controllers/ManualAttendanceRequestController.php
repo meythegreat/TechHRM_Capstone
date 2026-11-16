@@ -90,6 +90,7 @@ class ManualAttendanceRequestController extends Controller
         }
 
         $validated = $request->validate([
+            'client_request_id' => 'nullable|string|uuid|max:36',
             'request_type' => 'nullable|in:regular,janitorial,class_hours',
             'reason' => 'nullable|string|max:1000',
             'shifts' => 'required|array|min:1|max:10',
@@ -99,6 +100,27 @@ class ManualAttendanceRequestController extends Controller
             'shifts.*.janitorial_area' => 'nullable|string|max:120',
             'shifts.*.janitorial_group_id' => 'nullable|integer|exists:janitorial_groups,id',
         ]);
+
+        $clientRequestId = isset($validated['client_request_id'])
+            ? trim((string) $validated['client_request_id'])
+            : null;
+        if ($clientRequestId === '') {
+            $clientRequestId = null;
+        }
+
+        if ($clientRequestId !== null) {
+            $existing = ManualAttendanceRequest::query()
+                ->where('user_id', $user->id)
+                ->where('client_request_id', $clientRequestId)
+                ->with(['shifts', 'reviewer:id,name'])
+                ->first();
+            if ($existing) {
+                return response()->json([
+                    'message' => 'Offline attendance request already submitted.',
+                    'request' => $this->serialize($existing),
+                ]);
+            }
+        }
 
         $requestType = $validated['request_type'] ?? ManualAttendanceRequest::TYPE_REGULAR;
         $janitorialGroup = null;
@@ -291,9 +313,10 @@ class ManualAttendanceRequestController extends Controller
             };
         }
 
-        $row = DB::transaction(function () use ($user, $reason, $shiftRows, $requestType) {
+        $row = DB::transaction(function () use ($user, $reason, $shiftRows, $requestType, $clientRequestId) {
             $requestRow = ManualAttendanceRequest::create([
                 'user_id' => $user->id,
+                'client_request_id' => $clientRequestId,
                 'request_type' => $requestType,
                 'reason' => $reason,
                 'status' => ManualAttendanceRequest::PENDING,
@@ -661,6 +684,7 @@ class ManualAttendanceRequestController extends Controller
         $payload = [
             'id' => $row->id,
             'user_id' => $row->user_id,
+            'client_request_id' => $row->client_request_id,
             'request_type' => $row->request_type ?: ManualAttendanceRequest::TYPE_REGULAR,
             'reason' => $row->reason,
             'status' => $row->status,

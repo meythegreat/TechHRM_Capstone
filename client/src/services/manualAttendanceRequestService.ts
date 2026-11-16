@@ -57,6 +57,7 @@ export const manualAttendanceRequestService = {
   },
 
   async submit(payload: {
+    client_request_id?: string;
     request_type?: ManualAttendanceRequestType;
     reason?: string;
     shifts: ManualAttendanceShiftInput[];
@@ -68,6 +69,7 @@ export const manualAttendanceRequestService = {
 
     const form = new FormData();
     form.append('request_type', 'janitorial');
+    if (payload.client_request_id) form.append('client_request_id', payload.client_request_id);
     if (payload.reason) form.append('reason', payload.reason);
     payload.shifts.forEach((shift, index) => {
       form.append(`shifts[${index}][date]`, shift.date);

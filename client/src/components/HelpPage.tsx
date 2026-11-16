@@ -41,7 +41,7 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Attendance / DTR',
         summary: 'Clock in and clock out for your duty.',
         about:
-            'Attendance / DTR is where you record your daily time. You can clock in and out using a supervisor passcode or a live QR code. If you have more than one shift in the morning or afternoon, clock out of the current shift before the next one. Each shift is recorded on the DTR. When the office had no internet, use Offline manual attendance to request time in and time out; hours appear on your DTR only after your supervisor approves. You can also preview your DTR and check recent logs with statuses like Accepted, Rejected, Pending, or Timed in.',
+            'Attendance / DTR is where you record your daily time. You can clock in and out using a supervisor passcode or a live QR code. If you have more than one shift in the morning or afternoon, clock out of the current shift before the next one. Each shift is recorded on the DTR. When the office had no internet, use Offline manual attendance to request time in and time out. You can submit while offline — the request stays on your device and uploads when you are back online; hours appear on your DTR only after your supervisor approves. You can also preview your DTR and check recent logs with statuses like Accepted, Rejected, Pending, or Timed in.',
         audience: ['Student'],
         steps: [
             'Click Attendance / DTR in the left menu.',
@@ -49,7 +49,7 @@ const HELP_TOPICS: HelpTopic[] = [
             'Ask your supervisor for the current passcode, or scan the QR code they show.',
             'Click Clock In when your duty starts.',
             'Click Clock Out any time after you clock in. The recorded time is that moment, and the entry is approved right away.',
-            'If the office had no internet, open Offline manual attendance, enter time in and time out (add more shifts if needed), then submit when you are online again.',
+            'If the office had no internet, open Offline manual attendance, enter time in and time out (add more shifts if needed), then submit. If you are still offline, the request is saved on this device and uploads automatically when you reconnect (or tap Upload now).',
             'Wait for supervisor approval. Approved shifts are credited on your DTR.',
             'Open DTR Preview to review your recorded times.',
             'Check Recent Logs. An open shift shows Timed in. After you clock out, it shows Accepted.',
