@@ -104,6 +104,8 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
               children: [
         const SectionTitle('Profile settings'),
         Text('${auth.userRole ?? ''} · ${auth.userDepartment ?? ''}'),
+        const SizedBox(height: 8),
+        const Text('Phone alerts appear while WoSPIS is open. The app checks for new notices every few seconds and shows them at the top of the screen. Background web push stays on the browser app, because this phone app uses the same signed-in account without a separate push service.'),
         const SizedBox(height: 12),
         TextField(controller: _name, decoration: const InputDecoration(labelText: 'Full name')),
         const SizedBox(height: 8),

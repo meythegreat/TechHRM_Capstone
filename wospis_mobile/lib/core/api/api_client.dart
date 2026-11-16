@@ -79,6 +79,24 @@ class ApiClient {
     return _decode(response);
   }
 
+  /// Binary response, used for secured documents and proof photos.
+  Future<Uint8List> getBytes(String endpoint, [Map<String, String>? query]) async {
+    final uri = Uri.parse('$baseUrl$endpoint').replace(
+      queryParameters: query == null || query.isEmpty ? null : query,
+    );
+    final response = await http.get(uri, headers: await _headers(json: false));
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return response.bodyBytes;
+    }
+    dynamic body;
+    try {
+      body = response.body.isEmpty ? null : jsonDecode(response.body);
+    } catch (_) {
+      body = response.body;
+    }
+    throw ApiException(_message(body, response.statusCode), response.statusCode);
+  }
+
   Future<dynamic> _send(
     String method,
     String endpoint, {

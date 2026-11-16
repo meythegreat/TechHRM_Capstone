@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/api/api_client.dart';
 import '../../core/json_util.dart';
 import '../../core/widgets/common.dart';
 import '../auth/auth_provider.dart';
+import '../sync/media_tools.dart';
+import '../sync/staff_extras.dart';
+import '../sync/student_extras.dart';
 
 class StaffDashboardScreen extends StatelessWidget {
   const StaffDashboardScreen({super.key});
@@ -19,9 +23,13 @@ class StaffDashboardScreen extends StatelessWidget {
           final active = await auth.api.get('/admin/active-now');
           return {'stats': stats, 'roster': roster, 'active': active};
         }
-        final stats = await auth.api.get('/admin/stats');
-        final active = await auth.api.get('/admin/active-now');
-        return {'stats': stats, 'active': active};
+        try {
+          final stats = await auth.api.get('/admin/stats');
+          final active = await auth.api.get('/admin/active-now');
+          return {'stats': stats, 'active': active};
+        } on ApiException catch (error) {
+          return {'blocked': error.message};
+        }
       },
       builder: (context, data, reload) {
         final payload = asMap(data);
@@ -30,6 +38,13 @@ class StaffDashboardScreen extends StatelessWidget {
         final active = asMaps(activePayload['students']);
         final signedIn = asMaps(activePayload['signed_in']);
         final staffOnline = asMaps(activePayload['staff']);
+        if (payload['blocked'] != null) {
+          return PageBody(children: [
+            Text(auth.userName ?? '', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 12),
+            RecordCard(title: 'Waiting for the supervisor', subtitle: textOf(payload['blocked'])),
+          ]);
+        }
         if (superAdmin) {
           final departments = asMaps(stats['department_stats']);
           final roster = asMaps(payload['roster']);
@@ -80,6 +95,27 @@ class StaffDashboardScreen extends StatelessWidget {
           children: [
             Text(auth.userName ?? 'Staff', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
             Text('${auth.userRole} · ${auth.userDepartment}'),
+            if (auth.userRole == 'Supervisor')
+              RecordCard(
+                title: auth.supervisorAbsent ? 'You are marked absent today' : 'You are on duty',
+                subtitle: 'Mark yourself absent so the department secretary can act with your access.',
+                children: [
+                  TextButton(
+                    onPressed: () => runAction(context, () => auth.api.post('/supervisor-absence', {'absent': !auth.supervisorAbsent}), success: auth.supervisorAbsent ? 'Marked present.' : 'Marked absent.', reload: () async {
+                      await auth.refreshProfile();
+                      await reload();
+                    }),
+                    child: Text(auth.supervisorAbsent ? 'Mark me present' : 'Mark me absent today'),
+                  ),
+                ],
+              ),
+            if (auth.userRole == 'Department Secretary')
+              RecordCard(
+                title: auth.secretaryActing ? 'You are acting for the supervisor' : 'Waiting for the supervisor to be marked absent',
+                subtitle: auth.secretaryActing
+                    ? 'Their departments are covered with your account until they are marked present again.'
+                    : 'You have the same access as the supervisor, and it turns on for today once they are marked absent.',
+              ),
             const SizedBox(height: 12),
             Row(children: [
               StatCard(label: 'Students', value: '${stats['activeStudents'] ?? 0}', icon: Icons.people),
@@ -151,6 +187,20 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
           onRefresh: reload,
           children: [
             const SectionTitle('Timesheets'),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              if (auth.userRole == 'Super Admin')
+                OutlinedButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ForceClockOutScreen())), child: const Text('Force clock-out')),
+              if (auth.userRole == 'Supervisor' || auth.userRole == 'Department Secretary' || auth.userRole == 'WSPO Staff')
+                OutlinedButton(
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ExtraHoursScreen(
+                    canCreate: auth.userRole == 'Supervisor' || auth.userRole == 'Department Secretary',
+                    canReview: auth.userRole == 'WSPO Staff' || auth.userRole == 'Super Admin',
+                  ))),
+                  child: const Text('Extra Hours'),
+                ),
+              if (auth.userRole == 'Supervisor' || auth.userRole == 'WSPO Staff' || auth.userRole == 'Super Admin' || auth.userRole == 'Department Secretary')
+                OutlinedButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HourLimitsScreen(staff: true))), child: const Text('Hour limits')),
+            ]),
             ListTile(
               contentPadding: EdgeInsets.zero,
               title: Text('Date: $_date'),
@@ -378,8 +428,12 @@ class SchedulesScreen extends StatelessWidget {
                 FilledButton(onPressed: () => _assign(context, people, reload), child: const Text('Assign shift')),
                 OutlinedButton(onPressed: () => _addClass(context, people, reload), child: const Text('Add class')),
               ]),
-            if (auth.userRole == 'Supervisor')
+            if (auth.userRole == 'Supervisor' || auth.userRole == 'Department Secretary') ...[
               OutlinedButton(onPressed: () => _requestStaff(context, reload), child: const Text('Request a working student')),
+              OutlinedButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExtraServiceSheet())), child: const Text('Extra Service letter')),
+            ],
+            if (auth.userRole == 'WSPO Staff' || auth.userRole == 'Super Admin') const SemesterEditor(),
+            const OrganizationCalendar(),
             if (shifts.isEmpty) const EmptyNote('No shifts yet.'),
             for (final shift in shifts)
               RecordCard(
@@ -729,12 +783,16 @@ class AttendanceHubScreen extends StatelessWidget {
                 subtitle: textOf(passcode['token_code'] ?? passcode['error']),
                 trailing: passcode['seconds_remaining'] == null ? '' : '${passcode['seconds_remaining']}s',
               ),
-              RecordCard(
-                title: 'Live QR payload',
-                subtitle: textOf(qr['payload'] ?? qr['error']),
-                trailing: qr['seconds_remaining'] == null ? '' : '${qr['seconds_remaining']}s',
+              QrPayloadCard(
+                title: 'Live QR',
+                payload: textOf(qr['payload'] ?? qr['error'], ''),
+                seconds: qr['seconds_remaining']?.toString(),
               ),
-              const Text('Students enter this passcode or scan the QR code shown on the desktop hub.'),
+              const Text('Students enter this passcode or scan this QR.'),
+            if (auth.canManageActivityGroups)
+              OutlinedButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ActivityToolsScreen())), child: const Text('Groups, assembly reps, new activity')),
+            if (auth.canManageJanitorialGroups)
+              OutlinedButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const JanitorialAdminScreen())), child: const Text('Janitorial leaders')),
             ],
             if (canCheckActivities) ...[
               const SectionTitle('Activity attendance'),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'core/realtime_bus.dart';
 import 'core/theme_controller.dart';
 import 'core/widgets/common.dart';
 import 'features/auth/auth_provider.dart';
@@ -31,7 +32,10 @@ class WoSPISApp extends StatelessWidget {
       theme: techTheme(),
       darkTheme: techDarkTheme(),
       themeMode: theme.isDark ? ThemeMode.dark : ThemeMode.light,
-      home: const AuthGate(),
+      home: ChangeNotifierProvider(
+        create: (_) => RealtimeBus(),
+        child: const AuthGate(),
+      ),
     );
   }
 }
