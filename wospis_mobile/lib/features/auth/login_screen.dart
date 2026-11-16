@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme_controller.dart';
 import '../../core/json_util.dart';
 import '../../core/widgets/common.dart';
+import '../apply/application_wizard.dart';
 import 'auth_provider.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -501,28 +502,7 @@ class ApplyScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Working student application'), backgroundColor: Colors.white, foregroundColor: kInk, surfaceTintColor: Colors.white),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: const [
-          Text(
-            'Submit on the WoSPIS website',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: kInk),
-          ),
-          SizedBox(height: 12),
-          Text(
-            'Work-Study applications now use the official personal information sheet and parents consent, with five required documents (application letter, report card or grades, birth certificate, 2 x 2 picture, and certificate of indigency).',
-            style: TextStyle(height: 1.45, fontWeight: FontWeight.w600, color: Color(0xFF475569)),
-          ),
-          SizedBox(height: 12),
-          Text(
-            'Open the WoSPIS website on a computer or phone browser, choose Apply, attach each required file, and save your tracking code after submission. You can still track that application from this app.',
-            style: TextStyle(height: 1.45, fontWeight: FontWeight.w600, color: Color(0xFF475569)),
-          ),
-        ],
-      ),
-    );
+    return const ApplicationWizardScreen();
   }
 }
 

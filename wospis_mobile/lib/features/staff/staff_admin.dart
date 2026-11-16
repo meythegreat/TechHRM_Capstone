@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/json_util.dart';
 import '../../core/widgets/common.dart';
 import '../auth/auth_provider.dart';
+import '../sync/media_tools.dart';
 
 class ComplianceScreen extends StatelessWidget {
   const ComplianceScreen({super.key});
@@ -268,6 +269,8 @@ class DocumentReviewScreen extends StatelessWidget {
                 subtitle: textOf(row['remarks'], 'No remarks'),
                 trailing: textOf(row['status']),
                 children: [
+                  if (textOf(row['file_path'], '').isNotEmpty)
+                    TextButton(onPressed: () => openSecureFile(context, textOf(row['file_path'], ''), title: textOf(row['document_type'])), child: const Text('Open file')),
                   Row(children: [
                     TextButton(onPressed: () => runAction(context, () => api.patch('/requirements/${row['id']}/status', {'status': 'verified'}), success: 'Verified.', reload: reload), child: const Text('Verify')),
                     TextButton(
@@ -469,6 +472,7 @@ class _UsersScreenState extends State<UsersScreen> {
                 subtitle: '${textOf(user['role'])} · ${textOf(user['email'])}',
                 trailing: textOf(user['username']),
                 children: [
+                  TextButton(onPressed: () => _edit(context, user, reload), child: const Text('Edit')),
                   TextButton(
                     onPressed: () async {
                       if (!await confirm(context, 'Delete ${user['name']}?')) return;
@@ -510,7 +514,7 @@ class _UsersScreenState extends State<UsersScreen> {
               TextField(controller: password, decoration: const InputDecoration(labelText: 'Temporary password')),
               DropdownButtonFormField<String>(
                 initialValue: role,
-                items: const ['Student', 'Supervisor', 'WSPO Staff'].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
+                items: const ['Student', 'Supervisor', 'Department Secretary', 'WSPO Staff'].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
                 onChanged: (value) => setLocal(() => role = value ?? role),
               ),
               if (role == 'Student' || role == 'Supervisor') ...[
@@ -559,6 +563,54 @@ class _UsersScreenState extends State<UsersScreen> {
     office.dispose();
     year.dispose();
   }
+
+  Future<void> _edit(BuildContext context, Map<String, dynamic> user, Future<void> Function() reload) async {
+    final name = TextEditingController(text: textOf(user['name'], ''));
+    final phone = TextEditingController(text: textOf(user['phone_number'], ''));
+    final password = TextEditingController();
+    final office = TextEditingController(text: textOf(asMap(user['profile'])['assigned_office'], ''));
+    var role = textOf(user['role'], 'Student');
+    const roles = ['Student', 'Supervisor', 'Department Secretary', 'WSPO Staff', 'Super Admin'];
+    if (!roles.contains(role)) role = 'Student';
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: const Text('Edit user'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(controller: name, decoration: const InputDecoration(labelText: 'Name')),
+              DropdownButtonFormField<String>(
+                initialValue: role,
+                items: roles.map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
+                onChanged: (value) => setLocal(() => role = value ?? role),
+              ),
+              TextField(controller: phone, decoration: const InputDecoration(labelText: 'Phone')),
+              TextField(controller: office, decoration: const InputDecoration(labelText: 'Assigned office')),
+              TextField(controller: password, decoration: const InputDecoration(labelText: 'New password (optional)')),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save')),
+          ],
+        ),
+      ),
+    );
+    if (saved == true && context.mounted) {
+      await runAction(context, () => context.read<AuthProvider>().api.put('/users/${user['id']}', {
+        'name': name.text.trim(),
+        'role': role,
+        'phone_number': phone.text.trim(),
+        'assigned_office': office.text.trim(),
+        if (password.text.trim().isNotEmpty) 'password': password.text,
+      }), success: 'User updated.', reload: reload);
+    }
+    name.dispose();
+    phone.dispose();
+    password.dispose();
+    office.dispose();
+  }
 }
 
 class OfficesScreen extends StatelessWidget {
@@ -568,7 +620,8 @@ class OfficesScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final api = auth.api;
-    final canEdit = auth.userRole == 'Super Admin';
+    final canDelete = auth.userRole == 'Super Admin';
+    final canEdit = auth.userRole == 'Super Admin' || auth.userRole == 'WSPO Staff';
     return FetchView(
       loader: () => api.get('/offices'),
       builder: (context, data, reload) {
@@ -582,7 +635,9 @@ class OfficesScreen extends StatelessWidget {
                 onPressed: () async {
                   final name = await promptText(context, 'New office', label: 'Name');
                   if (name == null || !context.mounted) return;
-                  await runAction(context, () => api.post('/offices', {'name': name}), success: 'Office added.', reload: reload);
+                  final abbreviation = await promptText(context, 'Abbreviation', label: 'Short name', required: false);
+                  if (!context.mounted) return;
+                  await runAction(context, () => api.post('/offices', {'name': name, if (abbreviation != null && abbreviation.isNotEmpty) 'abbreviation': abbreviation}), success: 'Office added.', reload: reload);
                 },
                 child: const Text('Add office'),
               ),
@@ -594,6 +649,17 @@ class OfficesScreen extends StatelessWidget {
                 children: [
                   TextButton(onPressed: () => _breakdown(context, office), child: const Text('Breakdown')),
                   if (canEdit)
+                    TextButton(
+                      onPressed: () async {
+                        final name = await promptText(context, 'Rename office', label: 'Name', initial: textOf(office['name'], ''));
+                        if (name == null || !context.mounted) return;
+                        final abbreviation = await promptText(context, 'Abbreviation', label: 'Short name', required: false, initial: textOf(office['abbreviation'], ''));
+                        if (!context.mounted || abbreviation == null) return;
+                        await runAction(context, () => api.put('/offices/${office['id']}', {'name': name, 'abbreviation': abbreviation}), success: 'Office updated.', reload: reload);
+                      },
+                      child: const Text('Edit'),
+                    ),
+                  if (canDelete)
                     TextButton(
                       onPressed: () async {
                         if (!await confirm(context, 'Delete ${office['name']}?')) return;
@@ -706,6 +772,9 @@ class FinancialScreen extends StatelessWidget {
             ]),
             const SizedBox(height: 8),
             FilledButton(onPressed: () => _compute(context, reload), child: const Text('Compute a period')),
+            OutlinedButton(onPressed: () => _report(context), child: const Text('Hours report')),
+            if (context.read<AuthProvider>().userRole == 'Super Admin')
+              OutlinedButton(onPressed: () => _rate(context, reload), child: const Text('Change hourly rate')),
             if (records.isEmpty) const EmptyNote('No assessment records.'),
             for (final row in records)
               RecordCard(
@@ -760,5 +829,56 @@ class FinancialScreen extends StatelessWidget {
     start.dispose();
     end.dispose();
     rate.dispose();
+  }
+
+  Future<void> _report(BuildContext context) async {
+    final now = DateTime.now();
+    final start = TextEditingController(text: DateTime(now.year, now.month, 1).toIso8601String().split('T').first);
+    final end = TextEditingController(text: DateTime(now.year, now.month + 1, 0).toIso8601String().split('T').first);
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Hours report'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: start, decoration: const InputDecoration(labelText: 'Start')),
+          TextField(controller: end, decoration: const InputDecoration(labelText: 'End')),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Load')),
+        ],
+      ),
+    );
+    if (saved != true || !context.mounted) {
+      start.dispose();
+      end.dispose();
+      return;
+    }
+    try {
+      final data = asMap(await context.read<AuthProvider>().api.get('/financial/hours-report', {
+        'period_start': start.text.trim(),
+        'period_end': end.text.trim(),
+      }));
+      if (!context.mounted) return;
+      final summary = asMap(data['summary']);
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Hours report'),
+          content: Text(summary.isEmpty ? data.toString() : summary.entries.map((entry) => '${entry.key}: ${entry.value}').join('\n')),
+          actions: [FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+        ),
+      );
+    } catch (error) {
+      if (context.mounted) toast(context, errorText(error), error: true);
+    }
+    start.dispose();
+    end.dispose();
+  }
+
+  Future<void> _rate(BuildContext context, Future<void> Function() reload) async {
+    final rate = await promptText(context, 'Hourly rate', label: 'Pesos', initial: '28');
+    if (rate == null || !context.mounted) return;
+    await runAction(context, () => context.read<AuthProvider>().api.put('/financial/hourly-rate', {'hourly_rate': num.tryParse(rate) ?? 28}), success: 'Hourly rate saved.', reload: reload);
   }
 }

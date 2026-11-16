@@ -1,13 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/json_util.dart';
 import '../../core/theme_controller.dart';
 import '../../core/widgets/common.dart';
 import '../auth/auth_provider.dart';
+import '../chat/messages_screen.dart';
+import '../help/help_screen.dart';
 import '../notifications/notification_center.dart';
 import '../shared/account_screens.dart';
 import '../staff/staff_admin.dart';
 import '../staff/staff_operations.dart';
 import '../student/student_portal.dart';
+import '../sync/student_extras.dart';
 
 class Destination {
   const Destination(this.label, this.icon, this.page);
@@ -16,18 +22,28 @@ class Destination {
   final Widget page;
 }
 
-List<Destination> destinationsFor(String? role, {bool mustClockAsStudent = false, bool canCheckActivities = false}) {
+List<Destination> destinationsFor(
+  String? role, {
+  bool mustClockAsStudent = false,
+  bool canCheckActivities = false,
+  bool yearLeader = false,
+  bool janitorialLeader = false,
+}) {
   if (role == 'Student') {
     return [
       const Destination('Dashboard', Icons.dashboard_outlined, StudentOverviewScreen()),
       const Destination('Attendance / DTR', Icons.access_time, StudentAttendanceScreen()),
+      if (janitorialLeader) const Destination('Janitorial code', Icons.vpn_key_outlined, JanitorialCodeScreen()),
+      if (yearLeader) const Destination('Year Activities', Icons.groups_outlined, YearActivitiesScreen()),
       if (canCheckActivities)
-        const Destination('Campus Activities', Icons.groups_outlined, AttendanceHubScreen()),
+        const Destination('Campus Activities', Icons.qr_code_2, AttendanceHubScreen()),
       const Destination('Hours Rendered', Icons.payments_outlined, StudentHoursScreen()),
       const Destination('My Schedule', Icons.calendar_month_outlined, StudentScheduleScreen()),
       const Destination('Requirements', Icons.description_outlined, StudentRequirementsScreen()),
       const Destination('Disciplinary Records', Icons.gavel_outlined, StudentDisciplinaryScreen()),
       const Destination('Application Status', Icons.assignment_outlined, StudentApplicationScreen()),
+      const Destination('Messages', Icons.chat_bubble_outline, MessagesScreen()),
+      const Destination('Help', Icons.help_outline, HelpScreen()),
       const Destination('Settings', Icons.settings_outlined, ProfileSettingsScreen()),
     ];
   }
@@ -52,6 +68,8 @@ List<Destination> destinationsFor(String? role, {bool mustClockAsStudent = false
     ],
     if (admin && mustClockAsStudent)
       const Destination('Hours Rendered', Icons.payments_outlined, FinancialScreen()),
+    const Destination('Messages', Icons.chat_bubble_outline, MessagesScreen()),
+    const Destination('Help', Icons.help_outline, HelpScreen()),
     const Destination('Profile Settings', Icons.settings_outlined, ProfileSettingsScreen()),
   ];
 }
@@ -66,15 +84,44 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
   NotificationCenter? _notes;
+  Timer? _presence;
+  bool _flagsLoaded = false;
+  bool _yearLeader = false;
+  bool _janitorialLeader = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _notes ??= NotificationCenter(context.read<AuthProvider>().api)..start();
+    final api = context.read<AuthProvider>().api;
+    _notes ??= NotificationCenter(api)..start();
+    if (_presence == null) {
+      api.post('/chat/presence', {}).then((_) {}, onError: (_) {});
+      _presence = Timer.periodic(const Duration(seconds: 25), (_) {
+        api.post('/chat/presence', {}).then((_) {}, onError: (_) {});
+      });
+    }
+    if (context.read<AuthProvider>().userRole == 'Student' && !_flagsLoaded) {
+      _flagsLoaded = true;
+      _loadStudentFlags();
+    }
+  }
+
+  Future<void> _loadStudentFlags() async {
+    final auth = context.read<AuthProvider>();
+    try {
+      final year = asMap(await auth.api.get('/attendance/my-year-activities'));
+      final groups = asMaps(asMap(await auth.api.get('/attendance/janitorial-groups'))['groups']);
+      if (!mounted) return;
+      setState(() {
+        _yearLeader = year['leader'] == true;
+        _janitorialLeader = groups.any((group) => numOf(asMap(group['supervisor'])['id']).toInt() == auth.userId);
+      });
+    } catch (_) {}
   }
 
   @override
   void dispose() {
+    _presence?.cancel();
     _notes?.dispose();
     super.dispose();
   }
@@ -104,6 +151,10 @@ class _HomeShellState extends State<HomeShell> {
       label = 'User Management';
     } else if (title.contains('Appeal') || title.contains('Disciplinary')) {
       label = role == 'Student' ? 'Disciplinary Records' : 'Compliance';
+    } else if (title.contains('Message')) {
+      label = 'Messages';
+    } else if (title.contains('Hour') || title.contains('Extra')) {
+      label = role == 'Student' ? 'Hours Rendered' : 'Timesheets';
     }
     if (label == null) return;
     final auth = context.read<AuthProvider>();
@@ -111,6 +162,8 @@ class _HomeShellState extends State<HomeShell> {
       role,
       mustClockAsStudent: auth.mustClockAsStudent,
       canCheckActivities: auth.canCheckActivityAttendance,
+      yearLeader: _yearLeader,
+      janitorialLeader: _janitorialLeader,
     ).indexWhere((destination) => destination.label == label);
     if (next >= 0) setState(() => _index = next);
   }
@@ -125,6 +178,8 @@ class _HomeShellState extends State<HomeShell> {
       auth.userRole,
       mustClockAsStudent: auth.mustClockAsStudent,
       canCheckActivities: auth.canCheckActivityAttendance,
+      yearLeader: _yearLeader,
+      janitorialLeader: _janitorialLeader,
     );
     final index = _index >= items.length ? 0 : _index;
     final current = items[index];

@@ -15,7 +15,11 @@ class AuthProvider with ChangeNotifier {
   bool _mustChangePassword = false;
   bool _canCheckActivityAttendance = false;
   bool _canIssueDailyAttendance = false;
+  bool _canManageActivityGroups = false;
+  bool _canManageJanitorialGroups = false;
   bool _mustClockAsStudent = false;
+  bool _supervisorAbsent = false;
+  bool _secretaryActing = false;
   String? _officerPosition;
 
   bool get ready => _ready;
@@ -28,7 +32,11 @@ class AuthProvider with ChangeNotifier {
   bool get mustChangePassword => _mustChangePassword;
   bool get canCheckActivityAttendance => _canCheckActivityAttendance;
   bool get canIssueDailyAttendance => _canIssueDailyAttendance;
+  bool get canManageActivityGroups => _canManageActivityGroups;
+  bool get canManageJanitorialGroups => _canManageJanitorialGroups;
   bool get mustClockAsStudent => _mustClockAsStudent;
+  bool get supervisorAbsent => _supervisorAbsent;
+  bool get secretaryActing => _secretaryActing;
   String? get officerPosition => _officerPosition;
   bool get isAuthenticated => _userRole != null;
   ApiClient get api => _api;
@@ -108,6 +116,9 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> logout() async {
     try {
+      await _api.delete('/chat/presence');
+    } catch (_) {}
+    try {
       await _api.post('/logout', {});
     } catch (_) {}
     await _storage.delete(key: 'auth_token');
@@ -139,8 +150,13 @@ class AuthProvider with ChangeNotifier {
     _officerPosition = officer.trim().isEmpty ? null : officer.trim();
     final flagged = user['can_check_activity_attendance'] == true || user['can_issue_activity_attendance'] == true;
     _canCheckActivityAttendance = flagged || _looksLikeActivityChecker(_userRole, office, _officerPosition);
+    _canManageActivityGroups = user['can_manage_activity_groups'] == true;
+    _canManageJanitorialGroups = user['can_manage_janitorial_groups'] == true;
+    _supervisorAbsent = user['supervisor_absent'] == true;
+    _secretaryActing = user['acting'] == true;
     _canIssueDailyAttendance = user['can_issue_daily_attendance'] == true
         || (_userRole == 'Supervisor')
+        || (_userRole == 'Department Secretary' && _secretaryActing)
         || (_userRole == 'WSPO Staff' && !_mustClockAsStudentFlag(user) && _looksLikeCoordinator(office));
     _mustClockAsStudent = user['must_clock_as_student'] == true
         || user['is_student_officer'] == true
@@ -187,7 +203,11 @@ class AuthProvider with ChangeNotifier {
     _mustChangePassword = false;
     _canCheckActivityAttendance = false;
     _canIssueDailyAttendance = false;
+    _canManageActivityGroups = false;
+    _canManageJanitorialGroups = false;
     _mustClockAsStudent = false;
+    _supervisorAbsent = false;
+    _secretaryActing = false;
     _officerPosition = null;
   }
 }

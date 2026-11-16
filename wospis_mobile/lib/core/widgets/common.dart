@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../api/api_client.dart';
+import '../realtime_bus.dart';
 
 const Color kBlue = Color(0xFF1D4ED8);
 const Color kInk = Color(0xFF0F172A);
@@ -136,6 +138,7 @@ class FetchView extends StatefulWidget {
 
 class _FetchViewState extends State<FetchView> {
   late Future<dynamic> _future;
+  RealtimeBus? _bus;
 
   @override
   void initState() {
@@ -143,9 +146,29 @@ class _FetchViewState extends State<FetchView> {
     _future = widget.loader();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final bus = context.read<RealtimeBus>();
+    if (!identical(bus, _bus)) {
+      _bus?.removeListener(reload);
+      _bus = bus;
+      _bus!.addListener(reload);
+    }
+  }
+
+  @override
+  void dispose() {
+    _bus?.removeListener(reload);
+    super.dispose();
+  }
+
   Future<void> reload() async {
+    if (!mounted) return;
     setState(() => _future = widget.loader());
-    await _future;
+    try {
+      await _future;
+    } catch (_) {}
   }
 
   @override
@@ -375,6 +398,7 @@ Future<void> runAction(BuildContext context, Future<void> Function() action, {St
     await action();
     if (!context.mounted) return;
     if (success != null) toast(context, success);
+    context.read<RealtimeBus>().ping();
     if (reload != null) await reload();
   } catch (error) {
     if (context.mounted) toast(context, errorText(error), error: true);

@@ -11,6 +11,8 @@ import '../../core/json_util.dart';
 import '../../core/offline/offline_attendance_outbox.dart';
 import '../../core/widgets/common.dart';
 import '../auth/auth_provider.dart';
+import '../sync/media_tools.dart';
+import '../sync/student_extras.dart';
 
 class StudentOverviewScreen extends StatelessWidget {
   const StudentOverviewScreen({super.key});
@@ -154,11 +156,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> with 
       return;
     }
     if (open != null && _needsCleaningProof(open) && !_cleaningProofReady(open)) {
-      toast(
-        context,
-        'Capture before and after cleaning photos in the web attendance app (live camera with date/time stamp), then clock out here.',
-        error: true,
-      );
+      toast(context, 'Capture the before and after surroundings photos below before you clock out.', error: true);
       return;
     }
     final api = context.read<AuthProvider>().api;
@@ -232,8 +230,14 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> with 
                     Text(
                       _cleaningProofReady(open)
                           ? 'Cleaning proof complete. You can clock out.'
-                          : 'Before/after cleaning photos are required. Capture them in the web attendance app (live camera; date and time stamped).',
+                          : 'Capture a live before photo and a live after photo. The date and time are stamped on each one.',
                       style: const TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                    const SizedBox(height: 8),
+                    FilledButton(
+                      style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: kInk),
+                      onPressed: () => _captureProof(context, open!, reload),
+                      child: Text(_cleaningProofReady(open) ? 'Replace cleaning photo' : (open['cleaning_before_path'] == null ? 'Capture before photo' : 'Capture after photo')),
                     ),
                   ],
                   const SizedBox(height: 14),
@@ -316,6 +320,14 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> with 
                   },
                 ),
             ],
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => _janitorialPhoto(context, reload, open),
+              icon: const Icon(Icons.photo_camera_outlined),
+              label: Text(open == null ? 'Janitorial photo clock-in' : 'Janitorial photo clock-out'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HourLimitsScreen())), child: const Text('Weekly and monthly hour limits')),
             const SizedBox(height: 16),
             const SectionTitle('Daily time record'),
             if (dtr.isEmpty) const EmptyNote('No attendance yet.'),
@@ -446,6 +458,59 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> with 
       if (context.mounted) toast(context, errorText(error), error: true);
     }
   }
+
+  Future<void> _captureProof(BuildContext context, Map<String, dynamic> open, Future<void> Function() reload) async {
+    final phase = open['cleaning_before_path'] == null ? 'before' : 'after';
+    final shot = await captureStampedPhoto();
+    if (shot == null || !context.mounted) return;
+    await runAction(
+      context,
+      () => context.read<AuthProvider>().api.upload('/attendance/${open['id']}/cleaning-proof', fields: {
+        'phase': phase,
+        'capture_source': 'live_camera',
+        'captured_at': shot.capturedAt.toUtc().toIso8601String(),
+      }, files: [shot.file('photo', '$phase-cleaning.jpg')]),
+      success: '${phase == 'before' ? 'Before' : 'After'} photo saved.',
+      reload: reload,
+    );
+  }
+
+  Future<void> _janitorialPhoto(BuildContext context, Future<void> Function() reload, Map<String, dynamic>? open) async {
+    final groups = asMaps(asMap(await context.read<AuthProvider>().api.get('/attendance/janitorial-groups'))['groups']);
+    if (!context.mounted) return;
+    final mine = groups.where((group) => asMaps(group['members']).any((member) => numOf(member['id']).toInt() == context.read<AuthProvider>().userId) || numOf(asMap(group['supervisor'])['id']).toInt() == context.read<AuthProvider>().userId).toList();
+    int? groupId = mine.isEmpty ? null : numOf(mine.first['id']).toInt();
+    if (open == null && mine.length > 1) {
+      groupId = await showDialog<int>(
+        context: context,
+        builder: (context) => SimpleDialog(
+          title: const Text('Which area?'),
+          children: [
+            for (final group in mine)
+              SimpleDialogOption(
+                onPressed: () => Navigator.pop(context, numOf(group['id']).toInt()),
+                child: Text(textOf(group['area'], textOf(group['name']))),
+              ),
+          ],
+        ),
+      );
+      if (groupId == null || !context.mounted) return;
+    }
+    final shot = await captureStampedPhoto();
+    if (shot == null || !context.mounted) return;
+    final phase = open == null ? 'before' : 'after';
+    await runAction(
+      context,
+      () => context.read<AuthProvider>().api.upload('/attendance/janitorial-photo', fields: {
+        'phase': phase,
+        'capture_source': 'live_camera',
+        'captured_at': shot.capturedAt.toUtc().toIso8601String(),
+        if (groupId != null) 'group_id': '$groupId',
+      }, files: [shot.file('photo', '$phase-janitorial.jpg')]),
+      success: phase == 'before' ? 'Janitorial clock-in started from the photo.' : 'Janitorial clock-out saved. Your leader reviews the photos.',
+      reload: reload,
+    );
+  }
 }
 
 class QrScanScreen extends StatelessWidget {
@@ -501,6 +566,10 @@ class _StudentHoursScreenState extends State<StudentHoursScreen> {
         return PageBody(
           onRefresh: reload,
           children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HourLimitsScreen())), child: const Text('Week and month limits')),
+            ),
             const SectionTitle('Period breakdown'),
             Row(
               children: [
@@ -656,6 +725,10 @@ class StudentRequirementsScreen extends StatelessWidget {
                 title: textOf(row['document_type']),
                 subtitle: textOf(row['remarks'], 'No remarks'),
                 trailing: textOf(row['status']),
+                children: [
+                  if (textOf(row['file_path'], '').isNotEmpty)
+                    TextButton(onPressed: () => openSecureFile(context, textOf(row['file_path'], ''), title: textOf(row['document_type'])), child: const Text('Open file')),
+                ],
               ),
           ],
         );
