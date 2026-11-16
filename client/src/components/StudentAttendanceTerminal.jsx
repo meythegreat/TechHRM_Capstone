@@ -26,6 +26,7 @@ import {
 import TimesheetPrintView from './TimesheetPrintView';
 import ManualAttendanceRequestForm from './ManualAttendanceRequestForm';
 import CleaningProofCapture from './CleaningProofCapture';
+import { janitorialGroupService } from '../services/janitorialGroupService';
 import Toast from './Toast';
 import { playAccessAcceptedSound, playAccessRejectedSound } from '../sounds';
 
@@ -113,6 +114,9 @@ const StudentAttendanceTerminal = () => {
     const [cameraStarting, setCameraStarting] = useState(false);
     const insecureCamera = typeof window !== 'undefined' && !window.isSecureContext;
     const [activeShift, setActiveShift] = useState(null);
+    const [janitorialGroups, setJanitorialGroups] = useState([]);
+    const [janitorialGroupId, setJanitorialGroupId] = useState('');
+    const [janitorialClockMode, setJanitorialClockMode] = useState('photo');
     const [openActivity, setOpenActivity] = useState(null);
     const [activityToken, setActivityToken] = useState('');
     const [activityMethod, setActivityMethod] = useState('passcode');
@@ -195,6 +199,14 @@ const StudentAttendanceTerminal = () => {
     useEffect(() => {
         loadSummary();
         loadProfile();
+        Promise.all([axios.get('/api/user'), janitorialGroupService.list()])
+            .then(([userRes, groups]) => {
+                const userId = Number(userRes.data?.id);
+                const mine = (groups || []).filter((group) => (group.members || []).some((member) => member.id === userId));
+                setJanitorialGroups(mine);
+                if (mine.length === 1) setJanitorialGroupId(String(mine[0].id));
+            })
+            .catch(() => setJanitorialGroups([]));
         axios.get('/api/my-schedule')
             .then((response) => setWorkSchedules(Array.isArray(response.data) ? response.data : []))
             .catch(() => setWorkSchedules([]));
@@ -307,6 +319,14 @@ const StudentAttendanceTerminal = () => {
         await clockOutWith(tokenInput.trim().toUpperCase(), 'passcode', { auto_clock_out: true });
     };
 
+    const photoJanitorialShift = Boolean(
+        activeShift
+        && activeShift.check_in_method === 'photo'
+        && (
+            String(activeShift.attendance_type || activeShift.work_type || '').toLowerCase() === 'janitorial'
+            || activeShift.janitorial_group_id
+        )
+    );
     const isJanitorialShift = Boolean(
         activeShift
         && (
@@ -758,6 +778,87 @@ const StudentAttendanceTerminal = () => {
                                     <h2 className="text-xl font-semibold text-slate-900">Start Shift</h2>
                                 </div>
 
+                                {janitorialGroups.length > 0 && (
+                                    <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 space-y-3">
+                                        <div>
+                                            <h3 className="text-sm font-semibold text-slate-900">Janitorial duty</h3>
+                                            <p className="mt-1 text-xs text-slate-600">
+                                                When your leader is present, a photo starts and ends the duty. A supervisor code is the second choice, and only while that leader is showing one.
+                                            </p>
+                                        </div>
+                                        {janitorialGroups.length > 1 && (
+                                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                                                Group
+                                                <select
+                                                    value={janitorialGroupId}
+                                                    onChange={(event) => setJanitorialGroupId(event.target.value)}
+                                                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-bold normal-case tracking-normal text-slate-800"
+                                                >
+                                                    {janitorialGroups.map((group) => (
+                                                        <option key={group.id} value={group.id}>
+                                                            {group.area}{group.name && group.name !== group.area ? ` · ${group.name}` : ''}
+                                                            {group.leader_present === false ? ' · leader absent' : ''}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </label>
+                                        )}
+                                        {(janitorialGroups.find((group) => String(group.id) === String(janitorialGroupId)) || janitorialGroups[0])?.leader_present === false ? (
+                                            <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+                                                <p className="text-sm font-semibold text-slate-800">Your janitorial leader is marked absent.</p>
+                                                <p className="text-xs text-slate-600">
+                                                    A code cannot be used. Record the duty under Offline attendance: enter the time you started, then capture the before and after photos with the camera. The date and time are stamped on each photo.
+                                                </p>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => document.getElementById('offline-attendance')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                                                    className="text-xs font-bold text-blue-700"
+                                                >
+                                                    Go to offline attendance
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className="grid grid-cols-2 gap-2 p-1 bg-white rounded-xl">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setJanitorialClockMode('photo')}
+                                                        className={`py-2.5 rounded-lg text-sm font-bold ${janitorialClockMode === 'photo' ? 'bg-slate-900 text-white' : 'text-slate-500'}`}
+                                                    >
+                                                        Photo
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setJanitorialClockMode('code')}
+                                                        className={`py-2.5 rounded-lg text-sm font-bold ${janitorialClockMode === 'code' ? 'bg-slate-900 text-white' : 'text-slate-500'}`}
+                                                    >
+                                                        Supervisor code
+                                                    </button>
+                                                </div>
+                                                {janitorialClockMode === 'photo' ? (
+                                                    <CleaningProofCapture
+                                                        janitorial
+                                                        groupId={janitorialGroupId || janitorialGroups[0]?.id}
+                                                        insecureCamera={insecureCamera}
+                                                        onUpdated={(payload) => {
+                                                            const next = payload?.attendance;
+                                                            if (!next) return;
+                                                            setActiveShift(next);
+                                                            localStorage.setItem('active_shift_segment', JSON.stringify(next));
+                                                            setSuccessMsg(payload?.message || 'Janitorial clock-in started with your photo.');
+                                                            loadSummary();
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <p className="text-xs font-medium text-slate-600">
+                                                        Enter or scan the code on your janitorial supervisor&apos;s screen in the regular clock-in form below. You still photograph the area before you can clock out with that same code.
+                                                    </p>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+
                                 <p className="mb-5 text-sm font-medium text-slate-600">
                                     {todayShiftLabel
                                         ? `Today’s work schedule: ${todayShiftLabel}. You can clock in from 30 minutes before a shift starts until it ends.${todayShifts.length > 1 ? ' Each shift is recorded separately. Clock out of the current shift before you clock in for the next one.' : ''}`
@@ -878,28 +979,38 @@ const StudentAttendanceTerminal = () => {
                                             {activeShift.time_in ? new Date(activeShift.time_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
                                         </p>
                                         <p className="mt-2 text-xs font-medium text-emerald-800">
-                                            {isJanitorialShift
-                                                ? 'Capture before and after cleaning photos, then clock out anytime when finished. Hours credit only after both photos and clock-out.'
-                                                : 'You can clock out any time after you clock in. The entry is approved when you clock out.'}
+                                            {photoJanitorialShift
+                                                ? 'Your first photo started this clock-in. Take one last photo of the area to clock out. If your janitorial supervisor accepts it, the entry is recorded as exactly 4 hours from that first photo.'
+                                                : isJanitorialShift
+                                                    ? 'You started with your supervisor\'s code. Photograph the area, then clock out with that same code. If the entry is accepted, it is recorded as exactly 4 hours from clock-in.'
+                                                    : 'You can clock out any time after you clock in. The entry is approved when you clock out.'}
                                         </p>
                                     </div>
 
                                     {needsCleaningProof(activeShift) && (
                                         <CleaningProofCapture
+                                            janitorial={photoJanitorialShift}
+                                            groupId={activeShift.janitorial_group_id}
                                             attendanceId={activeShift.id}
                                             beforePath={activeShift.cleaning_before_path}
                                             afterPath={activeShift.cleaning_after_path}
                                             insecureCamera={insecureCamera}
                                             onUpdated={(payload) => {
-                                                setActiveShift((prev) => {
-                                                    const next = applyCleaningProofUpdate(prev, payload);
-                                                    localStorage.setItem('active_shift_segment', JSON.stringify(next));
-                                                    return next;
-                                                });
+                                                const next = applyCleaningProofUpdate(activeShift, payload);
+                                                if (photoJanitorialShift && next?.time_out) {
+                                                    setSuccessMsg(payload?.message || 'Janitorial clock-out saved with your photo.');
+                                                    localStorage.removeItem('active_shift_segment');
+                                                    setActiveShift(null);
+                                                    loadSummary();
+                                                    return;
+                                                }
+                                                setActiveShift(next);
+                                                localStorage.setItem('active_shift_segment', JSON.stringify(next));
                                             }}
                                         />
                                     )}
 
+                                    {!photoJanitorialShift && (
                                     <form onSubmit={handleClockOut} className="w-full mt-6 space-y-4 text-left">
                                         <div>
                                             <label className="block text-xs font-bold text-emerald-800 uppercase tracking-wider mb-2">Clock-out method</label>
@@ -924,7 +1035,7 @@ const StudentAttendanceTerminal = () => {
 
                                         {!janitorialProofReady && (
                                             <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">
-                                                Capture before and after cleaning photos before you can clock out.
+                                                Photograph your surroundings at clock-in, then take one last photo before you can clock out.
                                             </p>
                                         )}
 
@@ -1012,6 +1123,7 @@ const StudentAttendanceTerminal = () => {
                                             </div>
                                         )}
                                     </form>
+                                    )}
                                 </div>
                             </motion.div>
                         )}

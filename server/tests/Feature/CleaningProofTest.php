@@ -30,6 +30,80 @@ class CleaningProofTest extends TestCase
         parent::tearDown();
     }
 
+    public function test_janitorial_photos_clock_in_and_out_without_a_code(): void
+    {
+        [$lead, $member, $groupId] = $this->seedJanitorialGroup();
+
+        Sanctum::actingAs($member);
+        $started = $this->post('/api/attendance/janitorial-photo', [
+            'phase' => 'before',
+            'capture_source' => 'live_camera',
+            'captured_at' => '2026-11-13T17:16:00+08:00',
+            'group_id' => $groupId,
+            'photo' => UploadedFile::fake()->image('before.jpg', 640, 480),
+        ], ['Accept' => 'application/json'])->assertCreated()
+            ->assertJsonPath('attendance.check_in_method', 'photo');
+
+        $attendanceId = $started->json('attendance.id');
+        $open = Attendance::query()->findOrFail($attendanceId);
+        $this->assertNull($open->time_out);
+        $this->assertTrue(Carbon::parse($open->time_in)->equalTo(Carbon::parse('2026-11-13T17:16:00+08:00')));
+        $this->assertEquals(0.0, (float) $open->rendered_hours);
+
+        Carbon::setTestNow(Carbon::parse('2026-11-13 17:40:00'));
+        $this->post('/api/attendance/janitorial-photo', [
+            'phase' => 'after',
+            'capture_source' => 'live_camera',
+            'captured_at' => '2026-11-13T17:40:00+08:00',
+            'photo' => UploadedFile::fake()->image('after.jpg', 640, 480),
+        ], ['Accept' => 'application/json'])->assertCreated();
+
+        $closed = Attendance::query()->findOrFail($attendanceId);
+        $this->assertSame('pending', $closed->status);
+        $this->assertEquals(0.0, (float) $closed->rendered_hours);
+        $this->assertTrue(Carbon::parse($closed->time_out)->equalTo(Carbon::parse('2026-11-13T17:40:00+08:00')));
+
+        Sanctum::actingAs($lead);
+        $this->patchJson('/api/attendance/janitorial-reviews/'.$attendanceId, ['status' => 'accepted'])
+            ->assertOk();
+
+        $accepted = Attendance::query()->findOrFail($attendanceId);
+        $this->assertEquals(4.0, (float) $accepted->rendered_hours);
+        $this->assertTrue(Carbon::parse($accepted->time_in)->addHours(4)->equalTo(Carbon::parse($accepted->time_out)));
+    }
+
+    public function test_absent_janitorial_leader_blocks_code_and_live_photo(): void
+    {
+        [$lead, $member, $groupId] = $this->seedJanitorialGroup();
+        $leaderRow = \App\Models\JanitorialLeader::query()->where('user_id', $lead->id)->firstOrFail();
+        $coordinator = User::query()->where('role', 'WSPO Staff')->firstOrFail();
+
+        Sanctum::actingAs($coordinator);
+        $this->patchJson('/api/attendance/janitorial-leaders/'.$leaderRow->id, [
+            'is_present' => false,
+        ])->assertOk()
+            ->assertJsonPath('leader.is_present', false);
+
+        Sanctum::actingAs($lead);
+        $code = $this->getJson('/api/attendance/janitorial-passcode?group_id='.$groupId)
+            ->assertOk()
+            ->json('token_code');
+
+        Sanctum::actingAs($member);
+        $this->postJson('/api/attendance/secure-clock-in', [
+            'token_code' => $code,
+            'method' => 'passcode',
+        ])->assertStatus(422);
+
+        $this->post('/api/attendance/janitorial-photo', [
+            'phase' => 'before',
+            'capture_source' => 'live_camera',
+            'captured_at' => '2026-11-13T17:16:00+08:00',
+            'group_id' => $groupId,
+            'photo' => UploadedFile::fake()->image('before.jpg', 640, 480),
+        ], ['Accept' => 'application/json'])->assertStatus(422);
+    }
+
     public function test_janitorial_clock_out_rejected_without_cleaning_proof(): void
     {
         [$lead, $member, $groupId] = $this->seedJanitorialGroup();
@@ -117,14 +191,15 @@ class CleaningProofTest extends TestCase
             'token_code' => $outCode,
             'method' => 'passcode',
         ])->assertOk()
-            ->assertJsonPath('hours_rendered', 4)
+            ->assertJsonPath('hours_rendered', 0)
             ->assertJsonPath('cleaning_proof.complete', true);
 
         $row = Attendance::query()->findOrFail($attendanceId);
         $this->assertNotNull($row->time_out);
         $this->assertNotEmpty($row->cleaning_before_path);
         $this->assertNotEmpty($row->cleaning_after_path);
-        $this->assertEquals(4.0, (float) $row->rendered_hours);
+        $this->assertEquals(0.0, (float) $row->rendered_hours);
+        $this->assertSame('pending', $row->status);
 
         Sanctum::actingAs($lead);
         $this->getJson('/api/attendance/'.$attendanceId.'/cleaning-proof')
@@ -133,6 +208,73 @@ class CleaningProofTest extends TestCase
 
         $this->get('/api/secure-file?path='.urlencode($row->cleaning_before_path))
             ->assertOk();
+    }
+
+    public function test_janitorial_supervisor_accepts_or_declines_photo_entry(): void
+    {
+        [$lead, $member, $groupId] = $this->seedJanitorialGroup();
+        $outsider = $this->makeUser('Student', 'Library', 'Outsider');
+
+        Sanctum::actingAs($lead);
+        $code = $this->getJson('/api/attendance/janitorial-passcode?group_id='.$groupId)->json('token_code');
+        Sanctum::actingAs($member);
+        $attendanceId = $this->postJson('/api/attendance/secure-clock-in', [
+            'token_code' => $code,
+            'method' => 'passcode',
+        ])->assertOk()->json('attendance.id');
+
+        foreach (['before' => '2026-11-13T17:16:00+08:00', 'after' => '2026-11-13T17:40:00+08:00'] as $phase => $capturedAt) {
+            $this->post('/api/attendance/'.$attendanceId.'/cleaning-proof', [
+                'phase' => $phase,
+                'capture_source' => 'live_camera',
+                'captured_at' => $capturedAt,
+                'photo' => UploadedFile::fake()->image($phase.'.jpg', 640, 480),
+            ], ['Accept' => 'application/json'])->assertCreated();
+        }
+
+        Sanctum::actingAs($lead);
+        $this->getJson('/api/attendance/janitorial-reviews')
+            ->assertOk()
+            ->assertJsonPath('entries.0.id', $attendanceId)
+            ->assertJsonPath('entries.0.time_out', null)
+            ->assertJsonPath('entries.0.before_captured_at', '2026-11-13T17:16:00+08:00');
+
+        $outCode = $this->getJson('/api/attendance/janitorial-passcode?group_id='.$groupId)->json('token_code');
+        Sanctum::actingAs($member);
+        $this->putJson('/api/attendance/secure-clock-out/'.$attendanceId, [
+            'token_code' => $outCode,
+            'method' => 'passcode',
+        ])->assertOk();
+
+        Sanctum::actingAs($member);
+        $this->getJson('/api/attendance/janitorial-reviews')->assertOk()->assertJsonPath('entries', []);
+        $this->patchJson('/api/attendance/janitorial-reviews/'.$attendanceId, ['status' => 'accepted'])->assertForbidden();
+
+        Sanctum::actingAs($outsider);
+        $this->patchJson('/api/attendance/janitorial-reviews/'.$attendanceId, ['status' => 'accepted'])->assertForbidden();
+
+        Sanctum::actingAs($lead);
+        $this->getJson('/api/attendance/janitorial-reviews')
+            ->assertOk()
+            ->assertJsonPath('entries.0.id', $attendanceId)
+            ->assertJsonPath('entries.0.status', 'pending')
+            ->assertJsonPath('entries.0.before_captured_at', '2026-11-13T17:16:00+08:00')
+            ->assertJsonPath('entries.0.after_captured_at', '2026-11-13T17:40:00+08:00');
+
+        $this->patchJson('/api/attendance/janitorial-reviews/'.$attendanceId, ['status' => 'accepted'])
+            ->assertOk()
+            ->assertJsonPath('entry.status', 'accepted');
+        $accepted = Attendance::query()->findOrFail($attendanceId);
+        $this->assertSame('accepted', $accepted->status);
+        $this->assertEquals(4.0, (float) $accepted->rendered_hours);
+        $this->assertTrue(
+            Carbon::parse($accepted->time_in)->addHours(4)->equalTo(Carbon::parse($accepted->time_out))
+        );
+
+        $this->patchJson('/api/attendance/janitorial-reviews/'.$attendanceId, ['status' => 'rejected'])
+            ->assertOk()
+            ->assertJsonPath('entry.status', 'rejected');
+        $this->assertEquals(0.0, (float) Attendance::query()->findOrFail($attendanceId)->rendered_hours);
     }
 
     public function test_daily_cleaning_time_out_requires_proof(): void
@@ -312,6 +454,13 @@ class CleaningProofTest extends TestCase
             $table->string('penalty')->nullable();
             $table->decimal('penalty_hours', 8, 2)->default(0);
             $table->date('incident_date')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('janitorial_leaders', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->unique()->constrained('users')->cascadeOnDelete();
+            $table->boolean('is_present')->default(true);
             $table->timestamps();
         });
 

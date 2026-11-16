@@ -40,6 +40,8 @@ import HelpPage from './HelpPage';
 import MessagesPage from './MessagesPage';
 import { YearLeaderActivities } from './hours/YearLeaderActivities';
 import { StudentOfficerActivityHub } from './hours/StudentOfficerActivityHub';
+import { JanitorialCodeScreen } from './hours/JanitorialCodeScreen';
+import { janitorialGroupService } from '../services/janitorialGroupService';
 import { canCheckActivityAttendance, storeActivityAttendanceCapability } from '../utils/wspoActivityAccess';
 
 interface ScheduleRecord {
@@ -116,11 +118,28 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
     const [isSavingPassword, setIsSavingPassword] = useState(false);
     const [profileReady, setProfileReady] = useState(false);
     const [yearLeader, setYearLeader] = useState(false);
+    const [janitorialSupervisor, setJanitorialSupervisor] = useState(false);
 
     useEffect(() => {
         axios.get('/api/attendance/my-year-activities')
             .then((response) => setYearLeader(Boolean(response.data.leader)))
             .catch(() => setYearLeader(false));
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        Promise.all([axios.get('/api/user'), janitorialGroupService.list()])
+            .then(([userRes, groups]) => {
+                if (cancelled) return;
+                const userId = Number(userRes.data?.id);
+                setJanitorialSupervisor(groups.some((group) => group.supervisor?.id === userId));
+            })
+            .catch(() => {
+                if (!cancelled) setJanitorialSupervisor(false);
+            });
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
     useEffect(() => {
@@ -351,6 +370,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
     const studentNavItems = [
         { id: 'dashboard', label: 'Dashboard', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /> },
         { id: 'attendance', label: 'Attendance / DTR', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /> },
+        ...(janitorialSupervisor ? [{ id: 'janitorial-code', label: 'Janitorial code', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /> }] : []),
         ...(yearLeader ? [{ id: 'year-activities', label: 'Year Activities', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-4-4h-1M9 20H4v-2a4 4 0 014-4h1m4-4a4 4 0 100-8 4 4 0 000 8zm6 2a3 3 0 100-6 3 3 0 000 6zM6 10a3 3 0 100-6 3 3 0 000 6z" /> }] : []),
         ...(canManageCampusActivities ? [{ id: 'campus-activities', label: 'Campus Activities', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /> }] : []),
         { id: 'hours', label: 'Hours Rendered', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 7h6m0 10v-3m-3 3v-6m-3 6v-9m6 13H6a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2z" /> },
@@ -460,6 +480,8 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
 
                         {/* 2. ATTENDANCE LOG */}
                         {currentPath === 'attendance' && <StudentAttendanceTerminal />}
+
+                        {currentPath === 'janitorial-code' && <JanitorialCodeScreen />}
 
                         {currentPath === 'year-activities' && <YearLeaderActivities />}
 

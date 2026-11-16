@@ -156,6 +156,32 @@ class SecureFileController extends Controller
                 ->first();
 
             if (! $attendance) {
+                $shift = \App\Models\ManualAttendanceRequestShift::query()
+                    ->with('request')
+                    ->where(function ($query) use ($path) {
+                        $query->where('before_photo_path', $path)
+                            ->orWhere('after_photo_path', $path);
+                    })
+                    ->first();
+                if (! $shift?->request) {
+                    return false;
+                }
+
+                if ((int) $shift->request->user_id === (int) $user->id) {
+                    return true;
+                }
+
+                if (in_array($user->role, ['Super Admin', 'WSPO Staff', 'Supervisor'], true)) {
+                    return true;
+                }
+
+                if ((int) ($shift->janitorial_group_id ?? 0) > 0) {
+                    return \App\Models\JanitorialGroup::query()
+                        ->where('id', $shift->janitorial_group_id)
+                        ->where('supervisor_user_id', $user->id)
+                        ->exists();
+                }
+
                 return false;
             }
 

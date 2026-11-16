@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Plus, QrCode, Users } from 'lucide-react';
 import { financialService } from '../../services/financialService';
-import { canManageActivityGroups } from '../../utils/wspoActivityAccess';
+import { canManageActivityGroups, canManageJanitorialGroups } from '../../utils/wspoActivityAccess';
 import { ActivityAttendanceChecker } from './ActivityAttendanceChecker';
 import { ActivityQrCard } from './ActivityQrCard';
 import { AddActivityHoursDialog } from './AddActivityHoursDialog';
@@ -18,7 +18,7 @@ export function StudentOfficerActivityHub() {
   const [janitorialGroupsOpen, setJanitorialGroupsOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const canManageGroups = canManageActivityGroups();
-  const canManageJanitorial = canManageGroups;
+  const canManageJanitorial = canManageJanitorialGroups();
 
   const today = () => {
     const now = new Date();

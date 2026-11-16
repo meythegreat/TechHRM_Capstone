@@ -11,7 +11,9 @@ use App\Support\ClassHoursDuty;
 use App\Support\ManualDtrEntry;
 use App\Support\SuperAdminAudit;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class ManualAttendanceRequestController extends Controller
 {
@@ -58,6 +60,11 @@ class ManualAttendanceRequestController extends Controller
             $query->where('status', $request->status);
         }
 
+        $query->where(function ($builder) {
+            $builder->whereNull('request_type')
+                ->orWhere('request_type', '!=', ManualAttendanceRequest::TYPE_JANITORIAL);
+        });
+
         if ($accounts->usesSupervisorScope($actor)) {
             $areas = $accounts->supervisedOfficeAreas($actor);
             if ($areas === []) {
@@ -96,21 +103,59 @@ class ManualAttendanceRequestController extends Controller
         $requestType = $validated['request_type'] ?? ManualAttendanceRequest::TYPE_REGULAR;
         $janitorialGroup = null;
         if ($requestType === ManualAttendanceRequest::TYPE_JANITORIAL) {
-            $janitorialGroup = JanitorialGroup::query()
+            $eligible = JanitorialGroup::query()
                 ->where(function ($query) use ($user) {
                     $query->where('supervisor_user_id', $user->id)
                         ->orWhereHas('members', fn ($members) => $members->where('users.id', $user->id));
                 })
-                ->first();
-            if (! $janitorialGroup) {
+                ->orderBy('area')
+                ->get();
+            if ($eligible->isEmpty()) {
                 return response()->json([
                     'message' => 'You must be assigned to a janitorial group before submitting a janitorial offline request.',
+                ], 422);
+            }
+
+            $requestedIds = collect($validated['shifts'])
+                ->pluck('janitorial_group_id')
+                ->filter(fn ($id) => $id !== null && $id !== '')
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values();
+            if ($requestedIds->count() > 1) {
+                return response()->json([
+                    'message' => 'Submit one janitorial group per offline request.',
+                ], 422);
+            }
+
+            if ($requestedIds->count() === 1) {
+                $janitorialGroup = $eligible->firstWhere('id', $requestedIds->first());
+                if (! $janitorialGroup) {
+                    return response()->json([
+                        'message' => 'Choose a janitorial group you belong to.',
+                    ], 422);
+                }
+            } elseif ($eligible->count() === 1) {
+                $janitorialGroup = $eligible->first();
+            } else {
+                return response()->json([
+                    'message' => 'Choose which janitorial group this offline duty was for.',
                 ], 422);
             }
         }
 
         $shiftRows = [];
         foreach (array_values($validated['shifts']) as $index => $shift) {
+            if ($requestType === ManualAttendanceRequest::TYPE_JANITORIAL) {
+                $start = \Carbon\Carbon::createFromFormat('Y-m-d H:i', $shift['date'].' '.$shift['time_in']);
+                if (! $start) {
+                    return response()->json([
+                        'message' => 'Shift '.($index + 1).': Enter a valid time in.',
+                    ], 422);
+                }
+                $shift['time_out'] = \App\Support\DutyHours::janitorialCreditedEnd($start)->format('H:i');
+            }
+
             [$timeIn, $timeOut, $error] = ManualDtrEntry::resolveTimes(
                 $shift['date'],
                 $shift['time_in'],
@@ -172,12 +217,64 @@ class ManualAttendanceRequestController extends Controller
                 }
             }
 
+            $beforePhoto = null;
+            $afterPhoto = null;
+            $beforeCapturedAt = null;
+            $afterCapturedAt = null;
+            if ($requestType === ManualAttendanceRequest::TYPE_JANITORIAL) {
+                $beforePhoto = $request->file('shifts.'.$index.'.before_photo');
+                $afterPhoto = $request->file('shifts.'.$index.'.after_photo');
+                if ($request->input('shifts.'.$index.'.capture_source') !== 'live_camera') {
+                    return response()->json([
+                        'message' => 'Shift '.($index + 1).': capture the before and after photos with the live camera. Gallery uploads are not allowed.',
+                    ], 422);
+                }
+                if (! $beforePhoto instanceof UploadedFile || ! $afterPhoto instanceof UploadedFile) {
+                    return response()->json([
+                        'message' => 'Shift '.($index + 1).': capture the before and after surroundings photos with the camera.',
+                    ], 422);
+                }
+                foreach (['before' => $beforePhoto, 'after' => $afterPhoto] as $label => $photo) {
+                    $photoError = $this->photoError($photo, $label);
+                    if ($photoError) {
+                        return response()->json([
+                            'message' => 'Shift '.($index + 1).': '.$photoError,
+                        ], 422);
+                    }
+                }
+
+                $beforeCaptured = $request->input('shifts.'.$index.'.before_captured_at');
+                $afterCaptured = $request->input('shifts.'.$index.'.after_captured_at');
+                if (! is_string($beforeCaptured) || trim($beforeCaptured) === '' || ! is_string($afterCaptured) || trim($afterCaptured) === '') {
+                    return response()->json([
+                        'message' => 'Shift '.($index + 1).': enter the date and time on the before photo, the date and time on the after photo, and your time in.',
+                    ], 422);
+                }
+                try {
+                    $beforeCapturedAt = \Carbon\Carbon::parse($beforeCaptured);
+                    $afterCapturedAt = \Carbon\Carbon::parse($afterCaptured);
+                } catch (\Throwable) {
+                    return response()->json([
+                        'message' => 'Shift '.($index + 1).': enter a valid date and time for each photo.',
+                    ], 422);
+                }
+                if ($afterCapturedAt->lessThanOrEqualTo($beforeCapturedAt)) {
+                    return response()->json([
+                        'message' => 'Shift '.($index + 1).': the after photo time must be later than the before photo time.',
+                    ], 422);
+                }
+            }
+
             $shiftRows[] = [
                 'work_date' => $shift['date'],
                 'time_in' => $shift['time_in'],
                 'time_out' => $shift['time_out'],
                 'janitorial_area' => $area !== '' ? $area : null,
                 'janitorial_group_id' => $groupId,
+                'before_photo' => $beforePhoto,
+                'after_photo' => $afterPhoto,
+                'before_captured_at' => $beforeCapturedAt,
+                'after_captured_at' => $afterCapturedAt,
                 'sort_order' => $index,
                 'time_in_at' => $timeIn,
                 'time_out_at' => $timeOut,
@@ -202,6 +299,13 @@ class ManualAttendanceRequestController extends Controller
             ]);
 
             foreach ($shiftRows as $shift) {
+                $beforePath = $shift['before_photo'] instanceof UploadedFile
+                    ? $this->storeOfflinePhoto($shift['before_photo'], (int) $requestRow->id, (int) $shift['sort_order'], 'before')
+                    : null;
+                $afterPath = $shift['after_photo'] instanceof UploadedFile
+                    ? $this->storeOfflinePhoto($shift['after_photo'], (int) $requestRow->id, (int) $shift['sort_order'], 'after')
+                    : null;
+
                 ManualAttendanceRequestShift::create([
                     'manual_attendance_request_id' => $requestRow->id,
                     'work_date' => $shift['work_date'],
@@ -209,6 +313,10 @@ class ManualAttendanceRequestController extends Controller
                     'time_out' => $shift['time_out'],
                     'janitorial_area' => $shift['janitorial_area'],
                     'janitorial_group_id' => $shift['janitorial_group_id'],
+                    'before_photo_path' => $beforePath,
+                    'after_photo_path' => $afterPath,
+                    'before_captured_at' => $shift['before_captured_at'],
+                    'after_captured_at' => $shift['after_captured_at'],
                     'sort_order' => $shift['sort_order'],
                 ]);
             }
@@ -221,15 +329,25 @@ class ManualAttendanceRequestController extends Controller
             ManualAttendanceRequest::TYPE_CLASS_HOURS => 'Class-hours duty request',
             default => 'Offline attendance request',
         };
-        $this->notifyReviewers(
-            $user,
-            $title,
-            $user->name.' submitted a '.$requestType.' attendance request with '
-                .count($shiftRows).(count($shiftRows) === 1 ? ' shift' : ' shifts').' for approval.',
-        );
+        if ($requestType === ManualAttendanceRequest::TYPE_JANITORIAL && $janitorialGroup) {
+            Notification::create([
+                'user_id' => $janitorialGroup->supervisor_user_id,
+                'title' => $title,
+                'message' => $user->name.' submitted a janitorial offline request with '
+                    .count($shiftRows).(count($shiftRows) === 1 ? ' shift' : ' shifts')
+                    .' for '.$janitorialGroup->area.'. Accepting it records exactly 4 hours from clock-in.',
+            ]);
+        } else {
+            $this->notifyReviewers(
+                $user,
+                $title,
+                $user->name.' submitted a '.$requestType.' attendance request with '
+                    .count($shiftRows).(count($shiftRows) === 1 ? ' shift' : ' shifts').' for approval.',
+            );
+        }
 
         $message = match ($requestType) {
-            ManualAttendanceRequest::TYPE_JANITORIAL => 'Janitorial offline request submitted. Hours appear on DTR after supervisor approval.',
+            ManualAttendanceRequest::TYPE_JANITORIAL => 'Janitorial offline request submitted. Your janitorial supervisor approves it. If accepted, the DTR records exactly 4 hours from your time in.',
             ManualAttendanceRequest::TYPE_CLASS_HOURS => 'Class-hours duty request submitted. Hours appear on DTR after supervisor approval.',
             default => 'Offline attendance request submitted. It will appear on your DTR after your supervisor approves it.',
         };
@@ -252,6 +370,15 @@ class ManualAttendanceRequestController extends Controller
             return response()->json(['message' => 'Only pending requests can be cancelled.'], 422);
         }
 
+        $manualAttendanceRequest->load('shifts');
+        foreach ($manualAttendanceRequest->shifts as $shift) {
+            foreach ([$shift->before_photo_path, $shift->after_photo_path] as $path) {
+                if (is_string($path) && $path !== '' && Storage::disk('local')->exists($path)) {
+                    Storage::disk('local')->delete($path);
+                }
+            }
+        }
+
         $manualAttendanceRequest->delete();
 
         return response()->json(['message' => 'Offline attendance request cancelled.']);
@@ -263,17 +390,22 @@ class ManualAttendanceRequestController extends Controller
         SuperAdminAudit::denyMutation($request);
 
         $reviewer = $request->user()->loadMissing('profile');
-        if (!in_array($reviewer->role, ['Supervisor', 'WSPO Staff'], true)) {
-            return response()->json(['message' => 'Only a supervisor or WSPO staff can decide this request.'], 403);
-        }
-
         $manualAttendanceRequest->load(['student.profile', 'shifts']);
         $student = $manualAttendanceRequest->student;
         if (!$student) {
             return response()->json(['message' => 'Student account was not found.'], 404);
         }
 
-        if (!$this->canReviewStudent($reviewer, $student)) {
+        $requestType = $manualAttendanceRequest->request_type ?: ManualAttendanceRequest::TYPE_REGULAR;
+        if ($requestType === ManualAttendanceRequest::TYPE_JANITORIAL) {
+            if (! $this->janitorialSupervisorCanReview($reviewer, $manualAttendanceRequest)) {
+                return response()->json([
+                    'message' => 'Only this group\'s janitorial supervisor can approve or decline this offline request.',
+                ], 403);
+            }
+        } elseif (! in_array($reviewer->role, ['Supervisor', 'WSPO Staff'], true)) {
+            return response()->json(['message' => 'Only a supervisor or WSPO staff can decide this request.'], 403);
+        } elseif (! $this->canReviewStudent($reviewer, $student)) {
             return response()->json(['message' => 'You can only review offline attendance for students in your scope.'], 403);
         }
 
@@ -297,7 +429,9 @@ class ManualAttendanceRequestController extends Controller
             Notification::create([
                 'user_id' => $student->id,
                 'title' => 'Offline attendance declined',
-                'message' => 'Your offline manual attendance request was declined by your supervisor.',
+                'message' => $requestType === ManualAttendanceRequest::TYPE_JANITORIAL
+                    ? 'Your janitorial supervisor declined the offline request.'
+                    : 'Your offline manual attendance request was declined by your supervisor.',
             ]);
 
             return response()->json([
@@ -306,7 +440,6 @@ class ManualAttendanceRequestController extends Controller
             ]);
         }
 
-        $requestType = $manualAttendanceRequest->request_type ?: ManualAttendanceRequest::TYPE_REGULAR;
         $noteBase = trim((string) ($manualAttendanceRequest->reason ?: ManualAttendanceRequest::DEFAULT_REASON));
         $createdIds = [];
 
@@ -349,6 +482,15 @@ class ManualAttendanceRequestController extends Controller
                         );
                     }
 
+                    if ($requestType === ManualAttendanceRequest::TYPE_JANITORIAL) {
+                        $created['attendance']->update([
+                            'cleaning_before_path' => $shift->before_photo_path,
+                            'cleaning_after_path' => $shift->after_photo_path,
+                            'cleaning_before_captured_at' => $shift->before_captured_at,
+                            'cleaning_after_captured_at' => $shift->after_captured_at,
+                        ]);
+                    }
+
                     $shift->update(['attendance_id' => $created['attendance']->id]);
                     $createdIds[] = $created['attendance']->id;
                 }
@@ -383,6 +525,101 @@ class ManualAttendanceRequestController extends Controller
             'request' => $this->serialize($manualAttendanceRequest->fresh(['shifts', 'student.profile', 'reviewer:id,name']), true),
             'attendance_ids' => $createdIds,
         ]);
+    }
+
+    /** Janitorial leader: offline requests for the groups they supervise. */
+    public function janitorialQueue(Request $request)
+    {
+        $user = $request->user();
+        if ($user->role !== 'Student') {
+            return response()->json(['requests' => []]);
+        }
+
+        $groupIds = JanitorialGroup::query()
+            ->where('supervisor_user_id', $user->id)
+            ->pluck('id');
+        if ($groupIds->isEmpty()) {
+            return response()->json(['requests' => []]);
+        }
+
+        $rows = ManualAttendanceRequest::query()
+            ->with([
+                'student:id,name',
+                'student.profile:id,user_id,student_id_number,assigned_office,year_level',
+                'shifts',
+                'reviewer:id,name',
+            ])
+            ->where('request_type', ManualAttendanceRequest::TYPE_JANITORIAL)
+            ->whereHas('shifts', fn ($shifts) => $shifts->whereIn('janitorial_group_id', $groupIds))
+            ->orderByRaw("CASE status WHEN 'Pending' THEN 0 WHEN 'Approved' THEN 1 ELSE 2 END")
+            ->orderByDesc('created_at')
+            ->limit(40)
+            ->get()
+            ->map(fn (ManualAttendanceRequest $row) => $this->serialize($row, true));
+
+        return response()->json(['requests' => $rows]);
+    }
+
+    private function janitorialSupervisorCanReview(User $reviewer, ManualAttendanceRequest $manualAttendanceRequest): bool
+    {
+        if ($reviewer->role !== 'Student') {
+            return false;
+        }
+
+        $groupIds = $manualAttendanceRequest->shifts
+            ->pluck('janitorial_group_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+        if ($groupIds->isEmpty()) {
+            return false;
+        }
+
+        $supervised = JanitorialGroup::query()
+            ->whereIn('id', $groupIds)
+            ->where('supervisor_user_id', $reviewer->id)
+            ->count();
+
+        return $supervised === $groupIds->count();
+    }
+
+    private function photoError(UploadedFile $photo, string $label): ?string
+    {
+        if (! $photo->isValid()) {
+            return 'The '.$label.' photo could not be uploaded.';
+        }
+
+        if ($photo->getSize() > 5_242_880) {
+            return 'The '.$label.' photo must be 5 MB or smaller.';
+        }
+
+        $mime = strtolower((string) $photo->getMimeType());
+        if (! in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true)) {
+            return 'The '.$label.' photo must be a JPEG, PNG, or WebP image.';
+        }
+
+        return null;
+    }
+
+    private function storeOfflinePhoto(UploadedFile $photo, int $requestId, int $index, string $phase): string
+    {
+        $extension = strtolower($photo->getClientOriginalExtension() ?: 'jpg');
+        if (! in_array($extension, ['jpg', 'jpeg', 'png', 'webp'], true)) {
+            $extension = 'jpg';
+        }
+
+        $stored = $photo->storeAs(
+            'cleaning-proofs/offline/'.$requestId,
+            $index.'-'.$phase.'.'.$extension,
+            'local',
+        );
+
+        if (! is_string($stored) || $stored === '') {
+            abort(500, 'Could not store the '.$phase.' photo.');
+        }
+
+        return $stored;
     }
 
     private function canReviewStudent(User $actor, User $student): bool
@@ -438,6 +675,10 @@ class ManualAttendanceRequestController extends Controller
                 'time_out' => $shift->time_out,
                 'janitorial_area' => $shift->janitorial_area,
                 'janitorial_group_id' => $shift->janitorial_group_id,
+                'before_photo_path' => $shift->before_photo_path,
+                'after_photo_path' => $shift->after_photo_path,
+                'before_captured_at' => optional($shift->before_captured_at)?->toIso8601String(),
+                'after_captured_at' => optional($shift->after_captured_at)?->toIso8601String(),
                 'sort_order' => (int) $shift->sort_order,
                 'attendance_id' => $shift->attendance_id,
             ])->values()->all(),

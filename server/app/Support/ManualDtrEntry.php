@@ -95,6 +95,19 @@ class ManualDtrEntry
             return ['ok' => false, 'message' => $error, 'status' => 422];
         }
 
+        $attendanceType = $options['attendance_type'] ?? 'Regular';
+        $isJanitorial = strcasecmp($attendanceType, 'Janitorial') === 0;
+        if ($isJanitorial) {
+            $timeOut = DutyHours::janitorialCreditedEnd($timeIn);
+            if ($timeOut->greaterThan(now())) {
+                return [
+                    'ok' => false,
+                    'message' => 'The 4-hour window from this time in has not finished yet.',
+                    'status' => 422,
+                ];
+            }
+        }
+
         if (self::overlaps((int) $student->id, $timeIn, $timeOut)) {
             return [
                 'ok' => false,
@@ -103,8 +116,6 @@ class ManualDtrEntry
             ];
         }
 
-        $attendanceType = $options['attendance_type'] ?? 'Regular';
-        $isJanitorial = strcasecmp($attendanceType, 'Janitorial') === 0;
         $skipSchedule = (bool) ($options['skip_schedule_match'] ?? $isJanitorial);
         $applyLunch = (bool) ($options['apply_lunch'] ?? ! $isJanitorial);
         $capAtEnd = (bool) ($options['cap_at_schedule_end'] ?? ! $isJanitorial);
@@ -116,20 +127,7 @@ class ManualDtrEntry
 
         $office = trim((string) ($student->profile?->assigned_office ?? ''));
         if ($isJanitorial) {
-            $already = Attendance::query()
-                ->where('user_id', $student->id)
-                ->whereNull('rendered_hour_event_id')
-                ->where(function ($query) {
-                    $query->where('attendance_type', 'Janitorial')
-                        ->orWhere('work_type', 'Janitorial');
-                })
-                ->whereNotNull('time_out')
-                ->whereDate('time_in', $timeIn->toDateString())
-                ->where(function ($query) {
-                    $query->where('computed_hours', '>', 0)->orWhere('rendered_hours', '>', 0);
-                })
-                ->exists();
-            $hours = DutyHours::janitorialShiftHours($already);
+            $hours = DutyHours::JANITORIAL_FIXED_HOURS;
         } else {
             $hours = $applyLunch
                 ? DutyHours::creditedHours($timeIn, $timeOut, $office)
@@ -186,7 +184,7 @@ class ManualDtrEntry
                 ? $note
                 : ($isJanitorial
                     ? ('Janitorial duty'.($area ? ' — '.$area : '')
-                        .'. Fixed '.DutyHours::JANITORIAL_FIXED_HOURS.'h credit (5–9pm overall shift).')
+                        .'. Recorded as '.DutyHours::JANITORIAL_FIXED_HOURS.' hours from clock-in.')
                     : 'Manually entered by supervisor.'),
             'status' => $status,
             'check_in_method' => $checkInMethod,

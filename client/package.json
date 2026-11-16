@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --config vite.config.ts",
-    "build": "tsc -b && vite build --config vite.config.ts",
+    "dev": "vite",
+    "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview --config vite.config.ts",
+    "preview": "vite preview",
     "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {

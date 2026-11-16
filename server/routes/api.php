@@ -125,6 +125,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/attendance/janitorial-groups', [\App\Http\Controllers\JanitorialGroupController::class, 'index']);
     Route::get('/attendance/janitorial-passcode', [\App\Http\Controllers\AdvancedAttendanceController::class, 'janitorialPasscode']);
     Route::get('/attendance/janitorial-qr', [\App\Http\Controllers\AdvancedAttendanceController::class, 'janitorialQr']);
+    Route::get('/attendance/janitorial-reviews', [\App\Http\Controllers\JanitorialReviewController::class, 'index']);
+    Route::patch('/attendance/janitorial-reviews/{attendance}', [\App\Http\Controllers\JanitorialReviewController::class, 'decide']);
+    Route::get('/attendance/janitorial-offline-requests', [\App\Http\Controllers\ManualAttendanceRequestController::class, 'janitorialQueue']);
+    Route::patch('/attendance/janitorial-offline-requests/{manualAttendanceRequest}', [\App\Http\Controllers\ManualAttendanceRequestController::class, 'decide']);
     Route::get('/attendance/assembly-year-representatives', [\App\Http\Controllers\AssemblyYearRepresentativeController::class, 'index']);
 
     Route::get('/holidays', [HolidayController::class, 'index']);
@@ -153,6 +157,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- STAGE 3 & 4: Advanced Attendance ---
     Route::post('/attendance/secure-clock-in', [\App\Http\Controllers\AdvancedAttendanceController::class, 'secureClockIn']);
     Route::put('/attendance/secure-clock-out/{id}', [\App\Http\Controllers\AdvancedAttendanceController::class, 'secureClockOut']);
+    Route::post('/attendance/janitorial-photo', [\App\Http\Controllers\CleaningProofController::class, 'janitorial']);
     Route::post('/attendance/{id}/cleaning-proof', [\App\Http\Controllers\CleaningProofController::class, 'store']);
     Route::get('/attendance/{id}/cleaning-proof', [\App\Http\Controllers\CleaningProofController::class, 'show']);
     Route::get('/attendance/hours-summary', [\App\Http\Controllers\AdvancedAttendanceController::class, 'getWorkHourSummary']);
@@ -181,6 +186,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/attendance/manual-requests', [ManualAttendanceRequestController::class, 'index']);
         Route::patch('/attendance/manual-requests/{manualAttendanceRequest}', [ManualAttendanceRequestController::class, 'decide']);
 
+        Route::post('/attendance/janitorial-leaders', [\App\Http\Controllers\JanitorialGroupController::class, 'storeLeader']);
+        Route::patch('/attendance/janitorial-leaders/{janitorialLeader}', [\App\Http\Controllers\JanitorialGroupController::class, 'updateLeader']);
+        Route::delete('/attendance/janitorial-leaders/{janitorialLeader}', [\App\Http\Controllers\JanitorialGroupController::class, 'destroyLeader']);
         Route::post('/attendance/janitorial-groups', [\App\Http\Controllers\JanitorialGroupController::class, 'store']);
         Route::put('/attendance/janitorial-groups/{janitorialGroup}', [\App\Http\Controllers\JanitorialGroupController::class, 'update']);
         Route::delete('/attendance/janitorial-groups/{janitorialGroup}', [\App\Http\Controllers\JanitorialGroupController::class, 'destroy']);

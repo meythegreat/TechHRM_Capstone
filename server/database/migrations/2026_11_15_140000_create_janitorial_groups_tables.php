@@ -18,7 +18,7 @@ return new class extends Migration
                 $table->timestamps();
 
                 $table->index(['department'], 'jg_department_idx');
-                $table->unique(['department', 'name'], 'jg_department_name_uq');
+                $table->index(['supervisor_user_id'], 'jg_supervisor_idx');
             });
         }
 

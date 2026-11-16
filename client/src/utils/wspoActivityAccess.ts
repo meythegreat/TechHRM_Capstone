@@ -50,11 +50,26 @@ export function canManageActivityGroups(role?: string | null, office?: string | 
   return !resolvedOffice.includes('wspo president');
 }
 
-/** Janitorial duty rosters: same people as activity Groups (Secretary + Coordinator). */
+/** Janitorial leaders and area groups: WSPO Coordinator only. */
 export function canManageJanitorialGroups(role?: string | null, office?: string | null): boolean {
-  // Keep in lockstep with Groups. A stale can_manage_janitorial_groups=0 from an
-  // older login must not hide the button when Groups is already allowed.
-  return canManageActivityGroups(role, office);
+  const resolvedRole = role ?? localStorage.getItem('user_role') ?? '';
+  const resolvedOffice = (office ?? localStorage.getItem('assigned_office') ?? '').trim().toLowerCase();
+  const officer = (localStorage.getItem('officer_position') ?? '').trim().toLowerCase();
+
+  if (resolvedRole === 'Student' || officer === 'wspo secretary' || officer === 'wspo president') {
+    return false;
+  }
+  if (localStorage.getItem('is_student_officer') === '1') return false;
+  if (resolvedRole !== 'WSPO Staff') return false;
+  if (resolvedOffice.includes('secretary') || resolvedOffice.includes('president')) return false;
+
+  return (
+    resolvedOffice === ''
+    || resolvedOffice === 'wspo'
+    || resolvedOffice === 'unassigned'
+    || resolvedOffice.includes('wspo coordinator')
+    || resolvedOffice === 'wspo coordinator'
+  );
 }
 
 export function canIssueDailyAttendance(): boolean {
