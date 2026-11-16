@@ -265,7 +265,7 @@ const ManualAttendanceRequestForm = ({ onToast }) => {
                 {requestType === 'janitorial' ? (
                   <p className="px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700">
                     {plusFourHours(shift.time_in)}
-                    <span className="block text-[11px] font-medium text-slate-500">Exactly 4 hours after time in, once accepted</span>
+                    <span className="block text-[11px] font-medium text-slate-500">Exactly 4 hours after time in, once accepted. You can submit even if that clock-out is still later today.</span>
                   </p>
                 ) : (
                   <input

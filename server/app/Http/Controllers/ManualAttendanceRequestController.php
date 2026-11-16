@@ -160,6 +160,7 @@ class ManualAttendanceRequestController extends Controller
                 $shift['date'],
                 $shift['time_in'],
                 $shift['time_out'],
+                $requestType === ManualAttendanceRequest::TYPE_JANITORIAL,
             );
             if ($error) {
                 return response()->json([

@@ -761,6 +761,25 @@ const StudentAttendanceTerminal = () => {
                             </div>
                         </div>
                     )}
+                    {janitorialGroups.length > 0 && (
+                        <div className="mb-4 space-y-2">
+                            {janitorialGroups.map((group) => {
+                                const present = group.leader_present !== false;
+                                return (
+                                    <div key={group.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Janitorial assignment</p>
+                                            <span className={`inline-flex shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${present ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                                                {present ? 'Supervisor present' : 'Supervisor absent'}
+                                            </span>
+                                        </div>
+                                        <p className="mt-2 text-sm font-semibold text-slate-900">Area: {group.area || '—'}</p>
+                                        <p className="mt-1 text-sm text-slate-600">Janitorial supervisor: {group.supervisor?.name || '—'}</p>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                     <AnimatePresence mode="wait">
                         {!activeShift ? (
                             /* CLOCK IN FORM */

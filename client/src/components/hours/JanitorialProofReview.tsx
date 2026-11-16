@@ -67,6 +67,12 @@ export function JanitorialProofReview() {
   }, []);
 
   const decide = async (id: number, status: 'accepted' | 'rejected') => {
+    const confirmed = window.confirm(
+      status === 'accepted'
+        ? 'Accept this entry? 4 hours will be recorded from the clock-in. This decision is final.'
+        : 'Decline this entry? No hours will be recorded. This decision is final.',
+    );
+    if (!confirmed) return;
     setBusyId(id);
     setError('');
     try {
@@ -84,7 +90,7 @@ export function JanitorialProofReview() {
     <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-8">
       <h2 className="text-xl font-semibold text-slate-900">Photo review</h2>
       <p className="mt-1 max-w-2xl text-sm text-slate-500">
-        Entries appear as soon as a student submits a surroundings photo, even if they are still clocked in. Check each photo’s date and time, then accept or decline after they clock out. Accepting records exactly 4 hours on their DTR, starting at clock-in.
+        Entries appear as soon as a student submits a surroundings photo, even if they are still clocked in. Check each photo’s date and time, then accept or decline after they clock out. Accepting records exactly 4 hours on their DTR, starting at clock-in. The decision is final.
       </p>
       {error && <p className="mt-4 text-sm font-semibold text-rose-700">{error}</p>}
       {loading && <p className="mt-4 text-sm text-slate-500">Loading entries…</p>}
@@ -133,8 +139,8 @@ export function JanitorialProofReview() {
                   studentName={entry.student_name || 'Student'}
                 />
               </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {!accepted && (
+              {!accepted && !declined ? (
+                <div className="mt-4 flex flex-wrap gap-2">
                   <button
                     type="button"
                     disabled={busyId === entry.id || !entry.time_out}
@@ -143,8 +149,6 @@ export function JanitorialProofReview() {
                   >
                     <Check className="h-4 w-4" /> Accept
                   </button>
-                )}
-                {!declined && (
                   <button
                     type="button"
                     disabled={busyId === entry.id}
@@ -153,8 +157,10 @@ export function JanitorialProofReview() {
                   >
                     <X className="h-4 w-4" /> Decline
                   </button>
-                )}
-              </div>
+                </div>
+              ) : (
+                <p className="mt-4 text-sm font-medium text-slate-600">This decision is final.</p>
+              )}
             </article>
           );
         })}

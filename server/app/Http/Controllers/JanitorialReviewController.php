@@ -55,6 +55,11 @@ class JanitorialReviewController extends Controller
             return response()->json(['message' => 'Choose accepted or rejected.'], 422);
         }
 
+        $current = strtolower((string) $attendance->status);
+        if (in_array($current, ['accepted', 'approved', 'rejected'], true)) {
+            return response()->json(['message' => 'This decision is final and cannot be changed.'], 422);
+        }
+
         if ($decision === 'accepted' && ! $attendance->time_out) {
             return response()->json(['message' => 'The student must clock out, with a final surroundings photo, before this entry can be accepted.'], 422);
         }

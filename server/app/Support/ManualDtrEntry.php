@@ -16,7 +16,7 @@ class ManualDtrEntry
     /**
      * @return array{0: ?Carbon, 1: ?Carbon, 2: ?string}
      */
-    public static function resolveTimes(string $date, string $timeIn, string $timeOut): array
+    public static function resolveTimes(string $date, string $timeIn, string $timeOut, bool $allowFutureEnd = false): array
     {
         $start = Carbon::createFromFormat('Y-m-d H:i', $date.' '.$timeIn);
         $end = Carbon::createFromFormat('Y-m-d H:i', $date.' '.$timeOut);
@@ -33,7 +33,7 @@ class ManualDtrEntry
             return [null, null, 'Time in cannot be in the future.'];
         }
 
-        if ($end->greaterThan(now())) {
+        if ($end->greaterThan(now()) && ! $allowFutureEnd) {
             return [null, null, 'Time out cannot be in the future.'];
         }
 
@@ -90,22 +90,17 @@ class ManualDtrEntry
         ?string $checkInMethod = null,
         array $options = [],
     ): array {
-        [$timeIn, $timeOut, $error] = self::resolveTimes($date, $timeInHm, $timeOutHm);
+        $attendanceType = $options['attendance_type'] ?? 'Regular';
+        $isJanitorial = strcasecmp($attendanceType, 'Janitorial') === 0;
+        [$timeIn, $timeOut, $error] = self::resolveTimes($date, $timeInHm, $timeOutHm, $isJanitorial);
         if ($error) {
             return ['ok' => false, 'message' => $error, 'status' => 422];
         }
 
-        $attendanceType = $options['attendance_type'] ?? 'Regular';
-        $isJanitorial = strcasecmp($attendanceType, 'Janitorial') === 0;
         if ($isJanitorial) {
+            // The DTR clock-out is a 4-hour credit from time in, even if that
+            // moment is still later today when the request is approved.
             $timeOut = DutyHours::janitorialCreditedEnd($timeIn);
-            if ($timeOut->greaterThan(now())) {
-                return [
-                    'ok' => false,
-                    'message' => 'The 4-hour window from this time in has not finished yet.',
-                    'status' => 422,
-                ];
-            }
         }
 
         if (self::overlaps((int) $student->id, $timeIn, $timeOut)) {

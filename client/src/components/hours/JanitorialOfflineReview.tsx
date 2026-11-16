@@ -53,6 +53,12 @@ export function JanitorialOfflineReview() {
   }, []);
 
   const decide = async (id: number, status: 'Approved' | 'Rejected') => {
+    const confirmed = window.confirm(
+      status === 'Approved'
+        ? 'Accept this offline entry? 4 hours will be recorded from the time in. This decision is final.'
+        : 'Decline this offline entry? No hours will be recorded. This decision is final.',
+    );
+    if (!confirmed) return;
     setBusyId(id);
     setError('');
     try {
@@ -72,7 +78,7 @@ export function JanitorialOfflineReview() {
     <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-8">
       <h2 className="text-xl font-semibold text-slate-900">Offline requests</h2>
       <p className="mt-1 max-w-2xl text-sm text-slate-500">
-        Each request includes the before and after surroundings photos. Accepting records exactly 4 hours from the time in they entered.
+        Each request includes the before and after surroundings photos. Accepting records exactly 4 hours from the time in they entered. The decision is final.
       </p>
       {error && <p className="mt-4 text-sm font-semibold text-rose-700">{error}</p>}
       {loading && <p className="mt-4 text-sm text-slate-500">Loading requests…</p>}

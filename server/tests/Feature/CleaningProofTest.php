@@ -272,9 +272,9 @@ class CleaningProofTest extends TestCase
         );
 
         $this->patchJson('/api/attendance/janitorial-reviews/'.$attendanceId, ['status' => 'rejected'])
-            ->assertOk()
-            ->assertJsonPath('entry.status', 'rejected');
-        $this->assertEquals(0.0, (float) Attendance::query()->findOrFail($attendanceId)->rendered_hours);
+            ->assertStatus(422);
+        $this->assertSame('accepted', Attendance::query()->findOrFail($attendanceId)->status);
+        $this->assertEquals(4.0, (float) Attendance::query()->findOrFail($attendanceId)->rendered_hours);
     }
 
     public function test_daily_cleaning_time_out_requires_proof(): void

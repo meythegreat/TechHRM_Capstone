@@ -207,6 +207,33 @@ class AttendanceDutyFeaturesTest extends TestCase
         $this->assertNotEmpty($attendance->cleaning_after_path);
         Storage::disk('local')->assertExists($attendance->cleaning_before_path);
         Storage::disk('local')->assertExists($attendance->cleaning_after_path);
+
+        // Time in 16:30 with the clock at 16:55 credits a 20:30 clock-out, which is still later today.
+        Sanctum::actingAs($member);
+        $futureCreditId = $this->post('/api/attendance/manual-requests', [
+            'request_type' => 'janitorial',
+            'shifts' => [
+                [
+                    'date' => '2026-11-13',
+                    'time_in' => '16:30',
+                    'time_out' => '17:00',
+                    'before_photo' => UploadedFile::fake()->image('before-late.jpg', 640, 480),
+                    'after_photo' => UploadedFile::fake()->image('after-late.jpg', 640, 480),
+                    'before_captured_at' => '2026-11-13T16:30:00',
+                    'after_captured_at' => '2026-11-13T16:50:00',
+                    'capture_source' => 'live_camera',
+                ],
+            ],
+        ], ['Accept' => 'application/json'])->assertCreated()->json('request.id');
+
+        Sanctum::actingAs($lead);
+        $this->patchJson('/api/attendance/janitorial-offline-requests/'.$futureCreditId, [
+            'status' => 'Approved',
+        ])->assertOk();
+
+        $late = Attendance::query()->where('user_id', $member->id)->orderByDesc('id')->first();
+        $this->assertTrue(Carbon::parse($late->time_in)->addHours(4)->equalTo(Carbon::parse($late->time_out)));
+        $this->assertTrue(Carbon::parse($late->time_out)->greaterThan(Carbon::parse('2026-11-13 16:55:00')));
     }
 
     public function test_only_coordinator_can_manage_janitorial_leaders_and_groups(): void
