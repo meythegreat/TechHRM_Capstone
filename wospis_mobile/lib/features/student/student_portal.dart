@@ -70,10 +70,32 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
     super.dispose();
   }
 
+  bool _needsCleaningProof(Map<String, dynamic>? row) {
+    if (row == null) return false;
+    final label = '${row['attendance_type'] ?? ''} ${row['work_type'] ?? ''}'.toLowerCase();
+    return label.contains('janitorial') || row['janitorial_group_id'] != null || label.contains('daily cleaning');
+  }
+
+  bool _cleaningProofReady(Map<String, dynamic>? row) {
+    if (row == null) return true;
+    return row['cleaning_before_path'] != null &&
+        row['cleaning_before_path'].toString().isNotEmpty &&
+        row['cleaning_after_path'] != null &&
+        row['cleaning_after_path'].toString().isNotEmpty;
+  }
+
   Future<void> _clock(BuildContext context, Map<String, dynamic>? open, Future<void> Function() reload, {String method = 'passcode'}) async {
     final raw = _code.text.trim();
     if (raw.isEmpty) {
       toast(context, 'Enter the passcode or scan the QR code.', error: true);
+      return;
+    }
+    if (open != null && _needsCleaningProof(open) && !_cleaningProofReady(open)) {
+      toast(
+        context,
+        'Capture before and after cleaning photos in the web attendance app (live camera with date/time stamp), then clock out here.',
+        error: true,
+      );
       return;
     }
     final api = context.read<AuthProvider>().api;
@@ -137,6 +159,15 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                   Text(open == null ? 'READY TO WORK' : 'YOU ARE ON DUTY', style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w800, letterSpacing: 1.1, fontSize: 12)),
                   const SizedBox(height: 6),
                   Text(open == null ? 'Enter the office passcode or scan the QR code.' : 'Confirm the code again to end this shift.', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                  if (open != null && _needsCleaningProof(open)) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      _cleaningProofReady(open)
+                          ? 'Cleaning proof complete. You can clock out.'
+                          : 'Before/after cleaning photos are required. Capture them in the web attendance app (live camera; date and time stamped).',
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                  ],
                   const SizedBox(height: 14),
                   Container(
                     padding: const EdgeInsets.all(14),

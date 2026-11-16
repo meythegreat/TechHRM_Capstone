@@ -27,4 +27,13 @@ export const submitSecureClockOut = async (attendanceId, tokenCode, method = 'pa
         auto_clock_out: options.auto_clock_out ? true : undefined,
     });
 
+/** Live-camera before/after cleaning proof (FormData: phase, photo, capture_source, captured_at). */
+export const submitCleaningProof = async (attendanceId, formData) =>
+    axios.post(`/api/attendance/${attendanceId}/cleaning-proof`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    });
+
+export const fetchCleaningProof = async (attendanceId) =>
+    axios.get(`/api/attendance/${attendanceId}/cleaning-proof`);
+
 export const fetchWorkHourSummary = async () => axios.get('/api/attendance/hours-summary');

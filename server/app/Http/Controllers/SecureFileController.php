@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ApplicationDocument;
+use App\Models\Attendance;
 use App\Models\Requirement;
 use App\Models\StaffingRequest;
 use App\Models\User;
@@ -18,6 +19,7 @@ class SecureFileController extends Controller
         'application-documents/',
         'staffing-approvals/',
         'extra-hours-approvals/',
+        'cleaning-proofs/',
     ];
 
     public function show(Request $request): BinaryFileResponse
@@ -143,6 +145,37 @@ class SecureFileController extends Controller
             }
 
             return in_array($user->role, ['Super Admin', 'WSPO Staff'], true);
+        }
+
+        if (str_starts_with($path, 'cleaning-proofs/')) {
+            $attendance = Attendance::query()
+                ->where(function ($query) use ($path) {
+                    $query->where('cleaning_before_path', $path)
+                        ->orWhere('cleaning_after_path', $path);
+                })
+                ->first();
+
+            if (! $attendance) {
+                return false;
+            }
+
+            if ((int) $attendance->user_id === (int) $user->id) {
+                return true;
+            }
+
+            if (in_array($user->role, ['Super Admin', 'WSPO Staff', 'Supervisor'], true)) {
+                return true;
+            }
+
+            // Janitorial student supervisors may review their group's cleaning photos.
+            if ((int) ($attendance->janitorial_group_id ?? 0) > 0) {
+                return \App\Models\JanitorialGroup::query()
+                    ->where('id', $attendance->janitorial_group_id)
+                    ->where('supervisor_user_id', $user->id)
+                    ->exists();
+            }
+
+            return false;
         }
 
         return false;

@@ -13,8 +13,10 @@ use App\Models\UserProfile;
 use App\Support\DutyHours;
 use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -91,6 +93,7 @@ class AttendanceDutyFeaturesTest extends TestCase
             'method' => 'passcode',
         ])->assertOk();
         $attendanceId = $clockIn->json('attendance.id');
+        $this->attachCleaningProofs($attendanceId);
 
         // Early clock-out still credits fixed 4h (5–9pm overall shift).
         Carbon::setTestNow(Carbon::parse('2026-11-13 18:00:00'));
@@ -112,6 +115,7 @@ class AttendanceDutyFeaturesTest extends TestCase
             'token_code' => $code2,
             'method' => 'passcode',
         ])->assertOk()->json('attendance.id');
+        $this->attachCleaningProofs($seg2);
         Carbon::setTestNow(Carbon::parse('2026-11-13 19:30:00'));
         Sanctum::actingAs($lead);
         $code2Out = $this->getJson('/api/attendance/janitorial-passcode?group_id='.$regGroupId)->json('token_code');
@@ -421,6 +425,19 @@ class AttendanceDutyFeaturesTest extends TestCase
         $this->assertSame(ManualAttendanceRequest::APPROVED, ManualAttendanceRequest::query()->find($requestId)->status);
     }
 
+    private function attachCleaningProofs(int $attendanceId): void
+    {
+        Storage::fake('local');
+        foreach (['before', 'after'] as $phase) {
+            $this->post('/api/attendance/'.$attendanceId.'/cleaning-proof', [
+                'phase' => $phase,
+                'capture_source' => 'live_camera',
+                'captured_at' => now()->toIso8601String(),
+                'photo' => UploadedFile::fake()->image($phase.'.jpg', 640, 480),
+            ], ['Accept' => 'application/json'])->assertCreated();
+        }
+    }
+
     private function makeUser(string $role, ?string $office = null, ?string $name = null): User
     {
         $user = User::create([
@@ -546,6 +563,10 @@ class AttendanceDutyFeaturesTest extends TestCase
             $table->unsignedBigInteger('schedule_id')->nullable();
             $table->unsignedBigInteger('janitorial_group_id')->nullable();
             $table->string('janitorial_area', 120)->nullable();
+            $table->string('cleaning_before_path', 500)->nullable();
+            $table->string('cleaning_after_path', 500)->nullable();
+            $table->timestamp('cleaning_before_captured_at')->nullable();
+            $table->timestamp('cleaning_after_captured_at')->nullable();
             $table->timestamps();
         });
 

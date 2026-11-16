@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import TimesheetPrintView from './TimesheetPrintView';
 import AuditPager, { pageSlice } from './AuditPager';
+import SecureImage from './SecureImage';
 import { formatYearLevel, homeDepartment } from '../utils/studentAssignment';
 import { HourLimitApprovalsPanel } from './hours/HourLimitApprovalsPanel';
 import ManualAttendanceRequestsPanel from './ManualAttendanceRequestsPanel';
@@ -69,11 +70,18 @@ interface AttendanceRecord {
     time_out: string | null;
     rendered_hours: number | string | null;
     work_type: string | null;
+    attendance_type?: string | null;
     task_description: string | null;
     status: string; 
     check_in_method?: 'passcode' | 'qr' | null;
     rendered_hour_event_id?: number | null;
     activity_hours?: number | string | null;
+    janitorial_group_id?: number | null;
+    janitorial_area?: string | null;
+    cleaning_before_path?: string | null;
+    cleaning_after_path?: string | null;
+    cleaning_before_captured_at?: string | null;
+    cleaning_after_captured_at?: string | null;
     user: {
         id?: number;
         name: string;
@@ -865,7 +873,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                             </div>
                                             <div className="mt-1.5">
                                                 <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 uppercase tracking-widest border border-slate-200">
-                                                    {record.work_type || 'Assigned Duty'}
+                                                    {record.work_type || record.attendance_type || 'Assigned Duty'}
                                                 </span>
                                                 {record.check_in_method && (
                                                     <span className="ml-1.5 inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 uppercase tracking-widest border border-indigo-200">
@@ -873,6 +881,30 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                                     </span>
                                                 )}
                                             </div>
+                                            {(record.cleaning_before_path || record.cleaning_after_path) && (
+                                                <div className="mt-3 grid grid-cols-2 gap-2 max-w-[220px]">
+                                                    {record.cleaning_before_path && (
+                                                        <div>
+                                                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Before</p>
+                                                            <SecureImage
+                                                                filePath={record.cleaning_before_path}
+                                                                altText={`${record.user?.name || 'Student'} before cleaning`}
+                                                                className="h-16 w-full object-cover rounded-lg border border-slate-200"
+                                                            />
+                                                        </div>
+                                                    )}
+                                                    {record.cleaning_after_path && (
+                                                        <div>
+                                                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">After</p>
+                                                            <SecureImage
+                                                                filePath={record.cleaning_after_path}
+                                                                altText={`${record.user?.name || 'Student'} after cleaning`}
+                                                                className="h-16 w-full object-cover rounded-lg border border-slate-200"
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </td>
 
                                         {/* Task Description Column */}

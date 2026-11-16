@@ -25,8 +25,21 @@ import {
 } from '../services/advancedAttendanceService';
 import TimesheetPrintView from './TimesheetPrintView';
 import ManualAttendanceRequestForm from './ManualAttendanceRequestForm';
+import CleaningProofCapture from './CleaningProofCapture';
 import Toast from './Toast';
 import { playAccessAcceptedSound, playAccessRejectedSound } from '../sounds';
+
+const needsCleaningProof = (record) => {
+    if (!record) return false;
+    const type = String(record.attendance_type || record.work_type || '').toLowerCase();
+    return type === 'janitorial'
+        || Boolean(record.janitorial_group_id)
+        || /daily\s*cleaning/.test(type);
+};
+
+const cleaningProofReady = (record) => Boolean(
+    record?.cleaning_before_path && record?.cleaning_after_path
+);
 
 const padMonth = (n) => String(n).padStart(2, '0');
 
@@ -301,6 +314,20 @@ const StudentAttendanceTerminal = () => {
             || activeShift.janitorial_group_id
         )
     );
+    const janitorialProofReady = !needsCleaningProof(activeShift) || cleaningProofReady(activeShift);
+    const activityNeedsProof = needsCleaningProof(openActivity);
+    const activityProofReady = !activityNeedsProof || cleaningProofReady(openActivity);
+
+    const applyCleaningProofUpdate = (target, payload) => {
+        const next = payload?.attendance || {
+            ...target,
+            cleaning_before_path: payload?.cleaning_proof?.before_path ?? target?.cleaning_before_path,
+            cleaning_after_path: payload?.cleaning_proof?.after_path ?? target?.cleaning_after_path,
+            cleaning_before_captured_at: payload?.cleaning_proof?.before_captured_at ?? target?.cleaning_before_captured_at,
+            cleaning_after_captured_at: payload?.cleaning_proof?.after_captured_at ?? target?.cleaning_after_captured_at,
+        };
+        return next;
+    };
 
     const timeOutActivity = async (code, method) => {
         if (!openActivity) return;
@@ -610,6 +637,17 @@ const StudentAttendanceTerminal = () => {
                                         {openActivity.time_in ? new Date(openActivity.time_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
                                     </p>
                                 </div>
+                                {activityNeedsProof && (
+                                    <CleaningProofCapture
+                                        attendanceId={openActivity.id}
+                                        beforePath={openActivity.cleaning_before_path}
+                                        afterPath={openActivity.cleaning_after_path}
+                                        insecureCamera={insecureCamera}
+                                        onUpdated={(payload) => {
+                                            setOpenActivity((prev) => applyCleaningProofUpdate(prev, payload));
+                                        }}
+                                    />
+                                )}
                                 <form onSubmit={handleActivityTimeOut} className="w-full mt-6 space-y-4 text-left">
                                     <div>
                                         <label className="block text-xs font-bold text-emerald-800 uppercase tracking-wider mb-2">Time-out method</label>
@@ -624,12 +662,18 @@ const StudentAttendanceTerminal = () => {
                                             <button
                                                 type="button"
                                                 onClick={() => setActivityMethod('qr')}
-                                                className={`py-2.5 rounded-lg text-sm font-bold transition-all ${activityMethod === 'qr' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+                                                disabled={!activityProofReady}
+                                                className={`py-2.5 rounded-lg text-sm font-bold transition-all ${activityMethod === 'qr' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'} disabled:opacity-50`}
                                             >
                                                 Scan QR
                                             </button>
                                         </div>
                                     </div>
+                                    {!activityProofReady && (
+                                        <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                                            Capture before and after cleaning photos before you can time out.
+                                        </p>
+                                    )}
                                     {activityMethod === 'passcode' ? (
                                         <>
                                             <div>
@@ -644,7 +688,8 @@ const StudentAttendanceTerminal = () => {
                                                         value={activityToken}
                                                         onChange={(e) => setActivityToken(e.target.value.toUpperCase())}
                                                         placeholder="Enter activity token..."
-                                                        className="block w-full pl-11 pr-4 py-3 bg-white border border-emerald-100 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-red-500 outline-none transition-all placeholder:text-slate-400 placeholder:font-medium uppercase tracking-widest"
+                                                        disabled={!activityProofReady}
+                                                        className="block w-full pl-11 pr-4 py-3 bg-white border border-emerald-100 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-red-500 outline-none transition-all placeholder:text-slate-400 placeholder:font-medium uppercase tracking-widest disabled:opacity-50"
                                                     />
                                                 </div>
                                                 <p className="mt-2 text-xs font-medium text-emerald-800">
@@ -653,7 +698,7 @@ const StudentAttendanceTerminal = () => {
                                             </div>
                                             <button
                                                 type="submit"
-                                                disabled={isLoading || !activityToken}
+                                                disabled={isLoading || !activityToken || !activityProofReady}
                                                 className="w-full py-4 bg-linear-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold rounded-xl shadow-lg shadow-red-500/25 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
                                                 {isLoading ? (
@@ -833,9 +878,27 @@ const StudentAttendanceTerminal = () => {
                                             {activeShift.time_in ? new Date(activeShift.time_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
                                         </p>
                                         <p className="mt-2 text-xs font-medium text-emerald-800">
-                                            You can clock out any time after you clock in. The entry is approved when you clock out.
+                                            {isJanitorialShift
+                                                ? 'Capture before and after cleaning photos, then clock out anytime when finished. Hours credit only after both photos and clock-out.'
+                                                : 'You can clock out any time after you clock in. The entry is approved when you clock out.'}
                                         </p>
                                     </div>
+
+                                    {needsCleaningProof(activeShift) && (
+                                        <CleaningProofCapture
+                                            attendanceId={activeShift.id}
+                                            beforePath={activeShift.cleaning_before_path}
+                                            afterPath={activeShift.cleaning_after_path}
+                                            insecureCamera={insecureCamera}
+                                            onUpdated={(payload) => {
+                                                setActiveShift((prev) => {
+                                                    const next = applyCleaningProofUpdate(prev, payload);
+                                                    localStorage.setItem('active_shift_segment', JSON.stringify(next));
+                                                    return next;
+                                                });
+                                            }}
+                                        />
+                                    )}
 
                                     <form onSubmit={handleClockOut} className="w-full mt-6 space-y-4 text-left">
                                         <div>
@@ -851,12 +914,19 @@ const StudentAttendanceTerminal = () => {
                                                 <button
                                                     type="button"
                                                     onClick={() => setCheckInMethod('qr')}
-                                                    className={`py-2.5 rounded-lg text-sm font-bold transition-all ${checkInMethod === 'qr' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+                                                    disabled={!janitorialProofReady}
+                                                    className={`py-2.5 rounded-lg text-sm font-bold transition-all ${checkInMethod === 'qr' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'} disabled:opacity-50`}
                                                 >
                                                     Scan QR
                                                 </button>
                                             </div>
                                         </div>
+
+                                        {!janitorialProofReady && (
+                                            <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                                                Capture before and after cleaning photos before you can clock out.
+                                            </p>
+                                        )}
 
                                         {checkInMethod === 'passcode' ? (
                                             <>
@@ -864,7 +934,7 @@ const StudentAttendanceTerminal = () => {
                                                     <label className="block text-xs font-bold text-emerald-800 uppercase tracking-wider mb-2">Verification Token</label>
                                                     <div className="relative">
                                                         <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                                            <KeyRound className="h-5 w-5 text-slate-400" />
+                                                            <KeyRound className="w-5 h-5 text-slate-400" />
                                                         </div>
                                                         <input
                                                             type="text"
@@ -872,7 +942,8 @@ const StudentAttendanceTerminal = () => {
                                                             value={tokenInput}
                                                             onChange={(e) => setTokenInput(e.target.value.toUpperCase())}
                                                             placeholder="Enter supervisor token..."
-                                                            className="block w-full pl-11 pr-4 py-3 bg-white border border-emerald-100 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-red-500 outline-none transition-all placeholder:text-slate-400 placeholder:font-medium uppercase tracking-widest"
+                                                            disabled={!janitorialProofReady}
+                                                            className="block w-full pl-11 pr-4 py-3 bg-white border border-emerald-100 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-red-500 outline-none transition-all placeholder:text-slate-400 placeholder:font-medium uppercase tracking-widest disabled:opacity-50"
                                                         />
                                                     </div>
                                                     <p className="mt-2 text-xs font-medium text-emerald-800">
@@ -883,7 +954,7 @@ const StudentAttendanceTerminal = () => {
                                                     whileHover={{ scale: 1.02 }}
                                                     whileTap={{ scale: 0.98 }}
                                                     type="submit"
-                                                    disabled={isLoading || !tokenInput}
+                                                    disabled={isLoading || !tokenInput || !janitorialProofReady}
                                                     className="w-full py-4 bg-linear-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold rounded-xl shadow-lg shadow-red-500/25 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                                 >
                                                     {isLoading ? (
@@ -920,7 +991,7 @@ const StudentAttendanceTerminal = () => {
                                                     <button
                                                         type="button"
                                                         onClick={() => startCamera('student-clockout-qr-reader')}
-                                                        disabled={cameraStarting}
+                                                        disabled={cameraStarting || !janitorialProofReady}
                                                         className="w-full py-3.5 bg-slate-900 hover:bg-red-600 text-white font-bold rounded-xl transition-all disabled:opacity-50"
                                                     >
                                                         {cameraStarting ? 'Asking for the camera…' : 'Turn on camera'}

@@ -9,8 +9,10 @@ use App\Models\User;
 use App\Models\UserProfile;
 use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -91,6 +93,7 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
                 'time_out' => null,
             ]);
 
+            $this->attachCleaningProofs((int) $clockIn->json('attendance.id'));
             $this->putJson('/api/attendance/secure-clock-out/'.$clockIn->json('attendance.id'), [
                 'token_code' => $code,
                 'method' => 'passcode',
@@ -293,6 +296,7 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
             ->assertJsonPath('status', 'timed_in')
             ->assertJsonPath('hours_delta', 0);
 
+        $this->attachCleaningProofs((int) $clockIn->json('attendance.id'));
         $this->putJson('/api/attendance/secure-clock-out/'.$clockIn->json('attendance.id'), [
             'token_code' => $code,
             'method' => 'passcode',
@@ -750,6 +754,19 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
             ->assertJsonPath('hours_delta', 1);
     }
 
+    private function attachCleaningProofs(int $attendanceId): void
+    {
+        Storage::fake('local');
+        foreach (['before', 'after'] as $phase) {
+            $this->post('/api/attendance/'.$attendanceId.'/cleaning-proof', [
+                'phase' => $phase,
+                'capture_source' => 'live_camera',
+                'captured_at' => now()->toIso8601String(),
+                'photo' => UploadedFile::fake()->image($phase.'.jpg', 640, 480),
+            ], ['Accept' => 'application/json'])->assertCreated();
+        }
+    }
+
     private function makeUser(string $role, ?string $office = null): User
     {
         $user = User::create([
@@ -941,6 +958,10 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
             $table->unsignedBigInteger('rendered_hour_event_id')->nullable();
             $table->decimal('activity_hours', 8, 2)->nullable();
             $table->unsignedBigInteger('schedule_id')->nullable();
+            $table->string('cleaning_before_path', 500)->nullable();
+            $table->string('cleaning_after_path', 500)->nullable();
+            $table->timestamp('cleaning_before_captured_at')->nullable();
+            $table->timestamp('cleaning_after_captured_at')->nullable();
             $table->timestamps();
         });
 

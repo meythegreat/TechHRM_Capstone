@@ -30,6 +30,10 @@ class Attendance extends Model
         'schedule_id',
         'janitorial_group_id',
         'janitorial_area',
+        'cleaning_before_path',
+        'cleaning_after_path',
+        'cleaning_before_captured_at',
+        'cleaning_after_captured_at',
     ];
 
     protected $casts = [
@@ -38,6 +42,8 @@ class Attendance extends Model
         'is_anomaly' => 'boolean',
         'computed_hours' => 'decimal:2',
         'activity_hours' => 'float',
+        'cleaning_before_captured_at' => 'datetime',
+        'cleaning_after_captured_at' => 'datetime',
     ];
 
     protected $appends = ['account_deleted'];
@@ -46,6 +52,16 @@ class Attendance extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function renderedHourEvent()
+    {
+        return $this->belongsTo(RenderedHourEvent::class, 'rendered_hour_event_id');
+    }
+
+    public function janitorialGroup()
+    {
+        return $this->belongsTo(JanitorialGroup::class, 'janitorial_group_id');
     }
 
     /** Official DTR rows are ordinary shift clock-ins. Meeting scans stay off the timesheet. */

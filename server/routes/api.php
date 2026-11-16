@@ -153,6 +153,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- STAGE 3 & 4: Advanced Attendance ---
     Route::post('/attendance/secure-clock-in', [\App\Http\Controllers\AdvancedAttendanceController::class, 'secureClockIn']);
     Route::put('/attendance/secure-clock-out/{id}', [\App\Http\Controllers\AdvancedAttendanceController::class, 'secureClockOut']);
+    Route::post('/attendance/{id}/cleaning-proof', [\App\Http\Controllers\CleaningProofController::class, 'store']);
+    Route::get('/attendance/{id}/cleaning-proof', [\App\Http\Controllers\CleaningProofController::class, 'show']);
     Route::get('/attendance/hours-summary', [\App\Http\Controllers\AdvancedAttendanceController::class, 'getWorkHourSummary']);
     Route::get('/hour-limits', [HourLimitController::class, 'mine']);
     Route::post('/hour-limits/request', [HourLimitController::class, 'requestExtension']);

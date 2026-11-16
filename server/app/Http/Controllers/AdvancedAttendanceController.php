@@ -8,6 +8,7 @@ use App\Models\JanitorialGroup;
 use App\Models\RenderedHourEntry;
 use App\Models\RenderedHourEvent;
 use App\Support\ClassHoursDuty;
+use App\Support\CleaningProof;
 use App\Support\DutyHours;
 use App\Support\HourLimits;
 use App\Support\RenderedHours;
@@ -364,8 +365,15 @@ class AdvancedAttendanceController extends Controller
         }
 
         $dutyType = $attendance->attendance_type ?: ($attendance->work_type ?: 'Regular');
-        $isJanitorial = strcasecmp((string) $dutyType, 'Janitorial') === 0
-            || (int) ($attendance->janitorial_group_id ?? 0) > 0;
+        $isJanitorial = CleaningProof::isJanitorialAttendance($attendance);
+
+        if ($proofDenial = CleaningProof::denialMessage($attendance)) {
+            return response()->json([
+                'message' => $proofDenial,
+                'cleaning_proof' => CleaningProof::status($attendance),
+                'requires_cleaning_proof' => true,
+            ], 422);
+        }
 
         $accounts = app(UserController::class);
         $studentDepartment = $accounts->isStudentOfficer($user)
@@ -522,6 +530,7 @@ class AdvancedAttendanceController extends Controller
         return response()->json([
             'message' => $message,
             'hours_rendered' => $credited,
+            'cleaning_proof' => CleaningProof::status($attendance->fresh()),
             'hour_limits' => HourLimits::status($user->id, $clockOutTime),
             'auto_clock_out_window_minutes' => DutyHours::AUTO_CLOCK_OUT_WINDOW_MINUTES,
             'within_auto_clock_out_window' => $shift ? DutyHours::withinAutoClockOutWindow($now, $shift) : false,
@@ -946,6 +955,16 @@ class AdvancedAttendanceController extends Controller
         if (!$event || !in_array((int) $event->id, $allowedIds, true)) {
             return response()->json([
                 'message' => "Use this activity's passcode or QR code to time out.",
+            ], 422);
+        }
+
+        // Attach event so CleaningProof::requiredFor can detect daily_cleaning without an extra query.
+        $attendance->setRelation('renderedHourEvent', $event);
+        if ($proofDenial = CleaningProof::denialMessage($attendance)) {
+            return response()->json([
+                'message' => $proofDenial,
+                'cleaning_proof' => CleaningProof::status($attendance),
+                'requires_cleaning_proof' => true,
             ], 422);
         }
 
@@ -1415,9 +1434,10 @@ class AdvancedAttendanceController extends Controller
         $this->notifyCodeOwner($validToken->generated_by, $user->name, 'Janitorial', $method, false);
 
         return response()->json([
-            'message' => 'Janitorial clock-in verified. Clock out anytime when finished; the overall shift credits '
+            'message' => 'Janitorial clock-in verified. Capture before and after cleaning photos with the live camera, then clock out anytime when finished; the overall shift credits '
                 .DutyHours::JANITORIAL_FIXED_HOURS.'h (5–9pm block).',
             'attendance' => $attendance,
+            'cleaning_proof' => CleaningProof::status($attendance),
             'hour_limits' => HourLimits::status($user->id, $now),
             'janitorial' => [
                 'group_id' => $group->id,
