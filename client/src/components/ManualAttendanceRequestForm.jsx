@@ -1,9 +1,17 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { ClipboardList, Plus, Trash2, WifiOff } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ClipboardList, CloudUpload, Plus, Trash2, WifiOff } from 'lucide-react';
 import { manualAttendanceRequestService } from '../services/manualAttendanceRequestService';
 import { janitorialGroupService } from '../services/janitorialGroupService';
 import CleaningProofCapture from './CleaningProofCapture';
 import { clearOfflineDraft, loadOfflineDraft, saveOfflineDraft } from '../utils/offlineAttendanceDraft';
+import {
+  enqueueOutbox,
+  flushOutbox,
+  isNetworkFailure,
+  listOutbox,
+  newClientRequestId,
+  removeOutbox,
+} from '../utils/offlineAttendanceOutbox';
 
 const pad = (n) => String(n).padStart(2, '0');
 const todayIso = () => {
@@ -58,8 +66,12 @@ const ManualAttendanceRequestForm = ({ onToast }) => {
   const [groups, setGroups] = useState([]);
   const [groupId, setGroupId] = useState('');
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [draftReady, setDraftReady] = useState(false);
+  const [pending, setPending] = useState([]);
+  const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
+  const syncingRef = useRef(false);
 
   const load = useCallback(async () => {
     try {
@@ -72,9 +84,50 @@ const ManualAttendanceRequestForm = ({ onToast }) => {
     }
   }, []);
 
+  const refreshPending = useCallback(async () => {
+    try {
+      setPending(await listOutbox());
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
+
+  const syncPending = useCallback(async ({ quiet } = {}) => {
+    if (syncingRef.current) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      await refreshPending();
+      return;
+    }
+    syncingRef.current = true;
+    setSyncing(true);
+    try {
+      const result = await flushOutbox();
+      setPending(result.remaining);
+      if (result.uploaded > 0) {
+        onToast?.(
+          result.uploaded === 1
+            ? 'Uploaded 1 saved offline request.'
+            : `Uploaded ${result.uploaded} saved offline requests.`,
+          'success',
+        );
+        await load();
+      } else if (!quiet && result.errors.length > 0) {
+        onToast?.(result.errors[0].message, 'error');
+      }
+    } catch (err) {
+      if (!quiet) {
+        onToast?.(err?.message || 'Could not upload saved offline requests.', 'error');
+      }
+    } finally {
+      syncingRef.current = false;
+      setSyncing(false);
+    }
+  }, [load, onToast, refreshPending]);
+
   useEffect(() => {
     let cancelled = false;
     load();
+    refreshPending();
     Promise.all([
       janitorialGroupService.list().catch(() => []),
       loadOfflineDraft().catch(() => null),
@@ -98,7 +151,22 @@ const ManualAttendanceRequestForm = ({ onToast }) => {
     return () => {
       cancelled = true;
     };
-  }, [load]);
+  }, [load, refreshPending]);
+
+  useEffect(() => {
+    const onOnline = () => {
+      setOnline(true);
+      syncPending({ quiet: true });
+    };
+    const onOffline = () => setOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    syncPending({ quiet: true });
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, [syncPending]);
 
   useEffect(() => {
     if (!draftReady) return undefined;
@@ -129,6 +197,31 @@ const ManualAttendanceRequestForm = ({ onToast }) => {
     setShifts((current) => current.map((row, i) => (i === index ? { ...row, [key]: value } : row)));
   };
 
+  const buildPayload = (clientRequestId) => ({
+    client_request_id: clientRequestId,
+    request_type: requestType,
+    reason: reason.trim() || undefined,
+    shifts: shifts.map((shift) => ({
+      date: shift.date,
+      time_in: shift.time_in,
+      time_out: requestType === 'janitorial' ? plusFourHours(shift.time_in) : shift.time_out,
+      janitorial_group_id: requestType === 'janitorial' && groupId ? Number(groupId) : undefined,
+      before_photo: requestType === 'janitorial' ? shift.before_photo : undefined,
+      after_photo: requestType === 'janitorial' ? shift.after_photo : undefined,
+      before_captured_at: requestType === 'janitorial' ? shift.before_captured_at : undefined,
+      after_captured_at: requestType === 'janitorial' ? shift.after_captured_at : undefined,
+      capture_source: requestType === 'janitorial' ? 'live_camera' : undefined,
+    })),
+  });
+
+  const queueLocally = async (payload) => {
+    const next = await enqueueOutbox(payload);
+    setPending(next);
+    setShifts([emptyShift()]);
+    await clearOfflineDraft().catch(() => {});
+    onToast?.('Saved on this device — will upload when online.', 'success');
+  };
+
   const submit = async (event) => {
     event.preventDefault();
     if (shifts.length === 0) return;
@@ -137,31 +230,37 @@ const ManualAttendanceRequestForm = ({ onToast }) => {
       return;
     }
     setSaving(true);
+    const clientRequestId = newClientRequestId();
+    const payload = buildPayload(clientRequestId);
     try {
-      const res = await manualAttendanceRequestService.submit({
-        request_type: requestType,
-        reason: reason.trim() || undefined,
-        shifts: shifts.map((shift) => ({
-          date: shift.date,
-          time_in: shift.time_in,
-          time_out: requestType === 'janitorial' ? plusFourHours(shift.time_in) : shift.time_out,
-          janitorial_group_id: requestType === 'janitorial' && groupId ? Number(groupId) : undefined,
-          before_photo: requestType === 'janitorial' ? shift.before_photo : undefined,
-          after_photo: requestType === 'janitorial' ? shift.after_photo : undefined,
-          before_captured_at: requestType === 'janitorial' ? shift.before_captured_at : undefined,
-          after_captured_at: requestType === 'janitorial' ? shift.after_captured_at : undefined,
-          capture_source: requestType === 'janitorial' ? 'live_camera' : undefined,
-        })),
-      });
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        await queueLocally(payload);
+        return;
+      }
+      const res = await manualAttendanceRequestService.submit(payload);
       onToast?.(res.message || 'Request submitted.', 'success');
       setShifts([emptyShift()]);
       await clearOfflineDraft().catch(() => {});
       await load();
     } catch (err) {
-      onToast?.(err?.response?.data?.message || 'Could not submit the offline attendance request.', 'error');
+      if (isNetworkFailure(err)) {
+        try {
+          await queueLocally(payload);
+        } catch (queueErr) {
+          onToast?.(queueErr?.message || 'Could not save the offline attendance request on this device.', 'error');
+        }
+      } else {
+        onToast?.(err?.response?.data?.message || 'Could not submit the offline attendance request.', 'error');
+      }
     } finally {
       setSaving(false);
     }
+  };
+
+  const discardPending = async (clientRequestId) => {
+    const next = await removeOutbox(clientRequestId);
+    setPending(next);
+    onToast?.('Discarded the saved offline request.', 'success');
   };
 
   const cancel = async (id) => {
@@ -182,8 +281,14 @@ const ManualAttendanceRequestForm = ({ onToast }) => {
           <h3 className="text-lg font-semibold text-slate-900">Offline / special attendance requests</h3>
           <p className="text-sm text-slate-500 mt-1 leading-relaxed">
             Regular offline when the office had no internet, janitorial offline when you could not record duty online, or class-hours duty when your
-            work time overlaps a class block. Janitorial requests need a time in, then a live camera photo before and after. The date and time are stamped on each photo. Gallery uploads are not accepted. Your janitorial supervisor approves them, and an accepted entry is recorded as exactly 4 hours from time in.
+            work time overlaps a class block. You can submit while offline — this device keeps the request and uploads it when you are back online.
+            Janitorial requests need a time in, then a live camera photo before and after. The date and time are stamped on each photo. Gallery uploads are not accepted. Your janitorial supervisor approves them, and an accepted entry is recorded as exactly 4 hours from time in.
           </p>
+          {!online && (
+            <p className="mt-2 text-xs font-bold uppercase tracking-wider text-amber-700">
+              Offline — new submits stay on this device until you reconnect.
+            </p>
+          )}
         </div>
       </div>
 
@@ -354,6 +459,59 @@ const ManualAttendanceRequestForm = ({ onToast }) => {
           {saving ? 'Submitting…' : 'Submit for supervisor approval'}
         </button>
       </form>
+
+      {pending.length > 0 && (
+        <div className="border-t border-amber-100 bg-amber-50/40 px-6 py-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <h4 className="text-xs font-bold uppercase tracking-widest text-amber-800">
+              Pending upload ({pending.length})
+            </h4>
+            <button
+              type="button"
+              onClick={() => syncPending()}
+              disabled={syncing || !online}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-200 bg-white text-xs font-bold text-amber-900 hover:bg-amber-50 disabled:opacity-50"
+            >
+              <CloudUpload className="w-3.5 h-3.5" />
+              {syncing ? 'Uploading…' : 'Upload now'}
+            </button>
+          </div>
+          <ul className="space-y-3">
+            {pending.map((item) => (
+              <li key={item.client_request_id} className="rounded-xl border border-amber-200 bg-white px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border border-amber-200 bg-amber-50 text-amber-800">
+                      Waiting to upload
+                    </span>
+                    <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border border-slate-200 bg-slate-50 text-slate-600">
+                      {TYPE_LABELS[item.request_type] || item.request_type || 'Regular offline'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => discardPending(item.client_request_id)}
+                    className="text-xs font-bold text-slate-500 hover:text-red-600"
+                  >
+                    Discard
+                  </button>
+                </div>
+                {item.reason && <p className="mt-2 text-sm text-slate-700">{item.reason}</p>}
+                <ul className="mt-2 space-y-1">
+                  {(item.shifts || []).map((shift, index) => (
+                    <li key={`${item.client_request_id}-${index}`} className="text-xs font-mono text-slate-600">
+                      {formatShift(shift)}
+                    </li>
+                  ))}
+                </ul>
+                {item.last_error && (
+                  <p className="mt-2 text-xs text-red-600">{item.last_error}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="border-t border-slate-100 px-6 py-5">
         <h4 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">Your requests</h4>

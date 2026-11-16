@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -5,6 +8,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 import '../../core/api/api_client.dart';
 import '../../core/json_util.dart';
+import '../../core/offline/offline_attendance_outbox.dart';
 import '../../core/widgets/common.dart';
 import '../auth/auth_provider.dart';
 
@@ -61,13 +65,72 @@ class StudentAttendanceScreen extends StatefulWidget {
   State<StudentAttendanceScreen> createState() => _StudentAttendanceScreenState();
 }
 
-class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
+class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> with WidgetsBindingObserver {
   final _code = TextEditingController();
+  final _outbox = OfflineAttendanceOutbox();
+  List<Map<String, dynamic>> _pending = [];
+  bool _syncing = false;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+  Future<void> Function()? _reloadHours;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refreshPending();
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
+      if (results.any((result) => result != ConnectivityResult.none)) {
+        _flushPending(quiet: true);
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _flushPending(quiet: true));
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _connectivitySub?.cancel();
     _code.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _flushPending(quiet: true);
+    }
+  }
+
+  Future<void> _refreshPending() async {
+    final rows = await _outbox.list();
+    if (!mounted) return;
+    setState(() => _pending = rows);
+  }
+
+  Future<void> _flushPending({bool quiet = false}) async {
+    if (_syncing) return;
+    setState(() => _syncing = true);
+    try {
+      final api = context.read<AuthProvider>().api;
+      final result = await _outbox.flush(api);
+      if (!mounted) return;
+      setState(() => _pending = result.remaining);
+      if (result.uploaded > 0) {
+        toast(
+          context,
+          result.uploaded == 1
+              ? 'Uploaded 1 saved offline request.'
+              : 'Uploaded ${result.uploaded} saved offline requests.',
+        );
+        await _reloadHours?.call();
+      } else if (!quiet && result.errors.isNotEmpty) {
+        toast(context, result.errors.first, error: true);
+      }
+    } catch (error) {
+      if (!quiet && mounted) toast(context, errorText(error), error: true);
+    } finally {
+      if (mounted) setState(() => _syncing = false);
+    }
   }
 
   bool _needsCleaningProof(Map<String, dynamic>? row) {
@@ -121,6 +184,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
     return FetchView(
       loader: () => api.get('/attendance/hours-summary'),
       builder: (context, data, reload) {
+        _reloadHours = reload;
         final summary = asMap(data);
         final history = asMaps(summary['history']);
         final dtr = history.where((row) {
@@ -135,7 +199,11 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
           }
         }
         return PageBody(
-          onRefresh: reload,
+          onRefresh: () async {
+            await reload();
+            await _refreshPending();
+            await _flushPending(quiet: true);
+          },
           children: [
             Row(children: [
               StatCard(label: 'Credited hours', value: numOf(summary['total_rendered']).toStringAsFixed(1), icon: Icons.timer),
@@ -204,6 +272,50 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
               icon: const Icon(Icons.wifi_off),
               label: const Text('Offline manual attendance'),
             ),
+            if (_pending.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              const SectionTitle('Pending upload'),
+              Text(
+                'Saved on this device. They upload when you are online again.',
+                style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.tonalIcon(
+                  onPressed: _syncing ? null : () => _flushPending(),
+                  icon: const Icon(Icons.cloud_upload_outlined),
+                  label: Text(_syncing ? 'Uploading…' : 'Upload now'),
+                ),
+              ),
+              for (final item in _pending)
+                RecordCard(
+                  title: textOf(item['reason'], 'Offline attendance'),
+                  subtitle: [
+                    for (final shift in asMaps(item['shifts']))
+                      '${textOf(shift['date'])} · ${textOf(shift['time_in'])}–${textOf(shift['time_out'])}',
+                  ].join('\n'),
+                  trailing: 'Queued',
+                  onTap: () async {
+                    final discard = await showDialog<bool>(
+                      context: context,
+                      builder: (dialogContext) => AlertDialog(
+                        title: const Text('Discard saved request?'),
+                        content: const Text('This removes the request from this device. It will not be uploaded.'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Keep')),
+                          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Discard')),
+                        ],
+                      ),
+                    );
+                    if (discard != true || !mounted) return;
+                    final next = await _outbox.remove(textOf(item['client_request_id']));
+                    if (!mounted) return;
+                    setState(() => _pending = next);
+                    toast(context, 'Discarded the saved offline request.');
+                  },
+                ),
+            ],
             const SizedBox(height: 16),
             const SectionTitle('Daily time record'),
             if (dtr.isEmpty) const EmptyNote('No attendance yet.'),
@@ -239,7 +351,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text(
-                    'Use this when the office had no internet. Submit when you are online again. Hours appear on your DTR only after supervisor approval.',
+                    'Use this when the office had no internet. If you are offline, the request stays on this device and uploads when you reconnect. Hours appear on your DTR only after supervisor approval.',
                   ),
                   const SizedBox(height: 12),
                   for (var i = 0; i < shifts.length; i++) ...[
@@ -298,28 +410,41 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
       reason.dispose();
       return;
     }
-    await runAction(
-      context,
-      () => context.read<AuthProvider>().api.post('/attendance/manual-requests', {
-        'reason': reason.text.trim(),
-        'shifts': [
-          for (final shift in shifts)
-            {
-              'date': shift['date']!.text.trim(),
-              'time_in': shift['time_in']!.text.trim(),
-              'time_out': shift['time_out']!.text.trim(),
-            },
-        ],
-      }),
-      success: 'Request submitted for supervisor approval.',
-      reload: reload,
-    );
+    final payload = <String, dynamic>{
+      'client_request_id': _outbox.newClientRequestId(),
+      'request_type': 'regular',
+      'reason': reason.text.trim(),
+      'shifts': [
+        for (final shift in shifts)
+          {
+            'date': shift['date']!.text.trim(),
+            'time_in': shift['time_in']!.text.trim(),
+            'time_out': shift['time_out']!.text.trim(),
+          },
+      ],
+    };
     for (final shift in shifts) {
       for (final c in shift.values) {
         c.dispose();
       }
     }
     reason.dispose();
+
+    try {
+      await context.read<AuthProvider>().api.post('/attendance/manual-requests', payload);
+      if (!context.mounted) return;
+      toast(context, 'Request submitted for supervisor approval.');
+      await reload();
+    } catch (error) {
+      if (shouldQueueOfflineAttendance(error)) {
+        final next = await _outbox.enqueue(payload);
+        if (!context.mounted) return;
+        setState(() => _pending = next);
+        toast(context, 'Saved on this device — will upload when online.');
+        return;
+      }
+      if (context.mounted) toast(context, errorText(error), error: true);
+    }
   }
 }
 

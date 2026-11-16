@@ -95,6 +95,43 @@ class ManualAttendanceRequestTest extends TestCase
         $this->assertCount(2, $rows);
     }
 
+    public function test_client_request_id_replays_without_duplicate(): void
+    {
+        $student = $this->makeUser('Student', 'Library', 'Cara Reyes');
+        $this->makeUser('Supervisor', 'Library', 'Library Supervisor');
+        $clientRequestId = '11111111-2222-4333-8444-555555555555';
+
+        Sanctum::actingAs($student);
+        $first = $this->postJson('/api/attendance/manual-requests', [
+            'client_request_id' => $clientRequestId,
+            'reason' => 'Queued while offline.',
+            'shifts' => [
+                ['date' => '2026-11-12', 'time_in' => '08:00', 'time_out' => '12:00'],
+            ],
+        ])->assertCreated()
+            ->assertJsonPath('request.client_request_id', $clientRequestId)
+            ->json('request.id');
+
+        $second = $this->postJson('/api/attendance/manual-requests', [
+            'client_request_id' => $clientRequestId,
+            'reason' => 'Queued while offline.',
+            'shifts' => [
+                ['date' => '2026-11-12', 'time_in' => '08:00', 'time_out' => '12:00'],
+            ],
+        ])->assertOk()
+            ->assertJsonPath('request.id', $first)
+            ->assertJsonPath('request.client_request_id', $clientRequestId);
+
+        $this->assertSame(1, ManualAttendanceRequest::query()->where('user_id', $student->id)->count());
+        $this->assertSame(
+            1,
+            Notification::query()
+                ->where('title', 'Offline attendance request')
+                ->count()
+        );
+        $this->assertNotNull($second->json('request.id'));
+    }
+
     public function test_student_can_cancel_pending_and_supervisor_can_reject(): void
     {
         $student = $this->makeUser('Student', 'Library', 'Ben Santos');
@@ -247,6 +284,7 @@ class ManualAttendanceRequestTest extends TestCase
         Schema::create('manual_attendance_requests', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->string('client_request_id', 36)->nullable();
             $table->string('request_type', 40)->default('regular');
             $table->string('reason', 1000)->default('Office had no internet; submitted for supervisor approval.');
             $table->string('status', 20)->default('Pending');
@@ -254,6 +292,7 @@ class ManualAttendanceRequestTest extends TestCase
             $table->foreignId('reviewed_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamp('reviewed_at')->nullable();
             $table->timestamps();
+            $table->unique(['user_id', 'client_request_id'], 'mar_user_client_req_uidx');
         });
 
         Schema::create('manual_attendance_request_shifts', function (Blueprint $table) {
@@ -266,6 +305,10 @@ class ManualAttendanceRequestTest extends TestCase
             $table->string('time_out', 5);
             $table->string('janitorial_area', 120)->nullable();
             $table->unsignedBigInteger('janitorial_group_id')->nullable();
+            $table->string('before_photo_path', 500)->nullable();
+            $table->string('after_photo_path', 500)->nullable();
+            $table->timestamp('before_captured_at')->nullable();
+            $table->timestamp('after_captured_at')->nullable();
             $table->unsignedSmallInteger('sort_order')->default(0);
             $table->foreignId('attendance_id')->nullable()->constrained('attendances')->nullOnDelete();
             $table->timestamps();
