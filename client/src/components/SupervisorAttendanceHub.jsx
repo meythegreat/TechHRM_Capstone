@@ -14,6 +14,7 @@ import {
     canCheckActivityAttendance,
     canIssueDailyAttendance,
     canManageActivityGroups,
+    canManageJanitorialGroups,
     mustClockAsStudent,
 } from '../utils/wspoActivityAccess';
 import StudentAttendanceTerminal from './StudentAttendanceTerminal';
@@ -65,8 +66,7 @@ const SupervisorAttendanceHub = () => {
     const canManageCleaningGroups = canManageActivityGroups(userRole, storedOffice);
     const canIssueDaily = canIssueDailyAttendance();
     const clocksAsStudent = mustClockAsStudent();
-    // Same gate as Groups — Secretary / Coordinator only.
-    const canManageJanitorialGroups = canManageCleaningGroups;
+    const canManageJanitorialGroupsFlag = canManageJanitorialGroups(userRole, storedOffice);
     const supervisorDepartment = canIssueDaily ? storedOffice : (canIssueActivity ? 'Activities' : storedOffice);
     const [tokenScope, setTokenScope] = useState(supervisorDepartment);
 
@@ -509,7 +509,7 @@ const SupervisorAttendanceHub = () => {
                                         <Users className="w-4 h-4" /> Groups
                                     </button>
                                 )}
-                                {canManageJanitorialGroups && (
+                                {canManageJanitorialGroupsFlag && (
                                     <button
                                         type="button"
                                         onClick={() => setJanitorialGroupsOpen(true)}

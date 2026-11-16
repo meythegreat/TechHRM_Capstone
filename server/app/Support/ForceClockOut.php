@@ -203,7 +203,7 @@ class ForceClockOut
         $clockOutTime = $now->copy();
 
         if ($isJanitorial) {
-            // Fixed 4h overall shift credit (same as student janitorial clock-out).
+            // Close the open session. Hours stay pending until the janitorial leader accepts.
         } else {
             $capped = DutyHours::cappedClockOut($clockInTime, $clockOutTime, $shift);
             if ($capped->lt($clockOutTime)) {
@@ -213,28 +213,9 @@ class ForceClockOut
         }
 
         if ($isJanitorial) {
-            $alreadyCredited = Attendance::query()
-                ->where('user_id', $user->id)
-                ->where('id', '!=', $attendance->id)
-                ->whereNull('rendered_hour_event_id')
-                ->where(function ($query) {
-                    $query->where('attendance_type', 'Janitorial')
-                        ->orWhere('work_type', 'Janitorial');
-                })
-                ->whereNotNull('time_out')
-                ->whereDate('time_in', $clockInTime->toDateString())
-                ->where(function ($query) {
-                    $query->where('computed_hours', '>', 0)->orWhere('rendered_hours', '>', 0);
-                })
-                ->exists();
-            $computedHours = DutyHours::janitorialShiftHours($alreadyCredited);
-            if ($alreadyCredited) {
-                $notes[] = 'Additional janitorial segment — overall shift already credited '
-                    .DutyHours::JANITORIAL_FIXED_HOURS.'h (5–9pm).';
-            } else {
-                $notes[] = 'Janitorial overall shift credited '
-                    .DutyHours::JANITORIAL_FIXED_HOURS.'h (5–9pm block).';
-            }
+            $computedHours = 0.0;
+            $notes[] = 'Janitorial session closed. The janitorial supervisor must accept the photos before '
+                .DutyHours::JANITORIAL_FIXED_HOURS.' hours are recorded from clock-in.';
         } else {
             $computedHours = DutyHours::creditedHours($clockInTime, $clockOutTime, $studentDepartment);
             if (! DutyHours::isLibrary($studentDepartment)) {
@@ -277,9 +258,9 @@ class ForceClockOut
 
         $attendance->update([
             'time_out' => $clockOutTime,
-            'computed_hours' => $credited,
-            'rendered_hours' => $credited,
-            'status' => 'approved',
+            'computed_hours' => $isJanitorial ? 0 : $credited,
+            'rendered_hours' => $isJanitorial ? 0 : $credited,
+            'status' => $isJanitorial ? 'pending' : 'approved',
             'task_description' => $task !== '' ? $task : null,
             'is_anomaly' => $isAnomaly,
             'anomaly_reason' => $anomalyReason,

@@ -35,51 +35,68 @@ class AttendanceDutyFeaturesTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_janitorial_supervisor_multi_dept_fixed_four_hour_shift(): void
+    public function test_janitorial_leader_groups_span_departments_and_credit_four_hours_on_approval(): void
     {
         $wspo = $this->makeUser('WSPO Staff', 'WSPO Coordinator', 'WSPO Coord');
         $lead = $this->makeUser('Student', 'Registrar', 'Jan Lead');
         $regMember = $this->makeUser('Student', 'Registrar', 'Reg Member');
+        $clinicMember = $this->makeUser('Student', 'Clinic', 'Clinic Member');
         $libMember = $this->makeUser('Student', 'Library', 'Lib Member');
         $ccsMember = $this->makeUser('Student', 'CCS Office', 'Ccs Member');
-        $fourthDeptMember = $this->makeUser('Student', 'Clinic', 'Clinic Member');
+        $extraMember = $this->makeUser('Student', 'Guidance', 'Extra Member');
+        $fourthMember = $this->makeUser('Student', 'Clinic', 'Fourth Member');
 
         Sanctum::actingAs($wspo);
+        $leaderId = $this->postJson('/api/attendance/janitorial-leaders', [
+            'user_id' => $lead->id,
+        ])->assertCreated()
+            ->assertJsonPath('leader.user.id', $lead->id)
+            ->assertJsonPath('leader.group_count', 0)
+            ->json('leader.id');
+
+        $this->getJson('/api/attendance/janitorial-groups')
+            ->assertOk()
+            ->assertJsonPath('leaders.0.id', $leaderId)
+            ->assertJsonPath('leaders.0.user.name', 'Jan Lead');
+
+        // Members may come from any department. The leader is chosen first.
         $regGroupId = $this->postJson('/api/attendance/janitorial-groups', [
-            'department' => 'Registrar',
-            'name' => 'Registrar clean',
+            'name' => 'East crew',
             'area' => 'East hallways',
             'supervisor_user_id' => $lead->id,
-            'member_ids' => [$regMember->id],
+            'member_ids' => [$regMember->id, $clinicMember->id],
         ])->assertCreated()
             ->assertJsonPath('group.max_members', 6)
-            ->assertJsonPath('group.max_departments_per_supervisor', 3)
+            ->assertJsonPath('group.max_groups', 3)
+            ->assertJsonPath('group.area', 'East hallways')
             ->json('group.id');
 
-        // Same supervisor may cover up to 3 departments with different membership.
         $this->postJson('/api/attendance/janitorial-groups', [
-            'department' => 'Library',
+            'name' => 'East again',
+            'area' => 'East hallways',
+            'supervisor_user_id' => $lead->id,
+            'member_ids' => [$extraMember->id],
+        ])->assertStatus(422);
+
+        $this->postJson('/api/attendance/janitorial-groups', [
             'name' => 'Library clean',
             'area' => 'Stacks',
             'supervisor_user_id' => $lead->id,
             'member_ids' => [$libMember->id],
         ])->assertCreated();
         $this->postJson('/api/attendance/janitorial-groups', [
-            'department' => 'CCS Office',
             'name' => 'CCS clean',
             'area' => 'Labs',
             'supervisor_user_id' => $lead->id,
             'member_ids' => [$ccsMember->id],
         ])->assertCreated();
         $this->postJson('/api/attendance/janitorial-groups', [
-            'department' => 'Clinic',
-            'name' => 'Clinic clean',
+            'name' => 'Fourth area',
             'area' => 'Lobby',
             'supervisor_user_id' => $lead->id,
-            'member_ids' => [$fourthDeptMember->id],
+            'member_ids' => [$fourthMember->id],
         ])->assertStatus(422);
 
-        // Per-department passcode (own code per group).
         Carbon::setTestNow(Carbon::parse('2026-11-13 17:15:00'));
         Sanctum::actingAs($lead);
         $regCode = $this->getJson('/api/attendance/janitorial-passcode?group_id='.$regGroupId)
@@ -95,7 +112,6 @@ class AttendanceDutyFeaturesTest extends TestCase
         $attendanceId = $clockIn->json('attendance.id');
         $this->attachCleaningProofs($attendanceId);
 
-        // Early clock-out still credits fixed 4h (5–9pm overall shift).
         Carbon::setTestNow(Carbon::parse('2026-11-13 18:00:00'));
         Sanctum::actingAs($lead);
         $passcodeOut = $this->getJson('/api/attendance/janitorial-passcode?group_id='.$regGroupId)->json('token_code');
@@ -104,31 +120,21 @@ class AttendanceDutyFeaturesTest extends TestCase
             'token_code' => $passcodeOut,
             'method' => 'passcode',
         ])->assertOk()
-            ->assertJsonPath('hours_rendered', 4);
-
-        // Second segment same day counts as one overall shift → 0 additional hours.
-        Carbon::setTestNow(Carbon::parse('2026-11-13 19:00:00'));
-        Sanctum::actingAs($lead);
-        $code2 = $this->getJson('/api/attendance/janitorial-passcode?group_id='.$regGroupId)->json('token_code');
-        Sanctum::actingAs($regMember);
-        $seg2 = $this->postJson('/api/attendance/secure-clock-in', [
-            'token_code' => $code2,
-            'method' => 'passcode',
-        ])->assertOk()->json('attendance.id');
-        $this->attachCleaningProofs($seg2);
-        Carbon::setTestNow(Carbon::parse('2026-11-13 19:30:00'));
-        Sanctum::actingAs($lead);
-        $code2Out = $this->getJson('/api/attendance/janitorial-passcode?group_id='.$regGroupId)->json('token_code');
-        Sanctum::actingAs($regMember);
-        $this->putJson('/api/attendance/secure-clock-out/'.$seg2, [
-            'token_code' => $code2Out,
-            'method' => 'passcode',
-        ])->assertOk()
             ->assertJsonPath('hours_rendered', 0);
 
-        $this->assertEquals(
-            4.0,
-            (float) Attendance::query()->where('user_id', $regMember->id)->sum('rendered_hours')
+        $pending = Attendance::query()->findOrFail($attendanceId);
+        $this->assertSame('pending', $pending->status);
+        $this->assertEquals(0.0, (float) $pending->rendered_hours);
+
+        Sanctum::actingAs($lead);
+        $this->patchJson('/api/attendance/janitorial-reviews/'.$attendanceId, ['status' => 'accepted'])
+            ->assertOk()
+            ->assertJsonPath('entry.status', 'accepted');
+
+        $accepted = Attendance::query()->findOrFail($attendanceId);
+        $this->assertEquals(4.0, (float) $accepted->rendered_hours);
+        $this->assertTrue(
+            Carbon::parse($accepted->time_in)->addHours(4)->equalTo(Carbon::parse($accepted->time_out))
         );
     }
 
@@ -149,17 +155,42 @@ class AttendanceDutyFeaturesTest extends TestCase
         ])->assertCreated()->json('group.id');
 
         Sanctum::actingAs($member);
-        $requestId = $this->postJson('/api/attendance/manual-requests', [
+        Storage::fake('local');
+        $this->post('/api/attendance/manual-requests', [
             'request_type' => 'janitorial',
             'shifts' => [
                 ['date' => '2026-11-12', 'time_in' => '09:00', 'time_out' => '11:00'],
             ],
-        ])->assertCreated()
+        ], ['Accept' => 'application/json'])->assertStatus(422);
+
+        $requestId = $this->post('/api/attendance/manual-requests', [
+            'request_type' => 'janitorial',
+            'shifts' => [
+                [
+                    'date' => '2026-11-12',
+                    'time_in' => '09:00',
+                    'time_out' => '11:00',
+                    'before_photo' => UploadedFile::fake()->image('before.jpg', 640, 480),
+                    'after_photo' => UploadedFile::fake()->image('after.jpg', 640, 480),
+                    'before_captured_at' => '2026-11-12T09:00:00',
+                    'after_captured_at' => '2026-11-12T11:00:00',
+                    'capture_source' => 'live_camera',
+                ],
+            ],
+        ], ['Accept' => 'application/json'])->assertCreated()
             ->assertJsonPath('request.request_type', 'janitorial')
             ->json('request.id');
 
         Sanctum::actingAs($officeSupervisor);
         $this->patchJson('/api/attendance/manual-requests/'.$requestId, [
+            'status' => 'Approved',
+        ])->assertForbidden();
+
+        Sanctum::actingAs($lead);
+        $this->getJson('/api/attendance/janitorial-offline-requests')
+            ->assertOk()
+            ->assertJsonPath('requests.0.id', $requestId);
+        $this->patchJson('/api/attendance/janitorial-offline-requests/'.$requestId, [
             'status' => 'Approved',
         ])->assertOk();
 
@@ -169,9 +200,16 @@ class AttendanceDutyFeaturesTest extends TestCase
         $this->assertSame((int) $groupId, (int) $attendance->janitorial_group_id);
         $this->assertSame('Second floor stacks', $attendance->janitorial_area);
         $this->assertEquals(4.0, (float) $attendance->rendered_hours);
+        $this->assertTrue(
+            Carbon::parse($attendance->time_in)->addHours(4)->equalTo(Carbon::parse($attendance->time_out))
+        );
+        $this->assertNotEmpty($attendance->cleaning_before_path);
+        $this->assertNotEmpty($attendance->cleaning_after_path);
+        Storage::disk('local')->assertExists($attendance->cleaning_before_path);
+        Storage::disk('local')->assertExists($attendance->cleaning_after_path);
     }
 
-    public function test_only_secretary_and_coordinator_can_manage_janitorial_groups(): void
+    public function test_only_coordinator_can_manage_janitorial_leaders_and_groups(): void
     {
         $coordinator = $this->makeUser('WSPO Staff', 'WSPO Coordinator', 'Coord');
         $secretary = $this->makeUser('WSPO Staff', 'WSPO Secretary', 'Secretary');
@@ -180,7 +218,6 @@ class AttendanceDutyFeaturesTest extends TestCase
         $lead = $this->makeUser('Student', 'Library', 'Lib Lead');
         $member = $this->makeUser('Student', 'Library', 'Lib Member');
         $payload = [
-            'department' => 'Library',
             'name' => 'Stacks',
             'area' => 'Second floor',
             'supervisor_user_id' => $lead->id,
@@ -189,12 +226,13 @@ class AttendanceDutyFeaturesTest extends TestCase
 
         $accounts = app(\App\Http\Controllers\UserController::class);
         $this->assertTrue($accounts->canManageJanitorialGroups($coordinator));
-        $this->assertTrue($accounts->canManageJanitorialGroups($secretary));
+        $this->assertFalse($accounts->canManageJanitorialGroups($secretary));
         $this->assertFalse($accounts->canManageJanitorialGroups($president));
         $this->assertFalse($accounts->canManageJanitorialGroups($supervisor));
 
         Sanctum::actingAs($supervisor);
         $this->postJson('/api/attendance/janitorial-groups', $payload)->assertForbidden();
+        $this->postJson('/api/attendance/janitorial-leaders', ['user_id' => $lead->id])->assertForbidden();
 
         Sanctum::actingAs($president);
         $this->postJson('/api/attendance/janitorial-groups', $payload)->assertForbidden();
@@ -202,14 +240,22 @@ class AttendanceDutyFeaturesTest extends TestCase
         Sanctum::actingAs($secretary);
         $this->getJson('/api/user')
             ->assertOk()
+            ->assertJsonPath('can_manage_janitorial_groups', false);
+        $this->postJson('/api/attendance/janitorial-leaders', ['user_id' => $lead->id])->assertForbidden();
+        $this->postJson('/api/attendance/janitorial-groups', $payload)->assertForbidden();
+
+        Sanctum::actingAs($coordinator);
+        $this->getJson('/api/user')
+            ->assertOk()
             ->assertJsonPath('can_manage_janitorial_groups', true);
+        $leaderId = $this->postJson('/api/attendance/janitorial-leaders', ['user_id' => $lead->id])
+            ->assertCreated()
+            ->json('leader.id');
         $groupId = $this->postJson('/api/attendance/janitorial-groups', $payload)
             ->assertCreated()
             ->json('group.id');
 
-        Sanctum::actingAs($coordinator);
         $this->putJson('/api/attendance/janitorial-groups/'.$groupId, [
-            'department' => 'Library',
             'name' => 'Stacks East',
             'area' => 'East wing',
             'supervisor_user_id' => $lead->id,
@@ -218,9 +264,11 @@ class AttendanceDutyFeaturesTest extends TestCase
 
         Sanctum::actingAs($supervisor);
         $this->deleteJson('/api/attendance/janitorial-groups/'.$groupId)->assertForbidden();
+        $this->deleteJson('/api/attendance/janitorial-leaders/'.$leaderId)->assertForbidden();
 
-        Sanctum::actingAs($secretary);
-        $this->deleteJson('/api/attendance/janitorial-groups/'.$groupId)->assertOk();
+        Sanctum::actingAs($coordinator);
+        $this->deleteJson('/api/attendance/janitorial-leaders/'.$leaderId)->assertOk();
+        $this->assertNull(\App\Models\JanitorialGroup::query()->find($groupId));
     }
 
     public function test_assembly_students_must_use_year_representative_code(): void
@@ -525,6 +573,13 @@ class AttendanceDutyFeaturesTest extends TestCase
             $table->timestamps();
         });
 
+        Schema::create('janitorial_leaders', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->unique()->constrained('users')->cascadeOnDelete();
+            $table->boolean('is_present')->default(true);
+            $table->timestamps();
+        });
+
         Schema::create('janitorial_groups', function (Blueprint $table) {
             $table->id();
             $table->string('department', 120);
@@ -590,6 +645,10 @@ class AttendanceDutyFeaturesTest extends TestCase
             $table->string('time_out', 5);
             $table->string('janitorial_area', 120)->nullable();
             $table->unsignedBigInteger('janitorial_group_id')->nullable();
+            $table->string('before_photo_path', 500)->nullable();
+            $table->string('after_photo_path', 500)->nullable();
+            $table->timestamp('before_captured_at')->nullable();
+            $table->timestamp('after_captured_at')->nullable();
             $table->unsignedSmallInteger('sort_order')->default(0);
             $table->foreignId('attendance_id')->nullable()->constrained('attendances')->nullOnDelete();
             $table->timestamps();

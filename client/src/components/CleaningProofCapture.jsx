@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
+import axios from 'axios';
 import { Camera, CheckCircle2, RefreshCw } from 'lucide-react';
 import SecureImage from './SecureImage';
 import { submitCleaningProof } from '../services/advancedAttendanceService';
+import { clearLiveCaptureDraft, loadLiveCaptureDraft, saveLiveCaptureDraft } from '../utils/offlineAttendanceDraft';
 
 const installedApp = () => window.matchMedia('(display-mode: standalone)').matches
     || window.navigator.standalone === true;
@@ -48,8 +50,13 @@ export default function CleaningProofCapture({
     afterPath = null,
     onUpdated,
     insecureCamera = false,
+    janitorial = false,
+    groupId = null,
+    collect = false,
+    onCollected,
+    restored = null,
 }) {
-    const [phase, setPhase] = useState(beforePath ? 'after' : 'before');
+    const [phase, setPhase] = useState(() => (restored?.before ? 'after' : (beforePath ? 'after' : 'before')));
     const [live, setLive] = useState(false);
     const [starting, setStarting] = useState(false);
     const [previewUrl, setPreviewUrl] = useState(null);
@@ -58,20 +65,67 @@ export default function CleaningProofCapture({
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
+    const [kept, setKept] = useState(() => ({
+        before: restored?.before || null,
+        after: restored?.after || null,
+    }));
     const videoRef = useRef(null);
     const streamRef = useRef(null);
+    const skipPersist = useRef(false);
 
-    const beforeDone = Boolean(beforePath);
-    const afterDone = Boolean(afterPath);
+    const persistLive = janitorial && !collect;
+
+    useEffect(() => {
+        if (!persistLive) return undefined;
+        let cancelled = false;
+        loadLiveCaptureDraft().then((draft) => {
+            if (cancelled || !draft?.blob) return;
+            const sameShift = attendanceId
+                ? String(draft.attendanceId || '') === String(attendanceId)
+                : !draft.attendanceId;
+            if (!sameShift) return;
+            if (groupId && draft.groupId && String(draft.groupId) !== String(groupId)) return;
+            setPhase(draft.phase || 'before');
+            setCapturedBlob(draft.blob);
+            setCapturedAt(draft.capturedAt ? new Date(draft.capturedAt) : new Date());
+            setPreviewUrl(URL.createObjectURL(draft.blob));
+        }).catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [persistLive, attendanceId, groupId]);
+
+    useEffect(() => {
+        if (!persistLive || !capturedBlob || !capturedAt) return undefined;
+        const payload = {
+            phase,
+            blob: capturedBlob,
+            capturedAt: capturedAt.toISOString(),
+            groupId: groupId || null,
+            attendanceId: attendanceId || null,
+        };
+        const timer = window.setTimeout(() => {
+            saveLiveCaptureDraft(payload).catch(() => {});
+        }, 100);
+        return () => {
+            window.clearTimeout(timer);
+            if (skipPersist.current) return;
+            saveLiveCaptureDraft(payload).catch(() => {});
+        };
+    }, [persistLive, capturedBlob, capturedAt, phase, groupId, attendanceId]);
+
+    const beforeDone = collect ? Boolean(kept.before) : Boolean(beforePath);
+    const afterDone = collect ? Boolean(kept.after) : Boolean(afterPath);
     const complete = beforeDone && afterDone;
 
     useEffect(() => {
+        if (collect) return;
         if (!beforePath) {
             setPhase('before');
         } else if (!afterPath) {
             setPhase('after');
         }
-    }, [beforePath, afterPath]);
+    }, [collect, beforePath, afterPath]);
 
     useEffect(() => () => {
         stopCamera();
@@ -168,6 +222,7 @@ export default function CleaningProofCapture({
         setError('');
         setNotice('');
         try {
+            skipPersist.current = false;
             const { blob, captured } = await burnTimestampFrame();
             if (previewUrl) URL.revokeObjectURL(previewUrl);
             setPreviewUrl(URL.createObjectURL(blob));
@@ -179,8 +234,34 @@ export default function CleaningProofCapture({
         }
     };
 
+    const keepCollectedPhoto = () => {
+        if (!capturedBlob || !capturedAt) return;
+        const file = new File([capturedBlob], `${phase}-cleaning.jpg`, { type: 'image/jpeg' });
+        const next = {
+            ...kept,
+            [phase]: {
+                file,
+                capturedAt: capturedAt.toISOString(),
+                url: previewUrl,
+            },
+        };
+        setKept(next);
+        setCapturedBlob(null);
+        setPreviewUrl(null);
+        setNotice(`${phase === 'before' ? 'Before' : 'After'} photo kept. The date and time are stamped on it.`);
+        if (phase === 'before') setPhase('after');
+        onCollected?.({
+            before: next.before,
+            after: next.after,
+        });
+    };
+
     const uploadPhoto = async () => {
-        if (!capturedBlob || !capturedAt || !attendanceId) return;
+        if (collect) {
+            keepCollectedPhoto();
+            return;
+        }
+        if (!capturedBlob || !capturedAt || (!janitorial && !attendanceId)) return;
         setUploading(true);
         setError('');
         setNotice('');
@@ -190,8 +271,17 @@ export default function CleaningProofCapture({
             form.append('capture_source', 'live_camera');
             form.append('captured_at', capturedAt.toISOString());
             form.append('photo', capturedBlob, `${phase}-cleaning.jpg`);
-            const res = await submitCleaningProof(attendanceId, form);
+            if (janitorial && groupId) form.append('group_id', String(groupId));
+            const res = janitorial
+                ? await axios.post('/api/attendance/janitorial-photo', form, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                })
+                : await submitCleaningProof(attendanceId, form);
             setNotice(res.data?.message || `${phase} photo saved.`);
+            if (persistLive) {
+                skipPersist.current = true;
+                clearLiveCaptureDraft().catch(() => {});
+            }
             setCapturedBlob(null);
             if (previewUrl) {
                 URL.revokeObjectURL(previewUrl);
@@ -207,7 +297,7 @@ export default function CleaningProofCapture({
         }
     };
 
-    if (complete) {
+    if (complete && !collect) {
         return (
             <div className="w-full mt-4 p-4 bg-white/80 border border-emerald-100 rounded-2xl text-left space-y-3">
                 <p className="text-xs font-bold text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">
@@ -236,15 +326,23 @@ export default function CleaningProofCapture({
                     Cleaning proof — {phase} photo
                 </p>
                 <p className="text-xs text-slate-600 mt-1">
-                    Take a live camera photo of the assigned area. The date and time are stamped on the image.
-                    Gallery upload is not allowed.
+                    {collect
+                        ? 'Open the camera and capture the area. The date and time are stamped on the photo. Gallery photos are not accepted.'
+                        : persistLive
+                            ? 'Capture the area with the camera. The date and time are stamped on the photo. It stays on this device if you leave before you clock in or out.'
+                            : janitorial && phase === 'before'
+                            ? 'This photo starts your clock-in. The date and time on the image are your time in. No code is required.'
+                            : janitorial && phase === 'after'
+                                ? 'This photo ends your clock-out. The date and time on the image are your time out.'
+                                : 'Take a live camera photo of the assigned area. The date and time are stamped on the image. Gallery upload is not allowed.'}
                 </p>
             </div>
 
+            {(collect || !janitorial || attendanceId) ? (
             <div className="flex gap-2">
                 <button
                     type="button"
-                    disabled={beforeDone}
+                    disabled={!collect && beforeDone}
                     onClick={() => { setPhase('before'); setCapturedBlob(null); setPreviewUrl(null); }}
                     className={`flex-1 py-2 rounded-lg text-xs font-bold border ${phase === 'before' ? 'bg-amber-100 border-amber-300 text-amber-900' : 'bg-white border-slate-200 text-slate-500'} ${beforeDone ? 'opacity-60' : ''}`}
                 >
@@ -259,6 +357,7 @@ export default function CleaningProofCapture({
                     After {afterDone ? '✓' : ''}
                 </button>
             </div>
+            ) : null}
 
             {insecureCamera && (
                 <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">
@@ -291,7 +390,7 @@ export default function CleaningProofCapture({
                             disabled={uploading}
                             className="py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold disabled:opacity-50"
                         >
-                            {uploading ? 'Saving…' : `Save ${phase} photo`}
+                            {uploading ? 'Saving…' : (collect ? `Keep ${phase} photo` : janitorial && phase === 'before' ? 'Clock in with this photo' : janitorial && phase === 'after' ? 'Clock out with this photo' : `Save ${phase} photo`)}
                         </button>
                     </div>
                 </div>
@@ -327,6 +426,22 @@ export default function CleaningProofCapture({
                             Capture {phase} photo
                         </button>
                     )}
+                </div>
+            )}
+            {collect && (kept.before || kept.after) && (
+                <div className="grid grid-cols-2 gap-3">
+                    {['before', 'after'].map((key) => (
+                        <div key={key}>
+                            <p className="text-[11px] font-bold text-slate-500 uppercase mb-1">
+                                {key} {kept[key] ? '✓' : ''}
+                            </p>
+                            {kept[key]?.url ? (
+                                <img src={kept[key].url} alt={`${key} surroundings`} className="w-full h-28 object-cover rounded-xl border border-slate-200" />
+                            ) : (
+                                <div className="h-28 rounded-xl border border-dashed border-slate-200 bg-slate-50" />
+                            )}
+                        </div>
+                    ))}
                 </div>
             )}
         </div>

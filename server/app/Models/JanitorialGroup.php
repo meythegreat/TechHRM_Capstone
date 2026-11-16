@@ -8,10 +8,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class JanitorialGroup extends Model
 {
-    /** A janitorial student supervisor may cover at most this many departments. */
-    public const MAX_DEPARTMENTS_PER_SUPERVISOR = 3;
+    /** A janitorial leader may handle at most this many groups, each in a different area. */
+    public const MAX_GROUPS = 3;
 
-    /** Members per department roster under that supervisor. */
+    /** Members on one janitorial group. */
     public const MAX_MEMBERS = 6;
 
     protected $fillable = [

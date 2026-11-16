@@ -14,12 +14,18 @@ class ManualAttendanceRequestShift extends Model
         'time_out',
         'janitorial_area',
         'janitorial_group_id',
+        'before_photo_path',
+        'after_photo_path',
+        'before_captured_at',
+        'after_captured_at',
         'sort_order',
         'attendance_id',
     ];
 
     protected $casts = [
         'work_date' => 'date',
+        'before_captured_at' => 'datetime',
+        'after_captured_at' => 'datetime',
     ];
 
     public function request(): BelongsTo

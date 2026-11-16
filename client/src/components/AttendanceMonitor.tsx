@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import TimesheetPrintView from './TimesheetPrintView';
 import AuditPager, { pageSlice } from './AuditPager';
-import SecureImage from './SecureImage';
+import { CleaningProofPhotos } from './CleaningProofPhotos';
 import { formatYearLevel, homeDepartment } from '../utils/studentAssignment';
 import { HourLimitApprovalsPanel } from './hours/HourLimitApprovalsPanel';
 import ManualAttendanceRequestsPanel from './ManualAttendanceRequestsPanel';
@@ -882,28 +882,14 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                                                 )}
                                             </div>
                                             {(record.cleaning_before_path || record.cleaning_after_path) && (
-                                                <div className="mt-3 grid grid-cols-2 gap-2 max-w-[220px]">
-                                                    {record.cleaning_before_path && (
-                                                        <div>
-                                                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Before</p>
-                                                            <SecureImage
-                                                                filePath={record.cleaning_before_path}
-                                                                altText={`${record.user?.name || 'Student'} before cleaning`}
-                                                                className="h-16 w-full object-cover rounded-lg border border-slate-200"
-                                                            />
-                                                        </div>
-                                                    )}
-                                                    {record.cleaning_after_path && (
-                                                        <div>
-                                                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">After</p>
-                                                            <SecureImage
-                                                                filePath={record.cleaning_after_path}
-                                                                altText={`${record.user?.name || 'Student'} after cleaning`}
-                                                                className="h-16 w-full object-cover rounded-lg border border-slate-200"
-                                                            />
-                                                        </div>
-                                                    )}
-                                                </div>
+                                                <CleaningProofPhotos
+                                                    layout="compact"
+                                                    studentName={record.user?.name || 'Student'}
+                                                    beforePath={record.cleaning_before_path}
+                                                    beforeCapturedAt={record.cleaning_before_captured_at}
+                                                    afterPath={record.cleaning_after_path}
+                                                    afterCapturedAt={record.cleaning_after_captured_at}
+                                                />
                                             )}
                                         </td>
 

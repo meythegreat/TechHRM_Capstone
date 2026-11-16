@@ -83,7 +83,7 @@ const ManualAttendanceRequestsPanel = ({ readOnly = false, onToast, onChanged }:
         <div>
           <h3 className="text-base font-semibold text-slate-900">Attendance approval requests</h3>
           <p className="text-sm text-slate-500 mt-1 leading-relaxed">
-            Regular / janitorial offline (no office internet) and class-hours duty requests. Approving credits closed shifts on their DTR.
+            Regular offline (no office internet) and class-hours duty requests. Approving credits closed shifts on their DTR. Janitorial offline requests are approved by the student&apos;s janitorial supervisor.
           </p>
         </div>
         {pending.length > 0 && (

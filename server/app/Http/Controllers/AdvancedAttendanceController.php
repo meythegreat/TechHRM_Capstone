@@ -443,28 +443,10 @@ class AdvancedAttendanceController extends Controller
 
         $office = $studentDepartment;
         if ($isJanitorial) {
-            $alreadyCredited = Attendance::query()
-                ->where('user_id', $user->id)
-                ->where('id', '!=', $attendance->id)
-                ->whereNull('rendered_hour_event_id')
-                ->where(function ($query) {
-                    $query->where('attendance_type', 'Janitorial')
-                        ->orWhere('work_type', 'Janitorial');
-                })
-                ->whereNotNull('time_out')
-                ->whereDate('time_in', $clockInTime->toDateString())
-                ->where(function ($query) {
-                    $query->where('computed_hours', '>', 0)->orWhere('rendered_hours', '>', 0);
-                })
-                ->exists();
-            $computedHours = DutyHours::janitorialShiftHours($alreadyCredited);
-            if ($alreadyCredited) {
-                $notes[] = 'Additional janitorial segment — overall shift already credited '
-                    .DutyHours::JANITORIAL_FIXED_HOURS.'h (5–9pm).';
-            } else {
-                $notes[] = 'Janitorial overall shift credited '
-                    .DutyHours::JANITORIAL_FIXED_HOURS.'h (5–9pm block), even if finished early.';
-            }
+            // Hours stay at 0 until the janitorial leader accepts the photos.
+            // Acceptance rewrites clock-out to exactly 4 hours after clock-in.
+            $computedHours = 0.0;
+            $notes[] = 'Clock-out recorded. Hours stay pending until your janitorial supervisor accepts the photos.';
         } else {
             $computedHours = DutyHours::creditedHours($clockInTime, $clockOutTime, $office);
             if (! DutyHours::isLibrary($office)) {
@@ -509,7 +491,13 @@ class AdvancedAttendanceController extends Controller
             'time_out' => $clockOutTime,
             'computed_hours' => $credited,
             'rendered_hours' => $credited,
-            'status' => 'approved',
+            // Keep a decision the janitorial supervisor already made from the photos.
+            // Otherwise hours stay pending until they accept the before/after timestamps.
+            'status' => $isJanitorial
+                ? (in_array(strtolower((string) $attendance->status), ['accepted', 'approved', 'rejected'], true)
+                    ? $attendance->status
+                    : 'pending')
+                : 'approved',
             'task_description' => $task !== '' ? $task : null,
             'is_anomaly' => $isAnomaly,
             'anomaly_reason' => $anomalyReason,
@@ -517,7 +505,10 @@ class AdvancedAttendanceController extends Controller
 
         $this->notifyCodeOwner($validToken->generated_by, $user->name, $dutyType, $method, true);
 
-        $message = 'Verified exit logging saved.';
+        $message = $isJanitorial
+            ? 'Clock-out saved. Your janitorial supervisor must accept the surroundings photos and their timestamps. If accepted, this entry is recorded as exactly '
+                .DutyHours::JANITORIAL_FIXED_HOURS.' hours from your clock-in.'
+            : 'Verified exit logging saved.';
         if ($notes !== []) {
             $message .= ' '.implode(' ', $notes);
         }
@@ -1285,7 +1276,7 @@ class AdvancedAttendanceController extends Controller
         $group = $groups->firstWhere('id', $groupId);
         if (! $group) {
             return response()->json([
-                'message' => 'Choose which department roster to show a code for (group_id).',
+                'message' => 'Choose which group to show a code for (group_id).',
                 'groups' => $groups->map(fn (JanitorialGroup $row) => [
                     'id' => $row->id,
                     'department' => $row->department,
@@ -1434,8 +1425,8 @@ class AdvancedAttendanceController extends Controller
         $this->notifyCodeOwner($validToken->generated_by, $user->name, 'Janitorial', $method, false);
 
         return response()->json([
-            'message' => 'Janitorial clock-in verified. Capture before and after cleaning photos with the live camera, then clock out anytime when finished; the overall shift credits '
-                .DutyHours::JANITORIAL_FIXED_HOURS.'h (5–9pm block).',
+            'message' => 'Janitorial clock-in verified. Photograph your surroundings now, with the date and time on the photo. You can clock out anytime, and you must take one last photo before clock-out. If your janitorial supervisor accepts the entry, it is recorded as exactly '
+                .DutyHours::JANITORIAL_FIXED_HOURS.' hours from this clock-in.',
             'attendance' => $attendance,
             'cleaning_proof' => CleaningProof::status($attendance),
             'hour_limits' => HourLimits::status($user->id, $now),
@@ -1480,12 +1471,18 @@ class AdvancedAttendanceController extends Controller
 
         $group = $this->janitorialGroupFromToken($matched);
         if (! $group || ! $group->isSupervisedBy((int) $matched->generated_by)) {
-            return response()->json(['message' => 'This janitorial code is not linked to an active department roster.'], 422);
+            return response()->json(['message' => 'This janitorial code is not linked to an active group.'], 422);
+        }
+
+        if (! \App\Models\JanitorialLeader::isOnDuty((int) $group->supervisor_user_id)) {
+            return response()->json([
+                'message' => 'Your janitorial leader is marked absent, so a code cannot be used. Submit offline attendance with your time in and before and after photos that show the date and time.',
+            ], 422);
         }
 
         if (! $group->includesStudent((int) $student->id)) {
             return response()->json([
-                'message' => 'This code is only for '.$group->department.' members of '.$group->name.'.',
+                'message' => 'This code is only for members of '.$group->name.' ('.$group->area.').',
             ], 403);
         }
 

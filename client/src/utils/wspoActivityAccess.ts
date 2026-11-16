@@ -12,7 +12,8 @@ const ACTIVITY_CHECKER_OFFICES = [
 export function canCheckActivityAttendance(role?: string | null, office?: string | null): boolean {
   const storedFlag = localStorage.getItem('can_check_activity_attendance');
   if (storedFlag === '1') return true;
-  if (storedFlag === '0') return false;
+  // Stale can_check_activity_attendance=0 must not blank the Activity QR panel
+  // for a Coordinator who already has the right role/office in localStorage.
 
   const resolvedRole = role ?? localStorage.getItem('user_role') ?? '';
   const resolvedOffice = (office ?? localStorage.getItem('assigned_office') ?? '').trim().toLowerCase();
@@ -37,7 +38,8 @@ export function canCheckActivityAttendance(role?: string | null, office?: string
 export function canManageActivityGroups(role?: string | null, office?: string | null): boolean {
   const storedFlag = localStorage.getItem('can_manage_activity_groups');
   if (storedFlag === '1') return true;
-  if (storedFlag === '0') return false;
+  // Do not hard-fail on a stale can_manage_activity_groups=0 from an older login.
+  // Fall through to role/office so Coordinator / Secretary keep Groups + Janitorial.
 
   if (!canCheckActivityAttendance(role, office)) return false;
 
@@ -48,11 +50,26 @@ export function canManageActivityGroups(role?: string | null, office?: string | 
   return !resolvedOffice.includes('wspo president');
 }
 
-/** Janitorial duty rosters: same people as activity Groups (Secretary + Coordinator). */
+/** Janitorial leaders and area groups: WSPO Coordinator only. */
 export function canManageJanitorialGroups(role?: string | null, office?: string | null): boolean {
-  // Keep in lockstep with Groups. A stale can_manage_janitorial_groups=0 from an
-  // older login must not hide the button when Groups is already allowed.
-  return canManageActivityGroups(role, office);
+  const resolvedRole = role ?? localStorage.getItem('user_role') ?? '';
+  const resolvedOffice = (office ?? localStorage.getItem('assigned_office') ?? '').trim().toLowerCase();
+  const officer = (localStorage.getItem('officer_position') ?? '').trim().toLowerCase();
+
+  if (resolvedRole === 'Student' || officer === 'wspo secretary' || officer === 'wspo president') {
+    return false;
+  }
+  if (localStorage.getItem('is_student_officer') === '1') return false;
+  if (resolvedRole !== 'WSPO Staff') return false;
+  if (resolvedOffice.includes('secretary') || resolvedOffice.includes('president')) return false;
+
+  return (
+    resolvedOffice === ''
+    || resolvedOffice === 'wspo'
+    || resolvedOffice === 'unassigned'
+    || resolvedOffice.includes('wspo coordinator')
+    || resolvedOffice === 'wspo coordinator'
+  );
 }
 
 export function canIssueDailyAttendance(): boolean {

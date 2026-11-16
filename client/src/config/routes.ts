@@ -2,6 +2,7 @@
 export const STUDENT_PATHS = new Set([
   'dashboard',
   'attendance',
+  'janitorial-code',
   'year-activities',
   'campus-activities',
   'hours',
