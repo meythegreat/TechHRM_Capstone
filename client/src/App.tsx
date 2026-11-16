@@ -60,7 +60,8 @@ const STUDENT_PAGE_TITLES: Record<string, string> = {
   settings: 'Settings',
 };
 import ApplicationManager from './components/ApplicationManager';
-import SupervisorAttendanceHub from './components/SupervisorAttendanceHub';
+// Pin .jsx so a stale tsc emit (SupervisorAttendanceHub.js) cannot hide Janitorial groups.
+import SupervisorAttendanceHub from './components/SupervisorAttendanceHub.jsx';
 import DisciplinaryManager from './components/DisciplinaryManager';
 import AdminAnalyticsDashboard from './components/AdminAnalyticsDashboard';
 import StaffProfileSettings from './components/StaffProfileSettings';

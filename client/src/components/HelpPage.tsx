@@ -309,13 +309,15 @@ const HELP_TOPICS: HelpTopic[] = [
             'Show the current code or QR to students who are ready to time in.',
             'Copy the passcode if you need to share it quickly, or expand the QR for easier scanning.',
             'Check the anomaly count if the page flags unusual attendance activity.',
-            'The WSPO coordinator assigns groups for every activity. Choose one leader from any year level first, then add members by year. A group can mix years. That leader can open the QR code and passcode, which works for every year level in the group.',
+            'WSPO Coordinator or Secretary: open Attendance Hub → Activity QR → Groups (campus cleaning / activity rosters) or Janitorial groups (duty cleaning shifts). President can check attendance but cannot edit those rosters.',
+            'In Groups / Janitorial groups, choose one leader first, then add members (years can mix). That leader can open the QR or passcode for everyone in the group.',
             'Super Admins can browse the login and logout table and move through pages of records.',
         ],
         tips: [
             'Passcodes and QR codes are usually limited to your department or office scope.',
             'Super Admins cannot generate student clock-in codes from this page.',
             'Ask students to clock out before starting a new duty session.',
+            'If Groups or Janitorial groups are missing, confirm role is WSPO Staff with office WSPO Coordinator (or WSPO Secretary), then sign out and back in.',
         ],
     },
     {

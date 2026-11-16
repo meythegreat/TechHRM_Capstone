@@ -12,7 +12,8 @@ const ACTIVITY_CHECKER_OFFICES = [
 export function canCheckActivityAttendance(role?: string | null, office?: string | null): boolean {
   const storedFlag = localStorage.getItem('can_check_activity_attendance');
   if (storedFlag === '1') return true;
-  if (storedFlag === '0') return false;
+  // Stale can_check_activity_attendance=0 must not blank the Activity QR panel
+  // for a Coordinator who already has the right role/office in localStorage.
 
   const resolvedRole = role ?? localStorage.getItem('user_role') ?? '';
   const resolvedOffice = (office ?? localStorage.getItem('assigned_office') ?? '').trim().toLowerCase();
@@ -37,7 +38,8 @@ export function canCheckActivityAttendance(role?: string | null, office?: string
 export function canManageActivityGroups(role?: string | null, office?: string | null): boolean {
   const storedFlag = localStorage.getItem('can_manage_activity_groups');
   if (storedFlag === '1') return true;
-  if (storedFlag === '0') return false;
+  // Do not hard-fail on a stale can_manage_activity_groups=0 from an older login.
+  // Fall through to role/office so Coordinator / Secretary keep Groups + Janitorial.
 
   if (!canCheckActivityAttendance(role, office)) return false;
 

@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Accidental tsc/JSX emits that shadow the real .tsx/.jsx/.ts sources
+# (Vite resolves .js before .jsx and would hide Janitorial groups, etc.).
+src/components/**/*.js
+vite.config.js
+pwa/plugin.js
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
