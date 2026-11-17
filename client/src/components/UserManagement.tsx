@@ -4,6 +4,11 @@ import { motion, AnimatePresence, type Variants } from "framer-motion";
 import Toast from "./Toast";
 import UserAvatar from "./UserAvatar";
 import { formatAssignment } from "../utils/studentAssignment";
+import {
+  formatDisplayName,
+  normalizeAbbreviation,
+  parseFullName,
+} from "../utils/personName";
 import ComboFilter from "./ComboFilter";
 import { REALTIME_EVENT } from "../utils/realtime";
 import { bindPopup } from "../utils/popupDismiss";
@@ -217,13 +222,6 @@ const UserManagement = () => {
 
   const toggleSupervisedDepartment = (department: string) => toggleNamedDepartments('supervised_departments', department);
 
-  // Prefixes and middle initials are abbreviations in the saved display name.
-  // Strip any entered trailing dots first so the result always contains exactly one.
-  const normalizeAbbreviation = (value: string) => {
-    const abbreviation = value.trim().replace(/\.+$/, '');
-    return abbreviation ? `${abbreviation}.` : '';
-  };
-
   const handleAbbreviationBlur = (field: 'prefix' | 'middle_initial') => {
     setFormData((current) => ({
       ...current,
@@ -236,28 +234,6 @@ const UserManagement = () => {
     if (val.length <= 10) {
       setFormData({ ...formData, phone_number: val });
     }
-  };
-
-  const parseFullName = (fullName: string) => {
-      const parts = fullName.trim().split(" ");
-      let prefix = ""; let first_name = ""; let middle_initial = ""; let last_name = "";
-      if (parts.length === 0) return { prefix, first_name, middle_initial, last_name };
-
-      const prefixes = ["Mr.", "Ms.", "Mrs.", "Dr.", "Atty.", "Engr.", "Prof."];
-      if (prefixes.includes(parts[0]) || parts[0].endsWith('.')) prefix = normalizeAbbreviation(parts.shift() || "");
-      if (parts.length > 0) last_name = parts.pop() || "";
-
-      if (parts.length > 0) {
-          const miCandidate = parts[parts.length - 1];
-          if (/^[\p{L}]\.*$/u.test(miCandidate)) {
-              middle_initial = normalizeAbbreviation(parts.pop() || "");
-          } else if (parts.length > 1) {
-              const middleName = parts.pop() || "";
-              middle_initial = normalizeAbbreviation(middleName.charAt(0));
-          }
-      }
-      first_name = parts.join(" ");
-      return { prefix, first_name, middle_initial, last_name };
   };
 
   // PASSWORD STRENGTH CALCULATOR (For resetting)
@@ -296,9 +272,12 @@ const UserManagement = () => {
       return;
     }
 
-    const prefix = normalizeAbbreviation(formData.prefix);
-    const middleInitial = normalizeAbbreviation(formData.middle_initial);
-    const combinedName = `${prefix ? prefix + ' ' : ''}${formData.first_name} ${middleInitial ? middleInitial + ' ' : ''}${formData.last_name}`.replace(/\s+/g, ' ').trim();
+    const combinedName = formatDisplayName(
+      formData.first_name,
+      formData.middle_initial,
+      formData.last_name,
+      formData.prefix,
+    );
 
     try {
       if (editingUserId) {
@@ -774,7 +753,7 @@ const UserManagement = () => {
 
                     <div className="sm:col-span-4">
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">M.I.</label>
-                        <input name="middle_initial" value={formData.middle_initial} onChange={handleInputChange} onBlur={() => handleAbbreviationBlur('middle_initial')} placeholder="D." maxLength={2} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all placeholder:text-slate-400" />
+                        <input name="middle_initial" value={formData.middle_initial} onChange={handleInputChange} onBlur={() => handleAbbreviationBlur('middle_initial')} placeholder="M." maxLength={2} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all placeholder:text-slate-400" />
                     </div>
 
                     <div className="sm:col-span-6">
