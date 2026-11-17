@@ -13,6 +13,7 @@ use App\Services\CompletedApplicationForm;
 use App\Services\DepartmentAssignmentNotifier;
 use App\Services\StaffNotifier;
 use App\Support\AccountLogin;
+use App\Support\PersonName;
 use App\Support\SuperAdminAudit;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -284,9 +285,9 @@ class ApplicationController extends Controller
         $loginUsername = ($applicant && ! filter_var($applicant->username, FILTER_VALIDATE_EMAIL))
             ? $applicant->username
             : AccountLogin::generateUsername($validated['first_name'], $validated['last_name']);
-        $middleInitial = $this->middleInitial($validated['middle_name'] ?? null);
+        $middleInitial = PersonName::middleInitial($validated['middle_name'] ?? null);
         $storedMiddleName = $middleInitial !== '' ? $middleInitial : null;
-        $studentName = $this->displayName(
+        $studentName = PersonName::displayName(
             $validated['first_name'],
             $storedMiddleName,
             $validated['last_name']
@@ -561,10 +562,10 @@ class ApplicationController extends Controller
 
     private function applicantName(Application $application): string
     {
-        return trim(
-            $application->first_name.' '.
-                ($application->middle_name ? $application->middle_name.' ' : '').
-                $application->last_name
+        return PersonName::displayName(
+            (string) $application->first_name,
+            $application->middle_name,
+            (string) $application->last_name
         );
     }
 
@@ -965,26 +966,6 @@ class ApplicationController extends Controller
         if ($studentIdTaken || $studentIdOnApplication) {
             abort(422, 'This student ID number is already used.');
         }
-    }
-
-    private function displayName(string $firstName, ?string $middleName, string $lastName): string
-    {
-        $initial = $this->middleInitial($middleName);
-
-        return trim(preg_replace('/\s+/u', ' ', trim($firstName.' '.($initial !== '' ? $initial.' ' : '').$lastName)) ?? '');
-    }
-
-    private function middleInitial(?string $middleName): string
-    {
-        $middleName = trim((string) $middleName);
-        if ($middleName === '') {
-            return '';
-        }
-
-        $middleName = rtrim($middleName, '.');
-        $letter = mb_substr($middleName, 0, 1);
-
-        return $letter === '' ? '' : mb_strtoupper($letter).'.';
     }
 
     private function numericYearLevel(mixed $yearLevel): ?int
