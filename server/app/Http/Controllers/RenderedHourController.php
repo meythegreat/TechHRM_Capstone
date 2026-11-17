@@ -188,22 +188,63 @@ class RenderedHourController extends Controller
             'summary' => $report['summary'],
             'grand' => $report['grand'],
             'signatories' => [
-                'secretary' => $this->signatoryName('WSPO Secretary'),
-                'coordinator' => $this->signatoryName('WSPO Coordinator'),
+                'secretary' => $this->secretarySignatoryName(),
+                'coordinator' => $this->coordinatorSignatoryName(),
             ],
             'hourly_rate' => CampusSetting::hourlyRate(),
         ]);
     }
 
-    private function signatoryName(string $position): string
+    /**
+     * Preferred: Student + organization_officer + officer_position = WSPO Secretary.
+     * Legacy: WSPO Staff whose assigned_office is/contains "WSPO Secretary".
+     */
+    private function secretarySignatoryName(): string
     {
+        $ids = app(UserController::class)->wspoSecretaryUserIds();
+        if ($ids === []) {
+            return '';
+        }
+
         $name = User::query()
-            ->where('role', 'WSPO Staff')
-            ->whereHas('profile', fn ($profile) => $profile->where('assigned_office', $position))
+            ->whereIn('id', $ids)
             ->orderBy('name')
             ->value('name');
 
         return trim((string) $name);
+    }
+
+    private function coordinatorSignatoryName(): string
+    {
+        $name = User::query()
+            ->where('role', 'WSPO Staff')
+            ->whereHas('profile', function ($profile) {
+                $profile->where(function ($office) {
+                    $office->whereRaw('LOWER(TRIM(assigned_office)) = ?', ['wspo coordinator'])
+                        ->orWhereRaw('LOWER(assigned_office) LIKE ?', ['%wspo coordinator%']);
+                });
+            })
+            ->orderBy('name')
+            ->value('name');
+
+        if ($name) {
+            return trim((string) $name);
+        }
+
+        // Older coordinator accounts used a blank / "WSPO" office label.
+        $legacy = User::query()
+            ->where('role', 'WSPO Staff')
+            ->whereHas('profile', function ($profile) {
+                $profile->where(function ($query) {
+                    $query->where('assigned_office', 'WSPO')
+                        ->orWhereNull('assigned_office')
+                        ->orWhere('assigned_office', '');
+                });
+            })
+            ->orderBy('name')
+            ->value('name');
+
+        return trim((string) $legacy);
     }
 
     public function store(Request $request)
