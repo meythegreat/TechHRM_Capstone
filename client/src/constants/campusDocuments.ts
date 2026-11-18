@@ -18,6 +18,10 @@ export const CAMPUS_LETTERHEAD = {
     eomsLabel: 'EDUCATIONAL ORGANIZATION\nMANAGEMENT SYSTEM',
 } as const;
 
+/** Consent copy for sign-in and the Work-Study sign-up form (RA 10173). */
+export const DATA_PRIVACY_NOTICE =
+    'By logging into or submitting information to WoSPIS, you consent to the collection and processing of your personal, academic, and employment details by Filamer Christian University, Inc. in accordance with the Data Privacy Act of 2012 (RA 10173) for working student profiling, verification, and support services.';
+
 /** Fixed wet-signature officers (names and official titles stay in sync across letters). */
 export const CAMPUS_OFFICERS = {
     president: {

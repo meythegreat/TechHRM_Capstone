@@ -15,7 +15,7 @@ export function FinancialManagement() {
           Hours Rendered
         </h1>
         <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
-          DTR hours plus activity hours, grouped by year level for the selected month.
+          DTR hours plus activity hours for a date range. Select specific students, a year level, or both.
         </p>
       </div>
 

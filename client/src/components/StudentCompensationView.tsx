@@ -34,9 +34,22 @@ const formatDay = (value: string) => {
   return new Date(year, month - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
+const boundsForMonth = (monthValue: string) => {
+  const [year, mon] = monthValue.split('-').map(Number);
+  const last = new Date(year, mon, 0).getDate();
+  return {
+    start: `${monthValue}-01`,
+    end: `${monthValue}-${String(last).padStart(2, '0')}`,
+  };
+};
+
 export function StudentCompensationView() {
   const now = new Date();
-  const [month, setMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+  const initialMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const initialBounds = boundsForMonth(initialMonth);
+  const [month, setMonth] = useState(initialMonth);
+  const [startDate, setStartDate] = useState(initialBounds.start);
+  const [endDate, setEndDate] = useState(initialBounds.end);
   const [student, setStudent] = useState<HourStudentRow | null>(null);
   const [activities, setActivities] = useState<StudentActivity[]>([]);
   const [hourlyRate, setHourlyRate] = useState(DEFAULT_HOURLY_RATE);
@@ -44,16 +57,19 @@ export function StudentCompensationView() {
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
 
-  const period = useMemo(() => {
-    const [year, mon] = month.split('-').map(Number);
-    const last = new Date(year, mon, 0).getDate();
-    return {
-      start: `${month}-01`,
-      end: `${month}-${String(last).padStart(2, '0')}`,
-    };
-  }, [month]);
+  const rangeInvalid = Boolean(startDate && endDate && endDate < startDate);
+  const period = useMemo(() => ({ start: startDate, end: endDate }), [startDate, endDate]);
+
+  const applyMonth = (nextMonth: string) => {
+    setMonth(nextMonth);
+    if (!nextMonth) return;
+    const bounds = boundsForMonth(nextMonth);
+    setStartDate(bounds.start);
+    setEndDate(bounds.end);
+  };
 
   useEffect(() => {
+    if (!period.start || !period.end || period.end < period.start) return undefined;
     let active = true;
     const load = (silent = false) => {
       if (!silent) setLoading(true);
@@ -112,18 +128,48 @@ export function StudentCompensationView() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-slate-900">Period breakdown</h2>
-          <p className="text-sm text-slate-500 mt-1">Grand total = DTR hours − duty deductions + activity hours.</p>
+          <p className="text-sm text-slate-500 mt-1">Grand total = DTR hours − duty deductions + activity hours for the dates you choose.</p>
         </div>
-        <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
-          Month
-          <input
-            type="month"
-            value={month}
-            onChange={(event) => setMonth(event.target.value)}
-            className="mt-1 block px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800"
-          />
-        </label>
+        <div className="flex flex-wrap gap-3">
+          <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+            Month
+            <input
+              type="month"
+              value={month}
+              onChange={(event) => applyMonth(event.target.value)}
+              title="Fills the from and to dates with that calendar month"
+              className="mt-1 block px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800"
+            />
+          </label>
+          <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+            From
+            <input
+              type="date"
+              value={startDate}
+              max={endDate || undefined}
+              onChange={(event) => {
+                const next = event.target.value;
+                setStartDate(next);
+                if (next) setMonth(next.slice(0, 7));
+              }}
+              className="mt-1 block px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800"
+            />
+          </label>
+          <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+            To
+            <input
+              type="date"
+              value={endDate}
+              min={startDate || undefined}
+              onChange={(event) => setEndDate(event.target.value)}
+              className="mt-1 block px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800"
+            />
+          </label>
+        </div>
       </div>
+      {rangeInvalid && (
+        <p className="text-sm font-semibold text-rose-600">The end date must be on or after the start date.</p>
+      )}
 
       <div className="bg-slate-900 text-white rounded-2xl px-6 py-5 flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -162,7 +208,7 @@ export function StudentCompensationView() {
           <p className="text-sm text-slate-500 mt-1">Hours are added only when you time out, and only if the clock-in was on time. Late adds nothing. Absent deducts the same hours.</p>
         </div>
         {activities.length === 0 ? (
-          <p className="px-6 py-8 text-sm text-slate-500">No activity hours in this month.</p>
+          <p className="px-6 py-8 text-sm text-slate-500">No activity hours in this date range.</p>
         ) : (
           <ul className="divide-y divide-slate-100">
             {activities.map((activity) => (

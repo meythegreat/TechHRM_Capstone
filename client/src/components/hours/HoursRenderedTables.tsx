@@ -89,11 +89,122 @@ export const pesoText = (hours: number, rate: number) => {
   return `${sign}₱${formatted}`;
 };
 
-const dutyMonth = (start?: string) => {
-  if (!start) return '';
+const periodHeading = (start?: string, end?: string) => {
+  if (!start) return '—';
   const from = new Date(`${start.slice(0, 10)}T00:00:00`);
-  if (Number.isNaN(from.getTime())) return '';
-  return from.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }).toUpperCase();
+  const to = end ? new Date(`${end.slice(0, 10)}T00:00:00`) : from;
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return '—';
+  const lastDay = new Date(to.getFullYear(), to.getMonth() + 1, 0).getDate();
+  const fullMonth = from.getFullYear() === to.getFullYear()
+    && from.getMonth() === to.getMonth()
+    && from.getDate() === 1
+    && to.getDate() === lastDay;
+  if (fullMonth) {
+    return `FOR THE MONTH OF ${from.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }).toUpperCase()}`;
+  }
+  const fmt = (date: Date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase();
+  return `FOR THE PERIOD ${fmt(from)} – ${fmt(to)}`;
+};
+
+const monthValueFromDate = (value: string) => value.slice(0, 7);
+
+const boundsForMonth = (monthValue: string) => {
+  const [year, mon] = monthValue.split('-').map(Number);
+  if (!year || !mon) return { start: '', end: '' };
+  const last = new Date(year, mon, 0).getDate();
+  return {
+    start: `${monthValue}-01`,
+    end: `${monthValue}-${String(last).padStart(2, '0')}`,
+  };
+};
+
+interface HoursListFilters {
+  studentIds: number[];
+  years: string[];
+  department: string;
+  course: string;
+}
+
+const emptyFilters = (): HoursListFilters => ({ studentIds: [], years: [], department: '', course: '' });
+
+const departmentOf = (student: HourStudentRow) =>
+  student.assigned_office?.trim() || student.office_abbreviation?.trim() || '';
+
+const courseOf = (student: HourStudentRow) =>
+  student.course?.trim() || student.course_abbreviation?.trim() || '';
+
+const yearKey = (student: HourStudentRow) => (student.year_level ? String(student.year_level) : 'unset');
+
+const yearOptionLabel = (key: string) => {
+  if (key === '1') return '1st Year';
+  if (key === '2') return '2nd Year';
+  if (key === '3') return '3rd Year';
+  if (key === '4') return '4th Year';
+  if (key === 'unset') return 'Year not set';
+  return `Year ${key}`;
+};
+
+const emptyHourTotals = () => ({
+  student_count: 0,
+  dtr_hours: 0,
+  duty_deduction: 0,
+  adjustments: 0,
+  grand_total: 0,
+});
+
+const addHourTotals = (totals: ReturnType<typeof emptyHourTotals>, student: HourStudentRow) => {
+  totals.student_count += 1;
+  totals.dtr_hours = roundHours(totals.dtr_hours + student.dtr_hours);
+  totals.duty_deduction = roundHours(totals.duty_deduction + student.duty_deduction);
+  totals.adjustments = roundHours(totals.adjustments + student.adjustments);
+  totals.grand_total = roundHours(totals.grand_total + student.grand_total);
+};
+
+const matchesHoursFilter = (student: HourStudentRow, filters: HoursListFilters) => {
+  const pickedStudents = filters.studentIds.length > 0;
+  const pickedYears = filters.years.length > 0;
+  if (pickedStudents || pickedYears) {
+    const named = pickedStudents && filters.studentIds.includes(student.user_id);
+    const inYear = pickedYears && filters.years.includes(yearKey(student));
+    if (!named && !inYear) return false;
+  }
+  if (filters.department && departmentOf(student) !== filters.department) return false;
+  if (filters.course && courseOf(student) !== filters.course) return false;
+  return true;
+};
+
+const applyHoursFilters = (report: HoursReport, filters: HoursListFilters): HoursReport => {
+  const breakdown = report.breakdown
+    .map((group) => {
+      const students = group.students.filter((student) => matchesHoursFilter(student, filters));
+      const totals = emptyHourTotals();
+      students.forEach((student) => addHourTotals(totals, student));
+      return { ...group, students, totals };
+    })
+    .filter((group) => group.students.length > 0);
+
+  const grand = emptyHourTotals();
+  breakdown.forEach((group) => {
+    grand.student_count += group.totals.student_count;
+    grand.dtr_hours = roundHours(grand.dtr_hours + group.totals.dtr_hours);
+    grand.duty_deduction = roundHours(grand.duty_deduction + group.totals.duty_deduction);
+    grand.adjustments = roundHours(grand.adjustments + group.totals.adjustments);
+    grand.grand_total = roundHours(grand.grand_total + group.totals.grand_total);
+  });
+
+  return {
+    ...report,
+    breakdown,
+    summary: breakdown.map((group) => ({
+      year_level: group.year_level,
+      label: group.label,
+      student_count: group.students.length,
+      dtr_hours: group.totals.dtr_hours,
+      adjustments: group.totals.adjustments,
+      grand_total: group.totals.grand_total,
+    })),
+    grand,
+  };
 };
 
 const cell = 'border border-black px-1 py-1 text-[10px] align-middle';
@@ -185,8 +296,8 @@ function HourCell({ value }: { value: number }) {
   return <td className={`px-3 py-3 text-right text-sm font-semibold tabular-nums ${tone}`}>{hoursText(value)}</td>;
 }
 
-export function HoursSummarySheet({ report, rate }: { report: HoursReport | null; rate: number }) {
-  const dutyMonthLabel = dutyMonth(report?.period_start);
+export function HoursSummarySheet({ report, rate, filterNote }: { report: HoursReport | null; rate: number; filterNote?: string }) {
+  const dutyPeriodLabel = periodHeading(report?.period_start, report?.period_end);
   const groups = useMemo(() => {
     const source = report?.breakdown ?? [];
     return [...source]
@@ -229,7 +340,8 @@ export function HoursSummarySheet({ report, rate }: { report: HoursReport | null
             <p className="text-[11px]">{CAMPUS_LETTERHEAD.address.toUpperCase()}</p>
             <p className="text-[11px]">{CAMPUS_LETTERHEAD.wspoOrgName.toUpperCase()}</p>
             <p className="mt-1 text-[12px]">SUMMARY OF DUTY HOURS</p>
-            <p className="text-[11px]">FOR THE MONTH OF {dutyMonthLabel || '—'}</p>
+            <p className="text-[11px]">{dutyPeriodLabel}</p>
+            {filterNote ? <p className="mt-1 text-[10px] font-semibold">{filterNote}</p> : null}
           </div>
           <img src={CAMPUS_LETTERHEAD.wspoLogoSrc} alt="Work Study Program Organization" className="h-14 w-14 shrink-0 object-contain" />
         </div>
@@ -327,10 +439,18 @@ export function HoursSummarySheet({ report, rate }: { report: HoursReport | null
   );
 }
 
+const fieldClass = 'mt-1 block w-full min-w-[10rem] px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800';
+
 export function HoursRenderedSection({ readOnly }: { readOnly: boolean }) {
   const canEditHourlyRate = localStorage.getItem('user_role') === 'Super Admin';
   const now = new Date();
-  const [month, setMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+  const initialMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const initialBounds = boundsForMonth(initialMonth);
+  const [month, setMonth] = useState(initialMonth);
+  const [startDate, setStartDate] = useState(initialBounds.start);
+  const [endDate, setEndDate] = useState(initialBounds.end);
+  const [filters, setFilters] = useState<HoursListFilters>(emptyFilters);
+  const [studentQuery, setStudentQuery] = useState('');
   const [rate, setRate] = useState(String(DEFAULT_HOURLY_RATE));
   const [savedRate, setSavedRate] = useState(DEFAULT_HOURLY_RATE);
   const [rateStatus, setRateStatus] = useState('');
@@ -338,16 +458,82 @@ export function HoursRenderedSection({ readOnly }: { readOnly: boolean }) {
   const [reloadKey, setReloadKey] = useState(0);
   const rateFocused = useRef(false);
 
-  const period = useMemo(() => {
-    const [year, mon] = month.split('-').map(Number);
-    const last = new Date(year, mon, 0).getDate();
-    return {
-      start: `${month}-01`,
-      end: `${month}-${String(last).padStart(2, '0')}`,
-    };
-  }, [month]);
-
+  const rangeInvalid = Boolean(startDate && endDate && endDate < startDate);
   const hourlyRate = Number(rate) > 0 ? Number(rate) : 0;
+
+  const roster = useMemo(
+    () => report?.breakdown.flatMap((group) => group.students) ?? [],
+    [report],
+  );
+  const departmentOptions = useMemo(() => {
+    const names = roster.map(departmentOf).filter(Boolean);
+    return [...new Set(filters.department ? [...names, filters.department] : names)].sort((a, b) => a.localeCompare(b));
+  }, [roster, filters.department]);
+  const courseOptions = useMemo(() => {
+    const names = roster.map(courseOf).filter(Boolean);
+    return [...new Set(filters.course ? [...names, filters.course] : names)].sort((a, b) => a.localeCompare(b));
+  }, [roster, filters.course]);
+  const yearOptions = useMemo(() => {
+    const keys = [...roster.map(yearKey), ...filters.years];
+    return [...new Set(keys)].sort((a, b) => {
+      if (a === 'unset') return 1;
+      if (b === 'unset') return -1;
+      return Number(a) - Number(b);
+    });
+  }, [roster, filters.years]);
+  const studentChoices = useMemo(() => {
+    const query = studentQuery.trim().toLowerCase();
+    return [...roster]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .filter((student) => {
+        if (!query) return true;
+        return `${student.name} ${student.student_id_number || ''}`.toLowerCase().includes(query);
+      });
+  }, [roster, studentQuery]);
+
+  const filtersActive = Boolean(
+    filters.studentIds.length || filters.years.length || filters.department || filters.course,
+  );
+  const filteredReport = useMemo(
+    () => (report && filtersActive ? applyHoursFilters(report, filters) : report),
+    [report, filters, filtersActive],
+  );
+  const selectedNames = roster
+    .filter((student) => filters.studentIds.includes(student.user_id))
+    .map((student) => student.name);
+  const shownNames = selectedNames.slice(0, 8);
+  const extraNames = selectedNames.length - shownNames.length;
+  const filterNote = [
+    filters.years.length > 0 && `Year: ${filters.years.map(yearOptionLabel).join(', ')}`,
+    shownNames.length > 0 && `Students: ${shownNames.join(', ')}${extraNames > 0 ? ` and ${extraNames} more` : ''}`,
+    filters.department && `Department: ${filters.department}`,
+    filters.course && `Course: ${filters.course}`,
+  ].filter(Boolean).join(' · ');
+
+  const toggleYear = (key: string) => {
+    setFilters((current) => ({
+      ...current,
+      years: current.years.includes(key)
+        ? current.years.filter((year) => year !== key)
+        : [...current.years, key],
+    }));
+  };
+  const toggleStudent = (userId: number) => {
+    setFilters((current) => ({
+      ...current,
+      studentIds: current.studentIds.includes(userId)
+        ? current.studentIds.filter((id) => id !== userId)
+        : [...current.studentIds, userId],
+    }));
+  };
+
+  const applyMonth = (nextMonth: string) => {
+    setMonth(nextMonth);
+    if (!nextMonth) return;
+    const bounds = boundsForMonth(nextMonth);
+    setStartDate(bounds.start);
+    setEndDate(bounds.end);
+  };
 
   const commitRate = async () => {
     rateFocused.current = false;
@@ -376,9 +562,10 @@ export function HoursRenderedSection({ readOnly }: { readOnly: boolean }) {
   };
 
   useEffect(() => {
+    if (!startDate || !endDate || endDate < startDate) return undefined;
     let active = true;
     const load = (silent = false) => {
-      financialService.getHoursReport(period.start, period.end)
+      financialService.getHoursReport(startDate, endDate)
         .then((res) => {
           if (!active) return;
           setReport(res);
@@ -400,7 +587,7 @@ export function HoursRenderedSection({ readOnly }: { readOnly: boolean }) {
       clearInterval(interval);
       window.removeEventListener(REALTIME_EVENT, refresh);
     };
-  }, [period.start, period.end, reloadKey]);
+  }, [startDate, endDate, reloadKey]);
 
   return (
     <div className="space-y-8">
@@ -408,7 +595,7 @@ export function HoursRenderedSection({ readOnly }: { readOnly: boolean }) {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-xl font-semibold text-slate-900">Period breakdown</h2>
-            <p className="text-sm text-slate-500 mt-1">Grand total = DTR hours − duty deductions + activity hours.</p>
+            <p className="text-sm text-slate-500 mt-1">Grand total = DTR hours − duty deductions + activity hours. Choose a date range, then select specific students, a year level, or both.</p>
           </div>
           <div className="flex flex-wrap gap-3">
             <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -416,8 +603,33 @@ export function HoursRenderedSection({ readOnly }: { readOnly: boolean }) {
               <input
                 type="month"
                 value={month}
-                onChange={(event) => setMonth(event.target.value)}
-                className="mt-1 block px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800"
+                onChange={(event) => applyMonth(event.target.value)}
+                title="Fills the from and to dates with that calendar month"
+                className={fieldClass}
+              />
+            </label>
+            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+              From
+              <input
+                type="date"
+                value={startDate}
+                max={endDate || undefined}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setStartDate(next);
+                  if (next) setMonth(monthValueFromDate(next));
+                }}
+                className={fieldClass}
+              />
+            </label>
+            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+              To
+              <input
+                type="date"
+                value={endDate}
+                min={startDate || undefined}
+                onChange={(event) => setEndDate(event.target.value)}
+                className={fieldClass}
               />
             </label>
             <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -458,29 +670,154 @@ export function HoursRenderedSection({ readOnly }: { readOnly: boolean }) {
             </label>
           </div>
         </div>
-        {report && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 space-y-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Who to include</p>
+              <p className="text-xs text-slate-500 mt-1">Leave both empty to include everyone with hours. A year level includes that whole cohort. Checked students are included even when their year is not selected.</p>
+            </div>
+            {filtersActive && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFilters(emptyFilters());
+                  setStudentQuery('');
+                }}
+                className="px-3 py-2.5 text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Year level</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {yearOptions.length === 0 ? (
+                <p className="text-sm text-slate-500">No year levels in this date range yet.</p>
+              ) : yearOptions.map((key) => {
+                const selected = filters.years.includes(key);
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => toggleYear(key)}
+                    aria-pressed={selected}
+                    className={`px-3 py-2 rounded-xl text-sm font-bold border ${
+                      selected
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-slate-400'
+                    }`}
+                  >
+                    {yearOptionLabel(key)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+              Specific students
+              <input
+                type="search"
+                value={studentQuery}
+                onChange={(event) => setStudentQuery(event.target.value)}
+                placeholder="Search name or ID"
+                className={`${fieldClass} max-w-sm`}
+              />
+            </label>
+            {filters.studentIds.length > 0 && (
+              <p className="mt-2 text-xs font-semibold text-slate-600">
+                {filters.studentIds.length} student{filters.studentIds.length === 1 ? '' : 's'} selected
+              </p>
+            )}
+            {studentChoices.length === 0 ? (
+              <p className="mt-2 text-sm text-slate-500">No students with hours match this search in the selected dates.</p>
+            ) : (
+              <ul className="mt-2 max-h-52 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
+                {studentChoices.map((student) => {
+                  const checked = filters.studentIds.includes(student.user_id);
+                  return (
+                    <li key={student.user_id}>
+                      <label className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-slate-50">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleStudent(student.user_id)}
+                          className="rounded border-slate-300"
+                        />
+                        <span className="min-w-0">
+                          <span className="font-semibold text-slate-800">{student.name}</span>
+                          <span className="text-slate-500">
+                            {' '}· {student.student_id_number || 'No ID'} · {yearOptionLabel(yearKey(student))}
+                          </span>
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+              Department
+              <select
+                value={filters.department}
+                onChange={(event) => setFilters((current) => ({ ...current, department: event.target.value }))}
+                className={fieldClass}
+              >
+                <option value="">All departments</option>
+                {departmentOptions.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+              Course
+              <select
+                value={filters.course}
+                onChange={(event) => setFilters((current) => ({ ...current, course: event.target.value }))}
+                className={`${fieldClass} max-w-xs`}
+              >
+                <option value="">All courses</option>
+                {courseOptions.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+        {rangeInvalid && (
+          <p className="text-sm font-semibold text-rose-600">The end date must be on or after the start date.</p>
+        )}
+        {filteredReport && (
           <div className="bg-slate-900 text-white rounded-2xl px-6 py-5 flex flex-wrap items-end justify-between gap-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Grand total hours</p>
-              <p className="text-4xl font-semibold mt-1">{hoursText(report.grand.grand_total)}</p>
-              <p className="text-sm text-emerald-300 mt-1">{pesoText(report.grand.grand_total, hourlyRate)} at ₱{hoursText(hourlyRate)}/hr</p>
+              <p className="text-4xl font-semibold mt-1">{hoursText(filteredReport.grand.grand_total)}</p>
+              <p className="text-sm text-emerald-300 mt-1">{pesoText(filteredReport.grand.grand_total, hourlyRate)} at ₱{hoursText(hourlyRate)}/hr</p>
             </div>
-            <p className="text-sm text-slate-300">{report.grand.student_count} student{report.grand.student_count === 1 ? '' : 's'} with hours this period</p>
+            <p className="text-sm text-slate-300">
+              {filteredReport.grand.student_count} student{filteredReport.grand.student_count === 1 ? '' : 's'} with hours in this range
+              {filtersActive ? ' matching the filters' : ''}
+            </p>
           </div>
         )}
         <HourLimitApprovalsPanel
           readOnly={readOnly}
           userRole={localStorage.getItem('user_role') || undefined}
         />
-        <HoursActivityBoard
-          readOnly={readOnly}
-          periodStart={period.start}
-          periodEnd={period.end}
-          onChanged={() => setReloadKey((value) => value + 1)}
-        />
-        <YearLevelBreakdown report={report} rate={hourlyRate} />
+        {startDate && endDate && !rangeInvalid && (
+          <HoursActivityBoard
+            readOnly={readOnly}
+            periodStart={startDate}
+            periodEnd={endDate}
+            onChanged={() => setReloadKey((value) => value + 1)}
+          />
+        )}
+        <YearLevelBreakdown report={filteredReport} rate={hourlyRate} />
       </div>
-      <HoursSummarySheet report={report} rate={hourlyRate} />
+      <HoursSummarySheet report={filteredReport} rate={hourlyRate} filterNote={filterNote} />
     </div>
   );
 }

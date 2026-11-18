@@ -87,13 +87,13 @@ const HELP_TOPICS: HelpTopic[] = [
     {
         id: 'student-hours',
         title: 'Hours Rendered',
-        summary: 'See how many hours you have worked this month.',
+        summary: 'See how many hours you have worked in a date range.',
         about:
-            'Hours Rendered shows your monthly duty summary. It includes your DTR hours, duty deductions, special or activity hours, and an estimated peso amount. It also reflects weekly and monthly hour limits: 20 hours/week by default, up to 25 with administrator approval, and 100 hours/month maximum.',
+            'Hours Rendered shows your duty summary for the dates you choose. It includes your DTR hours, duty deductions, special or activity hours, and an estimated peso amount. It also reflects weekly and monthly hour limits: 20 hours/week by default, up to 25 with administrator approval, and 100 hours/month maximum.',
         audience: ['Student'],
         steps: [
             'Click Hours Rendered in the left menu.',
-            'Pick the month you want to check.',
+            'Pick a month, or set From and To dates for a custom range.',
             'Read the grand total and the estimated amount shown.',
             'Review the breakdown cells such as DTR hours, deductions, cleaning, and meetings.',
             'Scroll the activity hours list to see each activity and its status.',
@@ -469,13 +469,13 @@ const HELP_TOPICS: HelpTopic[] = [
     {
         id: 'staff-hours-rendered',
         title: 'Hours Rendered',
-        summary: 'Review monthly duty hours, rates, and activity records.',
+        summary: 'Review duty hours, rates, and activity records for a date range.',
         about:
-            'Staff Hours Rendered shows monthly student hour totals, year-level breakdowns, activity details, and Extra Hours requests. Students may work 20 hours/week by default, up to 25 with a signed Extra Hours letter, and at most 100 hours/month. WSPO staff can manage activities and attendance corrections. Super Admins can review the board in read-only mode.',
+            'Staff Hours Rendered shows student hour totals for the dates you choose. You can select specific students, everyone in a year level, or both, and also narrow by department or course. It also shows year-level breakdowns, activity details, and Extra Hours requests. Students may work 20 hours/week by default, up to 25 with a signed Extra Hours letter, and at most 100 hours/month. WSPO staff can manage activities and attendance corrections. Super Admins can review the board in read-only mode.',
         audience: ['WSPO Staff', 'Super Admin'],
         steps: [
             'Click Hours Rendered in the left menu.',
-            'Pick the month you want to review.',
+            'Pick a month, or set From and To dates. Select a year level to include that whole cohort, check specific students, or use both. Department and course can narrow the list further. The tables and the printed summary follow that selection.',
             'Check the hourly rate used for peso estimates. Only a Super Admin can change it.',
             'Review Extra Hours letters and approve or decline permission to work up to 25 hours/week for the covered period.',
             'Review the year-level breakdown and print a summary when needed.',

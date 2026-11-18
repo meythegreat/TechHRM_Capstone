@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, CheckCircle2, Download, Loader2, Printer, Send, Upload } from 'lucide-react';
+import { DATA_PRIVACY_NOTICE } from '../../constants/campusDocuments';
 import ApplicationStatusTracker from '../ApplicationStatusTracker';
 import OfficialWspForms, { printOfficialForms } from './OfficialWspForms';
 import {
@@ -251,6 +252,7 @@ const WspApplicationWizard = ({ onSubmit, onFinished, onDraftChange, onPhaseChan
     const [files, setFiles] = useState<Partial<Record<RequirementKey, File>>>({});
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [privacyAccepted, setPrivacyAccepted] = useState(false);
     const [receipt, setReceipt] = useState<Receipt | null>(null);
 
     const patch = (values: Partial<OfficialFormDetails>) => setDetails((current) => ({ ...current, ...values }));
@@ -382,6 +384,10 @@ const WspApplicationWizard = ({ onSubmit, onFinished, onDraftChange, onPhaseChan
                 return;
             }
         }
+        if (!privacyAccepted) {
+            setError('Confirm the Data Privacy Notice before submitting your application.');
+            return;
+        }
         setLoading(true);
         setError('');
         try {
@@ -455,6 +461,25 @@ const WspApplicationWizard = ({ onSubmit, onFinished, onDraftChange, onPhaseChan
                         {index + 1}. {name}
                     </span>
                 ))}
+            </div>
+
+            <div className="border-b border-indigo-100 bg-indigo-50/80 px-5 py-4 sm:px-8">
+                <p className="text-xs font-bold uppercase tracking-wide text-indigo-800">Data Privacy Notice</p>
+                <p className="mt-1 text-sm leading-relaxed text-slate-700">{DATA_PRIVACY_NOTICE}</p>
+                {step === STEPS.length - 1 && (
+                    <label className="mt-3 flex items-start gap-3 text-sm font-semibold text-slate-800">
+                        <input
+                            type="checkbox"
+                            className="mt-1"
+                            checked={privacyAccepted}
+                            onChange={(event) => {
+                                setPrivacyAccepted(event.target.checked);
+                                setError('');
+                            }}
+                        />
+                        I have read the Data Privacy Notice and consent to the collection and processing of my information under the Data Privacy Act of 2012 (RA 10173).
+                    </label>
+                )}
             </div>
 
             <div className="px-5 py-6 sm:px-8">
@@ -735,7 +760,7 @@ const WspApplicationWizard = ({ onSubmit, onFinished, onDraftChange, onPhaseChan
                         Next <ArrowRight className="w-4 h-4" />
                     </button>
                 ) : (
-                    <button type="button" onClick={submit} disabled={loading} className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 px-5 py-3 font-bold text-white shadow-lg shadow-indigo-600/20 disabled:opacity-50">
+                    <button type="button" onClick={submit} disabled={loading || !privacyAccepted} className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 px-5 py-3 font-bold text-white shadow-lg shadow-indigo-600/20 disabled:opacity-50">
                         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Submit application
                     </button>
                 )}
