@@ -7,10 +7,13 @@ import './index.css'
 import { scheduleThemeSync } from './theme'
 import { armSounds } from './sounds'
 import { registerServiceWorker } from './registerServiceWorker'
+import { startOfflineCacheWarming } from './utils/warmOfflineCache'
+import { attachSyncAxiosInterceptors, startSyncMonitor } from './utils/syncStatus'
 
 scheduleThemeSync()
 armSounds()
 registerServiceWorker()
+startOfflineCacheWarming()
 
 // In dev, Vite proxies /api to Laravel (see vite.config.ts) — avoids CORS issues.
 // In production, set VITE_API_URL to the Render API (e.g. https://techhrm-capstone.onrender.com).
@@ -50,6 +53,9 @@ axios.interceptors.response.use(
     return Promise.reject(error)
   },
 )
+
+attachSyncAxiosInterceptors()
+startSyncMonitor()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

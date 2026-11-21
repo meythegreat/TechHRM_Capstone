@@ -3,6 +3,10 @@ import axios from 'axios';
 import { motion, useReducedMotion, type Variants } from 'framer-motion';
 import { REALTIME_EVENT } from '../utils/realtime';
 import {
+    readStudentDashboardCache,
+    writeStudentDashboardCache,
+} from '../utils/studentDashboardCache';
+import {
     Clock,
     Calendar,
     CheckCircle,
@@ -68,10 +72,17 @@ function ScoreRing({ score, tone }: { score: number; tone: string }) {
 }
 
 const StudentOverview = () => {
-    const [data, setData] = useState<DashboardData | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const [data, setData] = useState<DashboardData | null>(() => {
+        const saved = readStudentDashboardCache<DashboardData>();
+        return saved ? { ...emptyDashboard(), ...saved.dashboard } : null;
+    });
+    const [isLoading, setIsLoading] = useState(
+        () => readStudentDashboardCache<DashboardData>() == null
+    );
     const [userName, setUserName] = useState(localStorage.getItem('user_name') || 'Student Worker');
-    const [supervisorNames, setSupervisorNames] = useState<string[]>([]);
+    const [supervisorNames, setSupervisorNames] = useState<string[]>(
+        () => readStudentDashboardCache<DashboardData>()?.supervisors ?? []
+    );
     const [assignedOffice, setAssignedOffice] = useState(localStorage.getItem('assigned_office') || '');
     const reduceMotion = useReducedMotion();
 
@@ -89,18 +100,31 @@ const StudentOverview = () => {
                 const office = profile.profile?.assignment_label || profile.profile?.assigned_office || '';
                 setAssignedOffice(office || localStorage.getItem('assigned_office') || '');
                 if (office) localStorage.setItem('assigned_office', office);
-                setSupervisorNames(Array.isArray(profile.department_supervisors) ? profile.department_supervisors : []);
+                const supervisors = Array.isArray(profile.department_supervisors)
+                    ? profile.department_supervisors
+                    : null;
+                if (supervisors) setSupervisorNames(supervisors);
 
-                const dashboardRes = await axios.get('/api/student/dashboard');
+                const dashboardRes = await axios.get('/api/student/dashboard', { timeout: 8000 });
                 if (!active) return;
-                setData({
+                const dashboard = {
                     ...emptyDashboard(),
                     ...dashboardRes.data,
+                };
+                setData(dashboard);
+                writeStudentDashboardCache({
+                    dashboard,
+                    supervisors: supervisors ?? readStudentDashboardCache<DashboardData>()?.supervisors ?? [],
                 });
 
             } catch (error) {
                 console.error("Error fetching dashboard data", error);
-                if (active) setData(emptyDashboard());
+                if (!active) return;
+                setData((current) => {
+                    if (current) return current;
+                    const saved = readStudentDashboardCache<DashboardData>();
+                    return saved ? { ...emptyDashboard(), ...saved.dashboard } : emptyDashboard();
+                });
             } finally {
                 if (active) setIsLoading(false);
             }

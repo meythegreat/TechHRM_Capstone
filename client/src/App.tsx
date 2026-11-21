@@ -21,12 +21,14 @@ import SuperAdminAttendanceAudit from './components/SuperAdminAttendanceAudit';
 import AdminDashboard from './pages/Admin/AdminDashboard';
 import Sidebar from './components/Sidebar';
 import NotificationBell from './components/NotificationBell';
+import SyncStatus from './components/SyncStatus';
 import RequirementManagement from './components/RequirementManagement';
 import SecureImage from './components/SecureImage';
 import ScheduleManagement from './components/ScheduleManagement';
 import { normalizeFilePath } from './utils/secureFile';
 import { firstPathSegment, resolveStaffPath } from './config/routes';
 import { storeActivityAttendanceCapability } from './utils/wspoActivityAccess';
+import { clearStudentDashboardCache } from './utils/studentDashboardCache';
 
 const STAFF_PAGE_TITLES: Record<string, string> = {
   dashboard: 'Dashboard',
@@ -142,7 +144,7 @@ function App() {
       return;
     }
 
-    axios.get('/api/user')
+    axios.get('/api/user', { timeout: 8000 })
       .then(response => {
         const role = response.data.role;
         setUserRole(role);
@@ -278,6 +280,7 @@ function App() {
       localStorage.removeItem('must_clock_as_student');
       localStorage.removeItem('officer_position');
       localStorage.removeItem('assigned_office');
+      clearStudentDashboardCache();
       localStorage.removeItem('secretary_acting');
       setHasToken(false);
       setUserRole(null);
@@ -376,6 +379,7 @@ function App() {
           </div>
 
           <div className="flex items-center gap-5">
+            <SyncStatus />
             <NotificationBell onNavigate={(path) => navigate(`/${path}`)} />
             
             <div className="text-right hidden sm:block">

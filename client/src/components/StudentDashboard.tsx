@@ -24,6 +24,7 @@ import {
 
 import Sidebar from './Sidebar';
 import NotificationBell from './NotificationBell';
+import SyncStatus from './SyncStatus';
 import SecureImage from './SecureImage';
 import AvatarCropDialog from './AvatarCropDialog';
 import AvatarPhotoMenu from './AvatarPhotoMenu';
@@ -433,6 +434,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                     </div>
 
                     <div className="flex items-center gap-4">
+                        <SyncStatus />
                         <NotificationBell onNavigate={(path) => navigate(`/${path}`)} />
                         <div className="text-right hidden sm:block">
                             <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{assignedOffice}</p>
