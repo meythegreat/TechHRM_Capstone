@@ -9,7 +9,28 @@ const DB_NAME = 'wospis-offline-draft';
 const STORE = 'drafts';
 const OUTBOX_KEY = 'attendance-outbox';
 
+export const OUTBOX_EVENT = 'wospis:outbox-changed';
+export const OUTBOX_SYNC_EVENT = 'wospis:outbox-syncing';
+
+let inFlightFlush = null;
+
+const emitOutboxChanged = (rows) => {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(OUTBOX_EVENT, { detail: { rows } }));
+};
+
+const emitOutboxSyncing = (syncing) => {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(OUTBOX_SYNC_EVENT, { detail: { syncing } }));
+};
+
+const hasIndexedDb = () => typeof indexedDB !== 'undefined';
+
 const openDb = () => new Promise((resolve, reject) => {
+  if (!hasIndexedDb()) {
+    reject(new Error('IndexedDB is unavailable.'));
+    return;
+  }
   const request = indexedDB.open(DB_NAME, 1);
   request.onupgradeneeded = () => {
     if (!request.result.objectStoreNames.contains(STORE)) {
@@ -60,6 +81,7 @@ export const isNetworkFailure = (err) => {
 };
 
 export const listOutbox = async () => {
+  if (!hasIndexedDb()) return [];
   const rows = await readKey(OUTBOX_KEY);
   return Array.isArray(rows) ? rows : [];
 };
@@ -75,6 +97,7 @@ export const enqueueOutbox = async (item) => {
     },
   ];
   await writeKey(OUTBOX_KEY, next);
+  emitOutboxChanged(next);
   return next;
 };
 
@@ -82,6 +105,7 @@ export const removeOutbox = async (clientRequestId) => {
   const rows = await listOutbox();
   const next = rows.filter((row) => row.client_request_id !== clientRequestId);
   await writeKey(OUTBOX_KEY, next);
+  emitOutboxChanged(next);
   return next;
 };
 
@@ -93,6 +117,7 @@ export const updateOutboxError = async (clientRequestId, lastError) => {
       : row
   ));
   await writeKey(OUTBOX_KEY, next);
+  emitOutboxChanged(next);
   return next;
 };
 
@@ -117,33 +142,48 @@ const toSubmitPayload = (item) => ({
  * Attempt to upload every queued item. Returns { uploaded, remaining, errors }.
  */
 export const flushOutbox = async () => {
-  const rows = await listOutbox();
-  if (rows.length === 0) {
-    return { uploaded: 0, remaining: [], errors: [] };
-  }
+  if (inFlightFlush) return inFlightFlush;
 
-  let uploaded = 0;
-  const errors = [];
-  let remaining = [...rows];
-
-  for (const item of rows) {
-    try {
-      await manualAttendanceRequestService.submit(toSubmitPayload(item));
-      remaining = await removeOutbox(item.client_request_id);
-      uploaded += 1;
-    } catch (err) {
-      if (isNetworkFailure(err)) {
-        errors.push({
-          client_request_id: item.client_request_id,
-          message: 'Still offline — will retry when connected.',
-        });
-        break;
-      }
-      const message = err?.response?.data?.message || err?.message || 'Upload failed.';
-      remaining = await updateOutboxError(item.client_request_id, message);
-      errors.push({ client_request_id: item.client_request_id, message });
+  inFlightFlush = (async () => {
+    const rows = await listOutbox();
+    if (rows.length === 0) {
+      return { uploaded: 0, remaining: [], errors: [] };
     }
-  }
 
-  return { uploaded, remaining, errors };
+    emitOutboxSyncing(true);
+    let uploaded = 0;
+    const errors = [];
+    let remaining = [...rows];
+
+    try {
+      for (const item of rows) {
+        try {
+          await manualAttendanceRequestService.submit(toSubmitPayload(item));
+          remaining = await removeOutbox(item.client_request_id);
+          uploaded += 1;
+        } catch (err) {
+          if (isNetworkFailure(err)) {
+            errors.push({
+              client_request_id: item.client_request_id,
+              message: 'Still offline — will retry when connected.',
+            });
+            break;
+          }
+          const message = err?.response?.data?.message || err?.message || 'Upload failed.';
+          remaining = await updateOutboxError(item.client_request_id, message);
+          errors.push({ client_request_id: item.client_request_id, message });
+        }
+      }
+
+      return { uploaded, remaining, errors };
+    } finally {
+      emitOutboxSyncing(false);
+    }
+  })();
+
+  try {
+    return await inFlightFlush;
+  } finally {
+    inFlightFlush = null;
+  }
 };
