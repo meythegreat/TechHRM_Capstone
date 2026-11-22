@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\JanitorialGroup;
 use App\Models\JanitorialLeader;
 use App\Models\User;
+use App\Support\JanitorialApproval;
 use App\Support\RenderedHours;
 use App\Support\SuperAdminAudit;
 use Illuminate\Http\Request;
@@ -18,13 +19,19 @@ class JanitorialGroupController extends Controller
         $actor = $request->user()->loadMissing('profile');
         $accounts = app(UserController::class);
         $query = JanitorialGroup::query()
-            ->with(['supervisor.profile:id,user_id,student_id_number,year_level,assigned_office', 'members.profile:id,user_id,student_id_number,year_level,assigned_office'])
+            ->with([
+                'supervisor.profile:id,user_id,student_id_number,year_level,assigned_office',
+                'immediateSupervisor.profile:id,user_id,student_id_number,year_level,assigned_office',
+                'members.profile:id,user_id,student_id_number,year_level,assigned_office',
+            ])
             ->orderBy('area')
             ->orderBy('name');
 
         $manages = $accounts->canManageJanitorialGroups($actor);
         if (! $manages) {
-            if ($accounts->usesSupervisorScope($actor)) {
+            if ($actor->role === 'Immediate Supervisor') {
+                $query->where('immediate_supervisor_user_id', $actor->id);
+            } elseif ($accounts->usesSupervisorScope($actor)) {
                 $areas = $accounts->supervisedOfficeAreas($actor);
                 if ($areas === []) {
                     $query->whereRaw('0 = 1');
@@ -41,6 +48,7 @@ class JanitorialGroupController extends Controller
             if ($actor->role === 'Student') {
                 $query->where(function ($builder) use ($actor) {
                     $builder->where('supervisor_user_id', $actor->id)
+                        ->orWhere('immediate_supervisor_user_id', $actor->id)
                         ->orWhereHas('members', fn ($members) => $members->where('users.id', $actor->id));
                 });
             }
@@ -116,6 +124,7 @@ class JanitorialGroupController extends Controller
                 'name' => $payload['name'],
                 'area' => $payload['area'],
                 'supervisor_user_id' => $payload['supervisor_user_id'],
+                'immediate_supervisor_user_id' => $payload['immediate_supervisor_user_id'],
             ]);
             $group->members()->sync($payload['member_ids']);
 
@@ -124,7 +133,7 @@ class JanitorialGroupController extends Controller
 
         return response()->json([
             'message' => 'Janitorial group saved.',
-            'group' => $this->present($group->load(['supervisor.profile', 'members.profile'])),
+            'group' => $this->present($group->load(['supervisor.profile', 'immediateSupervisor.profile', 'members.profile'])),
         ], 201);
     }
 
@@ -140,13 +149,14 @@ class JanitorialGroupController extends Controller
                 'name' => $payload['name'],
                 'area' => $payload['area'],
                 'supervisor_user_id' => $payload['supervisor_user_id'],
+                'immediate_supervisor_user_id' => $payload['immediate_supervisor_user_id'],
             ]);
             $janitorialGroup->members()->sync($payload['member_ids']);
         });
 
         return response()->json([
             'message' => 'Janitorial group updated.',
-            'group' => $this->present($janitorialGroup->fresh()->load(['supervisor.profile', 'members.profile'])),
+            'group' => $this->present($janitorialGroup->fresh()->load(['supervisor.profile', 'immediateSupervisor.profile', 'members.profile'])),
         ]);
     }
 
@@ -186,15 +196,16 @@ class JanitorialGroupController extends Controller
     }
 
     /**
-     * @return array{department: string, name: string, area: string, supervisor_user_id: int, member_ids: list<int>}
+     * @return array{department: string, name: string, area: string, supervisor_user_id: int, immediate_supervisor_user_id: int, member_ids: list<int>}
      */
     private function validatedPayload(Request $request, ?JanitorialGroup $existing = null): array
     {
         $validated = $request->validate([
-            'department' => 'nullable|string|max:120',
+            'department' => 'required|string|max:120',
             'name' => 'nullable|string|max:80',
             'area' => 'required|string|max:120',
             'supervisor_user_id' => 'required|integer|exists:users,id',
+            'immediate_supervisor_user_id' => 'nullable|integer|exists:users,id',
             'member_ids' => 'present|array|max:'.JanitorialGroup::MAX_MEMBERS,
             'member_ids.*' => 'integer|exists:users,id',
         ]);
@@ -209,6 +220,7 @@ class JanitorialGroupController extends Controller
         }
 
         $supervisorId = (int) $validated['supervisor_user_id'];
+        $immediateId = (int) ($validated['immediate_supervisor_user_id'] ?? 0);
         $memberIds = collect($validated['member_ids'])
             ->map(fn ($id) => (int) $id)
             ->unique()
@@ -216,7 +228,7 @@ class JanitorialGroupController extends Controller
             ->all();
 
         if (in_array($supervisorId, $memberIds, true)) {
-            abort(422, 'The janitorial leader cannot also be listed as a member.');
+            abort(422, 'The janitorial supervisor cannot also be listed as a member.');
         }
 
         if (count($memberIds) > JanitorialGroup::MAX_MEMBERS) {
@@ -233,10 +245,7 @@ class JanitorialGroupController extends Controller
 
         $department = trim((string) ($validated['department'] ?? ''));
         if ($department === '') {
-            $department = trim((string) ($supervisor->profile?->assigned_office ?? ''));
-        }
-        if ($department === '') {
-            $department = 'Campus';
+            abort(422, 'Select the department area for this janitorial group.');
         }
 
         $otherGroups = JanitorialGroup::query()
@@ -263,6 +272,31 @@ class JanitorialGroupController extends Controller
 
         if ($students->count() !== count($memberIds)) {
             abort(422, 'Every member of a janitorial group must be a working student.');
+        }
+
+        $immediate = JanitorialApproval::resolveImmediateSupervisor($department);
+        if ($immediateId > 0 && $immediateId !== (int) $immediate->id) {
+            abort(422, 'The immediate supervisor comes from the department area. '.$immediate->name.' covers '.$department.'.');
+        }
+        $immediateId = (int) $immediate->id;
+        if ($immediateId === $supervisorId || in_array($immediateId, $memberIds, true)) {
+            abort(422, 'The immediate supervisor is a different person from the janitorial supervisor and the members.');
+        }
+        $immediateBlock = JanitorialApproval::immediateSupervisorBlock($immediate);
+        if ($immediateBlock) {
+            abort(422, $immediateBlock);
+        }
+        if (Schema::hasTable('janitorial_leaders') && JanitorialLeader::query()->where('user_id', $immediateId)->exists()) {
+            abort(422, $immediate->name.' is a janitorial supervisor and cannot be the immediate supervisor.');
+        }
+        if (JanitorialGroup::query()->where('supervisor_user_id', $immediateId)->exists()) {
+            abort(422, $immediate->name.' is a janitorial supervisor and cannot be the immediate supervisor.');
+        }
+        $immediateIsMember = JanitorialGroup::query()
+            ->whereHas('members', fn ($members) => $members->where('users.id', $immediateId))
+            ->exists();
+        if ($immediateIsMember) {
+            abort(422, $immediate->name.' is already a member of a janitorial group.');
         }
 
         if (Schema::hasTable('janitorial_leaders') && $memberIds !== []) {
@@ -294,6 +328,7 @@ class JanitorialGroupController extends Controller
             'name' => $name,
             'area' => $area,
             'supervisor_user_id' => $supervisorId,
+            'immediate_supervisor_user_id' => $immediateId,
             'member_ids' => $memberIds,
         ];
     }
@@ -358,8 +393,9 @@ class JanitorialGroupController extends Controller
 
     private function present(JanitorialGroup $group): array
     {
-        $group->loadMissing(['supervisor.profile', 'members.profile']);
+        $group->loadMissing(['supervisor.profile', 'immediateSupervisor.profile', 'members.profile']);
         $supervisor = $group->supervisor;
+        $immediate = $group->immediateSupervisor;
         $members = $group->members
             ->sortBy(fn (User $student) => mb_strtolower((string) $student->name))
             ->values()
@@ -371,6 +407,7 @@ class JanitorialGroupController extends Controller
             'name' => $group->name,
             'area' => $group->area,
             'supervisor' => $supervisor ? $this->studentPayload($supervisor) : null,
+            'immediate_supervisor' => $immediate ? $this->studentPayload($immediate) : null,
             'members' => $members,
             'member_count' => $members->count(),
             'max_members' => JanitorialGroup::MAX_MEMBERS,
@@ -390,6 +427,7 @@ class JanitorialGroupController extends Controller
             'year_level' => $year,
             'year_label' => RenderedHours::yearLabel($year ? (int) $year : null),
             'assigned_office' => $student->profile?->assigned_office,
+            'role' => $student->role,
         ];
     }
 }

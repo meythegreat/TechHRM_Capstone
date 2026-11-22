@@ -298,7 +298,8 @@ class RenderedHours
             ->whereIn('status', self::VERIFIED_STATUSES)
             ->where(function ($query) {
                 $query->where('attendance_type', 'Janitorial')
-                    ->orWhere('work_type', 'Janitorial');
+                    ->orWhere('work_type', 'Janitorial')
+                    ->orWhere('work_type', 'Janitorial Supervision');
             })
             ->whereBetween('time_in', [$start->copy()->startOfDay(), $end->copy()->endOfDay()])
             ->selectRaw('user_id, COALESCE(SUM(CASE WHEN computed_hours > 0 THEN computed_hours ELSE COALESCE(rendered_hours, 0) END), 0) as hours')

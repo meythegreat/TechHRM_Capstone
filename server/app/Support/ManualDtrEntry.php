@@ -53,6 +53,7 @@ class ManualDtrEntry
     {
         return Attendance::where('user_id', $userId)
             ->whereNull('rendered_hour_event_id')
+            ->withoutMissedLogins()
             ->when($ignoreId, fn ($query) => $query->where('id', '!=', $ignoreId))
             ->where('time_in', '<', $end)
             ->where(function ($query) use ($start) {
@@ -77,7 +78,7 @@ class ManualDtrEntry
     /**
      * Create a closed DTR row for one shift, applying weekly/monthly caps.
      *
-     * @param  array{attendance_type?: string, work_type?: string, janitorial_group_id?: int|null, janitorial_area?: string|null, skip_schedule_match?: bool, apply_lunch?: bool, cap_at_schedule_end?: bool}  $options
+     * @param  array{attendance_type?: string, work_type?: string, janitorial_group_id?: int|null, janitorial_area?: string|null, skip_schedule_match?: bool, apply_lunch?: bool, cap_at_schedule_end?: bool, credited_hours?: float}  $options
      * @return array{ok: true, attendance: Attendance, hour_limits: array}|array{ok: false, message: string, status: int, hour_limits?: array}
      */
     public static function createClosedShift(
@@ -98,9 +99,12 @@ class ManualDtrEntry
         }
 
         if ($isJanitorial) {
-            // The DTR clock-out is a 4-hour credit from time in, even if that
-            // moment is still later today when the request is approved.
-            $timeOut = DutyHours::janitorialCreditedEnd($timeIn);
+            $creditedHours = array_key_exists('credited_hours', $options)
+                ? max(0, min(DutyHours::JANITORIAL_FIXED_HOURS, round((float) $options['credited_hours'], 2)))
+                : DutyHours::JANITORIAL_FIXED_HOURS;
+            $timeOut = $creditedHours > 0
+                ? $timeIn->copy()->addMinutes((int) round($creditedHours * 60))
+                : $timeIn->copy()->addMinute();
         }
 
         if (self::overlaps((int) $student->id, $timeIn, $timeOut)) {
@@ -122,7 +126,7 @@ class ManualDtrEntry
 
         $office = trim((string) ($student->profile?->assigned_office ?? ''));
         if ($isJanitorial) {
-            $hours = DutyHours::JANITORIAL_FIXED_HOURS;
+            $hours = $creditedHours ?? DutyHours::JANITORIAL_FIXED_HOURS;
         } else {
             $hours = $applyLunch
                 ? DutyHours::creditedHours($timeIn, $timeOut, $office)

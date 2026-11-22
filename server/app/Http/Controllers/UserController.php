@@ -40,7 +40,7 @@ class UserController extends Controller
             });
         }
 
-        $roles = ['Student', 'Supervisor', 'Department Secretary', 'WSPO Staff', 'Super Admin'];
+        $roles = ['Student', 'Supervisor', 'Department Secretary', 'Immediate Supervisor', 'WSPO Staff', 'Super Admin'];
         if ($request->filled('role') && in_array($request->role, $roles, true)) {
             if ($request->role === 'Student') {
                 // Secretary and president are students who also hold office.
@@ -79,8 +79,13 @@ class UserController extends Controller
         }
 
         // 3. RETURN PAGINATED RESULTS
-        // Change from 10 to 15 or 20 if you want more users per page!
-        $users = $query->paginate(10);
+        // The staff sections load a role in one page. Students stay at 10.
+        $perPage = (int) $request->input('per_page', 10);
+        if ($perPage < 1) {
+            $perPage = 10;
+        }
+        $perPage = min($perPage, 100);
+        $users = $query->orderBy('name')->paginate($perPage);
         $supervisorMap = $this->departmentSupervisorMap();
         $users->getCollection()->transform(function ($listedUser) use ($supervisorMap) {
             if ($listedUser->role === 'Student' || $this->isStudentOfficer($listedUser)) {
@@ -118,6 +123,10 @@ class UserController extends Controller
             $data['secretary_departments'] = $this->secretaryDepartments($user);
             $data['acting_departments'] = $this->actingDepartments($user);
             $data['acting'] = $data['acting_departments'] !== [];
+        }
+
+        if ($user->role === 'Immediate Supervisor') {
+            $data['immediate_department'] = $user->profile?->assigned_office;
         }
 
         $data['assigned_office'] = $user->profile?->assigned_office;
@@ -314,14 +323,34 @@ class UserController extends Controller
      */
     public function studentOfficerPositions(): array
     {
-        return ['WSPO Secretary', 'WSPO President'];
+        return [
+            'WSPO Secretary',
+            'President',
+            'Vice President',
+            'Assistant Secretary',
+            'Treasurer',
+            'Auditor',
+            'Public Information Officer',
+            'First Year Representative',
+            'Second Year Representative',
+            'Third Year Representative',
+            'Fourth Year Representative',
+            'Business Manager',
+            // Legacy title kept for older accounts.
+            'WSPO President',
+        ];
     }
 
     private function isOfficerTitle(?string $position): bool
     {
         $position = strtolower(trim((string) $position));
+        if ($position === '') {
+            return false;
+        }
+
         foreach ($this->studentOfficerPositions() as $allowed) {
-            if ($position === strtolower($allowed)) {
+            $allowed = strtolower($allowed);
+            if ($position === $allowed || str_contains($position, $allowed)) {
                 return true;
             }
         }
@@ -674,12 +703,10 @@ class UserController extends Controller
 
     /**
      * WSPO activity attendance checker / issuer.
-     * Product intent: WSPO Secretary is the primary campus-wide activity checker
-     * (add/edit group activities + verify attendance). Coordinator and President
-     * share the same issue/correct tools. Secretary still clocks duty hours as a
-     * working student — this capability is activity-only, not department DTR.
-     * A blank / WSPO / Unassigned position is the original coordinator account.
-     * Group leaders may also correct times for their own group's activities.
+     * Product intent: only the WSPO Secretary (plus the Coordinator staff account)
+     * gets campus-wide activity tools. Other elected officers are titles only and
+     * still clock duty hours as working students. Group leaders may also correct
+     * times for their own group's activities.
      */
     public function canIssueActivityAttendance(User $user): bool
     {
@@ -691,15 +718,18 @@ class UserController extends Controller
     {
         $user->loadMissing('profile');
 
-        // Preferred account: Student + organization officer (Secretary / President).
+        // Preferred account: Student + organization officer as WSPO Secretary.
         if ($user->role === 'Student' && $this->isStudentOfficer($user)) {
-            $position = strtolower($this->officerPosition($user));
-
-            return $position === 'wspo secretary' || $position === 'wspo president';
+            return $this->isWspoSecretary($user);
         }
 
         if ($user->role !== 'WSPO Staff') {
             return false;
+        }
+
+        // Legacy student-officer logins on WSPO Staff: secretary only.
+        if ($this->isStudentOfficer($user)) {
+            return $this->isWspoSecretary($user);
         }
 
         $position = trim((string) ($user->profile?->assigned_office ?? ''));
@@ -709,45 +739,24 @@ class UserController extends Controller
             return true;
         }
 
-        foreach (['WSPO Coordinator', 'WSPO Secretary', 'WSPO President'] as $allowed) {
-            if (strcasecmp($position, $allowed) === 0) {
-                return true;
-            }
+        if (strcasecmp($position, 'WSPO Coordinator') === 0) {
+            return true;
         }
 
-        // Legacy labels may look like "CCS · WSPO Secretary" when work_department is set.
         $normalized = strtolower($position);
-        foreach (['wspo secretary', 'wspo coordinator', 'wspo president'] as $needle) {
-            if (str_contains($normalized, $needle)) {
-                return true;
-            }
+        if (str_contains($normalized, 'wspo coordinator')) {
+            return true;
         }
 
-        return false;
+        return $this->isWspoSecretary($user);
     }
 
     /**
-     * Cleaning / activity group roster edits: Coordinator and Secretary only
-     * (President may check attendance but not change groups).
+     * Cleaning / activity group roster edits: Coordinator and Secretary only.
      */
     public function canManageActivityGroups(User $user): bool
     {
-        if (!$this->canCheckActivityAttendance($user)) {
-            return false;
-        }
-
-        $title = strtolower($this->officerPosition($user));
-        if ($title === 'wspo president') {
-            return false;
-        }
-
-        $user->loadMissing('profile');
-        $office = strtolower(trim((string) ($user->profile?->assigned_office ?? '')));
-        if (str_contains($office, 'wspo president') || $office === 'wspo president') {
-            return false;
-        }
-
-        return true;
+        return $this->canCheckActivityAttendance($user);
     }
 
     /**
@@ -978,8 +987,12 @@ class UserController extends Controller
         $departments = is_array($configured) ? $configured : [];
 
         // Existing supervisor accounts continue to work after the migration.
+        // Officer titles (Secretary, President, …) are not department placements.
         if ($departments === [] && $user->profile?->assigned_office) {
-            $departments[] = $user->profile->assigned_office;
+            $office = trim((string) $user->profile->assigned_office);
+            if ($office !== '' && !$this->isOfficerTitle($office) && !$this->mustClockAsStudent($user)) {
+                $departments[] = $office;
+            }
         }
 
         return array_values(array_unique(array_filter(array_map('trim', $departments))));
@@ -1327,19 +1340,19 @@ class UserController extends Controller
             return;
         }
 
-        $wspoMayManage = ['Student', 'Department Secretary'];
+        $wspoMayManage = ['Student', 'Department Secretary', 'Immediate Supervisor'];
         if ($target && !in_array($target->role, $wspoMayManage, true)) {
-            abort(403, 'WSPO staff can only modify student and department secretary accounts.');
+            abort(403, 'WSPO staff can only modify student, department secretary, and immediate supervisor accounts.');
         }
 
         if ($requestedRole !== null && !in_array($requestedRole, $wspoMayManage, true)) {
-            abort(403, 'WSPO staff can only manage student and department secretary accounts.');
+            abort(403, 'WSPO staff can only manage student, department secretary, and immediate supervisor accounts.');
         }
     }
 
     private function roleUsesProfile(string $role): bool
     {
-        return in_array($role, ['Student', 'Supervisor', 'Department Secretary', 'WSPO Staff'], true);
+        return in_array($role, ['Student', 'Supervisor', 'Department Secretary', 'Immediate Supervisor', 'WSPO Staff'], true);
     }
 
     private function ensureOfficeIsAllowed(Request $request): void
@@ -1356,6 +1369,13 @@ class UserController extends Controller
                 'secretary_departments' => ['nullable', 'array'],
                 'secretary_departments.*' => ['string', Rule::in(Office::names())],
             ]);
+        }
+
+        if ($request->input('role') === 'Immediate Supervisor') {
+            $office = trim((string) $request->input('assigned_office', ''));
+            if ($office === '' || ! in_array($office, Office::names(), true)) {
+                abort(422, 'Choose the department this immediate supervisor covers.');
+            }
         }
 
         if ($request->input('role') === 'Student'
@@ -1393,6 +1413,17 @@ class UserController extends Controller
                 'year_level' => null,
                 'assigned_office' => $nullableString(($this->namedDepartmentsFromRequest($request, 'secretary_departments')[0] ?? null)),
                 'secretary_departments' => $this->namedDepartmentsFromRequest($request, 'secretary_departments'),
+                'supervised_departments' => null,
+                'duty_type' => null,
+                'duty_request' => null,
+                'gender' => in_array($request->input('gender'), ['Male', 'Female'], true) ? $request->input('gender') : null,
+            ],
+            'Immediate Supervisor' => [
+                'student_id_number' => null,
+                'course' => null,
+                'year_level' => null,
+                'assigned_office' => $nullableString($request->input('assigned_office')),
+                'secretary_departments' => null,
                 'supervised_departments' => null,
                 'duty_type' => null,
                 'duty_request' => null,
@@ -1467,6 +1498,10 @@ class UserController extends Controller
     public function markSupervisorAbsent(Request $request)
     {
         $actor = $request->user();
+        if ($actor->role === 'Supervisor') {
+            abort(403, 'Supervisors cannot mark themselves absent.');
+        }
+
         $validated = $request->validate([
             'absent' => 'required|boolean',
             'user_id' => 'nullable|integer|exists:users,id',

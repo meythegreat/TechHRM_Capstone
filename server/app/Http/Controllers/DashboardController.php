@@ -9,6 +9,7 @@ use App\Models\ActivityLog;
 use App\Models\DisciplinaryRecord;
 use App\Models\Schedule;
 use App\Support\HourLimits;
+use App\Support\StudentActivities;
 use App\Support\WorkRequirement;
 use Carbon\Carbon;
 
@@ -20,7 +21,7 @@ class DashboardController extends Controller
 
         // Default queries (For Super Admin & WSPO Staff who see everything)
         $studentsQuery = User::where('role', 'Student');
-        $attendanceQuery = Attendance::query();
+        $attendanceQuery = Attendance::query()->withoutMissedLogins();
 
         // Supervisors only see working students assigned to their supervised departments.
         if (app(UserController::class)->usesSupervisorScope($user)) {
@@ -259,6 +260,8 @@ class DashboardController extends Controller
                 'location' => $shift['location'],
             ]);
 
+        $activityFeed = StudentActivities::dashboardFeed($user);
+
         return response()->json([
             'total_hours_rendered' => round($creditedHours, 2),
             'logged_hours' => round($totalRendered, 2),
@@ -269,6 +272,8 @@ class DashboardController extends Controller
             'has_activity' => $hasActivity,
             'violations' => $openViolations->count(),
             'upcoming_schedules' => $upcomingSchedules,
+            'current_activities' => $activityFeed['current_activities'],
+            'upcoming_activities' => $activityFeed['upcoming_activities'],
             'hour_limits' => HourLimits::status($user->id),
         ]);
     }

@@ -2,8 +2,11 @@
 
 namespace App\Services;
 
+use App\Http\Controllers\UserController;
 use App\Models\Attendance;
 use App\Models\Notification;
+use App\Models\RenderedHourEntry;
+use App\Models\RenderedHourEvent;
 use App\Models\Schedule;
 use App\Models\ShiftReminder;
 use App\Models\User;
@@ -31,7 +34,12 @@ class ShiftClockReminder
 
     public function dispatchIfDue(): void
     {
-        if (! Schema::hasTable('schedules') || ! Schema::hasTable('shift_reminders') || ! Schema::hasTable('attendances') || ! Schema::hasTable('notifications')) {
+        if (
+            ! Schema::hasTable('shift_reminders')
+            || ! Schema::hasTable('attendances')
+            || ! Schema::hasTable('notifications')
+            || (! Schema::hasTable('schedules') && ! Schema::hasTable('rendered_hour_events'))
+        ) {
             return;
         }
 
@@ -44,12 +52,32 @@ class ShiftClockReminder
         } catch (\Throwable $exception) {
             report($exception);
         }
+
+        try {
+            app(MissedDutyLogin::class)->flagIfDue();
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
     }
 
     public function dispatch(?Carbon $moment = null): int
     {
         $now = ($moment ?? now())->copy()->timezone(config('app.timezone'));
+        $sent = 0;
 
+        if (Schema::hasTable('schedules')) {
+            $sent += $this->dispatchWorkShiftReminders($now);
+        }
+
+        if (Schema::hasTable('rendered_hour_events')) {
+            $sent += $this->dispatchActivityReminders($now);
+        }
+
+        return $sent;
+    }
+
+    private function dispatchWorkShiftReminders(Carbon $now): int
+    {
         $schedules = Schedule::query()
             ->where('kind', 'work')
             ->whereHas('user', fn ($query) => $query->where('role', 'Student'))
@@ -72,6 +100,129 @@ class ShiftClockReminder
         foreach ($schedules as $userId => $shifts) {
             $records = $attendances->get($userId, collect());
             $sent += $this->remindStudent($shifts, $records, $now);
+        }
+
+        return $sent;
+    }
+
+    private function dispatchActivityReminders(Carbon $now): int
+    {
+        $events = RenderedHourEvent::query()
+            ->where('kind', '!=', RenderedHourEvent::SPECIAL)
+            ->whereDate('event_date', '>=', $now->copy()->subDay()->toDateString())
+            ->whereDate('event_date', '<=', $now->copy()->addDay()->toDateString())
+            ->get();
+
+        if ($events->isEmpty()) {
+            return 0;
+        }
+
+        $hasEntriesTable = Schema::hasTable('rendered_hour_entries');
+        $hasAttendanceIdCol = $hasEntriesTable && Schema::hasColumn('rendered_hour_entries', 'attendance_id');
+        $secretaryIds = app(UserController::class)->wspoSecretaryUserIds();
+        $sent = 0;
+
+        foreach ($events as $event) {
+            if (! $event->usesAttendance()) {
+                continue;
+            }
+
+            $start = $event->officialStart();
+            if (! $start) {
+                continue;
+            }
+            $start = $start->copy()->timezone(config('app.timezone'));
+
+            $end = $event->officialEnd()
+                ? $event->officialEnd()->copy()->timezone(config('app.timezone'))
+                : $start->copy()->addMinutes(max(60, (int) round(((float) $event->hours) * 60)));
+
+            $cutoff = $event->valid_until
+                ? Carbon::parse($event->event_date->toDateString().' '.substr((string) $event->valid_until, 0, 5), config('app.timezone'))
+                : $start->copy()->addMinutes($event->windowMinutes());
+
+            $lead = $start->copy()->subMinutes(self::CLOCK_IN_LEAD_MINUTES);
+            $missedUntil = $end->copy()->addHours(4);
+
+            $inUpcomingWindow = $now->greaterThanOrEqualTo($lead) && $now->lt($start);
+            $inOngoingWindow = $now->greaterThanOrEqualTo($start) && $now->lessThanOrEqualTo($cutoff);
+            $inClockOutWindow = $now->greaterThanOrEqualTo($end) && $now->lessThanOrEqualTo($missedUntil);
+
+            if (! $inUpcomingWindow && ! $inOngoingWindow && ! $inClockOutWindow) {
+                continue;
+            }
+
+            $userIds = array_values(array_unique(array_merge($event->assignedUserIds(), $secretaryIds)));
+            if ($userIds === []) {
+                continue;
+            }
+
+            $users = User::query()->whereIn('id', $userIds)->get()->keyBy('id');
+            $entries = $hasEntriesTable
+                ? RenderedHourEntry::query()
+                    ->where('event_id', $event->id)
+                    ->whereIn('user_id', $userIds)
+                    ->get()
+                    ->keyBy('user_id')
+                : collect();
+
+            $attendances = collect();
+            if ($hasAttendanceIdCol) {
+                $attIds = $entries->pluck('attendance_id')->filter()->unique()->values()->all();
+                if ($attIds !== []) {
+                    $attendances = Attendance::query()->whereIn('id', $attIds)->get()->keyBy('id');
+                }
+            }
+
+            $kindLabel = RenderedHourEvent::KINDS[$event->kind]['label'] ?? 'Campus activity';
+            $hoursLabel = number_format((float) $event->hours, 2);
+            $dateKey = $start->toDateString();
+
+            foreach ($userIds as $userId) {
+                $user = $users->get($userId);
+                if (! $user) {
+                    continue;
+                }
+
+                /** @var RenderedHourEntry|null $entry */
+                $entry = $entries->get($userId);
+                $status = $entry?->status;
+                if ($status === 'absent') {
+                    continue;
+                }
+
+                $attendance = ($entry && $entry->attendance_id) ? $attendances->get($entry->attendance_id) : null;
+                $clockedIn = in_array($status, [RenderedHourEntry::TIMED_IN, 'on_time', 'late'], true)
+                    || $attendance !== null;
+                $openSession = ($status === RenderedHourEntry::TIMED_IN)
+                    && ($attendance === null || $attendance->time_out === null);
+
+                if ($inUpcomingWindow && ! $clockedIn) {
+                    $sent += $this->notify(
+                        $user,
+                        "activity:{$userId}:{$event->id}:{$dateKey}:upcoming",
+                        'activity_upcoming',
+                        "Upcoming {$kindLabel}",
+                        "{$event->title} starts at {$start->format('g:i A')}. Clock in before {$cutoff->format('g:i A')} so your {$hoursLabel} hours can be credited.",
+                    );
+                } elseif ($inOngoingWindow && ! $clockedIn) {
+                    $sent += $this->notify(
+                        $user,
+                        "activity:{$userId}:{$event->id}:{$dateKey}:ongoing",
+                        'activity_ongoing',
+                        "Happening now: {$kindLabel}",
+                        "{$event->title} is now in session ({$start->format('g:i A')}–{$end->format('g:i A')}). Clock in before {$cutoff->format('g:i A')} to earn {$hoursLabel} hours.",
+                    );
+                } elseif ($inClockOutWindow && $openSession) {
+                    $sent += $this->notify(
+                        $user,
+                        "activity:{$userId}:{$event->id}:{$dateKey}:clock_out",
+                        'activity_clock_out',
+                        "Clock out after {$kindLabel}",
+                        "{$event->title} ended at {$end->format('g:i A')}. Time out now so your activity hours are recorded.",
+                    );
+                }
+            }
         }
 
         return $sent;

@@ -1,11 +1,12 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { Printer } from 'lucide-react';
+import { Calendar, Filter, Printer, Search, SlidersHorizontal, Users, X, AlertCircle, FileSpreadsheet } from 'lucide-react';
 import { CAMPUS_LETTERHEAD, CAMPUS_OFFICERS } from '../../constants/campusDocuments';
 import { courseAcronym } from '../../utils/studentAssignment';
 import { financialService } from '../../services/financialService';
 import { REALTIME_EVENT } from '../../utils/realtime';
 import { HoursActivityBoard } from './HoursActivityBoard';
 import { HourLimitApprovalsPanel } from './HourLimitApprovalsPanel';
+import { HelpDisclosure } from '../HelpDisclosure';
 
 export interface HourStudentRow {
   user_id: number;
@@ -235,42 +236,60 @@ const roundHours = (value: number) => Math.round((Number(value) || 0) * 100) / 1
 export function YearLevelBreakdown({ report, rate }: { report: HoursReport | null; rate: number }) {
   if (!report || report.breakdown.length === 0) {
     return (
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-8 text-center text-slate-500">
-        <p className="font-semibold text-slate-700">No hours in this period yet</p>
-        <p className="text-sm mt-1">Verified DTR logs and activity marks for this period will appear here, grouped by year level.</p>
+      <div className="rounded-[1.75rem] border border-dashed border-slate-200 bg-white px-6 py-14 text-center">
+        <FileSpreadsheet className="mx-auto mb-2.5 h-8 w-8 text-slate-300" />
+        <p className="text-sm font-extrabold text-slate-700">No hours in this period yet</p>
+        <p className="mt-1 text-xs font-medium text-slate-400">
+          Verified DTR logs and activity marks for this period will appear here, grouped by year level.
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {report.breakdown.map((group) => (
-        <section key={group.label} className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
-            <h3 className="text-lg font-semibold text-slate-900">{group.label}</h3>
-            <p className="text-sm font-bold text-slate-500">{group.students.length} student{group.students.length === 1 ? '' : 's'} · {hoursText(group.totals.grand_total)} hrs · {pesoText(group.totals.grand_total, rate)}</p>
+        <section key={group.label} className="overflow-hidden rounded-[1.75rem] border border-slate-200/90 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-6 py-4">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-900 text-xs font-black text-white">
+                {group.year_level ? `Y${group.year_level}` : '—'}
+              </span>
+              <h3 className="text-base font-black tracking-tight text-slate-900">{group.label}</h3>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-bold text-slate-600">
+                {group.students.length} student{group.students.length === 1 ? '' : 's'}
+              </span>
+              <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 font-mono text-[11px] font-extrabold text-blue-700">
+                {hoursText(group.totals.grand_total)} hrs
+              </span>
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-mono text-[11px] font-extrabold text-emerald-700">
+                {pesoText(group.totals.grand_total, rate)}
+              </span>
+            </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-left min-w-[980px]">
-              <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+            <table className="app-data-table w-full min-w-[980px] text-left">
+              <thead className="border-b border-slate-200/80 bg-slate-50/50 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">Student</th>
-                  <th className="px-3 py-3 font-semibold text-right">DTR</th>
-                  <th className="px-3 py-3 font-semibold text-right">Janitorial</th>
-                  <th className="px-3 py-3 font-semibold text-right">Duty deduction</th>
-                  <th className="px-3 py-3 font-semibold text-right">Special</th>
-                  <th className="px-3 py-3 font-semibold text-right">Daily cleaning</th>
-                  <th className="px-3 py-3 font-semibold text-right">General meeting</th>
-                  <th className="px-4 py-3 font-semibold text-right">Grand total</th>
-                  <th className="px-4 py-3 font-semibold text-right">At ₱{hoursText(rate)}/hr</th>
+                  <th className="px-5 py-3.5">Student</th>
+                  <th className="px-3 py-3.5 text-right">DTR</th>
+                  <th className="px-3 py-3.5 text-right">Janitorial</th>
+                  <th className="px-3 py-3.5 text-right">Deduction</th>
+                  <th className="px-3 py-3.5 text-right">Special</th>
+                  <th className="px-3 py-3.5 text-right">Daily Cleaning</th>
+                  <th className="px-3 py-3.5 text-right">General Meeting</th>
+                  <th className="px-4 py-3.5 text-right">Grand Total</th>
+                  <th className="px-5 py-3.5 text-right">At ₱{hoursText(rate)}/hr</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {group.students.map((student) => (
-                  <tr key={student.user_id}>
-                    <td className="px-4 py-3">
-                      <p className="font-bold text-slate-900">{student.name}</p>
-                      <p className="text-xs text-slate-500">{student.student_id_number || 'No ID'}</p>
+                  <tr key={student.user_id} className="transition-colors hover:bg-slate-50/80">
+                    <td className="px-5 py-3.5">
+                      <p className="text-sm font-extrabold text-slate-900">{student.name}</p>
+                      <p className="font-mono text-xs font-medium text-slate-500">{student.student_id_number || 'No ID'}</p>
                     </td>
                     <HourCell value={student.dtr_hours} />
                     <HourCell value={student.janitorial_hrs || 0} />
@@ -278,8 +297,12 @@ export function YearLevelBreakdown({ report, rate }: { report: HoursReport | nul
                     <HourCell value={student.special_request} />
                     <HourCell value={student.daily_cleaning} />
                     <HourCell value={meetingHours(student)} />
-                    <td className="px-4 py-3 text-right font-semibold text-slate-900">{hoursText(student.grand_total)}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-emerald-700 tabular-nums">{pesoText(student.grand_total, rate)}</td>
+                    <td className="px-4 py-3.5 text-right font-mono text-sm font-black tabular-nums text-slate-900">
+                      {hoursText(student.grand_total)}
+                    </td>
+                    <td className="px-5 py-3.5 text-right font-mono text-sm font-black tabular-nums text-emerald-700">
+                      {pesoText(student.grand_total, rate)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -314,18 +337,25 @@ export function HoursSummarySheet({ report, rate, filterNote }: { report: HoursR
 
   return (
     <section className="hours-summary-sheet">
-      <div className="flex items-start justify-between gap-4 mb-4 print:hidden">
-        <div>
-          <h2 className="text-xl font-semibold text-slate-900">Summary for accounting</h2>
-          <p className="text-sm text-slate-500 mt-1 max-w-xl">This is the only table that prints. It is passed by hand to the Accounting Office, then to the President&apos;s Office.</p>
+      <div className="mb-4 flex flex-col gap-4 rounded-[1.75rem] border border-slate-200/90 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between print:hidden">
+        <div className="flex items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white">
+            <Printer className="h-4 w-4" />
+          </span>
+          <div>
+            <h2 className="text-base font-black tracking-tight text-slate-900">Summary for Accounting</h2>
+            <p className="mt-0.5 max-w-xl text-xs font-medium leading-relaxed text-slate-500">
+              Printable summary sheet for the Accounting Office and the President&apos;s Office.
+            </p>
+          </div>
         </div>
         <button
           type="button"
           onClick={() => window.print()}
           disabled={!report || students.length === 0}
-          className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-sm font-bold rounded-xl flex items-center gap-2"
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-extrabold uppercase tracking-wider text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-45"
         >
-          <Printer className="w-4 h-4" /> Print summary
+          <Printer className="h-4 w-4" /> Print Summary
         </button>
       </div>
 
@@ -439,7 +469,7 @@ export function HoursSummarySheet({ report, rate, filterNote }: { report: HoursR
   );
 }
 
-const fieldClass = 'mt-1 block w-full min-w-[10rem] px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800';
+const fieldClass = 'mt-1.5 block w-full min-w-[10rem] rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-bold text-slate-900 outline-none transition focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-600/20';
 
 export function HoursRenderedSection({ readOnly }: { readOnly: boolean }) {
   const canEditHourlyRate = localStorage.getItem('user_role') === 'Super Admin';
@@ -590,91 +620,120 @@ export function HoursRenderedSection({ readOnly }: { readOnly: boolean }) {
   }, [startDate, endDate, reloadKey]);
 
   return (
-    <div className="space-y-8">
-      <div className="print:hidden space-y-8">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-900">Period breakdown</h2>
-            <p className="text-sm text-slate-500 mt-1">Grand total = DTR hours − duty deductions + activity hours. Choose a date range, then select specific students, a year level, or both.</p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
-              Month
-              <input
-                type="month"
-                value={month}
-                onChange={(event) => applyMonth(event.target.value)}
-                title="Fills the from and to dates with that calendar month"
-                className={fieldClass}
-              />
-            </label>
-            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
-              From
-              <input
-                type="date"
-                value={startDate}
-                max={endDate || undefined}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  setStartDate(next);
-                  if (next) setMonth(monthValueFromDate(next));
-                }}
-                className={fieldClass}
-              />
-            </label>
-            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
-              To
-              <input
-                type="date"
-                value={endDate}
-                min={startDate || undefined}
-                onChange={(event) => setEndDate(event.target.value)}
-                className={fieldClass}
-              />
-            </label>
-            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
-              Hourly rate (₱)
-              <input
-                type="number"
-                min="0"
-                step="0.5"
-                value={rate}
-                readOnly={!canEditHourlyRate}
-                onFocus={() => {
-                  if (canEditHourlyRate) rateFocused.current = true;
-                }}
-                onChange={(event) => {
-                  if (!canEditHourlyRate) return;
-                  setRateStatus('');
-                  setRate(event.target.value);
-                }}
-                onBlur={() => {
-                  void commitRate();
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    (event.currentTarget as HTMLInputElement).blur();
-                  }
-                }}
-                title={canEditHourlyRate ? 'Campus hourly rate' : 'Only a Super Admin can change the hourly rate'}
-                className={`mt-1 block w-28 px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-bold ${
-                  canEditHourlyRate
-                    ? 'bg-white text-slate-800'
-                    : 'bg-slate-100 text-slate-500 cursor-not-allowed'
-                }`}
-              />
-              <span className="mt-1 block text-[11px] font-medium normal-case tracking-normal text-slate-400">
-                {canEditHourlyRate ? rateStatus || 'Leave the field to save.' : 'Only a Super Admin can change this rate.'}
+    <div className="space-y-6">
+      <div className="space-y-6 print:hidden">
+        {/* PERIOD & RATE CONTROLS CARD */}
+        <section className="rounded-[1.75rem] border border-slate-200/90 bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 ring-1 ring-blue-100">
+                <Calendar className="h-5 w-5" />
               </span>
-            </label>
+              <div>
+                <h2 className="text-base font-black tracking-tight text-slate-900">Period Breakdown</h2>
+                <p className="mt-0.5 max-w-2xl text-xs font-medium leading-relaxed text-slate-500">
+                  Filter verified DTR and activity hours by date range, cohort, or student.
+                </p>
+                <HelpDisclosure
+                  variant="inline"
+                  title="Calculation & filter guidelines"
+                  className="mt-2.5"
+                  items={[
+                    'Grand total = DTR hours − duty deductions + activity hours.',
+                    'Leave year level and student selections empty to include everyone with hours in the selected period.',
+                    'Selecting a year level includes that entire cohort; individually checked students are also included even if their year level is unselected.',
+                  ]}
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <label className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                Month
+                <input
+                  type="month"
+                  value={month}
+                  onChange={(event) => applyMonth(event.target.value)}
+                  title="Fills the from and to dates with that calendar month"
+                  className={fieldClass}
+                />
+              </label>
+              <label className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                From
+                <input
+                  type="date"
+                  value={startDate}
+                  max={endDate || undefined}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setStartDate(next);
+                    if (next) setMonth(monthValueFromDate(next));
+                  }}
+                  className={fieldClass}
+                />
+              </label>
+              <label className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                To
+                <input
+                  type="date"
+                  value={endDate}
+                  min={startDate || undefined}
+                  onChange={(event) => setEndDate(event.target.value)}
+                  className={fieldClass}
+                />
+              </label>
+              <label className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                Hourly Rate (₱)
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={rate}
+                  readOnly={!canEditHourlyRate}
+                  onFocus={() => {
+                    if (canEditHourlyRate) rateFocused.current = true;
+                  }}
+                  onChange={(event) => {
+                    if (!canEditHourlyRate) return;
+                    setRateStatus('');
+                    setRate(event.target.value);
+                  }}
+                  onBlur={() => {
+                    void commitRate();
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      (event.currentTarget as HTMLInputElement).blur();
+                    }
+                  }}
+                  title={canEditHourlyRate ? 'Campus hourly rate' : 'Only a Super Admin can change the hourly rate'}
+                  className={`mt-1.5 block w-28 rounded-xl border border-slate-200 px-3 py-2.5 font-mono text-sm font-black outline-none transition ${
+                    canEditHourlyRate
+                      ? 'bg-slate-50 text-slate-900 focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-600/20'
+                      : 'cursor-not-allowed bg-slate-100 text-slate-500'
+                  }`}
+                />
+                <span className="mt-1 block text-[11px] font-medium normal-case tracking-normal text-slate-400">
+                  {canEditHourlyRate ? rateStatus || 'Leave field to save' : 'Super Admin only'}
+                </span>
+              </label>
+            </div>
           </div>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 space-y-4">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">Who to include</p>
-              <p className="text-xs text-slate-500 mt-1">Leave both empty to include everyone with hours. A year level includes that whole cohort. Checked students are included even when their year is not selected.</p>
+        </section>
+
+        {/* FILTER DECK */}
+        <section className="space-y-5 rounded-[1.75rem] border border-slate-200/90 bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
+            <div className="flex items-start gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white">
+                <SlidersHorizontal className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="text-sm font-black tracking-tight text-slate-900">Who to Include</p>
+                <p className="mt-0.5 text-xs font-medium leading-relaxed text-slate-500">
+                  Leave filters empty to include all students with hours in this period.
+                </p>
+              </div>
             </div>
             {filtersActive && (
               <button
@@ -683,17 +742,18 @@ export function HoursRenderedSection({ readOnly }: { readOnly: boolean }) {
                   setFilters(emptyFilters());
                   setStudentQuery('');
                 }}
-                className="px-3 py-2.5 text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-bold text-slate-700 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
               >
-                Clear filters
+                <X className="h-3.5 w-3.5" /> Clear Filters
               </button>
             )}
           </div>
+
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Year level</p>
+            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Year Level</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {yearOptions.length === 0 ? (
-                <p className="text-sm text-slate-500">No year levels in this date range yet.</p>
+                <p className="text-xs font-medium text-slate-500">No year levels in this date range yet.</p>
               ) : yearOptions.map((key) => {
                 const selected = filters.years.includes(key);
                 return (
@@ -702,10 +762,10 @@ export function HoursRenderedSection({ readOnly }: { readOnly: boolean }) {
                     type="button"
                     onClick={() => toggleYear(key)}
                     aria-pressed={selected}
-                    className={`px-3 py-2 rounded-xl text-sm font-bold border ${
+                    className={`rounded-xl border px-3.5 py-2 text-xs font-extrabold transition ${
                       selected
-                        ? 'bg-slate-900 text-white border-slate-900'
-                        : 'bg-white text-slate-700 border-slate-200 hover:border-slate-400'
+                        ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
+                        : 'border-slate-200 bg-slate-50/70 text-slate-700 hover:border-slate-300 hover:bg-white'
                     }`}
                   >
                     {yearOptionLabel(key)}
@@ -714,93 +774,136 @@ export function HoursRenderedSection({ readOnly }: { readOnly: boolean }) {
               })}
             </div>
           </div>
-          <div>
-            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
-              Specific students
-              <input
-                type="search"
-                value={studentQuery}
-                onChange={(event) => setStudentQuery(event.target.value)}
-                placeholder="Search name or ID"
-                className={`${fieldClass} max-w-sm`}
-              />
-            </label>
-            {filters.studentIds.length > 0 && (
-              <p className="mt-2 text-xs font-semibold text-slate-600">
-                {filters.studentIds.length} student{filters.studentIds.length === 1 ? '' : 's'} selected
-              </p>
-            )}
-            {studentChoices.length === 0 ? (
-              <p className="mt-2 text-sm text-slate-500">No students with hours match this search in the selected dates.</p>
-            ) : (
-              <ul className="mt-2 max-h-52 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
-                {studentChoices.map((student) => {
-                  const checked = filters.studentIds.includes(student.user_id);
-                  return (
-                    <li key={student.user_id}>
-                      <label className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-slate-50">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleStudent(student.user_id)}
-                          className="rounded border-slate-300"
-                        />
-                        <span className="min-w-0">
-                          <span className="font-semibold text-slate-800">{student.name}</span>
-                          <span className="text-slate-500">
-                            {' '}· {student.student_id_number || 'No ID'} · {yearOptionLabel(yearKey(student))}
-                          </span>
-                        </span>
-                      </label>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
-              Department
-              <select
-                value={filters.department}
-                onChange={(event) => setFilters((current) => ({ ...current, department: event.target.value }))}
-                className={fieldClass}
-              >
-                <option value="">All departments</option>
-                {departmentOptions.map((name) => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
-              Course
-              <select
-                value={filters.course}
-                onChange={(event) => setFilters((current) => ({ ...current, course: event.target.value }))}
-                className={`${fieldClass} max-w-xs`}
-              >
-                <option value="">All courses</option>
-                {courseOptions.map((name) => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </div>
-        {rangeInvalid && (
-          <p className="text-sm font-semibold text-rose-600">The end date must be on or after the start date.</p>
-        )}
-        {filteredReport && (
-          <div className="bg-slate-900 text-white rounded-2xl px-6 py-5 flex flex-wrap items-end justify-between gap-4">
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
             <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Grand total hours</p>
-              <p className="text-4xl font-semibold mt-1">{hoursText(filteredReport.grand.grand_total)}</p>
-              <p className="text-sm text-emerald-300 mt-1">{pesoText(filteredReport.grand.grand_total, hourlyRate)} at ₱{hoursText(hourlyRate)}/hr</p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                  Specific Students
+                </label>
+                {filters.studentIds.length > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[10px] font-extrabold text-blue-700">
+                    <Users className="h-3 w-3" />
+                    {filters.studentIds.length} selected
+                  </span>
+                )}
+              </div>
+              <div className="relative mt-1.5">
+                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="search"
+                  value={studentQuery}
+                  onChange={(event) => setStudentQuery(event.target.value)}
+                  placeholder="Search name or student ID…"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-600/20"
+                />
+              </div>
+              {studentChoices.length === 0 ? (
+                <p className="mt-2.5 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-3 text-xs font-medium text-slate-500">
+                  No students with hours match this search in the selected dates.
+                </p>
+              ) : (
+                <ul className="mt-2.5 max-h-52 divide-y divide-slate-100 overflow-y-auto rounded-2xl border border-slate-200 bg-white">
+                  {studentChoices.map((student) => {
+                    const checked = filters.studentIds.includes(student.user_id);
+                    return (
+                      <li key={student.user_id}>
+                        <label className={`flex cursor-pointer items-center gap-3 px-3.5 py-2.5 text-sm transition ${checked ? 'bg-blue-50/60' : 'hover:bg-slate-50'}`}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleStudent(student.user_id)}
+                            className="h-4 w-4 rounded border-slate-300 accent-blue-600"
+                          />
+                          <span className="min-w-0">
+                            <span className="font-bold text-slate-900">{student.name}</span>
+                            <span className="font-mono text-xs text-slate-500">
+                              {' '}· {student.student_id_number || 'No ID'} · {yearOptionLabel(yearKey(student))}
+                            </span>
+                          </span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
-            <p className="text-sm text-slate-300">
-              {filteredReport.grand.student_count} student{filteredReport.grand.student_count === 1 ? '' : 's'} with hours in this range
-              {filtersActive ? ' matching the filters' : ''}
-            </p>
+
+            <div className="space-y-4">
+              <div className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                <Filter className="h-3.5 w-3.5" /> Additional Filters
+              </div>
+              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                Department
+                <select
+                  value={filters.department}
+                  onChange={(event) => setFilters((current) => ({ ...current, department: event.target.value }))}
+                  className={fieldClass}
+                >
+                  <option value="">All departments</option>
+                  {departmentOptions.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                Course
+                <select
+                  value={filters.course}
+                  onChange={(event) => setFilters((current) => ({ ...current, course: event.target.value }))}
+                  className={fieldClass}
+                >
+                  <option value="">All courses</option>
+                  {courseOptions.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        {rangeInvalid && (
+          <div className="flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-bold text-rose-700">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>The end date must be on or after the start date.</span>
+          </div>
+        )}
+
+        {filteredReport && (
+          <div className="relative overflow-hidden rounded-[1.75rem] border border-slate-800 bg-slate-950 px-6 py-6 text-white shadow-xl shadow-slate-900/15 sm:px-8">
+            <div
+              className="pointer-events-none absolute inset-0 opacity-20"
+              style={{
+                backgroundImage: 'radial-gradient(rgba(148,163,184,0.4) 1px, transparent 1px)',
+                backgroundSize: '20px 20px',
+              }}
+              aria-hidden="true"
+            />
+            <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-emerald-500/20 blur-3xl" aria-hidden="true" />
+            <div className="relative z-10 flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                  Grand Total Hours
+                </p>
+                <div className="mt-1.5 flex flex-wrap items-baseline gap-3">
+                  <p className="font-mono text-4xl font-black tabular-nums tracking-tight text-white">
+                    {hoursText(filteredReport.grand.grand_total)}
+                    <span className="ml-1.5 text-base font-bold text-slate-400">hrs</span>
+                  </p>
+                  <span className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/15 px-3 py-1 font-mono text-xs font-extrabold text-emerald-300">
+                    {pesoText(filteredReport.grand.grand_total, hourlyRate)} at ₱{hoursText(hourlyRate)}/hr
+                  </span>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 backdrop-blur-xl">
+                <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Included Cohort</p>
+                <p className="mt-0.5 text-sm font-black text-white">
+                  {filteredReport.grand.student_count} student{filteredReport.grand.student_count === 1 ? '' : 's'}
+                  {filtersActive ? ' matching filters' : ' in this range'}
+                </p>
+              </div>
+            </div>
           </div>
         )}
         <HourLimitApprovalsPanel

@@ -137,9 +137,11 @@ class AdvancedAttendanceController extends Controller
 
         $event = RenderedHourEvent::findOrFail($validated['event_id']);
         if (!$this->canIssueActivityCode($issuer, $event)) {
-            $message = $event->kind === RenderedHourEvent::ASSEMBLY
-                ? 'Only the assembly representative for this year level can issue these QR codes.'
-                : 'Only the WSPO coordinator, secretary, president, or this group\'s leader can issue these QR codes.';
+            $message = match ($event->kind) {
+                RenderedHourEvent::ASSEMBLY => 'Only the assembly representative for this year level can issue these QR codes.',
+                RenderedHourEvent::DEVOTIONAL => 'Only the WSPO coordinator, secretary, president, or an assembly representative for this year level can issue these QR codes.',
+                default => 'Only the WSPO coordinator, secretary, president, or this group\'s leader can issue these QR codes.',
+            };
 
             return response()->json(['message' => $message], 403);
         }
@@ -179,9 +181,11 @@ class AdvancedAttendanceController extends Controller
 
         $event = RenderedHourEvent::findOrFail($validated['event_id']);
         if (!$this->canIssueActivityCode($issuer, $event)) {
-            $message = $event->kind === RenderedHourEvent::ASSEMBLY
-                ? 'Only the assembly representative for this year level can issue this passcode.'
-                : 'Only the WSPO coordinator, secretary, president, or this group\'s leader can issue this passcode.';
+            $message = match ($event->kind) {
+                RenderedHourEvent::ASSEMBLY => 'Only the assembly representative for this year level can issue this passcode.',
+                RenderedHourEvent::DEVOTIONAL => 'Only the WSPO coordinator, secretary, president, or an assembly representative for this year level can issue this passcode.',
+                default => 'Only the WSPO coordinator, secretary, president, or this group\'s leader can issue this passcode.',
+            };
 
             return response()->json(['message' => $message], 403);
         }
@@ -446,7 +450,7 @@ class AdvancedAttendanceController extends Controller
             // Hours stay at 0 until the janitorial leader accepts the photos.
             // Acceptance rewrites clock-out to exactly 4 hours after clock-in.
             $computedHours = 0.0;
-            $notes[] = 'Clock-out recorded. Hours stay pending until your janitorial supervisor accepts the photos.';
+            $notes[] = 'Clock-out recorded. Your janitorial supervisor reviews the photos first. The immediate supervisor has the final say before hours are recorded.';
         } else {
             $computedHours = DutyHours::creditedHours($clockInTime, $clockOutTime, $office);
             if (! DutyHours::isLibrary($office)) {
@@ -494,7 +498,7 @@ class AdvancedAttendanceController extends Controller
             // Keep a decision the janitorial supervisor already made from the photos.
             // Otherwise hours stay pending until they accept the before/after timestamps.
             'status' => $isJanitorial
-                ? (in_array(strtolower((string) $attendance->status), ['accepted', 'approved', 'rejected'], true)
+                ? (in_array(strtolower((string) $attendance->status), ['accepted', 'approved', 'rejected', 'recommended', 'leader_declined', 'awaiting_final'], true)
                     ? $attendance->status
                     : 'pending')
                 : 'approved',
@@ -506,7 +510,7 @@ class AdvancedAttendanceController extends Controller
         $this->notifyCodeOwner($validToken->generated_by, $user->name, $dutyType, $method, true);
 
         $message = $isJanitorial
-            ? 'Clock-out saved. Your janitorial supervisor must accept the surroundings photos and their timestamps. If accepted, this entry is recorded as exactly '
+            ? 'Clock-out saved. Your janitorial supervisor reviews the surroundings photos first. The immediate supervisor has the final say. If accepted, this entry is recorded as up to '
                 .DutyHours::JANITORIAL_FIXED_HOURS.' hours from your clock-in.'
             : 'Verified exit logging saved.';
         if ($notes !== []) {
@@ -1144,6 +1148,11 @@ class AdvancedAttendanceController extends Controller
             return $this->isAssemblyYearRepresentative($issuer, $event);
         }
 
+        if ($event->kind === RenderedHourEvent::DEVOTIONAL) {
+            return $accounts->canCheckActivityAttendance($issuer)
+                || $this->isAssemblyYearRepresentative($issuer, $event);
+        }
+
         return $accounts->canCheckActivityAttendance($issuer) || $accounts->isYearLeaderFor($issuer, $event);
     }
 
@@ -1176,12 +1185,13 @@ class AdvancedAttendanceController extends Controller
     private function issueActivityToken(\App\Models\User $issuer, RenderedHourEvent $event, string $channel): array
     {
         $siblingIds = $this->siblingActivityEventIds($event);
-        $lockKey = 'activity-'.$channel.':'.md5(implode(',', $siblingIds) ?: (string) $event->id);
+        $lockKey = 'activity-'.$channel.':'.md5((implode(',', $siblingIds) ?: (string) $event->id).'|'.$issuer->id);
 
         $issue = function () use ($issuer, $event, $channel, $siblingIds) {
             $live = DailyToken::query()
                 ->whereIn('event_id', $siblingIds)
                 ->where('channel', $channel)
+                ->where('generated_by', $issuer->id)
                 ->where('expires_at', '>', Carbon::now())
                 ->where('created_at', '>', Carbon::now()->subSeconds(self::ACCESS_TTL_SECONDS))
                 ->orderByDesc('id')
@@ -1194,6 +1204,7 @@ class AdvancedAttendanceController extends Controller
             DailyToken::query()
                 ->whereIn('event_id', $siblingIds)
                 ->where('channel', $channel)
+                ->where('generated_by', $issuer->id)
                 ->update(['expires_at' => Carbon::now()]);
 
             return DailyToken::create([
@@ -1425,7 +1436,7 @@ class AdvancedAttendanceController extends Controller
         $this->notifyCodeOwner($validToken->generated_by, $user->name, 'Janitorial', $method, false);
 
         return response()->json([
-            'message' => 'Janitorial clock-in verified. Photograph your surroundings now, with the date and time on the photo. You can clock out anytime, and you must take one last photo before clock-out. If your janitorial supervisor accepts the entry, it is recorded as exactly '
+            'message' => 'Janitorial clock-in verified. Photograph your surroundings now, with the date and time on the photo. You can clock out anytime, and you must take one last photo before clock-out. Your janitorial supervisor reviews the entry first. The immediate supervisor has the final say. If accepted, it is recorded as up to '
                 .DutyHours::JANITORIAL_FIXED_HOURS.' hours from this clock-in.',
             'attendance' => $attendance,
             'cleaning_proof' => CleaningProof::status($attendance),

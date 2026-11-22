@@ -20,6 +20,7 @@ use App\Http\Controllers\HolidayController;
 use App\Http\Controllers\SemesterTermController;
 use App\Http\Controllers\HourLimitController;
 use App\Http\Controllers\ExtraHoursController;
+use App\Http\Controllers\ClassClockInRequestController;
 use App\Http\Controllers\ManualAttendanceRequestController;
 
 // =========================================================
@@ -122,10 +123,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/attendance/manual-requests', [ManualAttendanceRequestController::class, 'store']);
     Route::delete('/attendance/manual-requests/{manualAttendanceRequest}', [ManualAttendanceRequestController::class, 'destroy']);
 
+    Route::get('/attendance/class-clock-in-requests/classes', [ClassClockInRequestController::class, 'classes']);
+    Route::get('/attendance/class-clock-in-requests/mine', [ClassClockInRequestController::class, 'mine']);
+    Route::post('/attendance/class-clock-in-requests', [ClassClockInRequestController::class, 'store']);
+    Route::delete('/attendance/class-clock-in-requests/{classClockInRequest}', [ClassClockInRequestController::class, 'destroy']);
+
     Route::get('/attendance/janitorial-groups', [\App\Http\Controllers\JanitorialGroupController::class, 'index']);
     Route::get('/attendance/janitorial-passcode', [\App\Http\Controllers\AdvancedAttendanceController::class, 'janitorialPasscode']);
     Route::get('/attendance/janitorial-qr', [\App\Http\Controllers\AdvancedAttendanceController::class, 'janitorialQr']);
     Route::get('/attendance/janitorial-reviews', [\App\Http\Controllers\JanitorialReviewController::class, 'index']);
+    Route::get('/attendance/janitorial-final-reviews', [\App\Http\Controllers\JanitorialReviewController::class, 'finalIndex']);
+    Route::post('/attendance/janitorial-immediate-absence', [\App\Http\Controllers\JanitorialReviewController::class, 'informAbsence']);
+    Route::post('/attendance/janitorial-supervision', [\App\Http\Controllers\JanitorialReviewController::class, 'supervisionPhoto']);
     Route::patch('/attendance/janitorial-reviews/{attendance}', [\App\Http\Controllers\JanitorialReviewController::class, 'decide']);
     Route::get('/attendance/janitorial-offline-requests', [\App\Http\Controllers\ManualAttendanceRequestController::class, 'janitorialQueue']);
     Route::patch('/attendance/janitorial-offline-requests/{manualAttendanceRequest}', [\App\Http\Controllers\ManualAttendanceRequestController::class, 'decide']);
@@ -138,6 +147,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/schedule/my-schedule', [ScheduleController::class, 'mySchedule']);
 
     Route::get('/my-schedule', [ScheduleController::class, 'mySchedule']);
+    Route::get('/my-activities', [ScheduleController::class, 'myActivities']);
 
     Route::get('/organization-schedules', [ScheduleController::class, 'organization']);
 
@@ -185,6 +195,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/attendance/{id}/times', [AttendanceController::class, 'updateTimes']);
         Route::get('/attendance/manual-requests', [ManualAttendanceRequestController::class, 'index']);
         Route::patch('/attendance/manual-requests/{manualAttendanceRequest}', [ManualAttendanceRequestController::class, 'decide']);
+        Route::get('/attendance/class-clock-in-requests', [ClassClockInRequestController::class, 'index']);
+        Route::patch('/attendance/class-clock-in-requests/{classClockInRequest}', [ClassClockInRequestController::class, 'decide']);
 
         Route::post('/attendance/janitorial-leaders', [\App\Http\Controllers\JanitorialGroupController::class, 'storeLeader']);
         Route::patch('/attendance/janitorial-leaders/{janitorialLeader}', [\App\Http\Controllers\JanitorialGroupController::class, 'updateLeader']);

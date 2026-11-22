@@ -25,9 +25,50 @@ class StudentOverviewScreen extends StatelessWidget {
       builder: (context, data, reload) {
         final overview = asMap(data);
         final shifts = asMaps(overview['upcoming_schedules']);
+        final currentActivities = asMaps(overview['current_activities']);
+        final upcomingActivities = asMaps(overview['upcoming_activities']);
         return PageBody(
           onRefresh: reload,
           children: [
+            if (currentActivities.isNotEmpty) ...[
+              for (final act in currentActivities)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF064E3B), Color(0xFF0F766E)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'HAPPENING NOW · ${textOf(act['kind_label'], 'ACTIVITY').toUpperCase()}',
+                        style: const TextStyle(
+                          color: Color(0xFFA7F3D0),
+                          fontWeight: FontWeight.w800,
+                          fontSize: 11,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        textOf(act['title'], 'Campus activity'),
+                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${whenOf(act['starts_at'])} – ${whenOf(act['ends_at'])} · +${numOf(act['hours']).toStringAsFixed(1)} hrs · ${textOf(act['audience_label'])}',
+                        style: const TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
             Text('Welcome back,', style: TextStyle(color: Colors.grey.shade600)),
             Text(auth.userName ?? 'Student', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
@@ -44,6 +85,16 @@ class StudentOverviewScreen extends StatelessWidget {
               const SizedBox(width: 10),
               StatCard(label: 'Open cases', value: '${overview['violations'] ?? 0}', icon: Icons.gavel, color: Colors.red.shade700),
             ]),
+            const SizedBox(height: 16),
+            const SectionTitle('Campus & group activities'),
+            if (currentActivities.isEmpty && upcomingActivities.isEmpty)
+              const EmptyNote('No ongoing or upcoming activities right now.'),
+            for (final act in [...currentActivities, ...upcomingActivities])
+              RecordCard(
+                title: textOf(act['title']),
+                subtitle: '${textOf(act['kind_label'])} · ${textOf(act['event_date'])} · ${whenOf(act['starts_at'])}–${whenOf(act['ends_at'])}',
+                trailing: act['is_happening_now'] == true ? 'LIVE NOW' : '+${numOf(act['hours']).toStringAsFixed(1)}h',
+              ),
             const SizedBox(height: 16),
             const SectionTitle('Upcoming shifts'),
             if (shifts.isEmpty) const EmptyNote('No shifts assigned yet.'),
@@ -297,7 +348,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> with 
                   title: textOf(item['reason'], 'Offline attendance'),
                   subtitle: [
                     for (final shift in asMaps(item['shifts']))
-                      '${textOf(shift['date'])} · ${textOf(shift['time_in'])}–${textOf(shift['time_out'])}',
+                      '${textOf(shift['date'])} · ${whenOf(shift['time_in'])}–${whenOf(shift['time_out'])}',
                   ].join('\n'),
                   trailing: 'Queued',
                   onTap: () async {
@@ -369,8 +420,8 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> with 
                   for (var i = 0; i < shifts.length; i++) ...[
                     Align(alignment: Alignment.centerLeft, child: Text('Shift ${i + 1}', style: const TextStyle(fontWeight: FontWeight.w700))),
                     TextField(controller: shifts[i]['date'], decoration: const InputDecoration(labelText: 'Date (YYYY-MM-DD)')),
-                    TextField(controller: shifts[i]['time_in'], decoration: const InputDecoration(labelText: 'Time in (HH:mm)')),
-                    TextField(controller: shifts[i]['time_out'], decoration: const InputDecoration(labelText: 'Time out (HH:mm)')),
+                    ClockField(controller: shifts[i]['time_in']!, label: 'Time in'),
+                    ClockField(controller: shifts[i]['time_out']!, label: 'Time out'),
                     if (shifts.length > 1)
                       Align(
                         alignment: Alignment.centerRight,

@@ -77,6 +77,7 @@ class WorkSchedule
                 ->where('schedule_id', $shift->id)
                 ->whereNull('rendered_hour_event_id')
                 ->whereDate('time_in', $moment->toDateString())
+                ->withoutMissedLogins()
                 ->exists();
             if (!$alreadyRecorded) {
                 return $shift;

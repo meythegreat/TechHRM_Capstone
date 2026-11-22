@@ -5,12 +5,12 @@ import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import UserAvatar from './UserAvatar';
 import { REALTIME_EVENT } from '../utils/realtime';
 import { bindPopup } from '../utils/popupDismiss';
-import { 
-    ShieldAlert, 
-    Terminal, 
-    Globe, 
-    Clock, 
-    ChevronLeft, 
+import {
+    ShieldAlert,
+    Terminal,
+    Globe,
+    Clock,
+    ChevronLeft,
     ChevronRight,
     Search,
     ListTree,
@@ -18,6 +18,7 @@ import {
     FileText,
     Filter,
     User,
+    Radio,
 } from 'lucide-react';
 import SecureFileViewerModal from './SecureFileViewerModal';
 
@@ -65,19 +66,21 @@ const ActivityLogs = () => {
     const [logs, setLogs] = useState<LogRecord[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedLog, setSelectedLog] = useState<LogRecord | null>(null);
-    const [documentViewer, setDocumentViewer] = useState<{ path: string; title: string } | null>(null);
+    const [documentViewer, setDocumentViewer] = useState<{ path: string; title: string } | null>(
+        null
+    );
     const [category, setCategory] = useState<ActionCategory>('all');
     const [nameInput, setNameInput] = useState('');
     const [name, setName] = useState('');
     const [people, setPeople] = useState<string[]>([]);
     const appliedName = useRef('');
-    
-    // Pagination State
+
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
 
     useEffect(() => {
-        axios.get<string[]>('/api/logs/people')
+        axios
+            .get<string[]>('/api/logs/people')
             .then((response) => setPeople(response.data))
             .catch(() => setPeople([]));
     }, []);
@@ -115,7 +118,12 @@ const ActivityLogs = () => {
         setCurrentPage(1);
     };
 
-    const fetchLogs = async (page: number, selectedCategory: ActionCategory, selectedName: string, silent = false) => {
+    const fetchLogs = async (
+        page: number,
+        selectedCategory: ActionCategory,
+        selectedName: string,
+        silent = false
+    ) => {
         if (!silent) setIsLoading(true);
         try {
             const response = await axios.get('/api/logs', {
@@ -125,7 +133,7 @@ const ActivityLogs = () => {
                     name: selectedName || undefined,
                 },
             });
-            setLogs(response.data.data); 
+            setLogs(response.data.data);
             setCurrentPage(response.data.current_page);
             setTotalPages(response.data.last_page);
         } catch (error) {
@@ -135,94 +143,127 @@ const ActivityLogs = () => {
         }
     };
 
-    // Helper to dynamically color-code actions
     const getActionBadge = (action: string) => {
         const act = action.toLowerCase();
-        const baseStyle = "px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border whitespace-nowrap";
-        
-        if (act.includes('login') || act.includes('logout')) 
-            return `${baseStyle} bg-purple-50 text-purple-700 border-purple-200`;
-        if (act.includes('create') || act.includes('add') || act.includes('assign') || act.includes('issue')) 
-            return `${baseStyle} bg-emerald-50 text-emerald-700 border-emerald-200`;
-        if (act.includes('update') || act.includes('edit') || act.includes('approve') || act.includes('resolve')) 
-            return `${baseStyle} bg-blue-50 text-blue-700 border-blue-200`;
-        if (act.includes('delete') || act.includes('remove') || act.includes('reject')) 
-            return `${baseStyle} bg-red-50 text-red-700 border-red-200`;
-            
-        return `${baseStyle} bg-slate-50 text-slate-600 border-slate-200`;
+        const baseStyle =
+            'inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider whitespace-nowrap';
+
+        if (act.includes('login') || act.includes('logout')) {
+            return `${baseStyle} border-purple-200 bg-purple-50 text-purple-700`;
+        }
+        if (
+            act.includes('create') ||
+            act.includes('add') ||
+            act.includes('assign') ||
+            act.includes('issue')
+        ) {
+            return `${baseStyle} border-emerald-200 bg-emerald-50 text-emerald-700`;
+        }
+        if (
+            act.includes('update') ||
+            act.includes('edit') ||
+            act.includes('approve') ||
+            act.includes('resolve')
+        ) {
+            return `${baseStyle} border-blue-200 bg-blue-50 text-blue-700`;
+        }
+        if (act.includes('delete') || act.includes('remove') || act.includes('reject')) {
+            return `${baseStyle} border-rose-200 bg-rose-50 text-rose-700`;
+        }
+
+        return `${baseStyle} border-slate-200 bg-slate-100 text-slate-600`;
     };
 
-    // STRICT TYPESCRIPT VARIANTS
     const containerVariants: Variants = {
         hidden: { opacity: 0 },
-        show: { opacity: 1, transition: { staggerChildren: 0.05 } }
+        show: { opacity: 1, transition: { staggerChildren: 0.04 } },
     };
 
     const rowVariants: Variants = {
-        hidden: { opacity: 0, x: -10 },
-        show: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } }
+        hidden: { opacity: 0, x: -8 },
+        show: { opacity: 1, x: 0, transition: { duration: 0.28, ease: [0.22, 1, 0.36, 1] } },
     };
 
     return (
-        <div className="max-w-7xl mx-auto space-y-6 font-sans p-4 sm:p-8">
-            
-            {/* DARK THEME HEADER - AUDIT COMMAND CENTER */}
-            <motion.div 
-                initial={{ opacity: 0, y: -20 }}
+        <div className="mx-auto max-w-7xl space-y-6 p-4 font-sans sm:p-8">
+            {/* OBSIDIAN AUDIT COMMAND HERO */}
+            <motion.header
+                initial={{ opacity: 0, y: -12 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
+                transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                className="relative overflow-hidden rounded-[2rem] border border-slate-800 bg-slate-950 p-6 text-white shadow-2xl shadow-slate-900/20 sm:p-8"
             >
+                <div
+                    className="pointer-events-none absolute inset-0 opacity-20"
+                    style={{
+                        backgroundImage:
+                            'radial-gradient(rgba(148,163,184,0.4) 1px, transparent 1px)',
+                        backgroundSize: '20px 20px',
+                    }}
+                    aria-hidden="true"
+                />
+                <div
+                    className="pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full bg-indigo-600/25 blur-3xl"
+                    aria-hidden="true"
+                />
+                <div
+                    className="pointer-events-none absolute -bottom-24 left-1/4 h-64 w-64 rounded-full bg-emerald-500/15 blur-3xl"
+                    aria-hidden="true"
+                />
 
-                <div className="relative z-10">
-                    <div className="flex items-center gap-2 mb-2">
-                        <Terminal className="w-5 h-5 text-indigo-400" />
-                        <span className="text-sm font-medium text-slate-500">System Security</span>
-                    </div>
-                    <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-                        System Audit Trail
-                    </h1>
-                    <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
-                        Real-time immutable monitoring of all administrative and system-level activities.
-                    </p>
-                </div>
-
-                <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
-                        <ShieldAlert className="w-5 h-5 animate-pulse" />
-                    </div>
-                    <div className="flex flex-col text-left">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tracking Status</span>
-                        <span className="text-sm font-semibold text-emerald-600">
-                            Active Monitoring
+                <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                    <div className="min-w-0 max-w-2xl">
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-400/25 bg-indigo-500/15 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-indigo-300">
+                            <Terminal className="h-3.5 w-3.5 text-indigo-400" />
+                            System Security
                         </span>
+                        <h1 className="mt-3.5 text-3xl font-black tracking-tight text-white sm:text-4xl">
+                            System Audit Trail
+                        </h1>
+                        <p className="mt-2 text-sm font-medium leading-relaxed text-slate-300">
+                            Real-time immutable monitoring of all administrative and system-level activities across WoSPIS.
+                        </p>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-3.5 self-start rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-4 backdrop-blur-xl lg:self-auto">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-400/30">
+                            <Radio className="h-5 w-5 animate-pulse" />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                                Tracking Status
+                            </p>
+                            <p className="mt-0.5 text-sm font-black text-emerald-300">
+                                Active Monitoring
+                            </p>
+                        </div>
                     </div>
                 </div>
-            </motion.div>
+            </motion.header>
 
             {/* UNIFIED CONTROL CONSOLE */}
-            <motion.div 
+            <motion.section
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex flex-col gap-4"
+                transition={{ delay: 0.08 }}
+                className="flex flex-col gap-4 rounded-[1.75rem] border border-slate-200/90 bg-white p-5 shadow-sm"
             >
-                {/* Search Bar (text-base prevents iOS Zoom) */}
                 <div className="relative w-full md:max-w-md">
-                    <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                    <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <input
                         type="search"
                         value={nameInput}
                         onChange={(event) => setNameInput(event.target.value)}
                         list="audit-user-names"
-                        placeholder="Search logs by administrator name..."
+                        placeholder="Search logs by administrator name…"
                         aria-label="Filter trails by name"
-                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3.5 pl-12 pr-12 text-base font-bold text-slate-900 outline-none focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-600/20 transition-all shadow-sm [&::-webkit-search-cancel-button]:hidden"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-11 text-base font-bold text-slate-900 outline-none transition placeholder:font-medium placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 sm:text-sm [&::-webkit-search-cancel-button]:hidden"
                     />
                     {nameInput && (
                         <button
                             type="button"
                             onClick={() => setNameInput('')}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl p-2 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition-colors"
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"
                             aria-label="Clear name filter"
                         >
                             <X className="h-4 w-4" />
@@ -235,11 +276,13 @@ const ActivityLogs = () => {
                     </datalist>
                 </div>
 
-                {/* Category Pills (Wraps cleanly on mobile) */}
-                <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-1 -mx-2 px-2 sm:mx-0 sm:px-0 sm:flex-wrap sm:pb-0">
-                    <div className="flex items-center gap-1.5 mr-2 shrink-0">
-                        <Filter className="w-4 h-4 text-slate-400" />
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest hidden sm:block">Filters:</span>
+                {/* Category Filter Pills */}
+                <div className="custom-scrollbar -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0">
+                    <div className="mr-1 flex shrink-0 items-center gap-1.5">
+                        <Filter className="h-3.5 w-3.5 text-slate-400" />
+                        <span className="hidden text-[10px] font-extrabold uppercase tracking-widest text-slate-400 sm:block">
+                            Filters:
+                        </span>
                     </div>
                     {ACTION_CATEGORIES.map((item) => {
                         const active = category === item.id;
@@ -248,10 +291,10 @@ const ActivityLogs = () => {
                                 key={item.id}
                                 type="button"
                                 onClick={() => selectCategory(item.id)}
-                                className={`px-4 py-2.5 rounded-xl text-sm font-bold border transition-all shrink-0 ${
+                                className={`shrink-0 rounded-xl border px-3.5 py-2 text-xs font-bold transition-all ${
                                     active
-                                        ? 'bg-slate-900 text-white border-slate-900 shadow-md'
-                                        : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-700 hover:bg-indigo-50/50'
+                                        ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
+                                        : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50/50 hover:text-indigo-700'
                                 }`}
                             >
                                 {item.label}
@@ -259,101 +302,136 @@ const ActivityLogs = () => {
                         );
                     })}
                 </div>
-            </motion.div>
+            </motion.section>
 
-            {/* MAIN TABLE */}
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden relative min-h-[400px]">
-                
-                {/* Loading Overlay */}
+            {/* MAIN AUDIT TABLE */}
+            <section className="relative min-h-[400px] overflow-hidden rounded-[1.75rem] border border-slate-200/90 bg-white shadow-sm">
                 {isLoading && (
-                    <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-10 flex items-center justify-center">
+                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 backdrop-blur-[2px]">
                         <div className="flex flex-col items-center gap-3">
-                            <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
-                            <span className="text-sm font-bold text-indigo-700 animate-pulse">Scanning records...</span>
+                            <div className="h-9 w-9 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
+                            <span className="text-xs font-extrabold uppercase tracking-widest text-indigo-700">
+                                Scanning records…
+                            </span>
                         </div>
                     </div>
                 )}
 
-                <div className="overflow-x-auto custom-scrollbar">
-                    <table className="w-full text-left border-collapse min-w-[800px]">
+                <div className="custom-scrollbar overflow-x-auto">
+                    <table className="app-data-table w-full min-w-[800px] border-collapse text-left">
                         <thead>
-                            <tr className="bg-slate-50/80 border-b border-slate-200">
-                                <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider w-24">Log ID</th>
-                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Administrator</th>
-                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Action Type</th>
-                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider w-1/3">Description</th>
-                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Technical Details</th>
+                            <tr className="bg-slate-950 text-white">
+                                <th className="w-28 px-6 py-4 text-[11px] font-extrabold uppercase tracking-widest">
+                                    Log ID
+                                </th>
+                                <th className="px-6 py-4 text-[11px] font-extrabold uppercase tracking-widest">
+                                    Administrator
+                                </th>
+                                <th className="px-6 py-4 text-[11px] font-extrabold uppercase tracking-widest">
+                                    Action Type
+                                </th>
+                                <th className="w-1/3 px-6 py-4 text-[11px] font-extrabold uppercase tracking-widest">
+                                    Description
+                                </th>
+                                <th className="px-6 py-4 text-right text-[11px] font-extrabold uppercase tracking-widest">
+                                    Technical Details
+                                </th>
                             </tr>
                         </thead>
-                        <motion.tbody 
+
+                        <motion.tbody
                             variants={containerVariants}
                             initial="hidden"
-                            animate={!isLoading ? "show" : "hidden"}
+                            animate={!isLoading ? 'show' : 'hidden'}
                             className="divide-y divide-slate-100"
                         >
                             {!isLoading && logs.length === 0 ? (
                                 <tr>
                                     <td colSpan={5} className="px-6 py-20 text-center text-slate-400">
-                                        <ShieldAlert className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                                        <p className="text-lg font-bold text-slate-600">No activity logs found</p>
-                                        <p className="text-sm font-medium mt-1">
+                                        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                                            <ShieldAlert className="h-7 w-7" />
+                                        </div>
+                                        <p className="text-sm font-extrabold text-slate-700">
+                                            No activity logs found
+                                        </p>
+                                        <p className="mt-1 text-xs font-medium text-slate-400">
                                             {name
                                                 ? `No security trails match the name “${name}”.`
                                                 : category === 'all'
-                                                ? 'System activity will appear here.'
-                                                : 'Nothing recorded in this specific category yet.'}
+                                                  ? 'System activity will appear here.'
+                                                  : 'Nothing recorded in this specific category yet.'}
                                         </p>
                                     </td>
                                 </tr>
                             ) : (
                                 logs.map((log) => (
-                                    <motion.tr variants={rowVariants} key={log.id} className="hover:bg-slate-50 transition-colors group">
+                                    <motion.tr
+                                        variants={rowVariants}
+                                        key={log.id}
+                                        className="group transition-colors hover:bg-slate-50/80"
+                                    >
                                         <td className="px-6 py-5 align-top">
-                                            <span className="text-xs font-bold text-slate-400 font-mono bg-slate-100 px-2 py-1 rounded-md">#{String(log.id).padStart(5, '0')}</span>
+                                            <span className="rounded-lg border border-slate-200 bg-slate-100 px-2.5 py-1 font-mono text-xs font-bold text-slate-600">
+                                                #{String(log.id).padStart(5, '0')}
+                                            </span>
                                         </td>
+
                                         <td className="px-6 py-5 align-top">
                                             <div className="flex items-center gap-3">
                                                 <UserAvatar
                                                     name={log.admin?.name || log.admin_name}
                                                     picture={log.admin?.profile_picture}
-                                                    className="w-10 h-10 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-sm"
+                                                    className="h-10 w-10 shrink-0 rounded-full border border-indigo-100 bg-indigo-50 text-sm text-indigo-700"
                                                 />
                                                 <div>
-                                                    <span className="text-sm font-bold text-slate-900 group-hover:text-indigo-700 transition-colors block">
+                                                    <span className="block text-sm font-extrabold text-slate-900 transition-colors group-hover:text-indigo-700">
                                                         {log.admin_name}
                                                     </span>
                                                     {log.account_deleted && (
-                                                        <span className="mt-1 inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-red-50 text-red-700 border border-red-200">
+                                                        <span className="mt-1 inline-flex rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-700">
                                                             Account deleted
                                                         </span>
                                                     )}
                                                 </div>
                                             </div>
                                         </td>
+
                                         <td className="px-6 py-5 align-top">
                                             <span className={getActionBadge(log.action)}>
                                                 {log.action}
                                             </span>
                                         </td>
+
                                         <td className="px-6 py-5 align-top">
-                                            <p className="text-sm font-medium text-slate-600 leading-relaxed">
+                                            <p className="text-xs font-medium leading-relaxed text-slate-600 sm:text-sm">
                                                 {log.description}
                                             </p>
                                             <button
                                                 type="button"
                                                 onClick={() => openBreakdown(log)}
-                                                className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-100 rounded-lg text-xs font-bold transition-colors"
+                                                className="mt-2.5 inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100"
                                             >
-                                                <ListTree className="w-3.5 h-3.5" /> View Breakdown
+                                                <ListTree className="h-3.5 w-3.5" />
+                                                View Breakdown
                                             </button>
                                         </td>
-                                        <td className="px-6 py-5 align-top text-right">
+
+                                        <td className="px-6 py-5 text-right align-top">
                                             <div className="flex flex-col items-end gap-2">
-                                                <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 font-mono bg-slate-100 px-2 py-1 rounded border border-slate-200">
-                                                    <Globe className="w-3 h-3 text-slate-400" /> {log.ip_address}
+                                                <div className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 font-mono text-[11px] font-bold text-slate-600">
+                                                    <Globe className="h-3 w-3 text-slate-400" />
+                                                    {log.ip_address}
                                                 </div>
-                                                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
-                                                    <Clock className="w-3.5 h-3.5" /> {new Date(log.created_at).toLocaleString()}
+                                                <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-400">
+                                                    <Clock className="h-3.5 w-3.5" />
+                                                    {new Date(log.created_at).toLocaleString('en-US', {
+                                                        month: 'short',
+                                                        day: 'numeric',
+                                                        year: 'numeric',
+                                                        hour: 'numeric',
+                                                        minute: '2-digit',
+                                                        hour12: true,
+                                                    })}
                                                 </div>
                                             </div>
                                         </td>
@@ -364,152 +442,203 @@ const ActivityLogs = () => {
                     </table>
                 </div>
 
-                {/* PREMIUM PAGINATION FOOTER */}
+                {/* PAGINATION FOOTER */}
                 {!isLoading && logs.length > 0 && (
-                    <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
-                        <span className="text-sm text-slate-500 font-medium">
-                            Showing page <span className="font-bold text-slate-900">{currentPage}</span> of <span className="font-bold text-slate-900">{totalPages}</span>
+                    <div className="flex flex-col items-center justify-between gap-4 border-t border-slate-100 bg-slate-50/70 px-6 py-4 sm:flex-row">
+                        <span className="text-xs font-semibold text-slate-500">
+                            Showing page{' '}
+                            <span className="font-extrabold text-slate-900">{currentPage}</span> of{' '}
+                            <span className="font-extrabold text-slate-900">{totalPages}</span>
                         </span>
-                        <div className="flex gap-2 w-full sm:w-auto">
-                            <button 
-                                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        <div className="flex w-full gap-2 sm:w-auto">
+                            <button
+                                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                                 disabled={currentPage === 1}
-                                className="flex-1 sm:flex-none px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm flex items-center justify-center gap-1"
+                                className="inline-flex flex-1 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
                             >
-                                <ChevronLeft className="w-4 h-4" /> Prev
+                                <ChevronLeft className="h-4 w-4" /> Prev
                             </button>
-                            <button 
-                                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                            <button
+                                onClick={() =>
+                                    setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                                }
                                 disabled={currentPage === totalPages}
-                                className="flex-1 sm:flex-none px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm flex items-center justify-center gap-1"
+                                className="inline-flex flex-1 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
                             >
-                                Next <ChevronRight className="w-4 h-4" />
+                                Next <ChevronRight className="h-4 w-4" />
                             </button>
                         </div>
                     </div>
                 )}
-            </div>
+            </section>
 
-            {/* BREAKDOWN MODAL (Mobile-Optimized Glassmorphism) */}
-            {createPortal(
-                <AnimatePresence>
-                {selectedLog && (
-                    <motion.div 
-                        key="audit-breakdown"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
-                        {...bindPopup(() => setSelectedLog(null))}
-                    >
-                        <motion.div
-                            initial={{ scale: 0.95, opacity: 0, y: 20 }}
-                            animate={{ scale: 1, opacity: 1, y: 0 }}
-                            exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                            role="dialog"
-                            aria-modal="true"
-                            aria-labelledby="trail-breakdown-title"
-                            className="w-full max-w-2xl bg-white shadow-2xl rounded-3xl flex flex-col overflow-hidden max-h-[90vh]"
-                            onClick={(event) => event.stopPropagation()}
-                        >
-                            {/* Modal Header */}
-                            <div className="px-6 sm:px-8 py-6 border-b border-slate-200 bg-slate-900 text-white flex items-start justify-between gap-4 shrink-0 relative overflow-hidden">
-                                <div className="relative z-10">
-                                    <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-300 font-mono mb-1">
-                                        Log Entry #{String(selectedLog.id).padStart(5, '0')}
-                                    </p>
-                                    <h2 id="trail-breakdown-title" className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-                                        <ShieldAlert className="w-6 h-6 text-indigo-400" />
-                                        Activity Breakdown
-                                    </h2>
-                                    <p className="mt-1.5 text-sm text-slate-500 flex items-center gap-1.5">
-                                        <User className="w-4 h-4" /> {selectedLog.admin_name} <span className="text-slate-500 mx-1">•</span> {selectedLog.action}
-                                    </p>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setSelectedLog(null)}
-                                    className="relative z-10 p-2.5 rounded-full bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
-                                    aria-label="Close breakdown"
+            {/* OBSIDIAN BREAKDOWN MODAL */}
+            {typeof document !== 'undefined' &&
+                createPortal(
+                    <AnimatePresence>
+                        {selectedLog && (
+                            <motion.div
+                                key="audit-breakdown"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm"
+                                {...bindPopup(() => setSelectedLog(null))}
+                            >
+                                <motion.div
+                                    initial={{ scale: 0.96, opacity: 0, y: 16 }}
+                                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                                    exit={{ scale: 0.96, opacity: 0, y: 16 }}
+                                    role="dialog"
+                                    aria-modal="true"
+                                    aria-labelledby="trail-breakdown-title"
+                                    className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl"
+                                    onClick={(event) => event.stopPropagation()}
                                 >
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </div>
-
-                            {/* Modal Body */}
-                            <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-6 space-y-8 custom-scrollbar bg-slate-50">
-                                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                                    <p className="text-sm font-bold text-slate-700 leading-relaxed">{selectedLog.description}</p>
-                                </div>
-
-                                <div className="space-y-4">
-                                    <h4 className="text-xs font-semibold uppercase tracking-widest text-slate-400 flex items-center gap-2 border-b border-slate-200 pb-2">
-                                        <ListTree className="w-4 h-4 text-indigo-400" /> Sequential Steps
-                                    </h4>
-                                    <ol className="space-y-4">
-                                        {(selectedLog.breakdown?.steps ?? []).length === 0 ? (
-                                            <p className="text-sm font-medium text-slate-500 italic">No complex steps recorded for this simple action.</p>
-                                        ) : (
-                                            (selectedLog.breakdown?.steps ?? []).map((step, index) => (
-                                                <li key={`${step.title}-${index}`} className="flex gap-4">
-                                                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-semibold text-indigo-700 border border-indigo-200 shadow-sm">
-                                                        {index + 1}
-                                                    </span>
-                                                    <div className="bg-white border border-slate-200 p-4 rounded-2xl w-full shadow-sm">
-                                                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">{step.title}</p>
-                                                        <p className="text-sm font-medium text-slate-800 leading-relaxed">{step.detail}</p>
-                                                    </div>
-                                                </li>
-                                            ))
-                                        )}
-                                    </ol>
-                                </div>
-
-                                {(selectedLog.breakdown?.documents.length ?? 0) > 0 && (
-                                    <div className="space-y-4">
-                                        <h4 className="text-xs font-semibold uppercase tracking-widest text-slate-400 flex items-center gap-2 border-b border-slate-200 pb-2">
-                                            <FileText className="w-4 h-4 text-indigo-400" /> Associated Documents
-                                        </h4>
-                                        <div className="grid grid-cols-1 gap-3">
-                                            {selectedLog.breakdown?.documents.map((document) => (
-                                                <div key={document.path} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm hover:border-indigo-300 transition-colors">
-                                                    <div className="min-w-0 flex items-center gap-3">
-                                                        <div className="p-2.5 bg-indigo-50 rounded-xl shrink-0">
-                                                            <FileText className="w-5 h-5 text-indigo-600" />
-                                                        </div>
-                                                        <p className="truncate text-sm font-bold text-slate-800">{document.name}</p>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setDocumentViewer({ path: document.path, title: document.name })}
-                                                        className="shrink-0 w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 transition-all shadow-md shadow-indigo-600/20"
-                                                    >
-                                                        <FileText className="w-4 h-4" />
-                                                        View Document
-                                                    </button>
-                                                </div>
-                                            ))}
+                                    {/* Modal Header */}
+                                    <div className="relative flex shrink-0 items-start justify-between gap-4 overflow-hidden bg-slate-950 px-6 py-5 text-white sm:px-7">
+                                        <div
+                                            className="pointer-events-none absolute inset-0 opacity-20"
+                                            style={{
+                                                backgroundImage:
+                                                    'radial-gradient(rgba(148,163,184,0.4) 1px, transparent 1px)',
+                                                backgroundSize: '18px 18px',
+                                            }}
+                                            aria-hidden="true"
+                                        />
+                                        <div className="relative z-10">
+                                            <p className="mb-1 font-mono text-[10px] font-extrabold uppercase tracking-widest text-indigo-300">
+                                                Log Entry #{String(selectedLog.id).padStart(5, '0')}
+                                            </p>
+                                            <h2
+                                                id="trail-breakdown-title"
+                                                className="flex items-center gap-2 text-xl font-black tracking-tight"
+                                            >
+                                                <ShieldAlert className="h-5 w-5 text-indigo-400" />
+                                                Activity Breakdown
+                                            </h2>
+                                            <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-300">
+                                                <User className="h-3.5 w-3.5 text-indigo-300" />
+                                                <span>{selectedLog.admin_name}</span>
+                                                <span className="text-slate-500">·</span>
+                                                <span className="text-indigo-200">
+                                                    {selectedLog.action}
+                                                </span>
+                                            </p>
                                         </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedLog(null)}
+                                            className="relative z-10 rounded-xl border border-white/10 bg-white/5 p-2 text-slate-300 transition hover:bg-white/15 hover:text-white"
+                                            aria-label="Close breakdown"
+                                        >
+                                            <X className="h-4 w-4" />
+                                        </button>
                                     </div>
-                                )}
-                            </div>
-                            
-                            {/* Modal Footer */}
-                            <div className="px-6 py-4 border-t border-slate-100 bg-white flex justify-end shrink-0">
-                                <button
-                                    type="button"
-                                    onClick={() => setSelectedLog(null)}
-                                    className="px-6 py-2.5 text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors w-full sm:w-auto"
-                                >
-                                    Close Window
-                                </button>
-                            </div>
-                        </motion.div>
-                    </motion.div>
+
+                                    {/* Modal Body */}
+                                    <div className="custom-scrollbar flex-1 space-y-6 overflow-y-auto bg-slate-50/70 px-6 py-6 sm:px-7">
+                                        <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs">
+                                            <p className="text-sm font-bold leading-relaxed text-slate-800">
+                                                {selectedLog.description}
+                                            </p>
+                                        </div>
+
+                                        <div className="space-y-3.5">
+                                            <h4 className="flex items-center gap-2 border-b border-slate-200 pb-2 text-[11px] font-extrabold uppercase tracking-widest text-slate-400">
+                                                <ListTree className="h-4 w-4 text-indigo-500" />
+                                                Sequential Steps
+                                            </h4>
+                                            <ol className="space-y-3">
+                                                {(selectedLog.breakdown?.steps ?? []).length ===
+                                                0 ? (
+                                                    <p className="text-xs font-medium italic text-slate-500">
+                                                        No complex steps recorded for this simple action.
+                                                    </p>
+                                                ) : (
+                                                    (selectedLog.breakdown?.steps ?? []).map(
+                                                        (step, index) => (
+                                                            <li
+                                                                key={`${step.title}-${index}`}
+                                                                className="flex gap-3.5"
+                                                            >
+                                                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-slate-900 font-mono text-xs font-black text-white shadow-xs">
+                                                                    {index + 1}
+                                                                </span>
+                                                                <div className="w-full rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs">
+                                                                    <p className="mb-1 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                                                                        {step.title}
+                                                                    </p>
+                                                                    <p className="text-sm font-medium leading-relaxed text-slate-800">
+                                                                        {step.detail}
+                                                                    </p>
+                                                                </div>
+                                                            </li>
+                                                        )
+                                                    )
+                                                )}
+                                            </ol>
+                                        </div>
+
+                                        {(selectedLog.breakdown?.documents.length ?? 0) > 0 && (
+                                            <div className="space-y-3.5">
+                                                <h4 className="flex items-center gap-2 border-b border-slate-200 pb-2 text-[11px] font-extrabold uppercase tracking-widest text-slate-400">
+                                                    <FileText className="h-4 w-4 text-indigo-500" />
+                                                    Associated Documents
+                                                </h4>
+                                                <div className="grid grid-cols-1 gap-3">
+                                                    {selectedLog.breakdown?.documents.map(
+                                                        (document) => (
+                                                            <div
+                                                                key={document.path}
+                                                                className="flex flex-col justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white px-4 py-3.5 shadow-2xs transition hover:border-indigo-300 sm:flex-row sm:items-center"
+                                                            >
+                                                                <div className="flex min-w-0 items-center gap-3">
+                                                                    <div className="shrink-0 rounded-xl bg-indigo-50 p-2.5 text-indigo-600">
+                                                                        <FileText className="h-4 w-4" />
+                                                                    </div>
+                                                                    <p className="truncate text-sm font-bold text-slate-800">
+                                                                        {document.name}
+                                                                    </p>
+                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        setDocumentViewer({
+                                                                            path: document.path,
+                                                                            title: document.name,
+                                                                        })
+                                                                    }
+                                                                    className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white transition hover:bg-indigo-600 sm:w-auto"
+                                                                >
+                                                                    <FileText className="h-3.5 w-3.5" />
+                                                                    View Document
+                                                                </button>
+                                                            </div>
+                                                        )
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Modal Footer */}
+                                    <div className="flex shrink-0 justify-end border-t border-slate-100 bg-white px-6 py-4">
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedLog(null)}
+                                            className="w-full rounded-xl bg-slate-100 px-5 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-200 sm:w-auto"
+                                        >
+                                            Close Window
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>,
+                    document.body
                 )}
-                </AnimatePresence>,
-                document.body
-            )}
+
             <SecureFileViewerModal
                 filePath={documentViewer?.path || null}
                 title={documentViewer?.title || 'Submitted document'}

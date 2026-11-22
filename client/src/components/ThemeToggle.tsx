@@ -46,13 +46,15 @@ export default function ThemeToggle({ layout = 'icon', expanded = true, classNam
         aria-pressed={isDark}
         aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
         title={hint}
-        className={`relative w-full flex items-center p-3 rounded-xl text-slate-500 hover:text-slate-900 transition-all duration-300 group outline-none overflow-hidden ${className}`}
+        className={`group relative flex w-full items-center overflow-hidden rounded-2xl p-2.5 text-slate-400 outline-none transition-all duration-200 hover:text-white ${className}`}
       >
-        <div className="absolute inset-0 bg-slate-50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-        <div className="relative z-10 flex items-center w-full">
-          <span className="inline-flex shrink-0 text-slate-400 group-hover:text-slate-600 transition-colors">{icon}</span>
-          <span className={`ml-3.5 font-bold text-sm whitespace-nowrap transition-all duration-300 ${
-            expanded ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4 lg:hidden'
+        <div className="absolute inset-0 rounded-2xl bg-white/[0.06] opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+        <div className="relative z-10 flex w-full items-center">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.04] text-slate-400 transition-all duration-200 group-hover:bg-white/10 group-hover:text-amber-300">
+            {icon}
+          </span>
+          <span className={`ml-3 whitespace-nowrap text-sm font-bold tracking-tight transition-all duration-200 ${
+            expanded ? 'translate-x-0 opacity-100' : '-translate-x-3 opacity-0 lg:hidden'
           }`}>
             {label}
           </span>
@@ -68,7 +70,7 @@ export default function ThemeToggle({ layout = 'icon', expanded = true, classNam
       aria-pressed={isDark}
       aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
       title={hint}
-      className={`p-2 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-blue-600 transition-colors ${className}`}
+      className={`inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200/80 bg-white/80 text-slate-600 shadow-2xs backdrop-blur-sm transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 ${className}`}
     >
       {icon}
     </button>

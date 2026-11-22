@@ -90,6 +90,7 @@ class DepartmentSecretaryAndWeekScheduleTest extends TestCase
         $secretary = $this->makeUser('Department Secretary', 'Library', 'Library Secretary');
         $secretary->profile->update(['secretary_departments' => ['Library']]);
         $student = $this->makeUser('Student', 'Library', 'Library Worker');
+        $coordinator = $this->makeUser('WSPO Staff', 'WSPO Coordinator', 'WSPO Coordinator');
 
         $accounts = app(UserController::class);
         $this->assertFalse($accounts->isActingDepartmentSecretary($secretary->fresh('profile')));
@@ -98,7 +99,13 @@ class DepartmentSecretaryAndWeekScheduleTest extends TestCase
         $this->getJson('/api/schedules')->assertForbidden();
 
         Sanctum::actingAs($supervisor);
-        $this->postJson('/api/supervisor-absence', ['absent' => true])->assertOk();
+        $this->postJson('/api/supervisor-absence', ['absent' => true])->assertForbidden();
+
+        Sanctum::actingAs($coordinator);
+        $this->postJson('/api/supervisor-absence', [
+            'absent' => true,
+            'user_id' => $supervisor->id,
+        ])->assertOk();
 
         $this->assertTrue($accounts->isActingDepartmentSecretary($secretary->fresh('profile')));
 

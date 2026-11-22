@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Plus, Trash2, Users, X } from 'lucide-react';
 import { financialService } from '../../services/financialService';
 import { bindPopup } from '../../utils/popupDismiss';
+import { HelpDisclosure } from '../HelpDisclosure';
 
 interface StudentOption {
   id: number;
@@ -213,105 +215,205 @@ export function CleaningGroupsDialog({ onClose }: { onClose: () => void }) {
     return `Leader: ${leaderName} · ${memberCount} member${memberCount === 1 ? '' : 's'}`;
   };
 
+  const inputClass = 'mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-bold text-slate-900 outline-none transition focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-600/20';
+
   return (
-    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] flex items-center justify-center p-4" {...bindPopup(onClose)}>
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 sm:p-8 space-y-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h3 className="text-xl font-semibold text-slate-900">Groups</h3>
-            <p className="mt-1 text-sm text-slate-500">These groups are used for every activity. Only the WSPO coordinator can assign them. Choose one leader from any year level first, then add members by year. A group can mix years. The leader can open attendance, the QR code, and the passcode that works for every year level in the group.</p>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm"
+      {...bindPopup(onClose)}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl"
+      >
+        <div className="flex items-center justify-between gap-3 bg-slate-950 px-6 py-4 text-white">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/20 text-blue-300 ring-1 ring-blue-400/30">
+              <Users className="h-4 w-4" />
+            </span>
+            <div>
+              <h3 className="text-base font-black tracking-tight text-white">Activity Groups</h3>
+              <p className="text-[11px] font-medium text-slate-400">
+                Manage campus activity groups, group leaders, and member rosters
+              </p>
+            </div>
           </div>
-          <button type="button" onClick={startCreate} className="shrink-0 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-xl">New group</button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={startCreate}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-extrabold uppercase tracking-wider text-white shadow-sm transition hover:bg-blue-500"
+            >
+              <Plus className="h-3.5 w-3.5" /> New Group
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-white/10 bg-white/5 p-2 text-slate-300 transition hover:bg-white/15 hover:text-white"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
-        {notice && <div className={`text-sm font-semibold rounded-2xl px-5 py-3 border ${noticeError ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>{notice}</div>}
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-6">
+          <HelpDisclosure
+            variant="inline"
+            title="How activity groups work"
+            items={[
+              'These rosters apply across campus activities and can only be assigned by the WSPO coordinator.',
+              'Select one group leader from any year level first, then add members across any mix of year levels.',
+              'The leader can open activity attendance and display a shared QR code and passcode for every year level in the group.',
+            ]}
+          />
 
-        {groups.length === 0 && !editorOpen ? (
-          <p className="text-sm text-slate-500">No groups yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {groups.map((group) => (
-              <div key={group.id} className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${editingId === group.id ? 'border-blue-300 bg-blue-50' : 'border-slate-200'}`}>
-                <button type="button" onClick={() => startEdit(group)} className="min-w-0 flex-1 text-left">
-                  <p className="font-bold text-slate-900">{group.name}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">{groupSummary(group)}</p>
-                </button>
-                <button type="button" onClick={() => remove(group)} className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg" aria-label={`Remove ${group.name}`}>
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {editorOpen && (
-          <form onSubmit={save} className="space-y-4 border-t border-slate-100 pt-5">
-            <h4 className="font-semibold text-slate-900">{editingId ? 'Edit group' : 'New group'}</h4>
-            <label className="block text-xs font-bold uppercase tracking-wide text-slate-500">
-              Group name
-              <input required value={name} onChange={(input) => setName(input.target.value)} placeholder="Group A" className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold" />
-            </label>
-            <label className="block text-xs font-bold uppercase tracking-wide text-slate-500">
-              Search
-              <input value={search} onChange={(input) => setSearch(input.target.value)} placeholder="Search name, ID, or year" className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold" />
-            </label>
-
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Leader · one student, any year</p>
-              <p className="mt-1 text-sm text-slate-500">{leader ? `${leader.name} · ${leader.year_label}` : 'Select the leader first.'}</p>
-              <div className="mt-2 max-h-44 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
-                {visibleStudents.length === 0 ? (
-                  <p className="px-3 py-3 text-sm text-slate-500">No students match that search.</p>
-                ) : visibleStudents.map((student) => (
-                  <label key={student.id} className="flex items-center gap-3 px-3 py-2 text-sm">
-                    <input type="radio" name="group-leader" checked={leaderId === student.id} onChange={() => chooseLeader(student.id)} />
-                    <span className="font-bold text-slate-900">{student.name}</span>
-                    <span className="text-slate-500">{student.student_id_number || 'No ID'} · {student.year_label}{placementNote(student)}</span>
-                  </label>
-                ))}
-              </div>
+          {notice && (
+            <div className={`rounded-xl border px-4 py-3 text-xs font-bold ${noticeError ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-blue-200 bg-blue-50 text-blue-800'}`}>
+              {notice}
             </div>
+          )}
 
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Members by year level · {memberIds.length} selected</p>
-              <p className="mt-1 text-sm text-slate-500">Pick members from each year. Years can be mixed. The leader is not listed here.</p>
-              <div className="mt-2 space-y-3">
-                {memberSections.length === 0 ? (
-                  <p className="text-sm text-slate-500 border border-slate-200 rounded-xl px-3 py-3">No members match that search.</p>
-                ) : memberSections.map((section) => {
-                  const selected = section.students.filter((student) => memberIds.includes(student.id)).length;
-                  return (
-                    <div key={section.key} className="border border-slate-200 rounded-xl overflow-hidden">
-                      <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-3">
-                        <p className="text-xs font-bold uppercase tracking-wide text-slate-600">{section.label}</p>
-                        <p className="text-xs font-semibold text-slate-500">{selected} selected</p>
+          {groups.length === 0 && !editorOpen ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-6 py-10 text-center">
+              <Users className="mx-auto mb-2.5 h-8 w-8 text-slate-300" />
+              <p className="text-sm font-extrabold text-slate-700">No groups yet</p>
+              <p className="mt-1 text-xs font-medium text-slate-400">Click New Group above to create your first roster.</p>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {groups.map((group) => (
+                <div
+                  key={group.id}
+                  className={`flex items-center gap-3 rounded-2xl border px-4 py-3.5 transition ${
+                    editingId === group.id ? 'border-blue-300 bg-blue-50/60 ring-1 ring-blue-100' : 'border-slate-200/90 bg-white hover:border-slate-300'
+                  }`}
+                >
+                  <button type="button" onClick={() => startEdit(group)} className="min-w-0 flex-1 text-left">
+                    <p className="text-sm font-black tracking-tight text-slate-900">{group.name}</p>
+                    <p className="mt-0.5 text-xs font-medium text-slate-500">{groupSummary(group)}</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => remove(group)}
+                    className="rounded-xl p-2 text-rose-500 transition hover:bg-rose-50 hover:text-rose-700"
+                    aria-label={`Remove ${group.name}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {editorOpen && (
+            <form onSubmit={save} className="space-y-4 rounded-2xl border border-slate-200/90 bg-slate-50/70 p-5">
+              <h4 className="text-sm font-black tracking-tight text-slate-900">
+                {editingId ? 'Edit Group' : 'Create New Group'}
+              </h4>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                  Group Name
+                  <input required value={name} onChange={(input) => setName(input.target.value)} placeholder="Group A" className={inputClass} />
+                </label>
+                <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                  Search Students
+                  <input value={search} onChange={(input) => setSearch(input.target.value)} placeholder="Name, ID, or year…" className={inputClass} />
+                </label>
+              </div>
+
+              <div>
+                <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                  Leader · One Student, Any Year
+                </p>
+                <p className="mt-1 text-xs font-bold text-slate-600">
+                  {leader ? `${leader.name} · ${leader.year_label}` : 'Select the leader first.'}
+                </p>
+                <div className="mt-2 max-h-44 divide-y divide-slate-100 overflow-y-auto rounded-2xl border border-slate-200 bg-white">
+                  {visibleStudents.length === 0 ? (
+                    <p className="px-3.5 py-3 text-xs font-medium text-slate-500">No students match that search.</p>
+                  ) : visibleStudents.map((student) => (
+                    <label key={student.id} className="flex cursor-pointer items-center gap-3 px-3.5 py-2.5 text-xs transition hover:bg-slate-50">
+                      <input type="radio" name="group-leader" checked={leaderId === student.id} onChange={() => chooseLeader(student.id)} className="h-4 w-4 accent-blue-600" />
+                      <span className="font-bold text-slate-900">{student.name}</span>
+                      <span className="font-mono text-slate-500">{student.student_id_number || 'No ID'} · {student.year_label}{placementNote(student)}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                  Members by Year Level · {memberIds.length} Selected
+                </p>
+                <p className="mt-1 text-xs font-medium text-slate-500">
+                  Select members from any year level (excluding the group leader).
+                </p>
+                <div className="mt-2 space-y-3">
+                  {memberSections.length === 0 ? (
+                    <p className="rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-xs font-medium text-slate-500">
+                      No members match that search.
+                    </p>
+                  ) : memberSections.map((section) => {
+                    const selected = section.students.filter((student) => memberIds.includes(student.id)).length;
+                    return (
+                      <div key={section.key} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                        <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-3.5 py-2">
+                          <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500">{section.label}</p>
+                          <p className="font-mono text-[11px] font-extrabold text-blue-700">{selected} selected</p>
+                        </div>
+                        <div className="max-h-40 divide-y divide-slate-100 overflow-y-auto">
+                          {section.students.map((student) => (
+                            <label key={student.id} className="flex cursor-pointer items-center gap-3 px-3.5 py-2.5 text-xs transition hover:bg-slate-50">
+                              <input type="checkbox" checked={memberIds.includes(student.id)} onChange={() => toggleMember(student.id)} className="h-4 w-4 accent-blue-600" />
+                              <span className="font-bold text-slate-900">{student.name}</span>
+                              <span className="font-mono text-slate-500">{student.student_id_number || 'No ID'}{placementNote(student)}</span>
+                            </label>
+                          ))}
+                        </div>
                       </div>
-                      <div className="max-h-40 overflow-y-auto divide-y divide-slate-100">
-                        {section.students.map((student) => (
-                          <label key={student.id} className="flex items-center gap-3 px-3 py-2 text-sm">
-                            <input type="checkbox" checked={memberIds.includes(student.id)} onChange={() => toggleMember(student.id)} />
-                            <span className="font-bold text-slate-900">{student.name}</span>
-                            <span className="text-slate-500">{student.student_id_number || 'No ID'}{placementNote(student)}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
 
-            <div className="flex justify-end gap-3">
-              <button type="button" onClick={resetEditor} className="px-4 py-2.5 font-bold text-slate-500">Cancel</button>
-              <button type="submit" disabled={saving || !leaderId} className="px-5 py-2.5 bg-blue-600 text-white font-bold rounded-xl disabled:opacity-50">{saving ? 'Saving...' : 'Save group'}</button>
-            </div>
-          </form>
-        )}
-
-        <div className="flex justify-end">
-          <button type="button" onClick={onClose} className="px-4 py-2.5 font-bold text-slate-500">Close</button>
+              <div className="flex justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={resetEditor}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !leaderId}
+                  className="rounded-xl bg-slate-900 px-5 py-2 text-xs font-extrabold uppercase tracking-wider text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-45"
+                >
+                  {saving ? 'Saving…' : 'Save Group'}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
-      </div>
-    </div>
+
+        <div className="flex justify-end border-t border-slate-100 bg-slate-50/70 px-6 py-3.5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+          >
+            Done
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }

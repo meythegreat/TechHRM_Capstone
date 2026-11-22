@@ -178,7 +178,10 @@ class SecureFileController extends Controller
                 if ((int) ($shift->janitorial_group_id ?? 0) > 0) {
                     return \App\Models\JanitorialGroup::query()
                         ->where('id', $shift->janitorial_group_id)
-                        ->where('supervisor_user_id', $user->id)
+                        ->where(function ($group) use ($user) {
+                            $group->where('supervisor_user_id', $user->id)
+                                ->orWhere('immediate_supervisor_user_id', $user->id);
+                        })
                         ->exists();
                 }
 
@@ -197,7 +200,10 @@ class SecureFileController extends Controller
             if ((int) ($attendance->janitorial_group_id ?? 0) > 0) {
                 return \App\Models\JanitorialGroup::query()
                     ->where('id', $attendance->janitorial_group_id)
-                    ->where('supervisor_user_id', $user->id)
+                    ->where(function ($group) use ($user) {
+                        $group->where('supervisor_user_id', $user->id)
+                            ->orWhere('immediate_supervisor_user_id', $user->id);
+                    })
                     ->exists();
             }
 

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight, CheckCircle2, Download, Loader2, Printer, Send, Upload } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle2, Download, Loader2, Printer, Send, ShieldCheck, Upload, AlertCircle, Sparkles } from 'lucide-react';
 import { DATA_PRIVACY_NOTICE } from '../../constants/campusDocuments';
 import ApplicationStatusTracker from '../ApplicationStatusTracker';
+import { HelpDisclosure } from '../HelpDisclosure';
 import OfficialWspForms, { printOfficialForms } from './OfficialWspForms';
 import {
     CIVIL_STATUSES,
@@ -409,30 +410,64 @@ const WspApplicationWizard = ({ onSubmit, onFinished, onDraftChange, onPhaseChan
     if (receipt) {
         return (
             <div className="space-y-6">
-                <div className="bg-white rounded-3xl border border-emerald-100 p-6 sm:p-8 text-center">
-                    <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto" />
-                    <h2 className="mt-4 text-2xl font-semibold text-slate-900">Application submitted</h2>
-                    <p className="mt-2 text-sm text-slate-600 max-w-xl mx-auto">
-                        Both forms were sent to the WSPO coordinator. Your copy downloaded as a PDF. Print it on long coupon paper (8.5 × 13 inches), then sign the blank signature lines by hand.
-                    </p>
-                    {receipt.tracking_code && (
-                        <p className="mt-4 font-mono text-2xl font-semibold text-indigo-700">{receipt.tracking_code}</p>
-                    )}
-                    <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
-                        <button type="button" onClick={() => downloadFormPdf(receipt.form_pdf)} disabled={!receipt.form_pdf?.data} className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-indigo-600 text-white font-bold disabled:opacity-40">
-                            <Download className="w-4 h-4" /> Download forms
-                        </button>
-                        <button type="button" onClick={printOfficialForms} className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white text-indigo-700 font-bold border border-indigo-200">
-                            <Printer className="w-4 h-4" /> Print both forms
-                        </button>
-                        {onFinished && (
-                            <button type="button" onClick={onFinished} className="px-5 py-3 rounded-xl bg-slate-100 text-slate-800 font-bold">
-                                Done
-                            </button>
+                <section className="relative overflow-hidden rounded-[2rem] border border-slate-800 bg-slate-950 p-6 text-center text-white shadow-2xl shadow-slate-900/20 sm:p-10">
+                    <div
+                        className="pointer-events-none absolute inset-0 opacity-20"
+                        style={{
+                            backgroundImage: 'radial-gradient(rgba(148,163,184,0.4) 1px, transparent 1px)',
+                            backgroundSize: '20px 20px',
+                        }}
+                        aria-hidden="true"
+                    />
+                    <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-emerald-500/25 blur-3xl" aria-hidden="true" />
+                    <div className="pointer-events-none absolute -bottom-20 left-1/4 h-56 w-56 rounded-full bg-indigo-500/20 blur-3xl" aria-hidden="true" />
+
+                    <div className="relative z-10 mx-auto max-w-xl">
+                        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-400/30">
+                            <CheckCircle2 className="h-7 w-7" />
+                        </div>
+                        <span className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-500/15 px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-emerald-300">
+                            <Sparkles className="h-3 w-3" /> Submitted to WSPO
+                        </span>
+                        <h2 className="mt-3 text-3xl font-black tracking-tight text-white">Application Submitted</h2>
+                        <p className="mt-2 text-sm font-medium leading-relaxed text-slate-300">
+                            Both forms were sent to the WSPO coordinator. Your copy downloaded as a PDF. Print it on long coupon paper (8.5 × 13 inches), then sign the blank signature lines by hand.
+                        </p>
+                        {receipt.tracking_code && (
+                            <div className="mt-5 inline-flex flex-col items-center rounded-2xl border border-white/10 bg-white/[0.06] px-6 py-3.5 backdrop-blur-xl">
+                                <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Tracking Code</span>
+                                <p className="mt-1 font-mono text-2xl font-black tracking-wider text-indigo-300">{receipt.tracking_code}</p>
+                            </div>
                         )}
+                        <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+                            <button
+                                type="button"
+                                onClick={() => downloadFormPdf(receipt.form_pdf)}
+                                disabled={!receipt.form_pdf?.data}
+                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 px-5 py-3 text-xs font-extrabold uppercase tracking-wider text-white shadow-lg shadow-indigo-600/30 transition hover:from-indigo-500 hover:to-blue-500 disabled:opacity-40"
+                            >
+                                <Download className="h-4 w-4" /> Download Forms
+                            </button>
+                            <button
+                                type="button"
+                                onClick={printOfficialForms}
+                                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-5 py-3 text-xs font-bold text-white backdrop-blur-md transition hover:bg-white/20"
+                            >
+                                <Printer className="h-4 w-4" /> Print Both Forms
+                            </button>
+                            {onFinished && (
+                                <button
+                                    type="button"
+                                    onClick={onFinished}
+                                    className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-xs font-bold text-slate-300 transition hover:bg-white/10 hover:text-white"
+                                >
+                                    Done
+                                </button>
+                            )}
+                        </div>
                     </div>
-                </div>
-                <div className="overflow-x-auto bg-slate-200/70 rounded-3xl p-4">
+                </section>
+                <div className="overflow-x-auto rounded-[1.75rem] border border-slate-200 bg-slate-200/70 p-4">
                     <OfficialWspForms
                         identity={{ ...identity, email: details.email, tracking_code: receipt.tracking_code, submitted_at: new Date().toISOString() }}
                         details={details}
@@ -444,33 +479,64 @@ const WspApplicationWizard = ({ onSubmit, onFinished, onDraftChange, onPhaseChan
     }
 
     return (
-        <div className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
-            <div className="bg-gradient-to-r from-indigo-700 via-indigo-600 to-blue-600 px-5 py-6 text-white sm:px-8">
-                <p className="text-xs font-bold uppercase tracking-[0.22em] text-indigo-100">Step {step + 1} of {STEPS.length}</p>
-                <h2 className="mt-1 text-2xl font-semibold tracking-tight">{STEPS[step]}</h2>
-                <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/20">
-                    <div className="h-full rounded-full bg-white" style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} />
+        <div className="overflow-hidden rounded-[2rem] border border-slate-200/90 bg-white shadow-xl shadow-slate-900/5">
+            {/* OBSIDIAN WIZARD PROGRESS HEADER */}
+            <div className="relative overflow-hidden bg-slate-950 px-5 py-6 text-white sm:px-8">
+                <div
+                    className="pointer-events-none absolute inset-0 opacity-20"
+                    style={{
+                        backgroundImage: 'radial-gradient(rgba(148,163,184,0.4) 1px, transparent 1px)',
+                        backgroundSize: '20px 20px',
+                    }}
+                    aria-hidden="true"
+                />
+                <div className="pointer-events-none absolute -right-16 -top-16 h-52 w-52 rounded-full bg-indigo-600/25 blur-3xl" aria-hidden="true" />
+                <div className="relative z-10">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-400/25 bg-indigo-500/15 px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-indigo-300">
+                            Step {step + 1} of {STEPS.length}
+                        </span>
+                        <span className="font-mono text-xs font-bold text-slate-400">
+                            {Math.round(((step + 1) / STEPS.length) * 100)}% Complete
+                        </span>
+                    </div>
+                    <h2 className="mt-2.5 text-2xl font-black tracking-tight text-white">{STEPS[step]}</h2>
+                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
+                        <div
+                            className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-blue-500 to-emerald-400 transition-all duration-300"
+                            style={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
+                        />
+                    </div>
                 </div>
             </div>
-            <div className="flex gap-2 overflow-x-auto border-b border-slate-100 bg-slate-50/80 px-4 py-3 sm:px-6">
+
+            <div className="flex gap-2 overflow-x-auto border-b border-slate-100 bg-slate-50/80 px-4 py-3.5 sm:px-6">
                 {STEPS.map((name, index) => (
                     <span
                         key={name}
-                        className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${index === step ? 'bg-indigo-600 text-white' : index < step ? 'bg-indigo-100 text-indigo-700' : 'bg-white text-slate-400 ring-1 ring-slate-200'}`}
+                        className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-extrabold transition ${
+                            index === step
+                                ? 'bg-slate-900 text-white shadow-xs'
+                                : index < step
+                                    ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                                    : 'border border-slate-200 bg-white text-slate-400'
+                        }`}
                     >
                         {index + 1}. {name}
                     </span>
                 ))}
             </div>
 
-            <div className="border-b border-indigo-100 bg-indigo-50/80 px-5 py-4 sm:px-8">
-                <p className="text-xs font-bold uppercase tracking-wide text-indigo-800">Data Privacy Notice</p>
-                <p className="mt-1 text-sm leading-relaxed text-slate-700">{DATA_PRIVACY_NOTICE}</p>
+            <div className="border-b border-indigo-100 bg-indigo-50/70 px-5 py-4 sm:px-8">
+                <p className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest text-indigo-700">
+                    <ShieldCheck className="h-3.5 w-3.5" /> Data Privacy Notice
+                </p>
+                <p className="mt-1 text-xs font-medium leading-relaxed text-slate-700 sm:text-sm">{DATA_PRIVACY_NOTICE}</p>
                 {step === STEPS.length - 1 && (
-                    <label className="mt-3 flex items-start gap-3 text-sm font-semibold text-slate-800">
+                    <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-indigo-200/80 bg-white/80 p-3 text-sm font-bold text-slate-800">
                         <input
                             type="checkbox"
-                            className="mt-1"
+                            className="mt-0.5 h-4 w-4 accent-indigo-600"
                             checked={privacyAccepted}
                             onChange={(event) => {
                                 setPrivacyAccepted(event.target.checked);
@@ -483,7 +549,12 @@ const WspApplicationWizard = ({ onSubmit, onFinished, onDraftChange, onPhaseChan
             </div>
 
             <div className="px-5 py-6 sm:px-8">
-            {error && <p className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p>}
+            {error && (
+                <div className="mb-5 flex items-center gap-2.5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span>{error}</span>
+                </div>
+            )}
 
             {step === 0 && (
                 <div className="space-y-6">
@@ -577,7 +648,7 @@ const WspApplicationWizard = ({ onSubmit, onFinished, onDraftChange, onPhaseChan
                 <div className="space-y-6">
                     <div className="rounded-2xl border border-slate-200 p-4 space-y-3">
                         <p className="text-sm font-semibold text-slate-900">3. Do you have any brother or sister employed as a work student at FCU?</p>
-                        <p className="text-sm text-slate-500">Answer Yes or No. If Yes, state how many and name them. If No, continue to the next question.</p>
+                        <p className="text-xs text-slate-500">If Yes, enter how many and list their names below.</p>
                         <Choice value={details.sibling_employed_at_fcu} options={['Yes', 'No']} onChange={setEmployedAnswer} />
                         {details.sibling_employed_at_fcu === 'Yes' && (
                             <div className="space-y-3 pt-2">
@@ -601,7 +672,7 @@ const WspApplicationWizard = ({ onSubmit, onFinished, onDraftChange, onPhaseChan
 
                     <div className="rounded-2xl border border-slate-200 p-4 space-y-3">
                         <p className="text-sm font-semibold text-slate-900">4. Name of all brothers / sisters</p>
-                        <p className="text-sm text-slate-500">List only brothers and sisters who are not work students at the university. This question still needs an answer.</p>
+                        <p className="text-xs text-slate-500">Required — include only siblings who are not FCU work students.</p>
                         <div className="flex flex-col sm:flex-row gap-2">
                             <button
                                 type="button"
@@ -669,10 +740,10 @@ const WspApplicationWizard = ({ onSubmit, onFinished, onDraftChange, onPhaseChan
 
             {step === 4 && (
                 <div className="space-y-4">
-                    <p className="text-sm text-slate-600">Submit these with the application. The letter is addressed to Mr. N-Gey C. Franco, WSP Coordinator, Filamer Christian University, Inc.</p>
+                    <p className="text-sm text-slate-600">Address your application letter to Mr. N-Gey C. Franco, WSP Coordinator, Filamer Christian University, Inc.</p>
                     <div className="rounded-2xl border border-slate-200 p-4 space-y-3">
                         <p className="text-sm font-semibold text-slate-900">Will you pass a Certificate of Good Moral Character?</p>
-                        <p className="text-sm text-slate-500">This depends on the school you came from. Answer Yes if that school will issue one, or No if it will not.</p>
+                        <p className="text-xs text-slate-500">Select Yes if your previous school issues one, or No otherwise.</p>
                         <Choice value={details.will_pass_good_moral} options={['Yes', 'No']} onChange={(will_pass_good_moral) => patch({ will_pass_good_moral })} />
                     </div>
                     {REQUIREMENTS.map((requirement) => (
@@ -724,8 +795,16 @@ const WspApplicationWizard = ({ onSubmit, onFinished, onDraftChange, onPhaseChan
             {step === 5 && (
                 <div className="space-y-4">
                     <p className="text-sm text-slate-600 leading-relaxed">
-                        The personal information sheet and the parents consent are sent to the coordinator for printing. Signature lines stay blank on that copy. After the printed forms are received, the applicant, the father and mother or the guardian, and the parent or guardian sign them by hand.
+                        Signature lines stay blank on the generated forms for wet signatures after printing.
                     </p>
+                    <HelpDisclosure
+                        variant="inline"
+                        title="Signing instructions"
+                        items={[
+                            'Both the Personal Information Sheet and Parent Consent form are forwarded to the WSPO coordinator for printing.',
+                            'Once printed, the applicant, father and mother (or guardian), and parent/guardian sign the blank lines by hand.',
+                        ]}
+                    />
                     <label className="flex items-start gap-3 text-sm font-semibold text-slate-800">
                         <input type="checkbox" className="mt-1" checked={details.will_sign_printed_copy} onChange={(event) => patch({ will_sign_printed_copy: event.target.checked })} />
                         The signature lines will be filled in by hand on the printed copy.
@@ -749,21 +828,40 @@ const WspApplicationWizard = ({ onSubmit, onFinished, onDraftChange, onPhaseChan
 
             </div>
 
-            <div className="space-y-3 border-t border-slate-100 px-5 py-5 sm:px-8">
-                {error && <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p>}
-                <div className="flex items-center justify-between gap-3">
-                <button type="button" onClick={() => { setError(''); setStep((current) => Math.max(0, current - 1)); }} disabled={step === 0} className="inline-flex items-center gap-2 rounded-2xl bg-slate-100 px-4 py-3 font-bold text-slate-800 disabled:opacity-40">
-                    <ArrowLeft className="w-4 h-4" /> Back
-                </button>
-                {step < STEPS.length - 1 ? (
-                    <button type="button" onClick={goNext} className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 px-5 py-3 font-bold text-white shadow-lg shadow-indigo-600/20">
-                        Next <ArrowRight className="w-4 h-4" />
-                    </button>
-                ) : (
-                    <button type="button" onClick={submit} disabled={loading || !privacyAccepted} className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 px-5 py-3 font-bold text-white shadow-lg shadow-indigo-600/20 disabled:opacity-50">
-                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Submit application
-                    </button>
+            <div className="space-y-3 border-t border-slate-100 bg-slate-50/60 px-5 py-5 sm:px-8">
+                {error && (
+                    <div className="flex items-center gap-2.5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        <span>{error}</span>
+                    </div>
                 )}
+                <div className="flex items-center justify-between gap-3">
+                    <button
+                        type="button"
+                        onClick={() => { setError(''); setStep((current) => Math.max(0, current - 1)); }}
+                        disabled={step === 0}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-2xs transition hover:bg-slate-50 disabled:opacity-40"
+                    >
+                        <ArrowLeft className="h-4 w-4" /> Back
+                    </button>
+                    {step < STEPS.length - 1 ? (
+                        <button
+                            type="button"
+                            onClick={goNext}
+                            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-extrabold uppercase tracking-wider text-white shadow-sm transition hover:bg-indigo-600"
+                        >
+                            Next <ArrowRight className="h-4 w-4" />
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={submit}
+                            disabled={loading || !privacyAccepted}
+                            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 px-5 py-2.5 text-xs font-extrabold uppercase tracking-wider text-white shadow-lg shadow-indigo-600/25 transition hover:from-indigo-500 hover:to-blue-500 disabled:opacity-50"
+                        >
+                            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Submit Application
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

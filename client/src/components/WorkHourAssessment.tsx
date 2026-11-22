@@ -65,7 +65,7 @@ export const WorkHourAssessment = () => {
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
-        <table className="w-full text-left">
+        <table className="app-data-table w-full text-left">
           <thead className="bg-slate-50">
             <tr>
               <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Student</th>

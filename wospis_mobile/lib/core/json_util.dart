@@ -20,7 +20,33 @@ String textOf(dynamic value, [String fallback = '—']) {
 String whenOf(dynamic value) {
   final raw = textOf(value, '');
   if (raw.isEmpty) return '—';
-  return raw.replaceFirst('T', ' ').split('.').first;
+  final clock = RegExp(r'^(\d{1,2}):(\d{2})(?::\d{2})?(?:\s*([AaPp][Mm]))?$').firstMatch(raw);
+  if (clock != null) {
+    return twelveHourLabel(int.parse(clock.group(1)!), clock.group(2)!, clock.group(3));
+  }
+  final parsed = DateTime.tryParse(raw);
+  if (parsed == null || !raw.contains(':')) {
+    return raw.replaceFirst('T', ' ').split('.').first;
+  }
+  final local = parsed.toLocal();
+  final date = '${local.year.toString().padLeft(4, '0')}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';
+  return '$date ${twelveHourLabel(local.hour, local.minute.toString().padLeft(2, '0'), null)}';
+}
+
+String twelveHourLabel(int hour, String minute, String? meridiem) {
+  var hour24 = hour;
+  if (meridiem != null) {
+    final marker = meridiem.toLowerCase();
+    if (marker == 'pm' && hour24 < 12) hour24 += 12;
+    if (marker == 'am' && hour24 == 12) hour24 = 0;
+  }
+  final suffix = hour24 >= 12 ? 'PM' : 'AM';
+  final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
+  return '$hour12:$minute $suffix';
+}
+
+String clockStorage(int hour, int minute) {
+  return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
 }
 
 String personName(Map<String, dynamic> row, [String nested = 'user']) {

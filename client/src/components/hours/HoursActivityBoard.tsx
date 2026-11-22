@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
+import { CalendarDays, ChevronDown, ClipboardCheck, Pencil, Search, Trash2, Users } from 'lucide-react';
 import { financialService } from '../../services/financialService';
 import { canCheckActivityAttendance } from '../../utils/wspoActivityAccess';
 import { AddActivityHoursDialog, type EditableHourEvent } from './AddActivityHoursDialog';
+import { formatClockTime } from '../../utils/scheduleTime';
+import ClockTimeInput from '../ClockTimeInput';
+import { HelpDisclosure } from '../HelpDisclosure';
 
 interface HourEntry {
   user_id: number;
@@ -153,163 +156,259 @@ export function HoursActivityBoard({
   };
 
   return (
-    <section className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-slate-900">Activity hours</h2>
-          <p className="text-sm text-slate-500 mt-1 max-w-2xl">
-            Create these activities in the Attendance Hub for a group and, if needed, one year level. The WSPO Secretary is the primary campus checker for activity attendance (Coordinator/President share the same tools). Marking someone absent removes those hours. An on-time scan keeps them.
-            The group leader can show that activity&apos;s QR code and passcode, which works for every year level in the group, and can also correct clock-in and time-out from Group activities. Every activity stays on time for 1 hour after the official time in.
-          </p>
+    <section className="overflow-hidden rounded-[1.75rem] border border-slate-200/90 bg-white shadow-sm">
+      <div className="relative overflow-hidden bg-slate-950 px-6 py-5 text-white">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-20"
+          style={{
+            backgroundImage: 'radial-gradient(rgba(148,163,184,0.4) 1px, transparent 1px)',
+            backgroundSize: '18px 18px',
+          }}
+          aria-hidden="true"
+        />
+        <div className="pointer-events-none absolute -right-12 -top-12 h-36 w-36 rounded-full bg-indigo-500/25 blur-3xl" aria-hidden="true" />
+        <div className="relative z-10 flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/20 text-indigo-300 ring-1 ring-indigo-400/30">
+              <CalendarDays className="h-5 w-5" />
+            </span>
+            <div>
+              <h2 className="text-base font-black tracking-tight text-white">Activity Hours</h2>
+              <p className="mt-1 max-w-2xl text-xs font-medium leading-relaxed text-slate-300">
+                Review scheduled campus activities and manage student attendance marks.
+              </p>
+            </div>
+          </div>
+          <span className="inline-flex shrink-0 items-center rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 font-mono text-[10px] font-extrabold uppercase tracking-wider text-slate-200">
+            {events.length} {events.length === 1 ? 'Activity' : 'Activities'}
+          </span>
         </div>
       </div>
 
-      {notice && <div className="bg-blue-50 border border-blue-200 text-blue-800 text-sm font-semibold rounded-2xl px-5 py-3">{notice}</div>}
+      <div className="space-y-4 p-6">
+        <HelpDisclosure
+          variant="inline"
+          title="How activity hours work"
+          items={[
+            'Create cleaning activities for a group. Devotional meetings and meeting assemblies include every student, with an optional year level.',
+            'The WSPO Secretary is the primary campus checker for activity attendance, with Coordinator and President sharing the same tools.',
+            'Every activity remains on time for 1 hour after the official time in; marking a student absent removes credited hours while an on-time scan keeps them.',
+            'The group leader can display the activity QR code and passcode for all year levels in the group and correct missed scans from Group Activities.',
+          ]}
+        />
 
-      {events.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-dashed border-slate-300 px-6 py-8 text-sm text-slate-500">
-          No special requests, cleaning, devotionals, or assemblies in this period.
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {events.map((item) => {
-            const roster = item.entries.filter((entry) => {
-              const term = rosterSearch.trim().toLowerCase();
-              if (expanded !== item.id || !term) return true;
-              return entry.name.toLowerCase().includes(term) || (entry.student_id_number || '').toLowerCase().includes(term);
-            });
-            return (
-              <article key={item.id} className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden">
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setExpanded(expanded === item.id ? null : item.id)}
-                  onKeyDown={(key) => {
-                    if (key.key === 'Enter') setExpanded(expanded === item.id ? null : item.id);
-                  }}
-                  className="w-full px-5 py-4 flex flex-wrap items-center gap-3 text-left hover:bg-slate-50 cursor-pointer"
+        {notice && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs font-bold text-blue-800">
+            {notice}
+          </div>
+        )}
+
+        {events.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-6 py-10 text-center">
+            <CalendarDays className="mx-auto mb-2.5 h-8 w-8 text-slate-300" />
+            <p className="text-sm font-extrabold text-slate-700">No activities in this period</p>
+            <p className="mt-1 text-xs font-medium text-slate-400">
+              Special requests, cleaning, devotionals, and assemblies will appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {events.map((item) => {
+              const isOpen = expanded === item.id;
+              const roster = item.entries.filter((entry) => {
+                const term = rosterSearch.trim().toLowerCase();
+                if (!isOpen || !term) return true;
+                return entry.name.toLowerCase().includes(term) || (entry.student_id_number || '').toLowerCase().includes(term);
+              });
+              return (
+                <article
+                  key={item.id}
+                  className={`overflow-hidden rounded-2xl border bg-white transition ${
+                    isOpen ? 'border-blue-200 ring-1 ring-blue-100' : 'border-slate-200/90 hover:border-slate-300'
+                  }`}
                 >
-                  <div className="min-w-0 flex-1">
-                    <p className="font-bold text-slate-900">{item.title}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {item.kind_label}
-                      {item.group_name ? ` · ${item.group_name}` : ''}
-                      {item.year_label ? ` · ${item.year_label}` : ''}
-                      {item.direction ? ` · ${item.direction === 'deduct' ? 'Deduct' : 'Add'} ${item.hours} hrs` : ` · ${item.hours} hrs`}
-                      {item.starts_at ? ` · time in ${item.starts_at}` : ''}
-                      {item.ends_at ? ` · ends ${item.ends_at}` : ''}
-                      {item.valid_until ? ` · on time until ${item.valid_until}` : ''}
-                      {' · '}{item.event_date}
-                    </p>
-                  </div>
-                  <span className="text-xs font-bold text-slate-500">{item.marked_count}/{item.eligible_count} marked</span>
-                  {!readOnly && issuer && (
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      onClick={(click) => {
-                        click.stopPropagation();
-                        setEditing(item);
-                      }}
-                      onKeyDown={(key) => {
-                        if (key.key === 'Enter') {
-                          key.stopPropagation();
-                          setEditing(item);
-                        }
-                      }}
-                      className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg"
-                      aria-label={`Edit ${item.title}`}
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </span>
-                  )}
-                  {!readOnly && issuer && (
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      onClick={(click) => {
-                        click.stopPropagation();
-                        remove(item);
-                      }}
-                      onKeyDown={(key) => {
-                        if (key.key === 'Enter') {
-                          key.stopPropagation();
-                          remove(item);
-                        }
-                      }}
-                      className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </span>
-                  )}
-                </div>
-
-                {expanded === item.id && (
-                  <div className="border-t border-slate-100 px-5 py-4 space-y-4">
-                    {item.uses_attendance && !readOnly && issuer && (
-                      <div className="space-y-3">
-                        <p className="text-sm text-slate-600">
-                          The QR code for this activity is issued in the Attendance Hub. If the scanner fails, correct the clock-in and time-out below. Time out defaults to the activity end time{item.ends_at ? ` (${item.ends_at})` : ''}. Hours are added only at time out, and only if that clock-in was on time.
-                        </p>
-                        <button type="button" onClick={() => markAbsent(item)} className="px-4 py-3 bg-white border border-slate-200 text-sm font-bold rounded-xl text-slate-700">Mark unmarked absent</button>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setExpanded(isOpen ? null : item.id)}
+                    onKeyDown={(key) => {
+                      if (key.key === 'Enter') setExpanded(isOpen ? null : item.id);
+                    }}
+                    className="flex w-full cursor-pointer flex-wrap items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-slate-50/70"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-black tracking-tight text-slate-900">{item.title}</p>
+                        <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-indigo-700">
+                          {item.kind_label}
+                        </span>
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 font-mono text-[10px] font-extrabold text-emerald-700">
+                          {item.direction ? `${item.direction === 'deduct' ? '−' : '+'}${item.hours} hrs` : `${item.hours} hrs`}
+                        </span>
                       </div>
-                    )}
-                    <input
-                      value={expanded === item.id ? rosterSearch : ''}
-                      onChange={(input) => setRosterSearch(input.target.value)}
-                      placeholder="Search this list"
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold"
-                    />
-                    <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
-                      {roster.map((entry) => (
-                        <div key={entry.user_id} className="py-3 flex flex-wrap items-center gap-3">
-                          <div className="min-w-[180px] flex-1">
-                            <p className="font-bold text-slate-900 text-sm">{entry.name}</p>
-                            <p className="text-xs text-slate-500">
-                              {entry.student_id_number || 'No ID'}
-                              {entry.year_level ? ` · Yr ${entry.year_level}` : ''}
-                              {entry.status ? ` · ${statusLabel[entry.status] || entry.status}` : ' · Not marked'}
-                              {entry.status ? ` · ${Number(entry.hours_delta).toFixed(2)} hrs` : ''}
-                            </p>
-                          </div>
-                          {item.uses_attendance && !readOnly && issuer && (
-                            <div className="flex flex-wrap items-center gap-2">
-                              <input
-                                type="time"
-                                value={timeInDrafts[entry.user_id] ?? entry.time_in ?? ''}
-                                onChange={(input) => setTimeInDrafts((current) => ({ ...current, [entry.user_id]: input.target.value }))}
-                                className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold"
-                                aria-label={`Clock-in time for ${entry.name}`}
-                              />
-                              <button type="button" onClick={() => correctTime(item, entry.user_id)} className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border bg-white text-slate-700 border-slate-200">Save time in</button>
-                              <input
-                                type="time"
-                                value={timeOutDrafts[entry.user_id] ?? entry.time_out ?? item.ends_at ?? ''}
-                                onChange={(input) => setTimeOutDrafts((current) => ({ ...current, [entry.user_id]: input.target.value }))}
-                                className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold"
-                                aria-label={`Time-out for ${entry.name}`}
-                              />
-                              <button type="button" onClick={() => correctTimeout(item, entry.user_id)} className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border bg-white text-slate-700 border-slate-200">Save time out</button>
-                              <button
-                                type="button"
-                                onClick={() => mark(item, entry.user_id, 'absent')}
-                                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold border ${entry.status === 'absent' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}
-                              >
-                                Absent
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                      {roster.length === 0 && <p className="py-4 text-sm text-slate-500">No students match.</p>}
+                      <p className="mt-1 font-mono text-xs font-medium text-slate-500">
+                        {item.event_date}
+                        {item.group_name ? ` · ${item.group_name}` : ''}
+                        {item.year_label ? ` · ${item.year_label}` : ''}
+                        {item.starts_at ? ` · in ${formatClockTime(item.starts_at)}` : ''}
+                        {item.ends_at ? ` · out ${formatClockTime(item.ends_at)}` : ''}
+                        {item.valid_until ? ` · on time until ${formatClockTime(item.valid_until)}` : ''}
+                      </p>
                     </div>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-mono text-[11px] font-extrabold text-slate-600">
+                      <Users className="h-3 w-3 text-slate-400" />
+                      {item.marked_count}/{item.eligible_count}
+                    </span>
+                    {!readOnly && issuer && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(click) => {
+                          click.stopPropagation();
+                          setEditing(item);
+                        }}
+                        onKeyDown={(key) => {
+                          if (key.key === 'Enter') {
+                            key.stopPropagation();
+                            setEditing(item);
+                          }
+                        }}
+                        className="rounded-xl p-2 text-slate-500 transition hover:bg-blue-50 hover:text-blue-600"
+                        aria-label={`Edit ${item.title}`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </span>
+                    )}
+                    {!readOnly && issuer && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(click) => {
+                          click.stopPropagation();
+                          remove(item);
+                        }}
+                        onKeyDown={(key) => {
+                          if (key.key === 'Enter') {
+                            key.stopPropagation();
+                            remove(item);
+                          }
+                        }}
+                        className="rounded-xl p-2 text-rose-500 transition hover:bg-rose-50 hover:text-rose-700"
+                        aria-label={`Remove ${item.title}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </span>
+                    )}
+                    <ChevronDown
+                      className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${
+                        isOpen ? 'rotate-180 text-blue-600' : ''
+                      }`}
+                    />
                   </div>
-                )}
-              </article>
-            );
-          })}
-        </div>
-      )}
+
+                  {isOpen && (
+                    <div className="space-y-4 border-t border-slate-100 bg-slate-50/50 px-5 py-4">
+                      {item.uses_attendance && !readOnly && issuer && (
+                        <div className="space-y-3 rounded-xl border border-slate-200/80 bg-white p-3.5">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <p className="text-xs font-medium text-slate-600">
+                              Correct missed scans below{item.ends_at ? ` (time-out defaults to ${formatClockTime(item.ends_at)})` : ''}.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => markAbsent(item)}
+                              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-2 text-xs font-extrabold uppercase tracking-wider text-white transition hover:bg-rose-600"
+                            >
+                              <ClipboardCheck className="h-3.5 w-3.5" /> Mark Unmarked Absent
+                            </button>
+                          </div>
+                          <HelpDisclosure
+                            variant="inline"
+                            title="Attendance correction rules"
+                            items={[
+                              'Live QR codes for this activity are issued from the Attendance Hub.',
+                              `If a scanner fails, enter clock-in and time-out manually below; time-out defaults to the activity end time${item.ends_at ? ` (${formatClockTime(item.ends_at)})` : ''}.`,
+                              'Hours are credited only upon time-out, and only when the clock-in was on time.',
+                            ]}
+                          />
+                        </div>
+                      )}
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <input
+                          value={isOpen ? rosterSearch : ''}
+                          onChange={(input) => setRosterSearch(input.target.value)}
+                          placeholder="Search this roster…"
+                          className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
+                        />
+                      </div>
+                      <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto rounded-2xl border border-slate-200/80 bg-white px-4">
+                        {roster.map((entry) => (
+                          <div key={entry.user_id} className="flex flex-wrap items-center gap-3 py-3">
+                            <div className="min-w-[180px] flex-1">
+                              <p className="text-sm font-extrabold text-slate-900">{entry.name}</p>
+                              <p className="font-mono text-xs font-medium text-slate-500">
+                                {entry.student_id_number || 'No ID'}
+                                {entry.year_level ? ` · Yr ${entry.year_level}` : ''}
+                                {entry.status ? ` · ${statusLabel[entry.status] || entry.status}` : ' · Not marked'}
+                                {entry.status ? ` · ${Number(entry.hours_delta).toFixed(2)} hrs` : ''}
+                              </p>
+                            </div>
+                            {item.uses_attendance && !readOnly && issuer && (
+                              <div className="flex flex-wrap items-center gap-2">
+                                <ClockTimeInput
+                                  value={timeInDrafts[entry.user_id] ?? entry.time_in ?? ''}
+                                  onChange={(value) => setTimeInDrafts((current) => ({ ...current, [entry.user_id]: value }))}
+                                  className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs font-bold"
+                                  aria-label={`Clock-in time for ${entry.name}`}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => correctTime(item, entry.user_id)}
+                                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                                >
+                                  Save In
+                                </button>
+                                <ClockTimeInput
+                                  value={timeOutDrafts[entry.user_id] ?? entry.time_out ?? item.ends_at ?? ''}
+                                  onChange={(value) => setTimeOutDrafts((current) => ({ ...current, [entry.user_id]: value }))}
+                                  className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs font-bold"
+                                  aria-label={`Time-out for ${entry.name}`}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => correctTimeout(item, entry.user_id)}
+                                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                                >
+                                  Save Out
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => mark(item, entry.user_id, 'absent')}
+                                  className={`rounded-xl border px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-wider transition ${
+                                    entry.status === 'absent'
+                                      ? 'border-slate-900 bg-slate-900 text-white'
+                                      : 'border-slate-200 bg-white text-slate-600 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700'
+                                  }`}
+                                >
+                                  Absent
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {roster.length === 0 && (
+                          <p className="py-6 text-center text-xs font-medium text-slate-500">No students match.</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {editing && (
         <AddActivityHoursDialog

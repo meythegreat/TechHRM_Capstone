@@ -180,7 +180,7 @@ class CleaningProofController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Clock-in started with your surroundings photo. Take one last photo when you finish. No code is required. If your janitorial supervisor accepts the entry, it is recorded as exactly '
+            'message' => 'Clock-in started with your surroundings photo. Take one last photo when you finish. No code is required. Your janitorial supervisor reviews it first, and the immediate supervisor has the final say. If accepted, it is recorded as up to '
                 .DutyHours::JANITORIAL_FIXED_HOURS.' hours from this photo.',
             'attendance' => $attendance,
             'cleaning_proof' => CleaningProof::status($attendance),
@@ -239,7 +239,7 @@ class CleaningProofController extends Controller
         }
 
         return response()->json([
-            'message' => 'Clock-out saved at the time of this photo. Your janitorial supervisor must accept it before '
+            'message' => 'Clock-out saved at the time of this photo. Your janitorial supervisor reviews it first. The immediate supervisor has the final say before up to '
                 .DutyHours::JANITORIAL_FIXED_HOURS.' hours are recorded from the first photo.',
             'attendance' => $fresh,
             'cleaning_proof' => CleaningProof::status($fresh),

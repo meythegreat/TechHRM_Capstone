@@ -98,12 +98,16 @@ const InstallAppPrompt = () => {
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))] print:hidden">
       <section
         aria-label="Install WoSPIS"
-        className="pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_12px_40px_rgba(15,23,42,0.16)]"
+        className="pointer-events-auto relative flex w-full max-w-md items-center gap-3 overflow-hidden rounded-[1.5rem] border border-slate-800 bg-slate-950 p-3.5 text-white shadow-2xl shadow-slate-950/35"
       >
-        <img src="/icons/icon-192.png" alt="" className="h-10 w-10 shrink-0 rounded-xl" />
-        <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold text-slate-900">Install WoSPIS</h2>
-          <p className="text-xs font-medium leading-relaxed text-slate-600">
+        <div
+          className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-blue-600/25 blur-2xl"
+          aria-hidden="true"
+        />
+        <img src="/icons/icon-192.png" alt="" className="relative z-10 h-10 w-10 shrink-0 rounded-xl ring-1 ring-white/15" />
+        <div className="relative z-10 min-w-0 flex-1">
+          <h2 className="text-sm font-black tracking-tight text-white">Install WoSPIS</h2>
+          <p className="mt-0.5 text-xs font-medium leading-relaxed text-slate-300">
             {mode === 'ios' && (isIosSafari()
               ? 'Tap Share, then Add to Home Screen. It opens as its own app.'
               : 'Open this page in Safari, tap Share, then Add to Home Screen.')}
@@ -116,16 +120,16 @@ const InstallAppPrompt = () => {
             type="button"
             onClick={install}
             disabled={installing}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white disabled:opacity-60"
+            className="relative z-10 inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-extrabold uppercase tracking-wider text-white shadow-sm shadow-blue-600/30 transition hover:bg-blue-500 disabled:opacity-60"
           >
-            <Download className="h-4 w-4" />
+            <Download className="h-3.5 w-3.5" />
             {installing ? 'Installing…' : 'Install'}
           </button>
         )}
         <button
           type="button"
           onClick={dismiss}
-          className="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          className="relative z-10 shrink-0 rounded-xl border border-white/10 bg-white/5 p-1.5 text-slate-300 transition hover:bg-white/15 hover:text-white"
           aria-label="Dismiss install prompt"
         >
           <X className="h-4 w-4" />

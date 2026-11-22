@@ -3,6 +3,7 @@ export const STUDENT_PATHS = new Set([
   'dashboard',
   'attendance',
   'janitorial-code',
+  'janitorial-approval',
   'year-activities',
   'campus-activities',
   'hours',
@@ -31,6 +32,9 @@ export const STAFF_BASE_PATHS = new Set([
 export const STAFF_ADMIN_PATHS = new Set(['logs', 'users', 'analytics', 'financial', 'offices']);
 
 export function getStaffPathsForRole(role: string): Set<string> {
+  if (role === 'Immediate Supervisor') {
+    return new Set(['dashboard', 'messages', 'help', 'settings']);
+  }
   const paths = new Set(STAFF_BASE_PATHS);
   if (role === 'Super Admin' || role === 'WSPO Staff') {
     STAFF_ADMIN_PATHS.forEach((p) => paths.add(p));

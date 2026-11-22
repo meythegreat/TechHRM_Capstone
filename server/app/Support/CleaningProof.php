@@ -27,8 +27,21 @@ class CleaningProof
     /**
      * Shifts that require before + after evidence before hours can clear.
      */
+    public static function isSupervision(Attendance $attendance): bool
+    {
+        if ((bool) ($attendance->janitorial_supervision ?? false)) {
+            return true;
+        }
+
+        return strcasecmp((string) ($attendance->work_type ?? ''), 'Janitorial Supervision') === 0;
+    }
+
     public static function requiredFor(Attendance $attendance): bool
     {
+        if (self::isSupervision($attendance)) {
+            return false;
+        }
+
         if (self::isJanitorialAttendance($attendance)) {
             return true;
         }

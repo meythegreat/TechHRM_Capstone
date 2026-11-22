@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { motion } from 'framer-motion';
+import { Crop, X, ZoomIn } from 'lucide-react';
 import { bindPopup } from '../utils/popupDismiss';
 
 interface AvatarCropDialogProps {
@@ -168,18 +170,48 @@ export default function AvatarCropDialog({ imageUrl, onCancel, onConfirm }: Avat
     };
 
     return createPortal(
-        <div className="fixed inset-0 z-[90] bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-3 sm:p-4" {...bindPopup(onCancel)}>
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[calc(100dvh-1.5rem)] overflow-y-auto border border-slate-200">
-                <div className="px-5 sm:px-6 pt-6 pb-2">
-                    <h3 className="text-xl font-semibold text-slate-900">Crop profile picture</h3>
-                    <p className="text-sm font-medium text-slate-500 mt-1">Drag the photo to move it inside the circle. Pinch or use the slider to zoom.</p>
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/75 p-3 backdrop-blur-sm sm:items-center sm:p-4"
+            {...bindPopup(onCancel)}
+        >
+            <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 16 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                className="max-h-[calc(100dvh-1.5rem)] w-full max-w-md overflow-y-auto rounded-[2rem] border border-slate-200 bg-white shadow-2xl"
+                onClick={(event) => event.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+            >
+                <div className="flex items-center justify-between gap-3 bg-slate-950 px-6 py-4 text-white">
+                    <div className="flex items-center gap-2.5">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/20 text-blue-300 ring-1 ring-blue-400/30">
+                            <Crop className="h-4 w-4" />
+                        </span>
+                        <div>
+                            <h3 className="text-base font-black tracking-tight text-white">Crop Profile Picture</h3>
+                            <p className="text-[11px] font-medium text-slate-400">Drag to position · Pinch or slide to zoom</p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        disabled={saving}
+                        className="rounded-xl border border-white/10 bg-white/5 p-2 text-slate-300 transition hover:bg-white/15 hover:text-white disabled:opacity-50"
+                        aria-label="Close"
+                    >
+                        <X className="h-4 w-4" />
+                    </button>
                 </div>
-                <div className="px-5 sm:px-6 py-5 flex flex-col items-center gap-5">
+
+                <div className="flex flex-col items-center gap-5 px-5 py-6 sm:px-6">
                     <canvas
                         ref={canvasRef}
                         width={VIEW}
                         height={VIEW}
-                        className="w-[min(18rem,calc(100vw-3.5rem))] h-auto aspect-square rounded-2xl cursor-grab active:cursor-grabbing touch-none bg-slate-200 shadow-inner"
+                        className="aspect-square h-auto w-[min(18rem,calc(100vw-3.5rem))] cursor-grab touch-none rounded-2xl border border-slate-200 bg-slate-200 shadow-inner active:cursor-grabbing"
                         onPointerDown={(event) => {
                             event.preventDefault();
                             event.currentTarget.setPointerCapture(event.pointerId);
@@ -225,8 +257,13 @@ export default function AvatarCropDialog({ imageUrl, onCancel, onConfirm }: Avat
                             dragRef.current = null;
                         }}
                     />
-                    <label className="w-full">
-                        <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Zoom</span>
+                    <label className="w-full rounded-2xl border border-slate-200/80 bg-slate-50/80 px-4 py-3">
+                        <span className="mb-1.5 flex items-center justify-between text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                            <span className="inline-flex items-center gap-1">
+                                <ZoomIn className="h-3.5 w-3.5 text-blue-500" /> Zoom
+                            </span>
+                            <span className="font-mono text-slate-600">{Math.round(zoom * 100)}%</span>
+                        </span>
                         <input
                             type="range"
                             min={1}
@@ -234,20 +271,30 @@ export default function AvatarCropDialog({ imageUrl, onCancel, onConfirm }: Avat
                             step={0.01}
                             value={zoom}
                             onChange={(event) => applyZoom(Number(event.target.value))}
-                            className="w-full h-11 accent-blue-600"
+                            className="h-9 w-full accent-blue-600"
                         />
                     </label>
                 </div>
-                <div className="px-5 sm:px-6 pb-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
-                    <button type="button" onClick={onCancel} disabled={saving} className="min-h-11 px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors">
+                <div className="flex flex-col-reverse gap-2.5 border-t border-slate-100 bg-slate-50/50 px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        disabled={saving}
+                        className="min-h-11 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                    >
                         Cancel
                     </button>
-                    <button type="button" onClick={confirmCrop} disabled={!ready || saving} className="min-h-11 px-6 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-lg shadow-blue-600/25 disabled:opacity-50">
-                        {saving ? 'Preparing...' : 'Use photo'}
+                    <button
+                        type="button"
+                        onClick={confirmCrop}
+                        disabled={!ready || saving}
+                        className="min-h-11 rounded-xl bg-slate-900 px-6 py-2.5 text-xs font-extrabold uppercase tracking-wider text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-50"
+                    >
+                        {saving ? 'Preparing…' : 'Use Photo'}
                     </button>
                 </div>
-            </div>
-        </div>,
+            </motion.div>
+        </motion.div>,
         document.body,
     );
 }

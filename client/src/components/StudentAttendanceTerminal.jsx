@@ -3,20 +3,24 @@ import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { Html5Qrcode } from 'html5-qrcode';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-    Clock, 
-    KeyRound, 
-    History, 
-    CheckCircle2, 
-    LogIn, 
-    LogOut, 
-    ShieldCheck, 
+import {
+    Clock,
+    KeyRound,
+    History,
+    CheckCircle2,
+    LogIn,
+    LogOut,
+    ShieldCheck,
     Timer,
     Activity,
     CalendarRange,
     Eye,
     X,
-    QrCode
+    QrCode,
+    Building2,
+    Camera,
+    Sparkles,
+    AlertTriangle,
 } from 'lucide-react';
 import {
     fetchWorkHourSummary,
@@ -24,8 +28,11 @@ import {
     submitSecureClockOut,
 } from '../services/advancedAttendanceService';
 import TimesheetPrintView from './TimesheetPrintView';
+import { formatScheduleRange } from '../utils/scheduleTime';
 import ManualAttendanceRequestForm from './ManualAttendanceRequestForm';
+import ClassClockInRequestForm from './ClassClockInRequestForm';
 import CleaningProofCapture from './CleaningProofCapture';
+import { HelpDisclosure } from './HelpDisclosure';
 import { janitorialGroupService } from '../services/janitorialGroupService';
 import Toast from './Toast';
 import { playAccessAcceptedSound, playAccessRejectedSound } from '../sounds';
@@ -100,7 +107,7 @@ const StudentAttendanceTerminal = () => {
         target_hours: 80,
         history: [],
     });
-    
+
     const [tokenInput, setTokenInput] = useState('');
     const [checkInMethod, setCheckInMethod] = useState('passcode');
     const scanBusy = useRef(false);
@@ -123,7 +130,7 @@ const StudentAttendanceTerminal = () => {
     const [errorMsg, setErrorMsg] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    
+
     const assignedDepartment = localStorage.getItem('assigned_office') || 'Unassigned';
     const [dtrMonth, setDtrMonth] = useState(currentYearMonth());
     const { start: dtrStart, end: dtrEnd } = monthBounds(dtrMonth);
@@ -141,24 +148,14 @@ const StudentAttendanceTerminal = () => {
         duty_type: '',
         supervisors: [],
     });
-    
-    // Real-time clock state
+
     const [currentTime, setCurrentTime] = useState(new Date());
 
     const formatHours = (value) => Number(value || 0).toFixed(2);
-    const formatShiftTime = (value) => {
-        const parsed = new Date(`2000-01-01T${String(value || '').trim()}`);
-        if (Number.isNaN(parsed.getTime())) {
-            const fallback = new Date(`2000-01-01 ${String(value || '').trim()}`);
-            return Number.isNaN(fallback.getTime()) ? String(value || '').trim() : fallback.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-        }
-        return parsed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    };
-    const todayShifts = workSchedules.filter((shift) => shift.kind !== 'class' && shift.day === currentTime.toLocaleDateString('en-US', { weekday: 'long' }));
-    const todayShiftLabel = todayShifts.map((shift) => {
-        const [start, end] = String(shift.time || '').split(/\s*-\s*/);
-        return `${formatShiftTime(start)} – ${formatShiftTime(end)}`;
-    }).join(', ');
+    const todayShifts = workSchedules.filter(
+        (shift) => shift.kind !== 'class' && shift.day === currentTime.toLocaleDateString('en-US', { weekday: 'long' })
+    );
+    const todayShiftLabel = todayShifts.map((shift) => formatScheduleRange(shift.time)).join(', ');
 
     const logLabel = (log) => {
         const raw = String(log.work_type || log.attendance_type || 'Regular').trim();
@@ -191,7 +188,6 @@ const StudentAttendanceTerminal = () => {
     };
 
     useEffect(() => {
-        // Update clock every second
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
@@ -202,7 +198,9 @@ const StudentAttendanceTerminal = () => {
         Promise.all([axios.get('/api/user'), janitorialGroupService.list()])
             .then(([userRes, groups]) => {
                 const userId = Number(userRes.data?.id);
-                const mine = (groups || []).filter((group) => (group.members || []).some((member) => member.id === userId));
+                const mine = (groups || []).filter((group) =>
+                    (group.members || []).some((member) => member.id === userId)
+                );
                 setJanitorialGroups(mine);
                 if (mine.length === 1) setJanitorialGroupId(String(mine[0].id));
             })
@@ -210,15 +208,14 @@ const StudentAttendanceTerminal = () => {
         axios.get('/api/my-schedule')
             .then((response) => setWorkSchedules(Array.isArray(response.data) ? response.data : []))
             .catch(() => setWorkSchedules([]));
-        
-        // BULLETPROOF LOCAL STORAGE CHECK
+
         try {
             const localShift = localStorage.getItem('active_shift_segment');
             if (localShift && localShift !== 'undefined' && localShift !== 'null') {
                 setActiveShift(JSON.parse(localShift));
             }
         } catch (e) {
-            console.warn("Cleared corrupted active shift data.");
+            console.warn('Cleared corrupted active shift data.');
             localStorage.removeItem('active_shift_segment');
         }
     }, []);
@@ -257,9 +254,13 @@ const StudentAttendanceTerminal = () => {
         try {
             const res = await submitSecureClockIn(code, method);
             playAccessAcceptedSound();
-            setSuccessMsg(res.data?.activity
-                ? res.data.message
-                : (method === 'qr' ? 'QR check-in accepted. Your shift has started.' : 'Shift started successfully! Work hard and stay safe.'));
+            setSuccessMsg(
+                res.data?.activity
+                    ? res.data.message
+                    : method === 'qr'
+                      ? 'QR check-in accepted. Your shift has started.'
+                      : 'Shift started successfully! Work hard and stay safe.'
+            );
             setTokenInput('');
             await loadSummary();
             await loadDtr();
@@ -270,6 +271,9 @@ const StudentAttendanceTerminal = () => {
             scanBusy.current = false;
             playAccessRejectedSound();
             setErrorMsg(err.response?.data?.message || 'Failed to verify token and clock in.');
+            if (err.response?.data?.requires_class_hours_approval) {
+                document.getElementById('class-clock-in')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
         } finally {
             setIsLoading(false);
         }
@@ -289,11 +293,12 @@ const StudentAttendanceTerminal = () => {
         try {
             const res = await submitSecureClockOut(activeShift.id, code, method, options);
             playAccessAcceptedSound();
-            const fallback = method === 'qr'
-                ? 'QR clock-out accepted. Your shift has ended.'
-                : (options.auto_clock_out
-                    ? 'Auto clock-out saved at your scheduled end time.'
-                    : 'Shift ended successfully! Great job today.');
+            const fallback =
+                method === 'qr'
+                    ? 'QR clock-out accepted. Your shift has ended.'
+                    : options.auto_clock_out
+                      ? 'Auto clock-out saved at your scheduled end time.'
+                      : 'Shift ended successfully! Great job today.';
             setSuccessMsg(res.data?.message || fallback);
             setTokenInput('');
             await loadSummary();
@@ -433,7 +438,7 @@ const StudentAttendanceTerminal = () => {
                 const codes = await detector.detect(video);
                 return codes?.[0]?.rawValue || '';
             } catch {
-                // This phone's detector cannot read the live video. Fall through.
+                // Fall through to canvas decoder.
             }
         }
         if (!video.videoWidth || !video.videoHeight) return '';
@@ -469,49 +474,54 @@ const StudentAttendanceTerminal = () => {
         stopCamera();
         setCameraStarting(true);
         setErrorMsg('');
-        // Ask for the camera in this tap. A second request, or one made after a delay,
-        // is blocked in the installed app because the tap is no longer active.
-        const pending = navigator.mediaDevices.getUserMedia({
-            audio: false,
-            video: { facingMode: { ideal: 'environment' } },
-        }).catch(() => navigator.mediaDevices.getUserMedia({ audio: false, video: true }));
 
-        pending.then((stream) => {
-            streamRef.current = stream;
-            video.srcObject = stream;
-            video.muted = true;
-            video.setAttribute('playsinline', 'true');
-            video.setAttribute('webkit-playsinline', 'true');
-            return Promise.resolve(video.play()).catch(() => {});
-        }).then(() => {
-            setCameraLive(true);
-            const scan = () => {
-                scanTimerRef.current = window.setTimeout(async () => {
-                    if (!streamRef.current) return;
-                    try {
-                        const raw = await readQrFrame(video);
-                        if (raw) acceptScan(raw);
-                        else if (repeatGuard.current.code) {
-                            repeatGuard.current.quietFrames += 1;
-                            if (repeatGuard.current.quietFrames >= 4) {
-                                repeatGuard.current = { code: '', quietFrames: 0 };
+        const pending = navigator.mediaDevices
+            .getUserMedia({
+                audio: false,
+                video: { facingMode: { ideal: 'environment' } },
+            })
+            .catch(() => navigator.mediaDevices.getUserMedia({ audio: false, video: true }));
+
+        pending
+            .then((stream) => {
+                streamRef.current = stream;
+                video.srcObject = stream;
+                video.muted = true;
+                video.setAttribute('playsinline', 'true');
+                video.setAttribute('webkit-playsinline', 'true');
+                return Promise.resolve(video.play()).catch(() => {});
+            })
+            .then(() => {
+                setCameraLive(true);
+                const scan = () => {
+                    scanTimerRef.current = window.setTimeout(async () => {
+                        if (!streamRef.current) return;
+                        try {
+                            const raw = await readQrFrame(video);
+                            if (raw) acceptScan(raw);
+                            else if (repeatGuard.current.code) {
+                                repeatGuard.current.quietFrames += 1;
+                                if (repeatGuard.current.quietFrames >= 4) {
+                                    repeatGuard.current = { code: '', quietFrames: 0 };
+                                }
                             }
+                        } catch {
+                            // Ignore single missed frame.
                         }
-                    } catch {
-                        // One missed frame should not turn the camera off.
-                    }
-                    if (streamRef.current) scan();
-                }, 280);
-            };
-            scan();
-        }).catch((err) => {
-            console.error('QR scanner failed', err);
-            stopCamera();
-            setCameraLive(false);
-            setErrorMsg(cameraErrorMessage(err));
-        }).finally(() => {
-            setCameraStarting(false);
-        });
+                        if (streamRef.current) scan();
+                    }, 280);
+                };
+                scan();
+            })
+            .catch((err) => {
+                console.error('QR scanner failed', err);
+                stopCamera();
+                setCameraLive(false);
+                setErrorMsg(cameraErrorMessage(err));
+            })
+            .finally(() => {
+                setCameraStarting(false);
+            });
     };
 
     const loadProfile = async () => {
@@ -538,8 +548,14 @@ const StudentAttendanceTerminal = () => {
                 params: { start: dtrStart, end: dtrEnd },
             });
             const payload = response.data;
-            const rows = Array.isArray(payload) ? payload : (payload.history ?? []);
-            setDtrHistory(rows.filter((log) => !log.rendered_hour_event_id && !/meeting/i.test(`${log.work_type || ''} ${log.attendance_type || ''}`)));
+            const rows = Array.isArray(payload) ? payload : payload.history ?? [];
+            setDtrHistory(
+                rows.filter(
+                    (log) =>
+                        !log.rendered_hour_event_id &&
+                        !/meeting/i.test(`${log.work_type || ''} ${log.attendance_type || ''}`)
+                )
+            );
             setDtrPenaltyHours(Number(payload?.duty_deduction_hours || 0));
         } catch (err) {
             console.error('Failed to load DTR', err);
@@ -557,514 +573,541 @@ const StudentAttendanceTerminal = () => {
 
     const hoursFor = (log) => Number(log.computed_hours || log.rendered_hours || 0);
     const dtrTotalHours = dtrHistory.reduce((sum, log) => sum + hoursFor(log), 0);
+    const progressPct = summary.target_hours > 0
+        ? Math.min(((summary.total_rendered || 0) / summary.target_hours) * 100, 100)
+        : 0;
 
-    // ANIMATION VARIANTS
     const containerVariants = {
         hidden: { opacity: 0 },
-        show: { opacity: 1, transition: { staggerChildren: 0.1 } }
+        show: { opacity: 1, transition: { staggerChildren: 0.08 } },
     };
 
     const itemVariants = {
-        hidden: { opacity: 0, y: 20 },
-        show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } }
+        hidden: { opacity: 0, y: 16 },
+        show: { opacity: 1, y: 0, transition: { duration: 0.38, ease: [0.22, 1, 0.36, 1] } },
     };
 
     return (
         <>
-        <div id="student-qr-file-decoder" className="hidden" aria-hidden="true" />
-        <div className="max-w-5xl mx-auto space-y-8 font-sans">
-            
-            {/* Header with Live Clock */}
-            <motion.div 
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
-            >
+            <div id="student-qr-file-decoder" className="hidden" aria-hidden="true" />
+            <div className="mx-auto max-w-6xl space-y-6 font-sans">
+                {/* OBSIDIAN SECURE TERMINAL HERO + LIVE CLOCK */}
+                <motion.header
+                    initial={{ opacity: 0, y: -14 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                    className="relative overflow-hidden rounded-[2rem] border border-slate-800 bg-slate-950 p-6 text-white shadow-2xl shadow-slate-900/20 sm:p-8"
+                >
+                    <div
+                        className="pointer-events-none absolute inset-0 opacity-20"
+                        style={{
+                            backgroundImage: 'radial-gradient(rgba(148,163,184,0.4) 1px, transparent 1px)',
+                            backgroundSize: '20px 20px',
+                        }}
+                        aria-hidden="true"
+                    />
+                    <div
+                        className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-blue-600/25 blur-3xl"
+                        aria-hidden="true"
+                    />
+                    <div
+                        className="pointer-events-none absolute -bottom-24 left-1/4 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl"
+                        aria-hidden="true"
+                    />
 
-                <div className="relative z-10">
-                    <div className="flex items-center gap-2 mb-2">
-                        <ShieldCheck className="w-5 h-5 text-blue-400" />
-                        <span className="text-sm font-medium text-slate-500">Secure Terminal</span>
-                    </div>
-                    <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-                        Attendance Entry
-                    </h1>
-                    <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
-                        Use your department supervisor&apos;s passcode or QR code to clock in and clock out.
-                    </p>
-                    <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">
-                        Your department: <span className="font-semibold text-slate-900">{assignedDepartment}</span>
-                    </p>
-                </div>
-
-                <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex flex-col items-center sm:items-end text-right">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Current System Time</span>
-                    <div className="text-3xl font-semibold tabular-nums text-slate-900 font-mono tracking-tight flex items-center gap-2">
-                        <Clock className="w-6 h-6 text-blue-400" />
-                        {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                    </div>
-                    <span className="text-sm text-slate-500 mt-1">
-                        {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-                    </span>
-                </div>
-            </motion.div>
-
-            <Toast
-                message={errorMsg || successMsg || null}
-                type={errorMsg ? 'error' : 'success'}
-                onClose={() => {
-                    setErrorMsg('');
-                    setSuccessMsg('');
-                }}
-            />
-
-            <ManualAttendanceRequestForm
-                onToast={(message, type) => {
-                    if (type === 'error') {
-                        setSuccessMsg('');
-                        setErrorMsg(message);
-                    } else {
-                        setErrorMsg('');
-                        setSuccessMsg(message);
-                    }
-                }}
-            />
-
-            <motion.div 
-                variants={containerVariants}
-                initial="hidden"
-                animate="show"
-                className="grid grid-cols-1 lg:grid-cols-3 gap-8"
-            >
-                {/* --- LEFT COLUMN: ACTION TERMINAL --- */}
-                <motion.div variants={itemVariants} className="lg:col-span-1 space-y-6">
-                    {openActivity && (
-                        <div className="bg-emerald-50 rounded-2xl border border-emerald-200 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-8">
-                            <div className="flex flex-col items-center text-center">
-                                <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 mb-4">
-                                    <Timer className="w-8 h-8" />
-                                </div>
-                                <h2 className="text-2xl font-semibold text-emerald-900">Activity in progress</h2>
-                                <p className="text-sm font-bold text-emerald-700 mt-1 uppercase tracking-wider">
-                                    {openActivity.work_type || openActivity.attendance_type || 'Activity'}
-                                </p>
-                                <p className="mt-3 text-sm font-medium text-emerald-800">
-                                    Time out the same way you clocked in, any time after you clock in. The activity hours are added only when you time out.
-                                </p>
-                                <div className="mt-6 w-full p-4 bg-white/60 rounded-2xl border border-emerald-100">
-                                    <p className="text-xs font-bold text-emerald-600 uppercase mb-1">Time In</p>
-                                    <p className="text-xl font-semibold text-emerald-900 font-mono">
-                                        {openActivity.time_in ? new Date(openActivity.time_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
-                                    </p>
-                                </div>
-                                {activityNeedsProof && (
-                                    <CleaningProofCapture
-                                        attendanceId={openActivity.id}
-                                        beforePath={openActivity.cleaning_before_path}
-                                        afterPath={openActivity.cleaning_after_path}
-                                        insecureCamera={insecureCamera}
-                                        onUpdated={(payload) => {
-                                            setOpenActivity((prev) => applyCleaningProofUpdate(prev, payload));
-                                        }}
-                                    />
+                    <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2.5">
+                                <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-400/25 bg-blue-500/15 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-blue-300">
+                                    <ShieldCheck className="h-3.5 w-3.5 text-blue-400" />
+                                    Secure Terminal
+                                </span>
+                                {activeShift && (
+                                    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/15 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-emerald-300">
+                                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+                                        Shift Active
+                                    </span>
                                 )}
-                                <form onSubmit={handleActivityTimeOut} className="w-full mt-6 space-y-4 text-left">
-                                    <div>
-                                        <label className="block text-xs font-bold text-emerald-800 uppercase tracking-wider mb-2">Time-out method</label>
-                                        <div className="grid grid-cols-2 gap-2 p-1 bg-white/70 rounded-xl">
-                                            <button
-                                                type="button"
-                                                onClick={() => setActivityMethod('passcode')}
-                                                className={`py-2.5 rounded-lg text-sm font-bold transition-all ${activityMethod === 'passcode' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
-                                            >
-                                                Passcode
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setActivityMethod('qr')}
-                                                disabled={!activityProofReady}
-                                                className={`py-2.5 rounded-lg text-sm font-bold transition-all ${activityMethod === 'qr' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'} disabled:opacity-50`}
-                                            >
-                                                Scan QR
-                                            </button>
-                                        </div>
-                                    </div>
-                                    {!activityProofReady && (
-                                        <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">
-                                            Capture before and after cleaning photos before you can time out.
-                                        </p>
-                                    )}
-                                    {activityMethod === 'passcode' ? (
-                                        <>
-                                            <div>
-                                                <label className="block text-xs font-bold text-emerald-800 uppercase tracking-wider mb-2">Verification Token</label>
-                                                <div className="relative">
-                                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                                        <KeyRound className="h-5 w-5 text-slate-400" />
-                                                    </div>
-                                                    <input
-                                                        type="text"
-                                                        required
-                                                        value={activityToken}
-                                                        onChange={(e) => setActivityToken(e.target.value.toUpperCase())}
-                                                        placeholder="Enter activity token..."
-                                                        disabled={!activityProofReady}
-                                                        className="block w-full pl-11 pr-4 py-3 bg-white border border-emerald-100 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-red-500 outline-none transition-all placeholder:text-slate-400 placeholder:font-medium uppercase tracking-widest disabled:opacity-50"
-                                                    />
-                                                </div>
-                                                <p className="mt-2 text-xs font-medium text-emerald-800">
-                                                    The passcode changes every 30 seconds. Use the one currently on the activity screen.
-                                                </p>
-                                            </div>
-                                            <button
-                                                type="submit"
-                                                disabled={isLoading || !activityToken || !activityProofReady}
-                                                className="w-full py-4 bg-linear-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold rounded-xl shadow-lg shadow-red-500/25 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                            >
-                                                {isLoading ? (
-                                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                                ) : (
-                                                    <>
-                                                        <LogOut className="w-5 h-5" />
-                                                        Time out
-                                                    </>
-                                                )}
-                                            </button>
-                                        </>
-                                    ) : (
-                                        <div className="space-y-3">
-                                            {insecureCamera && (
-                                                <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">
-                                                    This page is open over http, so the phone will not ask for the camera. Open https://{window.location.host}, accept the certificate warning, then turn the camera on.
-                                                </p>
-                                            )}
-                                            {!cameraLive && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => startCamera('student-activity-qr-reader')}
-                                                    disabled={cameraStarting}
-                                                    className="w-full py-3.5 bg-slate-900 hover:bg-red-600 text-white font-bold rounded-xl transition-all disabled:opacity-50"
-                                                >
-                                                    {cameraStarting ? 'Asking for the camera…' : 'Turn on camera'}
-                                                </button>
-                                            )}
-                                            <div id="student-activity-qr-reader" className="overflow-hidden rounded-2xl border border-emerald-100 bg-slate-900">
-                                                <video data-qr-video playsInline muted autoPlay className="block h-[240px] w-full object-cover" />
-                                            </div>
-                                            <p className="text-xs font-medium text-emerald-800 text-center flex items-center justify-center gap-1.5">
-                                                <QrCode className="w-3.5 h-3.5" />
-                                                Scan the live activity QR to time out. Hours are added only after this scan.
-                                            </p>
-                                        </div>
-                                    )}
-                                </form>
+                            </div>
+
+                            <h1 className="mt-3.5 text-3xl font-black tracking-tight text-white sm:text-4xl">
+                                Attendance Entry
+                            </h1>
+                            <p className="mt-2 max-w-xl text-sm font-medium leading-relaxed text-slate-300">
+                                Use your department supervisor&apos;s rotating passcode or QR code to clock in and clock out.
+                            </p>
+
+                            <div className="mt-4 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2 text-xs backdrop-blur-md">
+                                <Building2 className="h-4 w-4 text-blue-400" />
+                                <span className="text-slate-400">Assigned Department:</span>
+                                <span className="font-bold text-white">{assignedDepartment}</span>
                             </div>
                         </div>
-                    )}
-                    {janitorialGroups.length > 0 && (
-                        <div className="mb-4 space-y-2">
-                            {janitorialGroups.map((group) => {
-                                const present = group.leader_present !== false;
-                                return (
-                                    <div key={group.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                                        <div className="flex items-start justify-between gap-3">
-                                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Janitorial assignment</p>
-                                            <span className={`inline-flex shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${present ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
-                                                {present ? 'Supervisor present' : 'Supervisor absent'}
-                                            </span>
-                                        </div>
-                                        <p className="mt-2 text-sm font-semibold text-slate-900">Area: {group.area || '—'}</p>
-                                        <p className="mt-1 text-sm text-slate-600">Janitorial supervisor: {group.supervisor?.name || '—'}</p>
-                                    </div>
-                                );
-                            })}
+
+                        {/* Frosted Digital Clock Widget */}
+                        <div className="shrink-0 rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-4 backdrop-blur-xl sm:min-w-[270px]">
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                                    Current System Time
+                                </span>
+                                <span className="h-2 w-2 animate-pulse rounded-full bg-blue-400" />
+                            </div>
+                            <div className="mt-2 flex items-center gap-2.5 font-mono text-3xl font-black tracking-tight tabular-nums text-white sm:text-4xl">
+                                <Clock className="h-6 w-6 shrink-0 text-blue-400" />
+                                <span>
+                                    {currentTime.toLocaleTimeString('en-US', {
+                                        hour: 'numeric',
+                                        minute: '2-digit',
+                                        second: '2-digit',
+                                        hour12: true,
+                                    })}
+                                </span>
+                            </div>
+                            <p className="mt-1.5 text-xs font-semibold text-slate-300">
+                                {currentTime.toLocaleDateString('en-US', {
+                                    weekday: 'long',
+                                    month: 'long',
+                                    day: 'numeric',
+                                })}
+                            </p>
                         </div>
-                    )}
-                    <AnimatePresence mode="wait">
-                        {!activeShift ? (
-                            /* CLOCK IN FORM */
-                            <motion.div 
-                                key="clock-in"
-                                initial={{ opacity: 0, x: -20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: -20, transition: { duration: 0.2 } }}
-                                className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-8 relative overflow-hidden"
-                            >
-                                <div className="flex items-center gap-3 mb-6">
-                                    <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
-                                        <LogIn className="w-5 h-5" />
+                    </div>
+                </motion.header>
+
+                <Toast
+                    message={errorMsg || successMsg || null}
+                    type={errorMsg ? 'error' : 'success'}
+                    onClose={() => {
+                        setErrorMsg('');
+                        setSuccessMsg('');
+                    }}
+                />
+
+                <ClassClockInRequestForm
+                    clockedIn={Boolean(activeShift)}
+                    onClockedIn={() => {
+                        loadSummary();
+                        loadDtr();
+                    }}
+                    onToast={(message, type) => {
+                        if (type === 'error') {
+                            setSuccessMsg('');
+                            setErrorMsg(message);
+                        } else {
+                            setErrorMsg('');
+                            setSuccessMsg(message);
+                        }
+                    }}
+                />
+
+                <ManualAttendanceRequestForm
+                    onToast={(message, type) => {
+                        if (type === 'error') {
+                            setSuccessMsg('');
+                            setErrorMsg(message);
+                        } else {
+                            setErrorMsg('');
+                            setSuccessMsg(message);
+                        }
+                    }}
+                />
+
+                {/* MAIN WORKSPACE BENTO */}
+                <motion.div
+                    variants={containerVariants}
+                    initial="hidden"
+                    animate="show"
+                    className="grid grid-cols-1 gap-6 lg:grid-cols-12"
+                >
+                    {/* LEFT COLUMN (5 COLS): ACTION TERMINAL */}
+                    <motion.div variants={itemVariants} className="space-y-5 lg:col-span-5">
+                        {openActivity && (
+                            <div className="relative overflow-hidden rounded-[1.75rem] border border-emerald-200 bg-gradient-to-br from-emerald-50 via-emerald-50/70 to-teal-50/60 p-6 shadow-sm">
+                                <div className="flex flex-col items-center text-center">
+                                    <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/25">
+                                        <Timer className="h-7 w-7 animate-pulse" />
                                     </div>
-                                    <h2 className="text-xl font-semibold text-slate-900">Start Shift</h2>
-                                </div>
-
-                                {janitorialGroups.length > 0 && (
-                                    <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 space-y-3">
-                                        <div>
-                                            <h3 className="text-sm font-semibold text-slate-900">Janitorial duty</h3>
-                                            <p className="mt-1 text-xs text-slate-600">
-                                                When your leader is present, a photo starts and ends the duty. A supervisor code is the second choice, and only while that leader is showing one.
-                                            </p>
-                                        </div>
-                                        {janitorialGroups.length > 1 && (
-                                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                                                Group
-                                                <select
-                                                    value={janitorialGroupId}
-                                                    onChange={(event) => setJanitorialGroupId(event.target.value)}
-                                                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-bold normal-case tracking-normal text-slate-800"
-                                                >
-                                                    {janitorialGroups.map((group) => (
-                                                        <option key={group.id} value={group.id}>
-                                                            {group.area}{group.name && group.name !== group.area ? ` · ${group.name}` : ''}
-                                                            {group.leader_present === false ? ' · leader absent' : ''}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </label>
-                                        )}
-                                        {(janitorialGroups.find((group) => String(group.id) === String(janitorialGroupId)) || janitorialGroups[0])?.leader_present === false ? (
-                                            <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
-                                                <p className="text-sm font-semibold text-slate-800">Your janitorial leader is marked absent.</p>
-                                                <p className="text-xs text-slate-600">
-                                                    A code cannot be used. Record the duty under Offline attendance: enter the time you started, then capture the before and after photos with the camera. The date and time are stamped on each photo.
-                                                </p>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => document.getElementById('offline-attendance')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                                                    className="text-xs font-bold text-blue-700"
-                                                >
-                                                    Go to offline attendance
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <div className="grid grid-cols-2 gap-2 p-1 bg-white rounded-xl">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setJanitorialClockMode('photo')}
-                                                        className={`py-2.5 rounded-lg text-sm font-bold ${janitorialClockMode === 'photo' ? 'bg-slate-900 text-white' : 'text-slate-500'}`}
-                                                    >
-                                                        Photo
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setJanitorialClockMode('code')}
-                                                        className={`py-2.5 rounded-lg text-sm font-bold ${janitorialClockMode === 'code' ? 'bg-slate-900 text-white' : 'text-slate-500'}`}
-                                                    >
-                                                        Supervisor code
-                                                    </button>
-                                                </div>
-                                                {janitorialClockMode === 'photo' ? (
-                                                    <CleaningProofCapture
-                                                        janitorial
-                                                        groupId={janitorialGroupId || janitorialGroups[0]?.id}
-                                                        insecureCamera={insecureCamera}
-                                                        onUpdated={(payload) => {
-                                                            const next = payload?.attendance;
-                                                            if (!next) return;
-                                                            setActiveShift(next);
-                                                            localStorage.setItem('active_shift_segment', JSON.stringify(next));
-                                                            setSuccessMsg(payload?.message || 'Janitorial clock-in started with your photo.');
-                                                            loadSummary();
-                                                        }}
-                                                    />
-                                                ) : (
-                                                    <p className="text-xs font-medium text-slate-600">
-                                                        Enter or scan the code on your janitorial supervisor&apos;s screen in the regular clock-in form below. You still photograph the area before you can clock out with that same code.
-                                                    </p>
-                                                )}
-                                            </>
-                                        )}
-                                    </div>
-                                )}
-
-                                <p className="mb-5 text-sm font-medium text-slate-600">
-                                    {todayShiftLabel
-                                        ? `Today’s work schedule: ${todayShiftLabel}. You can clock in from 30 minutes before a shift starts until it ends.${todayShifts.length > 1 ? ' Each shift is recorded separately. Clock out of the current shift before you clock in for the next one.' : ''}`
-                                        : 'No work schedule is assigned for today. Clock-in follows the shift set by the WSPO coordinator or secretary.'}
-                                </p>
-
-                                <form onSubmit={handleClockIn} className="space-y-5">
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Check-in method</label>
-                                        <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
-                                            <button
-                                                type="button"
-                                                onClick={() => setCheckInMethod('passcode')}
-                                                className={`py-2.5 rounded-lg text-sm font-bold transition-all ${checkInMethod === 'passcode' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
-                                            >
-                                                Passcode
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setCheckInMethod('qr')}
-                                                className={`py-2.5 rounded-lg text-sm font-bold transition-all ${checkInMethod === 'qr' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
-                                            >
-                                                Scan QR
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {checkInMethod === 'passcode' ? (
-                                        <>
-                                            <div>
-                                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Verification Token</label>
-                                                <div className="relative">
-                                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                                        <KeyRound className="h-5 w-5 text-slate-400" />
-                                                    </div>
-                                                    <input
-                                                        type="text"
-                                                        required
-                                                        value={tokenInput}
-                                                        onChange={(e) => setTokenInput(e.target.value.toUpperCase())}
-                                                        placeholder="Enter supervisor token..."
-                                                        className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all placeholder:text-slate-400 placeholder:font-medium uppercase tracking-widest"
-                                                    />
-                                                </div>
-                                                <p className="mt-2 text-xs font-medium text-slate-500">
-                                                    The passcode changes every 30 seconds. Use the one currently on your supervisor&apos;s screen.
-                                                </p>
-                                            </div>
-
-                                            <motion.button
-                                                whileHover={{ scale: 1.02 }}
-                                                whileTap={{ scale: 0.98 }}
-                                                type="submit"
-                                                disabled={isLoading || !tokenInput}
-                                                className="w-full py-3.5 mt-2 bg-linear-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold rounded-xl shadow-lg shadow-blue-600/25 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                            >
-                                                {isLoading ? (
-                                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                                ) : (
-                                                    <>Clock In Now</>
-                                                )}
-                                            </motion.button>
-                                        </>
-                                    ) : (
-                                        <div className="space-y-3">
-                                            {insecureCamera && (
-                                                <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">
-                                                    This page is open over http, so the phone will not ask for the camera. Open https://{window.location.host}, accept the certificate warning, then turn the camera on.
-                                                </p>
-                                            )}
-                                            {!cameraLive && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => startCamera('student-qr-reader')}
-                                                    disabled={cameraStarting}
-                                                    className="w-full py-3.5 bg-slate-900 hover:bg-blue-600 text-white font-bold rounded-xl transition-all disabled:opacity-50"
-                                                >
-                                                    {cameraStarting ? 'Asking for the camera…' : 'Turn on camera'}
-                                                </button>
-                                            )}
-                                            <div id="student-qr-reader" className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-900">
-                                                <video data-qr-video playsInline muted autoPlay className="block h-[240px] w-full object-cover" />
-                                            </div>
-                                            <p className="text-xs font-medium text-slate-500 text-center flex items-center justify-center gap-1.5">
-                                                <QrCode className="w-3.5 h-3.5" />
-                                                Point the camera at the QR. Daily clock-in starts a shift. Cleaning, devotional, and assembly QR codes clock you in. Time out with that same code. Hours are added only when you time out.
-                                            </p>
-                                            {isLoading && (
-                                                <div className="flex justify-center">
-                                                    <div className="w-5 h-5 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </form>
-                            </motion.div>
-                        ) : (
-                            /* ACTIVE SHIFT DASHBOARD */
-                            <motion.div 
-                                key="active-shift"
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                className="bg-emerald-50 rounded-2xl border border-emerald-200 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-8 relative overflow-hidden"
-                            >
-
-                                <div className="flex flex-col items-center text-center relative z-10">
-                                    <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 mb-4 shadow-inner">
-                                        <Timer className="w-8 h-8 animate-pulse" />
-                                    </div>
-                                    <h2 className="text-2xl font-semibold text-emerald-900">Shift Active</h2>
-                                    <p className="text-sm font-bold text-emerald-700 mt-1 uppercase tracking-wider">
-                                        {activeShift.work_type || 'Regular Duty'}
+                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-0.5 text-[10px] font-extrabold uppercase tracking-widest text-emerald-800">
+                                        Activity In Progress
+                                    </span>
+                                    <h2 className="mt-2 text-xl font-black text-slate-900">
+                                        {openActivity.work_type || openActivity.attendance_type || 'Activity'}
+                                    </h2>
+                                    <p className="mt-2 text-xs font-medium leading-relaxed text-slate-600">
+                                        Time out with the active activity code when finished to credit your hours.
                                     </p>
-                                    
-                                    <div className="mt-6 w-full p-4 bg-white/60 backdrop-blur-sm rounded-2xl border border-emerald-100">
-                                        <p className="text-xs font-bold text-emerald-600 uppercase mb-1">Time In</p>
-                                        <p className="text-xl font-semibold text-emerald-900 font-mono">
-                                            {activeShift.time_in ? new Date(activeShift.time_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+
+                                    <div className="mt-5 w-full rounded-2xl border border-emerald-200/80 bg-white p-4 shadow-xs">
+                                        <p className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-600">
+                                            Time In
                                         </p>
-                                        <p className="mt-2 text-xs font-medium text-emerald-800">
-                                            {photoJanitorialShift
-                                                ? 'Your first photo started this clock-in. Take one last photo of the area to clock out. If your janitorial supervisor accepts it, the entry is recorded as exactly 4 hours from that first photo.'
-                                                : isJanitorialShift
-                                                    ? 'You started with your supervisor\'s code. Photograph the area, then clock out with that same code. If the entry is accepted, it is recorded as exactly 4 hours from clock-in.'
-                                                    : 'You can clock out any time after you clock in. The entry is approved when you clock out.'}
+                                        <p className="mt-1 font-mono text-2xl font-black text-slate-900">
+                                            {openActivity.time_in
+                                                ? new Date(openActivity.time_in).toLocaleTimeString('en-US', {
+                                                      hour: 'numeric',
+                                                      minute: '2-digit',
+                                                      hour12: true,
+                                                  })
+                                                : '--:--'}
                                         </p>
                                     </div>
 
-                                    {needsCleaningProof(activeShift) && (
+                                    {activityNeedsProof && (
                                         <CleaningProofCapture
-                                            janitorial={photoJanitorialShift}
-                                            groupId={activeShift.janitorial_group_id}
-                                            attendanceId={activeShift.id}
-                                            beforePath={activeShift.cleaning_before_path}
-                                            afterPath={activeShift.cleaning_after_path}
+                                            attendanceId={openActivity.id}
+                                            beforePath={openActivity.cleaning_before_path}
+                                            afterPath={openActivity.cleaning_after_path}
                                             insecureCamera={insecureCamera}
                                             onUpdated={(payload) => {
-                                                const next = applyCleaningProofUpdate(activeShift, payload);
-                                                if (photoJanitorialShift && next?.time_out) {
-                                                    setSuccessMsg(payload?.message || 'Janitorial clock-out saved with your photo.');
-                                                    localStorage.removeItem('active_shift_segment');
-                                                    setActiveShift(null);
-                                                    loadSummary();
-                                                    return;
-                                                }
-                                                setActiveShift(next);
-                                                localStorage.setItem('active_shift_segment', JSON.stringify(next));
+                                                setOpenActivity((prev) => applyCleaningProofUpdate(prev, payload));
                                             }}
                                         />
                                     )}
 
-                                    {!photoJanitorialShift && (
-                                    <form onSubmit={handleClockOut} className="w-full mt-6 space-y-4 text-left">
+                                    <form onSubmit={handleActivityTimeOut} className="mt-5 w-full space-y-4 text-left">
                                         <div>
-                                            <label className="block text-xs font-bold text-emerald-800 uppercase tracking-wider mb-2">Clock-out method</label>
-                                            <div className="grid grid-cols-2 gap-2 p-1 bg-white/70 rounded-xl">
+                                            <label className="mb-2 block text-[11px] font-extrabold uppercase tracking-widest text-emerald-800">
+                                                Time-out method
+                                            </label>
+                                            <div className="grid grid-cols-2 gap-1.5 rounded-xl border border-emerald-200/70 bg-white p-1">
                                                 <button
                                                     type="button"
-                                                    onClick={() => setCheckInMethod('passcode')}
-                                                    className={`py-2.5 rounded-lg text-sm font-bold transition-all ${checkInMethod === 'passcode' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+                                                    onClick={() => setActivityMethod('passcode')}
+                                                    className={`rounded-lg py-2 text-xs font-bold transition-all ${
+                                                        activityMethod === 'passcode'
+                                                            ? 'bg-slate-900 text-white shadow-sm'
+                                                            : 'text-slate-500 hover:text-slate-900'
+                                                    }`}
                                                 >
                                                     Passcode
                                                 </button>
                                                 <button
                                                     type="button"
-                                                    onClick={() => setCheckInMethod('qr')}
-                                                    disabled={!janitorialProofReady}
-                                                    className={`py-2.5 rounded-lg text-sm font-bold transition-all ${checkInMethod === 'qr' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'} disabled:opacity-50`}
+                                                    onClick={() => setActivityMethod('qr')}
+                                                    disabled={!activityProofReady}
+                                                    className={`rounded-lg py-2 text-xs font-bold transition-all ${
+                                                        activityMethod === 'qr'
+                                                            ? 'bg-slate-900 text-white shadow-sm'
+                                                            : 'text-slate-500 hover:text-slate-900'
+                                                    } disabled:opacity-50`}
                                                 >
                                                     Scan QR
                                                 </button>
                                             </div>
                                         </div>
 
-                                        {!janitorialProofReady && (
-                                            <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">
-                                                Photograph your surroundings at clock-in, then take one last photo before you can clock out.
+                                        {!activityProofReady && (
+                                            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
+                                                Capture before and after cleaning photos before you can time out.
                                             </p>
                                         )}
+
+                                        {activityMethod === 'passcode' ? (
+                                            <>
+                                                <div>
+                                                    <label className="mb-2 block text-[11px] font-extrabold uppercase tracking-widest text-emerald-800">
+                                                        Verification Token
+                                                    </label>
+                                                    <div className="relative">
+                                                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
+                                                            <KeyRound className="h-4 w-4 text-slate-400" />
+                                                        </div>
+                                                        <input
+                                                            type="text"
+                                                            required
+                                                            value={activityToken}
+                                                            onChange={(e) => setActivityToken(e.target.value.toUpperCase())}
+                                                            placeholder="ENTER ACTIVITY TOKEN"
+                                                            disabled={!activityProofReady}
+                                                            className="block w-full rounded-xl border border-emerald-200 bg-white py-3 pl-10 pr-4 font-mono text-sm font-bold uppercase tracking-widest text-slate-900 outline-none transition-all placeholder:font-sans placeholder:font-medium placeholder:normal-case placeholder:tracking-normal placeholder:text-slate-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 disabled:opacity-50"
+                                                        />
+                                                    </div>
+                                                    <p className="mt-2 text-[11px] font-medium text-emerald-800">
+                                                        Refreshes every 30 seconds on the activity screen.
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    type="submit"
+                                                    disabled={isLoading || !activityToken || !activityProofReady}
+                                                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-500 to-rose-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-red-500/25 transition-all hover:from-red-600 hover:to-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                    {isLoading ? (
+                                                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                                                    ) : (
+                                                        <>
+                                                            <LogOut className="h-4 w-4" />
+                                                            Time Out Activity
+                                                        </>
+                                                    )}
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                {insecureCamera && (
+                                                    <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
+                                                        This page is open over http, so the phone will not ask for the camera. Open https://{window.location.host}, accept the certificate warning, then turn the camera on.
+                                                    </p>
+                                                )}
+                                                {!cameraLive && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => startCamera('student-activity-qr-reader')}
+                                                        disabled={cameraStarting}
+                                                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-3.5 text-sm font-bold text-white transition-all hover:bg-red-600 disabled:opacity-50"
+                                                    >
+                                                        <Camera className="h-4 w-4" />
+                                                        {cameraStarting ? 'Asking for the camera…' : 'Turn on camera'}
+                                                    </button>
+                                                )}
+                                                <div
+                                                    id="student-activity-qr-reader"
+                                                    className="overflow-hidden rounded-2xl border-2 border-emerald-200 bg-slate-950 shadow-inner"
+                                                >
+                                                    <video
+                                                        data-qr-video
+                                                        playsInline
+                                                        muted
+                                                        autoPlay
+                                                        className="block h-[240px] w-full object-cover"
+                                                    />
+                                                </div>
+                                                <p className="flex items-center justify-center gap-1.5 text-center text-xs font-medium text-emerald-800">
+                                                    <QrCode className="h-3.5 w-3.5 shrink-0" />
+                                                    Scan the live activity QR to time out and credit hours.
+                                                </p>
+                                            </div>
+                                        )}
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+
+                        {janitorialGroups.length > 0 && (
+                            <div className="space-y-2.5">
+                                {janitorialGroups.map((group) => {
+                                    const present = group.leader_present !== false;
+                                    return (
+                                        <div
+                                            key={group.id}
+                                            className="rounded-2xl border border-slate-200/90 bg-white px-4 py-3.5 shadow-xs"
+                                        >
+                                            <div className="flex items-start justify-between gap-3">
+                                                <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                                                    Janitorial Assignment
+                                                </p>
+                                                <span
+                                                    className={`inline-flex shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${
+                                                        present
+                                                            ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70'
+                                                            : 'bg-slate-100 text-slate-600'
+                                                    }`}
+                                                >
+                                                    {present ? 'Supervisor present' : 'Supervisor absent'}
+                                                </span>
+                                            </div>
+                                            <p className="mt-2 text-sm font-bold text-slate-900">
+                                                Area: {group.area || '—'}
+                                            </p>
+                                            <p className="mt-0.5 text-xs font-medium text-slate-500">
+                                                Supervisor: {group.supervisor?.name || '—'}
+                                            </p>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        <AnimatePresence mode="wait">
+                            {!activeShift ? (
+                                /* CLOCK IN CARD */
+                                <motion.div
+                                    key="clock-in"
+                                    initial={{ opacity: 0, x: -16 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: -16, transition: { duration: 0.2 } }}
+                                    className="relative overflow-hidden rounded-[1.75rem] border border-slate-200/90 bg-white p-6 shadow-sm sm:p-7"
+                                >
+                                    <div className="mb-5 flex items-center gap-3">
+                                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/20">
+                                            <LogIn className="h-5 w-5" />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-lg font-black tracking-tight text-slate-900">
+                                                Start Shift
+                                            </h2>
+                                            <p className="text-xs font-medium text-slate-500">
+                                                Verify your presence to begin logging hours
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {janitorialGroups.length > 0 && (
+                                        <div className="mb-5 space-y-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
+                                            <div>
+                                                <h3 className="text-xs font-extrabold uppercase tracking-wider text-amber-900">
+                                                    Janitorial Duty
+                                                </h3>
+                                                <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                                                    Clock janitorial duty with live photos, or use a supervisor code when on-site.
+                                                </p>
+                                                <HelpDisclosure
+                                                    variant="inline"
+                                                    title="How janitorial duty works"
+                                                    className="mt-2"
+                                                    items={[
+                                                        'Photo mode starts and ends janitorial duty using live timestamped before and after area photos — no code required.',
+                                                        'Supervisor code is optional and only available while your janitorial leader is physically present showing a code; area photos are still required before clock-out.',
+                                                        'If your leader is marked absent, record the duty under Offline Attendance with your time in and live before/after camera photos.',
+                                                        'Accepted janitorial entries credit up to 4 hours from clock-in after supervisor verification.',
+                                                    ]}
+                                                />
+                                            </div>
+                                            {janitorialGroups.length > 1 && (
+                                                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                                                    Group
+                                                    <select
+                                                        value={janitorialGroupId}
+                                                        onChange={(event) => setJanitorialGroupId(event.target.value)}
+                                                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm font-bold normal-case tracking-normal text-slate-800"
+                                                    >
+                                                        {janitorialGroups.map((group) => (
+                                                            <option key={group.id} value={group.id}>
+                                                                {group.area}
+                                                                {group.name && group.name !== group.area ? ` · ${group.name}` : ''}
+                                                                {group.leader_present === false ? ' · leader absent' : ''}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </label>
+                                            )}
+                                            {(janitorialGroups.find((group) => String(group.id) === String(janitorialGroupId)) ||
+                                                janitorialGroups[0])?.leader_present === false ? (
+                                                <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3.5">
+                                                    <p className="text-xs font-bold text-slate-800">
+                                                        Your janitorial leader is marked absent.
+                                                    </p>
+                                                    <p className="text-xs leading-relaxed text-slate-600">
+                                                        Code entry is unavailable — submit this shift under Offline Attendance with live before/after photos.
+                                                    </p>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            document
+                                                                .getElementById('offline-attendance')
+                                                                ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                                                        }
+                                                        className="text-xs font-extrabold text-blue-700 hover:underline"
+                                                    >
+                                                        Go to offline attendance →
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-white p-1">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setJanitorialClockMode('photo')}
+                                                            className={`rounded-lg py-2 text-xs font-bold transition-all ${
+                                                                janitorialClockMode === 'photo'
+                                                                    ? 'bg-slate-900 text-white'
+                                                                    : 'text-slate-500'
+                                                            }`}
+                                                        >
+                                                            Photo
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setJanitorialClockMode('code')}
+                                                            className={`rounded-lg py-2 text-xs font-bold transition-all ${
+                                                                janitorialClockMode === 'code'
+                                                                    ? 'bg-slate-900 text-white'
+                                                                    : 'text-slate-500'
+                                                            }`}
+                                                        >
+                                                            Supervisor code
+                                                        </button>
+                                                    </div>
+                                                    {janitorialClockMode === 'photo' ? (
+                                                        <CleaningProofCapture
+                                                            janitorial
+                                                            groupId={janitorialGroupId || janitorialGroups[0]?.id}
+                                                            insecureCamera={insecureCamera}
+                                                            onUpdated={(payload) => {
+                                                                const next = payload?.attendance;
+                                                                if (!next) return;
+                                                                setActiveShift(next);
+                                                                localStorage.setItem('active_shift_segment', JSON.stringify(next));
+                                                                setSuccessMsg(payload?.message || 'Janitorial clock-in started with your photo.');
+                                                                loadSummary();
+                                                            }}
+                                                        />
+                                                    ) : (
+                                                        <p className="text-xs font-medium leading-relaxed text-slate-600">
+                                                            Enter or scan your janitorial supervisor&apos;s code in the form below (area photos are still required before clock-out).
+                                                        </p>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    <div className="mb-5 space-y-2 rounded-2xl border border-slate-100 bg-slate-50/80 p-3.5 text-xs font-medium leading-relaxed text-slate-600">
+                                        <p>
+                                            {todayShiftLabel
+                                                ? `Today’s work schedule: ${todayShiftLabel}.`
+                                                : 'No work schedule assigned for today.'}
+                                        </p>
+                                        <HelpDisclosure
+                                            variant="inline"
+                                            title="Shift clock-in rules"
+                                            items={[
+                                                'Clock-in opens 30 minutes before a scheduled shift starts and remains open until the shift ends.',
+                                                'Each shift is logged separately — clock out of your current shift before starting the next one.',
+                                                'Clock-in follows the work schedule assigned by the WSPO coordinator or secretary.',
+                                            ]}
+                                        />
+                                    </div>
+
+                                    <form onSubmit={handleClockIn} className="space-y-4">
+                                        <div>
+                                            <label className="mb-2 block text-[11px] font-extrabold uppercase tracking-widest text-slate-400">
+                                                Check-in method
+                                            </label>
+                                            <div className="grid grid-cols-2 gap-1.5 rounded-xl border border-slate-200/80 bg-slate-50 p-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setCheckInMethod('passcode')}
+                                                    className={`rounded-lg py-2.5 text-xs font-bold transition-all ${
+                                                        checkInMethod === 'passcode'
+                                                            ? 'bg-slate-900 text-white shadow-sm'
+                                                            : 'text-slate-500 hover:text-slate-900'
+                                                    }`}
+                                                >
+                                                    Passcode
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setCheckInMethod('qr')}
+                                                    className={`rounded-lg py-2.5 text-xs font-bold transition-all ${
+                                                        checkInMethod === 'qr'
+                                                            ? 'bg-slate-900 text-white shadow-sm'
+                                                            : 'text-slate-500 hover:text-slate-900'
+                                                    }`}
+                                                >
+                                                    Scan QR
+                                                </button>
+                                            </div>
+                                        </div>
 
                                         {checkInMethod === 'passcode' ? (
                                             <>
                                                 <div>
-                                                    <label className="block text-xs font-bold text-emerald-800 uppercase tracking-wider mb-2">Verification Token</label>
+                                                    <label className="mb-2 block text-[11px] font-extrabold uppercase tracking-widest text-slate-400">
+                                                        Verification Token
+                                                    </label>
                                                     <div className="relative">
-                                                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                                            <KeyRound className="w-5 h-5 text-slate-400" />
+                                                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
+                                                            <KeyRound className="h-4 w-4 text-slate-400" />
                                                         </div>
                                                         <input
                                                             type="text"
@@ -1072,321 +1115,650 @@ const StudentAttendanceTerminal = () => {
                                                             value={tokenInput}
                                                             onChange={(e) => setTokenInput(e.target.value.toUpperCase())}
                                                             placeholder="Enter supervisor token..."
-                                                            disabled={!janitorialProofReady}
-                                                            className="block w-full pl-11 pr-4 py-3 bg-white border border-emerald-100 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-red-500 outline-none transition-all placeholder:text-slate-400 placeholder:font-medium uppercase tracking-widest disabled:opacity-50"
+                                                            className="block w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 font-mono text-sm font-bold uppercase tracking-widest text-slate-900 outline-none transition-all placeholder:font-sans placeholder:font-medium placeholder:normal-case placeholder:tracking-normal placeholder:text-slate-400 focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-600/20"
                                                         />
                                                     </div>
-                                                    <p className="mt-2 text-xs font-medium text-emerald-800">
-                                                        The passcode changes every 30 seconds. Use the one currently on your supervisor&apos;s screen.
+                                                    <p className="mt-2 text-[11px] font-medium text-slate-500">
+                                                        Refreshes every 30 seconds on your supervisor&apos;s screen.
                                                     </p>
                                                 </div>
+
                                                 <motion.button
-                                                    whileHover={{ scale: 1.02 }}
-                                                    whileTap={{ scale: 0.98 }}
+                                                    whileHover={{ scale: 1.01 }}
+                                                    whileTap={{ scale: 0.99 }}
                                                     type="submit"
-                                                    disabled={isLoading || !tokenInput || !janitorialProofReady}
-                                                    className="w-full py-4 bg-linear-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold rounded-xl shadow-lg shadow-red-500/25 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    disabled={isLoading || !tokenInput}
+                                                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-600/25 transition-all hover:from-blue-700 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
                                                 >
                                                     {isLoading ? (
-                                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                                                     ) : (
                                                         <>
-                                                            <LogOut className="w-5 h-5" />
-                                                            Clock Out
+                                                            <LogIn className="h-4 w-4" />
+                                                            Clock In Now
                                                         </>
                                                     )}
                                                 </motion.button>
-                                                {!isJanitorialShift && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={handleAutoClockOut}
-                                                        disabled={isLoading || !tokenInput}
-                                                        className="w-full py-3 bg-white border border-emerald-200 hover:border-emerald-400 text-emerald-800 font-bold rounded-xl transition-all disabled:opacity-50"
-                                                    >
-                                                        Auto clock-out at scheduled end
-                                                        <span className="block text-[11px] font-medium text-emerald-700/80 mt-0.5">
-                                                            Available within 10 minutes of shift end
-                                                        </span>
-                                                    </button>
-                                                )}
                                             </>
                                         ) : (
                                             <div className="space-y-3">
                                                 {insecureCamera && (
-                                                    <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                                                    <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
                                                         This page is open over http, so the phone will not ask for the camera. Open https://{window.location.host}, accept the certificate warning, then turn the camera on.
                                                     </p>
                                                 )}
                                                 {!cameraLive && (
                                                     <button
                                                         type="button"
-                                                        onClick={() => startCamera('student-clockout-qr-reader')}
-                                                        disabled={cameraStarting || !janitorialProofReady}
-                                                        className="w-full py-3.5 bg-slate-900 hover:bg-red-600 text-white font-bold rounded-xl transition-all disabled:opacity-50"
+                                                        onClick={() => startCamera('student-qr-reader')}
+                                                        disabled={cameraStarting}
+                                                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-3.5 text-sm font-bold text-white transition-all hover:bg-blue-600 disabled:opacity-50"
                                                     >
+                                                        <Camera className="h-4 w-4" />
                                                         {cameraStarting ? 'Asking for the camera…' : 'Turn on camera'}
                                                     </button>
                                                 )}
-                                                <div id="student-clockout-qr-reader" className="overflow-hidden rounded-2xl border border-emerald-100 bg-slate-900">
-                                                    <video data-qr-video playsInline muted autoPlay className="block h-[240px] w-full object-cover" />
+                                                <div
+                                                    id="student-qr-reader"
+                                                    className="overflow-hidden rounded-2xl border-2 border-slate-200 bg-slate-950 shadow-inner"
+                                                >
+                                                    <video
+                                                        data-qr-video
+                                                        playsInline
+                                                        muted
+                                                        autoPlay
+                                                        className="block h-[240px] w-full object-cover"
+                                                    />
                                                 </div>
-                                                <p className="text-xs font-medium text-emerald-800 text-center flex items-center justify-center gap-1.5">
-                                                    <QrCode className="w-3.5 h-3.5" />
-                                                    Scan the live QR on your supervisor&apos;s screen to clock out. It changes every 30 seconds.
+                                                <p className="flex items-start justify-center gap-1.5 text-center text-[11px] font-medium leading-relaxed text-slate-500">
+                                                    <QrCode className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500" />
+                                                    <span>
+                                                        Scan a live daily duty or campus activity QR code (use the same code type to time out).
+                                                    </span>
                                                 </p>
                                                 {isLoading && (
                                                     <div className="flex justify-center">
-                                                        <div className="w-5 h-5 border-2 border-red-200 border-t-red-600 rounded-full animate-spin"></div>
+                                                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
                                                     </div>
                                                 )}
                                             </div>
                                         )}
                                     </form>
-                                    )}
-                                </div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                </motion.div>
-
-                {/* --- RIGHT COLUMN: STATS & HISTORY --- */}
-                <motion.div variants={itemVariants} className="lg:col-span-2 space-y-8">
-                    
-                    {/* Stat Cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                            <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Total Rendered</p>
-                            <h3 className="text-3xl font-semibold text-blue-600">
-                                {formatHours(summary.total_rendered)} <span className="text-sm font-bold text-slate-400 uppercase tracking-normal">hrs</span>
-                            </h3>
-                            <div className="w-full bg-slate-100 rounded-full h-1.5 mt-4 overflow-hidden">
-                                <motion.div 
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${Math.min(((summary.total_rendered || 0) / summary.target_hours) * 100, 100)}%` }}
-                                    transition={{ duration: 1 }}
-                                    className="bg-blue-600 h-1.5 rounded-full"
-                                />
-                            </div>
-                        </div>
-                        
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                            <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Remaining Hours</p>
-                            <h3 className="text-3xl font-semibold text-slate-900">
-                                {formatHours(summary.remaining_hours)} <span className="text-sm font-bold text-slate-400 uppercase tracking-normal">hrs</span>
-                            </h3>
-                            <p className="text-xs font-bold text-emerald-600 mt-3 flex items-center gap-1">
-                                <CheckCircle2 className="w-4 h-4" /> Target: {summary.target_hours} hrs{summary.special_hours_request ? ' · Special request' : ''}
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* Recent History List */}
-                    <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
-                        <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center gap-3">
-                            <History className="w-5 h-5 text-slate-400" />
-                            <h3 className="text-lg font-semibold text-slate-900">Recent Logs</h3>
-                        </div>
-                        
-                        <div className="p-0">
-                            {(!summary.history || summary.history.length === 0) ? (
-                                <div className="p-12 text-center text-slate-400 flex flex-col items-center">
-                                    <Activity className="w-12 h-12 mb-3 opacity-20" />
-                                    <p className="font-semibold text-slate-600 text-base">No history yet</p>
-                                    <p className="text-sm">Your verified attendance records will appear here.</p>
-                                </div>
+                                </motion.div>
                             ) : (
-                                <div className="divide-y divide-slate-100">
-                                    {recentLogs().map((log) => (
-                                        <div key={log.id} className="p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-slate-50 transition-colors">
-                                            <div className="flex items-start gap-4">
-                                                <div className={`mt-1 w-2.5 h-2.5 rounded-full shrink-0 ${log.time_out ? 'bg-slate-300' : 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]'}`}></div>
+                                /* ACTIVE SHIFT CARD */
+                                <motion.div
+                                    key="active-shift"
+                                    initial={{ opacity: 0, scale: 0.97 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    className="relative overflow-hidden rounded-[1.75rem] border border-emerald-200 bg-gradient-to-br from-emerald-50 via-emerald-50/70 to-teal-50/60 p-6 shadow-sm sm:p-7"
+                                >
+                                    <div className="relative z-10 flex flex-col items-center text-center">
+                                        <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/25">
+                                            <Timer className="h-7 w-7 animate-pulse" />
+                                        </div>
+                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-0.5 text-[10px] font-extrabold uppercase tracking-widest text-emerald-800">
+                                            Shift Active
+                                        </span>
+                                        <h2 className="mt-2 text-2xl font-black text-slate-900">
+                                            {activeShift.work_type || 'Regular Duty'}
+                                        </h2>
+
+                                        <div className="mt-5 w-full rounded-2xl border border-emerald-200/80 bg-white p-4 shadow-xs">
+                                            <p className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-600">
+                                                Time In
+                                            </p>
+                                            <p className="mt-1 font-mono text-2xl font-black text-slate-900">
+                                                {activeShift.time_in
+                                                    ? new Date(activeShift.time_in).toLocaleTimeString('en-US', {
+                                                          hour: 'numeric',
+                                                          minute: '2-digit',
+                                                          hour12: true,
+                                                      })
+                                                    : '--:--'}
+                                            </p>
+                                            <p className="mt-2 text-xs font-medium leading-relaxed text-slate-600">
+                                                {photoJanitorialShift
+                                                    ? 'Capture your final area photo below to clock out (up to 4 hours credited upon approval).'
+                                                    : isJanitorialShift
+                                                      ? 'Capture your area photos, then clock out with the supervisor code (up to 4 hours credited upon approval).'
+                                                      : 'Clock out when your duty ends to record and approve your shift hours.'}
+                                            </p>
+                                        </div>
+
+                                        {needsCleaningProof(activeShift) && (
+                                            <CleaningProofCapture
+                                                janitorial={photoJanitorialShift}
+                                                groupId={activeShift.janitorial_group_id}
+                                                attendanceId={activeShift.id}
+                                                beforePath={activeShift.cleaning_before_path}
+                                                afterPath={activeShift.cleaning_after_path}
+                                                insecureCamera={insecureCamera}
+                                                onUpdated={(payload) => {
+                                                    const next = applyCleaningProofUpdate(activeShift, payload);
+                                                    if (photoJanitorialShift && next?.time_out) {
+                                                        setSuccessMsg(payload?.message || 'Janitorial clock-out saved with your photo.');
+                                                        localStorage.removeItem('active_shift_segment');
+                                                        setActiveShift(null);
+                                                        loadSummary();
+                                                        return;
+                                                    }
+                                                    setActiveShift(next);
+                                                    localStorage.setItem('active_shift_segment', JSON.stringify(next));
+                                                }}
+                                            />
+                                        )}
+
+                                        {!photoJanitorialShift && (
+                                            <form onSubmit={handleClockOut} className="mt-5 w-full space-y-4 text-left">
                                                 <div>
-                                                    <p className="font-bold text-slate-900 text-base mb-1">
-                                                        {log.time_in ? new Date(log.time_in).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Unknown Date'}
-                                                    </p>
-                                                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">{logLabel(log)}</p>
-                                                    <div className="text-sm font-medium text-slate-600 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
-                                                        <span className="flex items-center gap-1">
-                                                            <LogIn className="w-3.5 h-3.5 text-blue-500" /> 
-                                                            {log.time_in ? new Date(log.time_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
-                                                        </span>
-                                                        {log.time_out && (
-                                                            <>
-                                                                <span className="hidden sm:inline text-slate-300">→</span>
-                                                                <span className="flex items-center gap-1">
-                                                                    <LogOut className="w-3.5 h-3.5 text-slate-500" /> 
-                                                                    {new Date(log.time_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                                                                </span>
-                                                            </>
-                                                        )}
+                                                    <label className="mb-2 block text-[11px] font-extrabold uppercase tracking-widest text-emerald-800">
+                                                        Clock-out method
+                                                    </label>
+                                                    <div className="grid grid-cols-2 gap-1.5 rounded-xl border border-emerald-200/70 bg-white p-1">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setCheckInMethod('passcode')}
+                                                            className={`rounded-lg py-2 text-xs font-bold transition-all ${
+                                                                checkInMethod === 'passcode'
+                                                                    ? 'bg-slate-900 text-white shadow-sm'
+                                                                    : 'text-slate-500 hover:text-slate-900'
+                                                            }`}
+                                                        >
+                                                            Passcode
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setCheckInMethod('qr')}
+                                                            disabled={!janitorialProofReady}
+                                                            className={`rounded-lg py-2 text-xs font-bold transition-all ${
+                                                                checkInMethod === 'qr'
+                                                                    ? 'bg-slate-900 text-white shadow-sm'
+                                                                    : 'text-slate-500 hover:text-slate-900'
+                                                            } disabled:opacity-50`}
+                                                        >
+                                                            Scan QR
+                                                        </button>
                                                     </div>
                                                 </div>
-                                            </div>
-                                            
-                                            <div className="flex flex-col items-start sm:items-end w-full sm:w-auto pl-6 sm:pl-0">
-                                                <span className="text-lg font-semibold text-slate-900">
-                                                    {formatHours(logHours(log))} <span className="text-xs text-slate-500 font-bold">hrs</span>
-                                                </span>
-                                                {(log.check_in_method === 'qr' || log.verification_code_used) && (
-                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">
-                                                        {log.check_in_method === 'qr' ? 'Checked in with QR' : `Passcode: ${log.verification_code_used}`}
-                                                    </span>
+
+                                                {!janitorialProofReady && (
+                                                    <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
+                                                        Photograph your surroundings at clock-in, then take one last photo before you can clock out.
+                                                    </p>
                                                 )}
-                                                {log.is_anomaly && (
-                                                    <span className="mt-2 px-2 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold uppercase tracking-wider rounded-md border border-red-200">
-                                                        Anomaly Flagged
-                                                    </span>
+
+                                                {checkInMethod === 'passcode' ? (
+                                                    <>
+                                                        <div>
+                                                            <label className="mb-2 block text-[11px] font-extrabold uppercase tracking-widest text-emerald-800">
+                                                                Verification Token
+                                                            </label>
+                                                            <div className="relative">
+                                                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
+                                                                    <KeyRound className="h-4 w-4 text-slate-400" />
+                                                                </div>
+                                                                <input
+                                                                    type="text"
+                                                                    required
+                                                                    value={tokenInput}
+                                                                    onChange={(e) => setTokenInput(e.target.value.toUpperCase())}
+                                                                    placeholder="Enter supervisor token..."
+                                                                    disabled={!janitorialProofReady}
+                                                                    className="block w-full rounded-xl border border-emerald-200 bg-white py-3 pl-10 pr-4 font-mono text-sm font-bold uppercase tracking-widest text-slate-900 outline-none transition-all placeholder:font-sans placeholder:font-medium placeholder:normal-case placeholder:tracking-normal placeholder:text-slate-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 disabled:opacity-50"
+                                                                />
+                                                            </div>
+                                                            <p className="mt-2 text-[11px] font-medium text-emerald-800">
+                                                                Refreshes every 30 seconds on your supervisor&apos;s screen.
+                                                            </p>
+                                                        </div>
+
+                                                        <motion.button
+                                                            whileHover={{ scale: 1.01 }}
+                                                            whileTap={{ scale: 0.99 }}
+                                                            type="submit"
+                                                            disabled={isLoading || !tokenInput || !janitorialProofReady}
+                                                            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-500 to-rose-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-red-500/25 transition-all hover:from-red-600 hover:to-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                                        >
+                                                            {isLoading ? (
+                                                                <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                                                            ) : (
+                                                                <>
+                                                                    <LogOut className="h-4 w-4" />
+                                                                    Clock Out
+                                                                </>
+                                                            )}
+                                                        </motion.button>
+
+                                                        {!isJanitorialShift && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleAutoClockOut}
+                                                                disabled={isLoading || !tokenInput}
+                                                                className="w-full rounded-xl border border-emerald-200 bg-white py-3 text-xs font-bold text-emerald-800 transition-all hover:border-emerald-400 hover:bg-emerald-50/50 disabled:opacity-50"
+                                                            >
+                                                                Auto clock-out at scheduled end
+                                                                <span className="mt-0.5 block text-[11px] font-medium text-emerald-700/80">
+                                                                    Available within 10 minutes of shift end
+                                                                </span>
+                                                            </button>
+                                                        )}
+                                                    </>
+                                                ) : (
+                                                    <div className="space-y-3">
+                                                        {insecureCamera && (
+                                                            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
+                                                                This page is open over http, so the phone will not ask for the camera. Open https://{window.location.host}, accept the certificate warning, then turn the camera on.
+                                                            </p>
+                                                        )}
+                                                        {!cameraLive && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => startCamera('student-clockout-qr-reader')}
+                                                                disabled={cameraStarting || !janitorialProofReady}
+                                                                className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-3.5 text-sm font-bold text-white transition-all hover:bg-red-600 disabled:opacity-50"
+                                                            >
+                                                                <Camera className="h-4 w-4" />
+                                                                {cameraStarting ? 'Asking for the camera…' : 'Turn on camera'}
+                                                            </button>
+                                                        )}
+                                                        <div
+                                                            id="student-clockout-qr-reader"
+                                                            className="overflow-hidden rounded-2xl border-2 border-emerald-200 bg-slate-950 shadow-inner"
+                                                        >
+                                                            <video
+                                                                data-qr-video
+                                                                playsInline
+                                                                muted
+                                                                autoPlay
+                                                                className="block h-[240px] w-full object-cover"
+                                                            />
+                                                        </div>
+                                                        <p className="flex items-center justify-center gap-1.5 text-center text-[11px] font-medium text-emerald-800">
+                                                            <QrCode className="h-3.5 w-3.5 shrink-0" />
+                                                            Scan the live QR on your supervisor&apos;s screen to clock out.
+                                                        </p>
+                                                        {isLoading && (
+                                                            <div className="flex justify-center">
+                                                                <div className="h-5 w-5 animate-spin rounded-full border-2 border-red-200 border-t-red-600" />
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
+                                            </form>
+                                        )}
+                                    </div>
+                                </motion.div>
                             )}
-                        </div>
-                    </div>
-                </motion.div>
-            </motion.div>
+                        </AnimatePresence>
+                    </motion.div>
 
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
-                <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                        <CalendarRange className="w-5 h-5 text-slate-400" />
-                        <div>
-                            <h3 className="text-lg font-semibold text-slate-900">Daily Time Record</h3>
-                            <p className="text-xs font-medium text-slate-500">Official WSPO DTR for the selected month. View your own record only.</p>
-                        </div>
-                    </div>
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                        <input
-                            type="month"
-                            value={dtrMonth}
-                            onChange={(e) => setDtrMonth(e.target.value)}
-                            className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-600"
-                        />
-                        <button
-                            type="button"
-                            onClick={() => setDtrPreviewOpen(true)}
-                            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl shadow-sm transition-colors"
-                        >
-                            <Eye className="w-4 h-4" />
-                            View DTR
-                        </button>
-                    </div>
-                </div>
-
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                        <thead>
-                            <tr className="bg-slate-900 text-white">
-                                <th className="px-4 py-3 text-left font-bold uppercase tracking-wider text-xs">Date</th>
-                                <th className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs">Time In</th>
-                                <th className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs">Time Out</th>
-                                <th className="px-4 py-3 text-left font-bold uppercase tracking-wider text-xs">Duty</th>
-                                <th className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs">Status</th>
-                                <th className="px-4 py-3 text-right font-bold uppercase tracking-wider text-xs">Hours</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {dtrHistory.length === 0 ? (
-                                <tr>
-                                    <td colSpan={6} className="px-4 py-12 text-center text-slate-500 font-medium">
-                                        No DTR records found for this period.
-                                    </td>
-                                </tr>
-                            ) : (
-                                dtrHistory.map((log) => (
-                                    <tr key={log.id} className="border-t border-slate-100 hover:bg-slate-50">
-                                        <td className="px-4 py-3 font-bold text-slate-900 whitespace-nowrap">
-                                            {log.time_in ? new Date(log.time_in).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
-                                        </td>
-                                        <td className="px-4 py-3 text-center font-mono text-slate-700">
-                                            {log.time_in ? new Date(log.time_in).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '--:--'}
-                                        </td>
-                                        <td className="px-4 py-3 text-center font-mono text-slate-700">
-                                            {log.time_out ? new Date(log.time_out).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '--:--'}
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-700">
-                                            <div>{log.work_type || log.attendance_type || 'Regular Duty'}</div>
-                                            {log.check_in_method && (
-                                                <div className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                                                    {log.check_in_method === 'qr' ? 'QR' : 'Passcode'}
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3 text-center">
-                                            <span className={`inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${['approved', 'accepted'].includes(String(log.status).toLowerCase()) ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : String(log.status).toLowerCase() === 'rejected' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
-                                                {['approved', 'accepted'].includes(String(log.status).toLowerCase()) ? 'Accepted' : String(log.status).toLowerCase() === 'rejected' ? 'Rejected' : (log.time_out ? 'Pending' : 'Timed in')}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3 text-right font-semibold font-mono text-slate-900">
-                                            {hoursFor(log).toFixed(2)}
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                        <tfoot>
-                            <tr className="bg-slate-50 border-t border-slate-200">
-                                <td colSpan={5} className="px-4 py-3 text-right font-semibold uppercase tracking-wider text-xs text-slate-600">Total Hours</td>
-                                <td className="px-4 py-3 text-right font-semibold font-mono text-slate-900">{dtrTotalHours.toFixed(2)}</td>
-                            </tr>
-                        </tfoot>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        {typeof document !== 'undefined' && createPortal(
-            <AnimatePresence>
-                {dtrPreviewOpen && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-80 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4"
-                        onClick={() => setDtrPreviewOpen(false)}
-                    >
-                        <motion.div
-                            initial={{ opacity: 0, y: 16, scale: 0.98 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: 16, scale: 0.98 }}
-                            className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden"
-                            onClick={(event) => event.stopPropagation()}
-                        >
-                            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-3 shrink-0">
-                                <div>
-                                    <p className="text-sm font-semibold text-slate-900">Official WSPO DTR</p>
-                                    <p className="text-xs font-medium text-slate-500">{fullName} · {studentProfile.student_id_number}</p>
+                    {/* RIGHT COLUMN (7 COLS): STATS & RECENT LOGS */}
+                    <motion.div variants={itemVariants} className="space-y-5 lg:col-span-7">
+                        {/* Stat Cards */}
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div className="rounded-[1.75rem] border border-slate-200/90 bg-white p-6 shadow-sm">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-xs font-extrabold uppercase tracking-widest text-slate-400">
+                                        Total Rendered
+                                    </p>
+                                    <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-[10px] font-extrabold text-blue-700">
+                                        {progressPct.toFixed(0)}%
+                                    </span>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setDtrPreviewOpen(false)}
-                                    className="p-2 rounded-xl text-slate-500 hover:bg-slate-100"
-                                    aria-label="Close DTR preview"
-                                >
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </div>
-                            <div className="overflow-y-auto bg-slate-100 p-4">
-                                <div className="dtr-paper bg-white shadow-sm mx-auto w-fit max-w-full">
-                                    <TimesheetPrintView
-                                        fullName={fullName}
-                                        studentProfile={studentProfile}
-                                        history={dtrHistory}
-                                        totalHours={dtrTotalHours}
-                                        penaltyHours={dtrPenaltyHours}
-                                        startDate={dtrStart}
-                                        endDate={dtrEnd}
-                                        holidays={dtrHolidays}
+                                <h3 className="mt-2.5 text-4xl font-black tracking-tight tabular-nums text-blue-600">
+                                    {formatHours(summary.total_rendered)}
+                                    <span className="ml-1.5 text-sm font-bold text-slate-400">hrs</span>
+                                </h3>
+                                <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                                    <motion.div
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${progressPct}%` }}
+                                        transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+                                        className="h-full rounded-full bg-gradient-to-r from-blue-600 to-indigo-500"
                                     />
                                 </div>
                             </div>
-                        </motion.div>
+
+                            <div className="rounded-[1.75rem] border border-slate-200/90 bg-white p-6 shadow-sm">
+                                <p className="text-xs font-extrabold uppercase tracking-widest text-slate-400">
+                                    Remaining Hours
+                                </p>
+                                <h3 className="mt-2.5 text-4xl font-black tracking-tight tabular-nums text-slate-900">
+                                    {formatHours(summary.remaining_hours)}
+                                    <span className="ml-1.5 text-sm font-bold text-slate-400">hrs</span>
+                                </h3>
+                                <p className="mt-3.5 inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                                    Target: {summary.target_hours} hrs
+                                    {summary.special_hours_request ? ' · Special' : ''}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Recent Logs Card */}
+                        <div className="overflow-hidden rounded-[1.75rem] border border-slate-200/90 bg-white shadow-sm">
+                            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-6 py-4">
+                                <div className="flex items-center gap-2.5">
+                                    <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-900 text-white">
+                                        <History className="h-4 w-4" />
+                                    </span>
+                                    <h3 className="text-base font-black text-slate-900">Recent Logs</h3>
+                                </div>
+                                <span className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] font-bold text-slate-500">
+                                    Latest entries
+                                </span>
+                            </div>
+
+                            <div>
+                                {!summary.history || summary.history.length === 0 ? (
+                                    <div className="flex flex-col items-center px-6 py-14 text-center">
+                                        <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                                            <Activity className="h-6 w-6" />
+                                        </div>
+                                        <p className="text-sm font-bold text-slate-700">No history yet</p>
+                                        <p className="mt-1 text-xs font-medium text-slate-400">
+                                            Your verified attendance records will appear here.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="divide-y divide-slate-100">
+                                        {recentLogs().map((log) => (
+                                            <div
+                                                key={log.id}
+                                                className="flex flex-col items-start justify-between gap-3 px-6 py-4 transition-colors hover:bg-slate-50/80 sm:flex-row sm:items-center"
+                                            >
+                                                <div className="flex items-start gap-3.5">
+                                                    <div
+                                                        className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${
+                                                            log.time_out
+                                                                ? 'bg-slate-300'
+                                                                : 'animate-pulse bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]'
+                                                        }`}
+                                                    />
+                                                    <div>
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <p className="text-sm font-extrabold text-slate-900">
+                                                                {log.time_in
+                                                                    ? new Date(log.time_in).toLocaleDateString('en-US', {
+                                                                          weekday: 'short',
+                                                                          month: 'short',
+                                                                          day: 'numeric',
+                                                                      })
+                                                                    : 'Unknown Date'}
+                                                            </p>
+                                                            <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                                                                {logLabel(log)}
+                                                            </span>
+                                                        </div>
+                                                        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500">
+                                                            <span className="inline-flex items-center gap-1">
+                                                                <LogIn className="h-3.5 w-3.5 text-blue-500" />
+                                                                {log.time_in
+                                                                    ? new Date(log.time_in).toLocaleTimeString('en-US', {
+                                                                          hour: 'numeric',
+                                                                          minute: '2-digit',
+                                                                          hour12: true,
+                                                                      })
+                                                                    : '--:--'}
+                                                            </span>
+                                                            {log.time_out && (
+                                                                <>
+                                                                    <span className="text-slate-300">→</span>
+                                                                    <span className="inline-flex items-center gap-1">
+                                                                        <LogOut className="h-3.5 w-3.5 text-slate-400" />
+                                                                        {new Date(log.time_out).toLocaleTimeString('en-US', {
+                                                                            hour: 'numeric',
+                                                                            minute: '2-digit',
+                                                                            hour12: true,
+                                                                        })}
+                                                                    </span>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex w-full flex-col items-start pl-6 sm:w-auto sm:items-end sm:pl-0">
+                                                    <span className="font-mono text-lg font-black tabular-nums text-slate-900">
+                                                        {formatHours(logHours(log))}
+                                                        <span className="ml-1 font-sans text-xs font-bold text-slate-400">
+                                                            hrs
+                                                        </span>
+                                                    </span>
+                                                    {(log.check_in_method === 'qr' || log.verification_code_used) && (
+                                                        <span className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                                            {log.check_in_method === 'qr'
+                                                                ? 'Checked in with QR'
+                                                                : `Passcode: ${log.verification_code_used}`}
+                                                        </span>
+                                                    )}
+                                                    {log.is_anomaly && (
+                                                        <span className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-red-700">
+                                                            <AlertTriangle className="h-3 w-3" />
+                                                            Anomaly Flagged
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </motion.div>
+                </motion.div>
+
+                {/* DAILY TIME RECORD (DTR) LEDGER */}
+                <section className="overflow-hidden rounded-[1.75rem] border border-slate-200/90 bg-white shadow-sm">
+                    <div className="flex flex-col justify-between gap-4 border-b border-slate-100 bg-slate-50/70 px-6 py-5 lg:flex-row lg:items-center">
+                        <div className="flex items-center gap-3">
+                            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-sm">
+                                <CalendarRange className="h-5 w-5" />
+                            </span>
+                            <div>
+                                <h3 className="text-base font-black text-slate-900">Daily Time Record</h3>
+                                <p className="text-xs font-medium text-slate-500">
+                                    Official monthly WSPO Daily Time Record.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex flex-col items-stretch gap-2.5 sm:flex-row sm:items-center">
+                            <input
+                                type="month"
+                                value={dtrMonth}
+                                onChange={(e) => setDtrMonth(e.target.value)}
+                                className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setDtrPreviewOpen(true)}
+                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-600"
+                            >
+                                <Eye className="h-4 w-4" />
+                                View DTR
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="app-data-table w-full text-sm">
+                            <thead>
+                                <tr className="bg-slate-950 text-white">
+                                    <th className="px-5 py-3.5 text-left text-[11px] font-extrabold uppercase tracking-widest">
+                                        Date
+                                    </th>
+                                    <th className="px-4 py-3.5 text-center text-[11px] font-extrabold uppercase tracking-widest">
+                                        Time In
+                                    </th>
+                                    <th className="px-4 py-3.5 text-center text-[11px] font-extrabold uppercase tracking-widest">
+                                        Time Out
+                                    </th>
+                                    <th className="px-4 py-3.5 text-left text-[11px] font-extrabold uppercase tracking-widest">
+                                        Duty
+                                    </th>
+                                    <th className="px-4 py-3.5 text-center text-[11px] font-extrabold uppercase tracking-widest">
+                                        Status
+                                    </th>
+                                    <th className="px-5 py-3.5 text-right text-[11px] font-extrabold uppercase tracking-widest">
+                                        Hours
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {dtrHistory.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={6} className="px-4 py-14 text-center text-sm font-medium text-slate-400">
+                                            No DTR records found for this period.
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    dtrHistory.map((log) => {
+                                        const statusLower = String(log.status).toLowerCase();
+                                        const isAccepted = ['approved', 'accepted'].includes(statusLower);
+                                        const isRejected = statusLower === 'rejected';
+                                        return (
+                                            <tr key={log.id} className="transition-colors hover:bg-slate-50/80">
+                                                <td className="whitespace-nowrap px-5 py-3.5 font-bold text-slate-900">
+                                                    {log.time_in
+                                                        ? new Date(log.time_in).toLocaleDateString('en-US', {
+                                                              weekday: 'short',
+                                                              month: 'short',
+                                                              day: 'numeric',
+                                                              year: 'numeric',
+                                                          })
+                                                        : '—'}
+                                                </td>
+                                                <td className="px-4 py-3.5 text-center font-mono text-xs font-semibold text-slate-700">
+                                                    {log.time_in
+                                                        ? new Date(log.time_in).toLocaleTimeString('en-US', {
+                                                              hour: 'numeric',
+                                                              minute: '2-digit',
+                                                              hour12: true,
+                                                          })
+                                                        : '--:--'}
+                                                </td>
+                                                <td className="px-4 py-3.5 text-center font-mono text-xs font-semibold text-slate-700">
+                                                    {log.time_out
+                                                        ? new Date(log.time_out).toLocaleTimeString('en-US', {
+                                                              hour: 'numeric',
+                                                              minute: '2-digit',
+                                                              hour12: true,
+                                                          })
+                                                        : '--:--'}
+                                                </td>
+                                                <td className="px-4 py-3.5 text-slate-700">
+                                                    <div className="text-xs font-bold text-slate-800">
+                                                        {log.work_type || log.attendance_type || 'Regular Duty'}
+                                                    </div>
+                                                    {log.check_in_method && (
+                                                        <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                                            {log.check_in_method === 'qr' ? 'QR' : 'Passcode'}
+                                                        </div>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3.5 text-center">
+                                                    <span
+                                                        className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${
+                                                            isAccepted
+                                                                ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                                                                : isRejected
+                                                                  ? 'border border-red-200 bg-red-50 text-red-700'
+                                                                  : 'border border-amber-200 bg-amber-50 text-amber-700'
+                                                        }`}
+                                                    >
+                                                        {isAccepted
+                                                            ? 'Accepted'
+                                                            : isRejected
+                                                              ? 'Rejected'
+                                                              : log.time_out
+                                                                ? 'Pending'
+                                                                : 'Timed in'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-5 py-3.5 text-right font-mono font-bold text-slate-900">
+                                                    {hoursFor(log).toFixed(2)}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                            <tfoot>
+                                <tr className="border-t border-slate-200 bg-slate-50">
+                                    <td
+                                        colSpan={5}
+                                        className="px-5 py-3.5 text-right text-xs font-extrabold uppercase tracking-widest text-slate-500"
+                                    >
+                                        Total Hours
+                                    </td>
+                                    <td className="px-5 py-3.5 text-right font-mono text-base font-black text-slate-900">
+                                        {dtrTotalHours.toFixed(2)}
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </section>
+            </div>
+
+            {typeof document !== 'undefined' &&
+                createPortal(
+                    <AnimatePresence>
+                        {dtrPreviewOpen && (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="fixed inset-0 z-80 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm"
+                                onClick={() => setDtrPreviewOpen(false)}
+                            >
+                                <motion.div
+                                    initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: 16, scale: 0.98 }}
+                                    className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-2xl"
+                                    onClick={(event) => event.stopPropagation()}
+                                >
+                                    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 bg-slate-950 px-6 py-4 text-white">
+                                        <div className="flex items-center gap-2.5">
+                                            <Sparkles className="h-4 w-4 text-blue-400" />
+                                            <div>
+                                                <p className="text-sm font-black tracking-tight">Official WSPO DTR</p>
+                                                <p className="text-xs font-medium text-slate-400">
+                                                    {fullName} · {studentProfile.student_id_number}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setDtrPreviewOpen(false)}
+                                            className="rounded-xl border border-white/10 bg-white/5 p-2 text-slate-300 transition-colors hover:bg-white/15 hover:text-white"
+                                            aria-label="Close DTR preview"
+                                        >
+                                            <X className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                    <div className="overflow-y-auto bg-slate-100 p-5">
+                                        <div className="dtr-paper mx-auto w-fit max-w-full bg-white shadow-md">
+                                            <TimesheetPrintView
+                                                fullName={fullName}
+                                                studentProfile={studentProfile}
+                                                history={dtrHistory}
+                                                totalHours={dtrTotalHours}
+                                                penaltyHours={dtrPenaltyHours}
+                                                startDate={dtrStart}
+                                                endDate={dtrEnd}
+                                                holidays={dtrHolidays}
+                                            />
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>,
+                    document.body
                 )}
-            </AnimatePresence>,
-            document.body
-        )}
         </>
     );
 };

@@ -408,6 +408,7 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
 
     public function test_wspo_secretary_can_check_activity_attendance_campus_wide(): void
     {
+        Carbon::setTestNow(Carbon::parse('2026-10-28 06:30:00'));
         $secretary = $this->makeUser('WSPO Staff', 'WSPO Secretary');
         // Legacy profile shape still identifies the secretary for activity tools.
         $secretary->profile->update([
@@ -464,6 +465,7 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
 
     public function test_student_officer_secretary_manages_activities_and_clocks_as_student(): void
     {
+        Carbon::setTestNow(Carbon::parse('2026-10-28 06:30:00'));
         $secretary = $this->makeStudent('Elected Secretary', 3, '2026-8801');
         $secretary->profile->update([
             'organization_officer' => true,
@@ -498,6 +500,39 @@ class ActivityAttendanceAllYearLevelsTest extends TestCase
             'starts_at' => '05:00',
             'ends_at' => '06:00',
         ])->assertCreated();
+    }
+
+    public function test_non_secretary_officers_are_titles_only_and_still_clock_as_students(): void
+    {
+        $treasurer = $this->makeStudent('Elected Treasurer', 2, '2026-8811');
+        $treasurer->profile->update([
+            'organization_officer' => true,
+            'officer_position' => 'Treasurer',
+            'assigned_office' => 'College of Computer Studies',
+        ]);
+        $president = $this->makeStudent('Elected President', 4, '2026-8812');
+        $president->profile->update([
+            'organization_officer' => true,
+            'officer_position' => 'President',
+            'assigned_office' => 'College of Nursing',
+        ]);
+
+        $accounts = app(\App\Http\Controllers\UserController::class);
+        foreach ([$treasurer, $president] as $officer) {
+            $fresh = $officer->fresh('profile');
+            $this->assertTrue($accounts->isStudentOfficer($fresh));
+            $this->assertTrue($accounts->mustClockAsStudent($fresh));
+            $this->assertFalse($accounts->canCheckActivityAttendance($fresh));
+            $this->assertFalse($accounts->canManageActivityGroups($fresh));
+            $this->assertFalse($accounts->canIssueDailyAttendance($fresh));
+        }
+
+        Sanctum::actingAs($treasurer->fresh('profile'));
+        $this->getJson('/api/user')
+            ->assertOk()
+            ->assertJsonPath('can_check_activity_attendance', false)
+            ->assertJsonPath('must_clock_as_student', true)
+            ->assertJsonPath('officer_position', 'Treasurer');
     }
 
     public function test_wspo_secretary_can_record_own_activity_attendance_without_group_membership(): void

@@ -12,6 +12,10 @@ class ManualAttendanceRequest extends Model
     use RecordsActivity;
 
     public const PENDING = 'Pending';
+
+    /** Janitorial supervisor recorded a decision. The immediate supervisor still decides. */
+    public const RECOMMENDED = 'Recommended';
+
     public const APPROVED = 'Approved';
     public const REJECTED = 'Rejected';
 
@@ -32,10 +36,19 @@ class ManualAttendanceRequest extends Model
         'decision_note',
         'reviewed_by',
         'reviewed_at',
+        'janitorial_leader_decision',
+        'janitorial_deducted_hours',
+        'janitorial_leader_remarks',
+        'janitorial_leader_reviewed_by',
+        'janitorial_leader_reviewed_at',
+        'janitorial_final_on_behalf',
     ];
 
     protected $casts = [
         'reviewed_at' => 'datetime',
+        'janitorial_leader_reviewed_at' => 'datetime',
+        'janitorial_deducted_hours' => 'float',
+        'janitorial_final_on_behalf' => 'boolean',
     ];
 
     public function student(): BelongsTo

@@ -151,15 +151,24 @@ class YearActivitiesScreen extends StatelessWidget {
         if (payload['leader'] != true) {
           return const PageBody(children: [
             SectionTitle('Year activities'),
-            EmptyNote('Only a group leader can open attendance QR codes and passcodes for their group.'),
+            EmptyNote('Only a group leader or assembly year representative can open attendance QR codes and passcodes.'),
           ]);
         }
+        final isGroupLeader = payload['group_leader'] == true;
+        final isAssemblyRep = payload['assembly_representative'] == true;
+        final repYear = textOf(payload['rep_year_label'], textOf(payload['year_label'], 'your year level'));
+        final groupName = textOf(payload['group_name'], 'your group');
+        final roleSummary = isAssemblyRep && isGroupLeader
+            ? 'Group leader for $groupName & Assembly representative for $repYear. Hours are added only when a student times out.'
+            : isAssemblyRep
+                ? 'Assembly representative for $repYear. Display the live QR code or passcode below for your year level. Hours are added only when a student times out.'
+                : 'Group leader for $groupName (${textOf(payload['year_label'], 'year')}). Hours are added only when a student times out.';
         return PageBody(
           onRefresh: reload,
           children: [
             const SectionTitle('Year activities'),
-            Text('Group leader for ${textOf(payload['group_name'], 'your group')} (${textOf(payload['year_label'], 'year')}). Hours are added only when a student times out.'),
-            if (events.isEmpty) const EmptyNote('No activities for your group right now.'),
+            Text(roleSummary),
+            if (events.isEmpty) const EmptyNote('No scheduled activities right now.'),
             for (final event in events)
               RecordCard(
                 title: textOf(event['title']),
@@ -171,7 +180,7 @@ class YearActivitiesScreen extends StatelessWidget {
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(textOf(entry['name'])),
-                      subtitle: Text('${textOf(entry['status'], 'Not marked')} · in ${textOf(entry['time_in'], '—')} · out ${textOf(entry['time_out'], '—')}'),
+                      subtitle: Text('${textOf(entry['status'], 'Not marked')} · in ${whenOf(entry['time_in'])} · out ${whenOf(entry['time_out'])}'),
                       trailing: Text('${numOf(entry['hours_delta']).toStringAsFixed(2)}'),
                     ),
                   if (event['uses_attendance'] == true)
@@ -215,7 +224,7 @@ class YearActivitiesScreen extends StatelessWidget {
       ),
     );
     if (picked == null || !context.mounted) return;
-    final time = await promptText(context, timeIn ? 'Clock-in time (HH:MM)' : 'Time-out (HH:MM)', label: 'Time');
+    final time = await pickClock(context, title: timeIn ? 'Clock-in time' : 'Time-out');
     if (time == null || !context.mounted) return;
     final path = timeIn ? 'time' : 'timeout';
     await runAction(
@@ -255,16 +264,24 @@ class _ActivityCodeState extends State<_ActivityCode> {
 
   Future<void> _load() async {
     final api = context.read<AuthProvider>().api;
+    Map<String, dynamic> pass = _pass;
+    Map<String, dynamic> qr = _qr;
     try {
-      final pass = asMap(await api.get('/attendance/activity-passcode', {'event_id': widget.eventId.toString()}));
-      final qr = asMap(await api.get('/attendance/activity-qr', {'event_id': '${widget.eventId}'}));
-      if (mounted) {
-        setState(() {
-          _pass = pass;
-          _qr = qr;
-        });
-      }
-    } catch (_) {}
+      pass = asMap(await api.get('/attendance/activity-passcode', {'event_id': widget.eventId.toString()}));
+    } catch (error) {
+      pass = {'error': errorText(error)};
+    }
+    try {
+      qr = asMap(await api.get('/attendance/activity-qr', {'event_id': widget.eventId.toString()}));
+    } catch (error) {
+      qr = {'error': errorText(error)};
+    }
+    if (mounted) {
+      setState(() {
+        _pass = pass;
+        _qr = qr;
+      });
+    }
   }
 
   @override
@@ -349,7 +366,17 @@ class _JanitorialCodeScreenState extends State<JanitorialCodeScreen> {
           onRefresh: reload,
           children: [
             const SectionTitle('Janitorial code'),
-            const Text('Members normally clock with surroundings photos. Show this code only when you are with the group and they choose Supervisor code. An accepted entry is exactly 4 hours from clock-in.'),
+            const Text('Generate a rotating passcode or QR code to verify janitorial duty attendance through supervisor approval.'),
+            const Card(
+              margin: EdgeInsets.symmetric(vertical: 8),
+              child: ExpansionTile(
+                title: Text('How Janitorial Duty Verification Works'),
+                childrenPadding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+                children: [
+                  Text('• Members normally clock janitorial duty using live surroundings photos with no code required.\n• Show this passcode or QR code only when you are physically with the group and they choose Supervisor code.\n• You can approve or decline entries, deduct hours, and add notes; the immediate supervisor has the final say.\n• Accepted entries record up to 4 hours from clock-in.'),
+                ],
+              ),
+            ),
             DropdownButtonFormField<int>(
               initialValue: _groupId,
               items: groups.map((group) => DropdownMenuItem(value: numOf(group['id']).toInt(), child: Text('${textOf(group['area'])} · ${textOf(group['name'])}'))).toList(),

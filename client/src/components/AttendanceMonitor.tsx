@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import Toast from './Toast';
+import CoverageHoldNotice from './CoverageHoldNotice';
+import { secretaryCoverageLocked } from '../utils/coverageHold';
 import UserAvatar from './UserAvatar';
 import { REALTIME_EVENT } from '../utils/realtime';
 import { bindPopup } from '../utils/popupDismiss';
@@ -33,6 +35,9 @@ import { CleaningProofPhotos } from './CleaningProofPhotos';
 import { formatYearLevel, homeDepartment } from '../utils/studentAssignment';
 import { HourLimitApprovalsPanel } from './hours/HourLimitApprovalsPanel';
 import ManualAttendanceRequestsPanel from './ManualAttendanceRequestsPanel';
+import ClassClockInRequestsPanel from './ClassClockInRequestsPanel';
+import FeatureSection from './FeatureSection';
+import { HelpDisclosure } from './HelpDisclosure';
 
 const padMonth = (n: number) => String(n).padStart(2, '0');
 const localIsoDate = (date = new Date()) =>
@@ -207,12 +212,24 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
     
     const { start: dtrStart, end: dtrEnd } = monthBounds(dtrMonth);
 
+    const [coverageHold, setCoverageHold] = useState(secretaryCoverageLocked);
+
     const fetchAttendance = useCallback((date: string) => {
+        if (secretaryCoverageLocked()) {
+            setCoverageHold(true);
+            setIsLoading(false);
+            return Promise.resolve();
+        }
+        setCoverageHold(false);
         return axios.get(`/api/attendance?date=${date}`)
             .then((response) => {
                 setRecords(response.data);
             })
             .catch((error) => {
+                if (secretaryCoverageLocked()) {
+                    setCoverageHold(true);
+                    return;
+                }
                 console.error("Failed to fetch attendance records", error);
                 setToastMsg({ text: "Failed to load attendance records.", type: 'error' });
             })
@@ -222,6 +239,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
     }, []);
 
     const fetchPendingDates = useCallback(() => {
+        if (secretaryCoverageLocked()) return Promise.resolve();
         return axios.get('/api/attendance/pending-dates')
             .then((response) => {
                 const dates = Array.isArray(response.data) ? response.data : [];
@@ -273,6 +291,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
     useEffect(() => {
         if (!canViewStudentDtr) return;
         const loadStudents = () => {
+            if (secretaryCoverageLocked()) return;
             axios.get('/api/personnel')
                 .then((response) => {
                     const list = Array.isArray(response.data) ? response.data : [];
@@ -605,6 +624,10 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
         setFilterDate(date);
     };
 
+    if (coverageHold) {
+        return <CoverageHoldNotice />;
+    }
+
     return (
         <>
         {canViewStudentDtr && selectedStudentId && typeof document !== 'undefined' && createPortal(
@@ -749,18 +772,6 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                 onClose={() => setToastMsg(null)}
             />
 
-            <HourLimitApprovalsPanel readOnly={userRole === 'Super Admin'} userRole={userRole} />
-
-            <ManualAttendanceRequestsPanel
-                readOnly={userRole === 'Super Admin'}
-                onToast={(message, type = 'success') => setToastMsg({ text: message, type })}
-                onChanged={() => {
-                    fetchAttendance(filterDate);
-                    fetchPendingDates();
-                    setDtrReloadKey((key) => key + 1);
-                }}
-            />
-
             {/* MAIN ATTENDANCE TABLE */}
             <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden relative">
                 
@@ -774,7 +785,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                 )}
 
                 <div className="overflow-x-auto custom-scrollbar">
-                    <table className="w-full text-left border-collapse">
+                    <table className="app-data-table w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-slate-50/80 border-b border-slate-200">
                                 <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Student Worker</th>
@@ -867,7 +878,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
 
                                         {/* Shift Details Column */}
                                         <td className="px-6 py-5 align-top">
-                                            <div className="flex items-center gap-2 text-sm text-slate-900 font-bold">
+                                            <div className="flex items-center gap-2 whitespace-nowrap text-sm text-slate-900 font-bold">
                                                 <Clock className="w-4 h-4 text-blue-500" />
                                                 {formatTime(record.time_in)} — {formatTime(record.time_out)}
                                             </div>
@@ -956,211 +967,22 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                 </div>
             </div>
 
-            {canManageHolidays && (
-                <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden mt-10">
-                    <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center gap-3">
-                        <div className="p-3 bg-amber-50 text-amber-600 rounded-xl border border-amber-100">
-                            <CalendarPlus className="w-6 h-6" />
-                        </div>
-                        <div>
-                            <h3 className="text-xl font-semibold text-slate-900 tracking-tight">Holidays and class breaks</h3>
-                            <p className="text-xs font-medium text-slate-500 mt-0.5">
-                                A full-day holiday or class break hides classes for those dates. A half-day holiday hides only the classes that overlap its hours.
-                            </p>
-                        </div>
-                    </div>
-                    <form id="dtr-holiday-form" onSubmit={saveHoliday} className="px-6 py-5 border-b border-slate-100 space-y-4">
-                        <div className="flex flex-wrap gap-2">
-                        <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
-                            {([
-                                ['holiday', 'Holiday'],
-                                ['break', 'Class break'],
-                            ] as const).map(([value, label]) => (
-                                <button
-                                    key={value}
-                                    type="button"
-                                    onClick={() => {
-                                        setHolidayKind(value);
-                                        if (value === 'break') setHolidayPortion('full');
-                                    }}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                                        holidayKind === value ? 'bg-white text-amber-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'
-                                    }`}
-                                >
-                                    {label}
-                                </button>
-                            ))}
-                        </div>
-                        <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
-                            {([
-                                ['single', 'Single date'],
-                                ['multiple', 'Multiple dates'],
-                            ] as const).map(([value, label]) => (
-                                <button
-                                    key={value}
-                                    type="button"
-                                    onClick={() => {
-                                        setHolidaySpan(value);
-                                        if (value === 'multiple') {
-                                            setHolidayPortion('full');
-                                            if (holidayEndDate < holidayDate) setHolidayEndDate(holidayDate);
-                                        }
-                                    }}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                                        holidaySpan === value ? 'bg-white text-amber-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'
-                                    }`}
-                                >
-                                    {label}
-                                </button>
-                            ))}
-                        </div>
-                        {holidayKind === 'holiday' && holidaySpan === 'single' && (
-                            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
-                                {([
-                                    ['full', 'Full day'],
-                                    ['half', 'Half day'],
-                                ] as const).map(([value, label]) => (
-                                    <button
-                                        key={value}
-                                        type="button"
-                                        onClick={() => setHolidayPortion(value)}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                                            holidayPortion === value ? 'bg-white text-amber-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'
-                                        }`}
-                                    >
-                                        {label}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                        </div>
-                        <div className={`grid grid-cols-1 gap-4 items-end ${holidaySpan === 'multiple' ? 'md:grid-cols-[160px_160px_1fr_auto]' : 'md:grid-cols-[180px_1fr_auto]'}`}>
-                        <div>
-                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">{holidaySpan === 'multiple' ? 'Start date' : 'Date'}</label>
-                            <input
-                                type="date"
-                                value={holidayDate}
-                                onChange={(event) => {
-                                    const next = event.target.value;
-                                    setHolidayDate(next);
-                                    if (holidayEndDate < next) setHolidayEndDate(next);
-                                }}
-                                required
-                                className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-500"
-                            />
-                        </div>
-                        {holidaySpan === 'multiple' && (
-                            <div>
-                                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">End date</label>
-                                <input
-                                    type="date"
-                                    value={holidayEndDate}
-                                    min={holidayDate}
-                                    onChange={(event) => setHolidayEndDate(event.target.value)}
-                                    required
-                                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-500"
-                                />
-                            </div>
-                        )}
-                        <div>
-                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">{holidayKind === 'break' ? 'Break name' : 'Holiday name'}</label>
-                            <input
-                                type="text"
-                                value={holidayName}
-                                onChange={(event) => setHolidayName(event.target.value)}
-                                required
-                                maxLength={120}
-                                placeholder={holidayKind === 'break' ? 'e.g. Wellness Break' : 'e.g. Family Day'}
-                                className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-amber-500"
-                            />
-                        </div>
-                        {holidayKind === 'holiday' && holidaySpan === 'single' && holidayPortion === 'half' && (
-                            <div className="grid grid-cols-2 gap-4 md:max-w-sm">
-                                <div>
-                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Starts</label>
-                                    <input type="time" value={holidayStartTime} onChange={(event) => setHolidayStartTime(event.target.value)} required className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-500" />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Ends</label>
-                                    <input type="time" value={holidayEndTime} onChange={(event) => setHolidayEndTime(event.target.value)} required className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-500" />
-                                </div>
-                            </div>
-                        )}
-                        <div className="flex items-center gap-2">
-                            {editingHolidayId && (
-                                <button
-                                    type="button"
-                                    onClick={cancelHolidayEdit}
-                                    className="h-10.5 px-4 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-bold rounded-xl"
-                                >
-                                    Cancel
-                                </button>
-                            )}
-                            <button
-                                type="submit"
-                                disabled={holidaySaving}
-                                className="h-10.5 px-5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-sm font-bold rounded-xl shadow-md shadow-amber-600/20 transition-all"
-                            >
-                                {holidaySaving ? 'Saving...' : editingHolidayId ? 'Save changes' : holidayKind === 'break' ? 'Add class break' : 'Add holiday'}
-                            </button>
-                        </div>
-                        </div>
-                    </form>
-                    <div className="px-6 py-4">
-                        {holidays.length === 0 ? (
-                            <p className="text-sm font-medium text-slate-400">No holidays or class breaks yet.</p>
-                        ) : (
-                            <ul className="divide-y divide-slate-100">
-                                {holidayListing.rows.map((holiday) => (
-                                    <li key={holiday.id} className={`flex items-center justify-between gap-3 py-3 ${editingHolidayId === holiday.id ? 'bg-amber-50/70 -mx-3 px-3 rounded-xl' : ''}`}>
-                                        <div>
-                                            <p className="text-sm font-semibold text-slate-900">{holiday.name}</p>
-                                            <p className="text-xs font-medium text-slate-500">
-                                                {formatHolidayWhen(holiday)}
-                                                {holiday.kind === 'break'
-                                                    ? ' · Class break'
-                                                    : holiday.portion === 'half'
-                                                        ? ` · Half day${holiday.starts_at && holiday.ends_at ? ` ${holiday.starts_at.slice(0, 5)}–${holiday.ends_at.slice(0, 5)}` : ''}`
-                                                        : ' · Full day'}
-                                            </p>
-                                        </div>
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            <button
-                                                type="button"
-                                                onClick={() => beginHolidayEdit(holiday)}
-                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold"
-                                            >
-                                                <Pencil className="w-3.5 h-3.5" />
-                                                Edit
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => removeHoliday(holiday)}
-                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-red-50 text-red-700 border border-red-200 rounded-lg text-xs font-bold"
-                                            >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                                Remove
-                                            </button>
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                        <AuditPager page={holidayListing.page} totalPages={holidayListing.totalPages} total={holidayListing.total} onPage={setHolidayPage} />
-                    </div>
-                </div>
-            )}
-
             {/* STUDENT DTR PANEL */}
             {canViewStudentDtr && (
-                <div id="student-dtr-panel" className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden mt-10">
-                    
+                <FeatureSection
+                    id="student-dtr-panel"
+                    defaultOpen
+                    className="mt-0"
+                    title="Edit DTR"
+                    icon={
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700">
+                            <CalendarRange className="h-4 w-4" />
+                        </span>
+                    }
+                >
                     {/* Panel Header & Controls */}
                     <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
-                            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100">
-                                <CalendarRange className="w-6 h-6" />
-                            </div>
                             <div>
                                 <h3 className="text-xl font-semibold text-slate-900 tracking-tight">Student Daily Time Record</h3>
                                 <p className="text-xs font-medium text-slate-500 mt-0.5">
@@ -1367,7 +1189,7 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
 
                     {/* DTR Table View */}
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
+                        <table className="app-data-table w-full text-sm text-left">
                             <thead>
                                 <tr className="bg-slate-50 border-b border-slate-200">
                                     <th className="px-6 py-3.5 font-bold uppercase tracking-wider text-[11px] text-slate-500">Date</th>
@@ -1448,7 +1270,234 @@ const AttendanceMonitor = ({ userRole }: AttendanceMonitorProps) => {
                             </tfoot>
                         </table>
                     </div>
-                </div>
+                </FeatureSection>
+            )}
+
+            <HourLimitApprovalsPanel readOnly={userRole === 'Super Admin'} userRole={userRole} />
+
+            <ClassClockInRequestsPanel
+                readOnly={userRole === 'Super Admin'}
+                onToast={(message, type = 'success') => setToastMsg({ text: message, type })}
+                onChanged={() => {
+                    fetchAttendance(filterDate);
+                    fetchPendingDates();
+                }}
+            />
+
+            <ManualAttendanceRequestsPanel
+                readOnly={userRole === 'Super Admin'}
+                onToast={(message, type = 'success') => setToastMsg({ text: message, type })}
+                onChanged={() => {
+                    fetchAttendance(filterDate);
+                    fetchPendingDates();
+                    setDtrReloadKey((key) => key + 1);
+                }}
+            />
+
+            {canManageHolidays && (
+                <FeatureSection
+                    defaultOpen={false}
+                    title="Holidays & Class Breaks"
+                    icon={
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                            <CalendarPlus className="h-4 w-4" />
+                        </span>
+                    }
+                >
+                    <div className="border-b border-slate-100 px-6 py-4">
+                        <p className="text-xs font-medium text-slate-500">
+                            A full-day holiday or class break hides classes for those dates. A half-day holiday hides only the classes that overlap its hours.
+                        </p>
+                        <HelpDisclosure
+                            variant="inline"
+                            title="How holidays affect schedules"
+                            className="mt-2"
+                            items={[
+                                'Full-day holidays and class breaks hide work and class schedules on the selected dates.',
+                                'Half-day holidays hide only the scheduled hours that overlap the configured time window.',
+                            ]}
+                        />
+                    </div>
+                    <form id="dtr-holiday-form" onSubmit={saveHoliday} className="px-6 py-5 border-b border-slate-100 space-y-4">
+                        <div className="flex flex-wrap gap-2">
+                        <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+                            {([
+                                ['holiday', 'Holiday'],
+                                ['break', 'Class break'],
+                            ] as const).map(([value, label]) => (
+                                <button
+                                    key={value}
+                                    type="button"
+                                    onClick={() => {
+                                        setHolidayKind(value);
+                                        if (value === 'break') setHolidayPortion('full');
+                                    }}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                                        holidayKind === value ? 'bg-white text-amber-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                                    }`}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+                            {([
+                                ['single', 'Single date'],
+                                ['multiple', 'Multiple dates'],
+                            ] as const).map(([value, label]) => (
+                                <button
+                                    key={value}
+                                    type="button"
+                                    onClick={() => {
+                                        setHolidaySpan(value);
+                                        if (value === 'multiple') {
+                                            setHolidayPortion('full');
+                                            if (holidayEndDate < holidayDate) setHolidayEndDate(holidayDate);
+                                        }
+                                    }}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                                        holidaySpan === value ? 'bg-white text-amber-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                                    }`}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                        {holidayKind === 'holiday' && holidaySpan === 'single' && (
+                            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+                                {([
+                                    ['full', 'Full day'],
+                                    ['half', 'Half day'],
+                                ] as const).map(([value, label]) => (
+                                    <button
+                                        key={value}
+                                        type="button"
+                                        onClick={() => setHolidayPortion(value)}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                                            holidayPortion === value ? 'bg-white text-amber-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                        </div>
+                        <div className={`grid grid-cols-1 gap-4 items-end ${holidaySpan === 'multiple' ? 'md:grid-cols-[160px_160px_1fr_auto]' : 'md:grid-cols-[180px_1fr_auto]'}`}>
+                        <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">{holidaySpan === 'multiple' ? 'Start date' : 'Date'}</label>
+                            <input
+                                type="date"
+                                value={holidayDate}
+                                onChange={(event) => {
+                                    const next = event.target.value;
+                                    setHolidayDate(next);
+                                    if (holidayEndDate < next) setHolidayEndDate(next);
+                                }}
+                                required
+                                className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-500"
+                            />
+                        </div>
+                        {holidaySpan === 'multiple' && (
+                            <div>
+                                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">End date</label>
+                                <input
+                                    type="date"
+                                    value={holidayEndDate}
+                                    min={holidayDate}
+                                    onChange={(event) => setHolidayEndDate(event.target.value)}
+                                    required
+                                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-500"
+                                />
+                            </div>
+                        )}
+                        <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">{holidayKind === 'break' ? 'Break name' : 'Holiday name'}</label>
+                            <input
+                                type="text"
+                                value={holidayName}
+                                onChange={(event) => setHolidayName(event.target.value)}
+                                required
+                                maxLength={120}
+                                placeholder={holidayKind === 'break' ? 'e.g. Wellness Break' : 'e.g. Family Day'}
+                                className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-amber-500"
+                            />
+                        </div>
+                        {holidayKind === 'holiday' && holidaySpan === 'single' && holidayPortion === 'half' && (
+                            <div className="grid grid-cols-2 gap-4 md:max-w-sm">
+                                <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Starts</label>
+                                    <input type="time" value={holidayStartTime} onChange={(event) => setHolidayStartTime(event.target.value)} required className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-500" />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Ends</label>
+                                    <input type="time" value={holidayEndTime} onChange={(event) => setHolidayEndTime(event.target.value)} required className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-500" />
+                                </div>
+                            </div>
+                        )}
+                        <div className="flex items-center gap-2">
+                            {editingHolidayId && (
+                                <button
+                                    type="button"
+                                    onClick={cancelHolidayEdit}
+                                    className="h-10.5 px-4 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-bold rounded-xl"
+                                >
+                                    Cancel
+                                </button>
+                            )}
+                            <button
+                                type="submit"
+                                disabled={holidaySaving}
+                                className="h-10.5 px-5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-sm font-bold rounded-xl shadow-md shadow-amber-600/20 transition-all"
+                            >
+                                {holidaySaving ? 'Saving...' : editingHolidayId ? 'Save changes' : holidayKind === 'break' ? 'Add class break' : 'Add holiday'}
+                            </button>
+                        </div>
+                        </div>
+                    </form>
+                    <div className="px-6 py-4">
+                        {holidays.length === 0 ? (
+                            <p className="text-sm font-medium text-slate-400">No holidays or class breaks yet.</p>
+                        ) : (
+                            <ul className="divide-y divide-slate-100">
+                                {holidayListing.rows.map((holiday) => (
+                                    <li key={holiday.id} className={`flex items-center justify-between gap-3 py-3 ${editingHolidayId === holiday.id ? 'bg-amber-50/70 -mx-3 px-3 rounded-xl' : ''}`}>
+                                        <div>
+                                            <p className="text-sm font-semibold text-slate-900">{holiday.name}</p>
+                                            <p className="text-xs font-medium text-slate-500">
+                                                {formatHolidayWhen(holiday)}
+                                                {holiday.kind === 'break'
+                                                    ? ' · Class break'
+                                                    : holiday.portion === 'half'
+                                                        ? ` · Half day${holiday.starts_at && holiday.ends_at ? ` ${holiday.starts_at.slice(0, 5)}–${holiday.ends_at.slice(0, 5)}` : ''}`
+                                                        : ' · Full day'}
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <button
+                                                type="button"
+                                                onClick={() => beginHolidayEdit(holiday)}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold"
+                                            >
+                                                <Pencil className="w-3.5 h-3.5" />
+                                                Edit
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => removeHoliday(holiday)}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-red-50 text-red-700 border border-red-200 rounded-lg text-xs font-bold"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                                Remove
+                                            </button>
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                        <AuditPager page={holidayListing.page} totalPages={holidayListing.totalPages} total={holidayListing.total} onPage={setHolidayPage} />
+                    </div>
+                </FeatureSection>
             )}
         </div>
 

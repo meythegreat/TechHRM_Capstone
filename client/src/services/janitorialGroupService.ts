@@ -7,6 +7,7 @@ export type JanitorialStudent = {
   year_level?: number | string | null;
   year_label?: string;
   assigned_office?: string | null;
+  role?: string | null;
 };
 
 export type JanitorialGroup = {
@@ -15,6 +16,7 @@ export type JanitorialGroup = {
   name: string;
   area: string;
   supervisor: JanitorialStudent | null;
+  immediate_supervisor?: JanitorialStudent | null;
   members: JanitorialStudent[];
   member_count: number;
   max_members: number;
@@ -61,12 +63,14 @@ export const janitorialGroupService = {
 
   async save(payload: {
     id?: number;
+    department: string;
     name?: string;
     area: string;
     supervisor_user_id: number;
     member_ids: number[];
   }) {
     const body = {
+      department: payload.department,
       name: payload.name || payload.area,
       area: payload.area,
       supervisor_user_id: payload.supervisor_user_id,

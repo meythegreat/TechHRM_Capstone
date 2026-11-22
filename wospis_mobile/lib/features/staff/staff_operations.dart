@@ -95,20 +95,6 @@ class StaffDashboardScreen extends StatelessWidget {
           children: [
             Text(auth.userName ?? 'Staff', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
             Text('${auth.userRole} · ${auth.userDepartment}'),
-            if (auth.userRole == 'Supervisor')
-              RecordCard(
-                title: auth.supervisorAbsent ? 'You are marked absent today' : 'You are on duty',
-                subtitle: 'Mark yourself absent so the department secretary can act with your access.',
-                children: [
-                  TextButton(
-                    onPressed: () => runAction(context, () => auth.api.post('/supervisor-absence', {'absent': !auth.supervisorAbsent}), success: auth.supervisorAbsent ? 'Marked present.' : 'Marked absent.', reload: () async {
-                      await auth.refreshProfile();
-                      await reload();
-                    }),
-                    child: Text(auth.supervisorAbsent ? 'Mark me present' : 'Mark me absent today'),
-                  ),
-                ],
-              ),
             if (auth.userRole == 'Department Secretary')
               RecordCard(
                 title: auth.secretaryActing ? 'You are acting for the supervisor' : 'Waiting for the supervisor to be marked absent',
@@ -226,7 +212,7 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
                 trailing: textOf(request['status']),
                 children: [
                   for (final shift in asMaps(request['shifts']))
-                    Text('${textOf(shift['date'])} · ${textOf(shift['time_in'])}–${textOf(shift['time_out'])}'),
+                    Text('${textOf(shift['date'])} · ${whenOf(shift['time_in'])}–${whenOf(shift['time_out'])}'),
                   if (canDecideOffline)
                     Row(children: [
                       TextButton(
@@ -325,8 +311,8 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
               items: people.map((person) => DropdownMenuItem(value: person['id'].toString(), child: Text(textOf(person['name'])))).toList(),
               onChanged: (value) => studentId = value ?? studentId,
             ),
-            TextField(controller: timeIn, decoration: const InputDecoration(labelText: 'Time in (HH:mm)')),
-            TextField(controller: timeOut, decoration: const InputDecoration(labelText: 'Time out (HH:mm)')),
+            ClockField(controller: timeIn, label: 'Time in'),
+            ClockField(controller: timeOut, label: 'Time out'),
             TextField(controller: note, decoration: const InputDecoration(labelText: 'Task note')),
           ]),
         ),
@@ -911,7 +897,7 @@ class _ActivityAttendanceScreenState extends State<ActivityAttendanceScreen> {
                   title: textOf(entry['name'], 'Student'),
                   subtitle: '${textOf(entry['student_id_number'], 'No ID')} · ${textOf(entry['status'], 'Not marked')} · ${numOf(entry['hours_delta']).toStringAsFixed(2)} hrs',
                   children: [
-                    Text('In ${textOf(entry['time_in'], '—')} · Out ${textOf(entry['time_out'], '—')}'),
+                    Text('In ${whenOf(entry['time_in'])} · Out ${whenOf(entry['time_out'])}'),
                     Wrap(spacing: 8, children: [
                       TextButton(
                         onPressed: () => _saveTime(context, auth, reload, entry, inTime: true, fallback: textOf(entry['time_in'])),
@@ -952,7 +938,7 @@ class _ActivityAttendanceScreenState extends State<ActivityAttendanceScreen> {
     required bool inTime,
     required String fallback,
   }) async {
-    final time = await promptText(context, inTime ? 'Clock-in time (HH:MM)' : 'Time-out (HH:MM)', initial: fallback, label: 'Time');
+    final time = await pickClock(context, initial: fallback, title: inTime ? 'Clock-in time' : 'Time-out');
     if (time == null || !context.mounted) return;
     final path = inTime ? 'time' : 'timeout';
     await runAction(

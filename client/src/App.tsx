@@ -8,6 +8,7 @@ import { FinancialManagement } from './components/FinancialManagement';
 import { REALTIME_EVENT } from './utils/realtime';
 
 import Login from './components/Login';
+import LandingPage from './components/LandingPage';
 import ForcePasswordChange from './components/ForcePasswordChange';
 import Toast from './components/Toast';
 import PublicApplication from './components/PublicApplication';
@@ -52,6 +53,7 @@ const STUDENT_PAGE_TITLES: Record<string, string> = {
   dashboard: 'Dashboard',
   attendance: 'Attendance / DTR',
   'janitorial-code': 'Janitorial code',
+  'janitorial-approval': 'Janitorial approval',
   'year-activities': 'Year Activities',
   hours: 'Hours Rendered',
   schedule: 'My Schedule',
@@ -87,19 +89,38 @@ class PageErrorBoundary extends Component<{ children: ReactNode }, { error: Erro
   render() {
     if (this.state.error) {
       return (
-        <div className="m-6 rounded-2xl border border-slate-200/80 bg-white p-8 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-500">This page could not be shown</p>
-          <h2 className="mt-2 text-2xl font-semibold text-slate-900">Something on this screen failed to load.</h2>
-          <p className="mt-2 max-w-xl text-sm font-medium text-slate-600">
-            Your session is still active. Open another section from the sidebar, or try this page again.
-          </p>
-          <button
-            type="button"
-            onClick={() => this.setState({ error: null })}
-            className="mt-6 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white"
-          >
-            Try again
-          </button>
+        <div className="mx-auto my-8 max-w-2xl overflow-hidden rounded-[2rem] border border-slate-200/90 bg-white shadow-xl">
+          <div className="relative overflow-hidden bg-slate-950 px-6 py-6 text-white sm:px-8">
+            <div
+              className="pointer-events-none absolute inset-0 opacity-20"
+              style={{
+                backgroundImage: 'radial-gradient(rgba(148,163,184,0.4) 1px, transparent 1px)',
+                backgroundSize: '18px 18px',
+              }}
+              aria-hidden="true"
+            />
+            <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-rose-500/25 blur-3xl" aria-hidden="true" />
+            <div className="relative z-10">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-400/30 bg-rose-500/15 px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-rose-300">
+                Screen Recovery
+              </span>
+              <h2 className="mt-3 text-2xl font-black tracking-tight text-white">
+                Something on this screen failed to load.
+              </h2>
+            </div>
+          </div>
+          <div className="p-6 sm:p-8">
+            <p className="max-w-xl text-sm font-medium leading-relaxed text-slate-600">
+              Your session is still active. Open another section from the sidebar, or try loading this page again.
+            </p>
+            <button
+              type="button"
+              onClick={() => this.setState({ error: null })}
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-extrabold uppercase tracking-wider text-white shadow-sm transition hover:bg-blue-600"
+            >
+              Try again
+            </button>
+          </div>
         </div>
       );
     }
@@ -110,7 +131,7 @@ class PageErrorBoundary extends Component<{ children: ReactNode }, { error: Erro
 function App() {
   const [hasToken, setHasToken] = useState<boolean>(() => Boolean(localStorage.getItem('auth_token')));
   const [userRole, setUserRole] = useState<string | null>(localStorage.getItem('user_role'));
-  const [guestView, setGuestView] = useState<'login' | 'apply' | 'track'>('login');
+  const [guestView, setGuestView] = useState<'home' | 'login' | 'apply' | 'track'>('home');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isVerifying, setIsVerifying] = useState(true);
   const [mustChangePassword, setMustChangePassword] = useState(false);
@@ -230,7 +251,13 @@ function App() {
 
   useEffect(() => {
     if (!hasToken) {
-      document.title = guestView === 'apply' ? 'Apply · WoSPIS' : guestView === 'track' ? 'Track application · WoSPIS' : 'Sign in · WoSPIS';
+      document.title = guestView === 'apply'
+        ? 'Apply · WoSPIS'
+        : guestView === 'track'
+          ? 'Track application · WoSPIS'
+          : guestView === 'login'
+            ? 'Sign in · WoSPIS'
+            : 'WoSPIS';
       return;
     }
     const segment = firstPathSegment(location.pathname);
@@ -286,6 +313,7 @@ function App() {
       setUserRole(null);
       setAdminAvatar(null);
       setMustChangePassword(false);
+      setGuestView('home');
       navigate('/');
     }
   };
@@ -311,15 +339,37 @@ function App() {
     <AnimatePresence mode="wait" initial={false}>
     <motion.div key={screen} {...shellMotion} className={screen === 'session' ? 'h-screen print:h-auto' : 'min-h-screen'}>
     {isVerifying ? (
-      <div className="flex h-screen items-center justify-center bg-slate-50 font-sans">
-        <div className="flex flex-col items-center gap-4">
-            <div className="w-12 h-12 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin"></div>
-            <p className="text-slate-500 font-bold animate-pulse tracking-widest uppercase text-sm">Verifying Secure Session</p>
+      <div className="relative flex h-screen items-center justify-center overflow-hidden bg-slate-950 font-sans text-white">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-20"
+          style={{
+            backgroundImage: 'radial-gradient(rgba(148,163,184,0.4) 1px, transparent 1px)',
+            backgroundSize: '20px 20px',
+          }}
+          aria-hidden="true"
+        />
+        <div className="pointer-events-none absolute -right-20 -top-20 h-80 w-80 rounded-full bg-blue-600/25 blur-3xl" aria-hidden="true" />
+        <div className="pointer-events-none absolute -bottom-24 left-1/4 h-72 w-72 rounded-full bg-indigo-500/20 blur-3xl" aria-hidden="true" />
+        <div className="relative z-10 flex flex-col items-center gap-4 rounded-[2rem] border border-white/10 bg-white/[0.05] px-10 py-8 backdrop-blur-xl shadow-2xl">
+          <div className="relative flex h-12 w-12 items-center justify-center">
+            <div className="absolute inset-0 rounded-full border-2 border-white/15" />
+            <div className="h-12 w-12 animate-spin rounded-full border-2 border-transparent border-t-blue-400 border-r-indigo-400" />
+          </div>
+          <div className="text-center">
+            <p className="text-xs font-extrabold uppercase tracking-widest text-blue-300">WoSPIS</p>
+            <p className="mt-1 text-sm font-bold text-slate-200">Verifying Secure Session</p>
+          </div>
         </div>
       </div>
     ) : !hasToken ? (
       <PageTransition pageKey={guestView}>
-        {guestView === 'apply' ? (
+        {guestView === 'home' ? (
+          <LandingPage
+            onSignIn={() => setGuestView('login')}
+            onApply={() => setGuestView('apply')}
+            onTrack={() => setGuestView('track')}
+          />
+        ) : guestView === 'apply' ? (
           <PublicApplication onBackToLogin={() => setGuestView('login')} />
         ) : guestView === 'track' ? (
           <ApplicationStatusLookup
@@ -331,6 +381,7 @@ function App() {
             onLoginSuccess={handleLoginSuccess}
             onNavigateToApply={() => setGuestView('apply')}
             onNavigateToTrack={() => setGuestView('track')}
+            onBackToPortal={() => setGuestView('home')}
           />
         )}
       </PageTransition>
@@ -353,53 +404,57 @@ function App() {
         userRole={userRole}
       />
 
-      <div className="flex-1 flex flex-col overflow-hidden relative print:overflow-visible print:h-auto">
+      <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden print:h-auto print:overflow-visible">
         
-        {/* TOP NAVIGATION HEADER */}
-        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-6 sm:px-8 z-40 sticky top-0 shadow-sm print:hidden">
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
-              className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-blue-600 transition-colors"
+        {/* FROSTED TOP NAVIGATION BAR */}
+        <header className="sticky top-0 z-40 flex h-[4.5rem] shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/85 px-4 backdrop-blur-xl sm:px-6 print:hidden">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 lg:hidden"
+              aria-label="Toggle navigation"
             >
-              <Menu className="w-6 h-6" />
+              <Menu className="h-5 w-5" />
             </button>
             <AnimatePresence mode="wait" initial={false}>
-              <motion.h2
+              <motion.div
                 key={currentPath}
                 initial={reduceMotion ? false : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={reduceMotion ? { opacity: 1 } : { opacity: 0, y: -6 }}
                 transition={{ duration: reduceMotion ? 0 : 0.22, ease: pageEase }}
-                className="hidden text-base font-semibold capitalize tracking-tight text-slate-900 sm:block"
+                className="hidden items-center gap-2 sm:flex"
               >
-                {currentPath === 'financial' ? 'Hours Rendered' : currentPath.replace('-', ' ')}
-              </motion.h2>
+                <span className="h-2 w-2 rounded-full bg-blue-600" />
+                <h2 className="text-sm font-extrabold tracking-tight text-slate-900">
+                  {STAFF_PAGE_TITLES[currentPath] ?? currentPath.replace('-', ' ')}
+                </h2>
+              </motion.div>
             </AnimatePresence>
           </div>
 
-          <div className="flex items-center gap-5">
+          <div className="flex items-center gap-2.5 sm:gap-3.5">
             <SyncStatus />
             <NotificationBell onNavigate={(path) => navigate(`/${path}`)} />
-            
-            <div className="text-right hidden sm:block">
-              <p className="flex items-center justify-end gap-1 text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                <ShieldCheck className="w-3 h-3" /> {userRole}
+
+            <div className="hidden text-right sm:block">
+              <p className="flex items-center justify-end gap-1 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                <ShieldCheck className="h-3 w-3 text-blue-500" /> {userRole}
               </p>
-              <p className="text-sm font-semibold text-slate-900">{adminName}</p>
+              <p className="text-sm font-bold text-slate-900">{adminName}</p>
             </div>
 
             <button
               type="button"
               onClick={() => navigate('/settings')}
-              className="w-10 h-10 bg-slate-100 border-2 border-slate-200 rounded-full flex items-center justify-center text-slate-600 font-bold shadow-sm overflow-hidden group cursor-pointer hover:border-blue-400 transition-colors"
+              className="group flex h-10 w-10 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-slate-200 bg-slate-100 font-bold text-slate-600 shadow-xs transition hover:border-blue-400"
               title="Profile settings"
             >
               {adminAvatar ? (
                 <SecureImage
                   filePath={adminAvatar}
                   altText="Admin Avatar"
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                  className="h-full w-full object-cover transition-transform group-hover:scale-110"
                   fallback={adminFirstName.charAt(0).toUpperCase()}
                 />
               ) : (
@@ -411,7 +466,7 @@ function App() {
 
         {/* MAIN CONTENT AREA */}
         <main
-          className={`install-clearance relative flex-1 custom-scrollbar print:h-auto print:overflow-visible ${
+          className={`app-content-frame install-clearance relative min-w-0 flex-1 custom-scrollbar print:h-auto print:overflow-visible ${
             currentPath === 'messages' ? 'flex min-h-0 flex-col overflow-hidden' : 'overflow-y-auto'
           }`}
         >

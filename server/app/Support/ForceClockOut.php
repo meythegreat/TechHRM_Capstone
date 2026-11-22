@@ -214,7 +214,7 @@ class ForceClockOut
 
         if ($isJanitorial) {
             $computedHours = 0.0;
-            $notes[] = 'Janitorial session closed. The janitorial supervisor must accept the photos before '
+            $notes[] = 'Janitorial session closed. The janitorial supervisor reviews the photos first. The immediate supervisor has the final say before up to '
                 .DutyHours::JANITORIAL_FIXED_HOURS.' hours are recorded from clock-in.';
         } else {
             $computedHours = DutyHours::creditedHours($clockInTime, $clockOutTime, $studentDepartment);

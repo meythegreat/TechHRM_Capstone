@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ClipboardCheck, Search, Users } from 'lucide-react';
 import { financialService } from '../../services/financialService';
+import ClockTimeInput from '../ClockTimeInput';
+import { HelpDisclosure } from '../HelpDisclosure';
 
 interface HourEntry {
   user_id: number;
@@ -163,8 +166,9 @@ export function ActivityAttendanceChecker({
 
   if (!event) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <p className="text-sm text-slate-500">{notice || 'Loading activity roster…'}</p>
+      <div className="flex items-center gap-2.5 rounded-[1.5rem] border border-slate-200/90 bg-white p-5 text-xs font-bold text-slate-500">
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-blue-600" />
+        <span>{notice || 'Loading activity roster…'}</span>
       </div>
     );
   }
@@ -174,75 +178,120 @@ export function ActivityAttendanceChecker({
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Check attendance</p>
-          <p className="text-sm text-slate-600 mt-1">
-            WSPO Secretary tools: correct clock-in / time-out when the scanner fails, mark absent, or close unmarked students.
-            Hours credit only at time-out when the clock-in was on time.
-          </p>
-          <p className="text-xs font-semibold text-slate-500 mt-1">
-            {event.marked_count}/{event.eligible_count} marked
-          </p>
+    <div className="overflow-hidden rounded-[1.5rem] border border-slate-200/90 bg-white shadow-xs">
+      <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white">
+            <ClipboardCheck className="h-4 w-4" />
+          </span>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-black tracking-tight text-slate-900">Check Attendance</p>
+              <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 font-mono text-[10px] font-extrabold text-blue-700">
+                <Users className="h-3 w-3" /> {event.marked_count}/{event.eligible_count} marked
+              </span>
+            </div>
+            <p className="mt-0.5 text-xs font-medium text-slate-500">
+              Correct missed scans or mark unmarked students absent.
+            </p>
+          </div>
         </div>
         <button
           type="button"
           disabled={busy}
           onClick={markAbsent}
-          className="px-4 py-2.5 bg-white border border-slate-200 text-sm font-bold rounded-xl text-slate-700 disabled:opacity-50"
+          className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-xs font-extrabold uppercase tracking-wider text-white shadow-sm transition hover:bg-rose-600 disabled:opacity-45"
         >
-          Mark unmarked absent
+          Mark Unmarked Absent
         </button>
       </div>
-      {notice && <div className="bg-blue-50 border border-blue-200 text-blue-800 text-sm font-semibold rounded-xl px-4 py-2">{notice}</div>}
-      <input
-        value={search}
-        onChange={(input) => setSearch(input.target.value)}
-        placeholder="Search this roster"
-        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold"
-      />
-      <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
-        {roster.map((entry) => (
-          <div key={entry.user_id} className="py-3 flex flex-wrap items-center gap-3">
-            <div className="min-w-[180px] flex-1">
-              <p className="font-bold text-slate-900 text-sm">{entry.name}</p>
-              <p className="text-xs text-slate-500">
-                {entry.student_id_number || 'No ID'}
-                {entry.year_level ? ` · Yr ${entry.year_level}` : ''}
-                {entry.status ? ` · ${statusLabel[entry.status] || entry.status}` : ' · Not marked'}
-                {entry.status ? ` · ${Number(entry.hours_delta).toFixed(2)} hrs` : ''}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="time"
-                value={timeInDrafts[entry.user_id] ?? entry.time_in ?? ''}
-                onChange={(input) => setTimeInDrafts((current) => ({ ...current, [entry.user_id]: input.target.value }))}
-                className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold"
-                aria-label={`Clock-in time for ${entry.name}`}
-              />
-              <button type="button" disabled={busy} onClick={() => correctTime(entry.user_id)} className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border bg-white text-slate-700 border-slate-200 disabled:opacity-50">Save time in</button>
-              <input
-                type="time"
-                value={timeOutDrafts[entry.user_id] ?? entry.time_out ?? event.ends_at ?? ''}
-                onChange={(input) => setTimeOutDrafts((current) => ({ ...current, [entry.user_id]: input.target.value }))}
-                className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold"
-                aria-label={`Time-out for ${entry.name}`}
-              />
-              <button type="button" disabled={busy} onClick={() => correctTimeout(entry.user_id)} className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border bg-white text-slate-700 border-slate-200 disabled:opacity-50">Save time out</button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => mark(entry.user_id, 'absent')}
-                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold border disabled:opacity-50 ${entry.status === 'absent' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}
-              >
-                Absent
-              </button>
-            </div>
+
+      <div className="space-y-4 p-5">
+        <HelpDisclosure
+          variant="inline"
+          title="Guidelines"
+          items={[
+            'Use these WSPO Secretary tools to fix clock-in/time-out when a scanner fails, mark absent, or close unmarked students.',
+            'Hours are credited only at time-out and only when the clock-in was on time.',
+          ]}
+        />
+
+        {notice && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-bold text-blue-800">
+            {notice}
           </div>
-        ))}
-        {roster.length === 0 && <p className="py-4 text-sm text-slate-500">No students match.</p>}
+        )}
+
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            value={search}
+            onChange={(input) => setSearch(input.target.value)}
+            placeholder="Search this roster…"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-600/20"
+          />
+        </div>
+
+        <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto rounded-2xl border border-slate-200/80 px-4">
+          {roster.map((entry) => (
+            <div key={entry.user_id} className="flex flex-wrap items-center gap-3 py-3">
+              <div className="min-w-[180px] flex-1">
+                <p className="text-sm font-extrabold text-slate-900">{entry.name}</p>
+                <p className="font-mono text-xs font-medium text-slate-500">
+                  {entry.student_id_number || 'No ID'}
+                  {entry.year_level ? ` · Yr ${entry.year_level}` : ''}
+                  {entry.status ? ` · ${statusLabel[entry.status] || entry.status}` : ' · Not marked'}
+                  {entry.status ? ` · ${Number(entry.hours_delta).toFixed(2)} hrs` : ''}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <ClockTimeInput
+                  value={timeInDrafts[entry.user_id] ?? entry.time_in ?? ''}
+                  onChange={(value) => setTimeInDrafts((current) => ({ ...current, [entry.user_id]: value }))}
+                  className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs font-bold"
+                  aria-label={`Clock-in time for ${entry.name}`}
+                />
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => correctTime(entry.user_id)}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-45"
+                >
+                  Save In
+                </button>
+                <ClockTimeInput
+                  value={timeOutDrafts[entry.user_id] ?? entry.time_out ?? event.ends_at ?? ''}
+                  onChange={(value) => setTimeOutDrafts((current) => ({ ...current, [entry.user_id]: value }))}
+                  className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs font-bold"
+                  aria-label={`Time-out for ${entry.name}`}
+                />
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => correctTimeout(entry.user_id)}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-45"
+                >
+                  Save Out
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => mark(entry.user_id, 'absent')}
+                  className={`rounded-xl border px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-wider transition disabled:opacity-45 ${
+                    entry.status === 'absent'
+                      ? 'border-slate-900 bg-slate-900 text-white'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700'
+                  }`}
+                >
+                  Absent
+                </button>
+              </div>
+            </div>
+          ))}
+          {roster.length === 0 && (
+            <p className="py-6 text-center text-xs font-medium text-slate-500">No students match.</p>
+          )}
+        </div>
       </div>
     </div>
   );

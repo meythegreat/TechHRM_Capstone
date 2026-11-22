@@ -40,7 +40,7 @@ class AuthController extends Controller
 
         // 4. Return assigned department for students/supervisors; admins get 'Management'
         $office = match ($user->role) {
-            'Student', 'Supervisor', 'WSPO Staff', 'Department Secretary' => $user->profile?->assignment_label
+            'Student', 'Supervisor', 'WSPO Staff', 'Department Secretary', 'Immediate Supervisor' => $user->profile?->assignment_label
                 ?: ($user->profile?->assigned_office ?? 'Unassigned'),
             default => 'Management',
         };

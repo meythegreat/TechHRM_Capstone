@@ -260,7 +260,7 @@ class _NewActivityTabState extends State<_NewActivityTab> {
   Widget build(BuildContext context) {
     return PageBody(
       children: [
-        const Text('Special request needs chosen students. Other activities cover a group and credit hours at time-out.'),
+        const Text('Special request needs chosen students. Cleaning activities cover a group. Devotional meetings and meeting assemblies include every student.'),
         DropdownButtonFormField<String>(
           initialValue: _kind,
           items: const [
@@ -295,7 +295,9 @@ class _NewActivityTabState extends State<_NewActivityTab> {
               }),
             ),
         ] else ...[
-          if (_groups.isNotEmpty && _groupId != null)
+          if (_kind == 'devotional' || _kind == 'meeting_assembly')
+            const Text('Group is unavailable. Every student is required to attend.')
+          else if (_groups.isNotEmpty && _groupId != null)
             DropdownButtonFormField<int>(
               initialValue: _groupId,
               decoration: const InputDecoration(labelText: 'Group'),
@@ -305,17 +307,17 @@ class _NewActivityTabState extends State<_NewActivityTab> {
           DropdownButtonFormField<int?>(
             initialValue: _year,
             decoration: const InputDecoration(labelText: 'Year level'),
-            items: const [
-              DropdownMenuItem(value: null, child: Text('All years in the group')),
-              DropdownMenuItem(value: 1, child: Text('1st year')),
-              DropdownMenuItem(value: 2, child: Text('2nd year')),
-              DropdownMenuItem(value: 3, child: Text('3rd year')),
-              DropdownMenuItem(value: 4, child: Text('4th year')),
+            items: [
+              DropdownMenuItem(value: null, child: Text(_kind == 'devotional' || _kind == 'meeting_assembly' ? 'All year levels' : 'All years in the group')),
+              const DropdownMenuItem(value: 1, child: Text('1st year')),
+              const DropdownMenuItem(value: 2, child: Text('2nd year')),
+              const DropdownMenuItem(value: 3, child: Text('3rd year')),
+              const DropdownMenuItem(value: 4, child: Text('4th year')),
             ],
             onChanged: (value) => setState(() => _year = value),
           ),
-          TextField(controller: _start, decoration: const InputDecoration(labelText: 'Official time in (HH:MM)')),
-          TextField(controller: _end, decoration: const InputDecoration(labelText: 'End time (HH:MM)')),
+          ClockField(controller: _start, label: 'Official time in'),
+          ClockField(controller: _end, label: 'End time'),
         ],
         const SizedBox(height: 12),
         FilledButton(onPressed: _save, child: const Text('Save activity')),
@@ -333,7 +335,7 @@ class _NewActivityTabState extends State<_NewActivityTab> {
         'direction': _direction,
         'user_ids': _selected.toList(),
       } else ...{
-        'group_id': _groupId,
+        if (_kind != 'devotional' && _kind != 'meeting_assembly') 'group_id': _groupId,
         if (_year != null) 'year_level': _year,
         'starts_at': _start.text.trim(),
         'ends_at': _end.text.trim(),

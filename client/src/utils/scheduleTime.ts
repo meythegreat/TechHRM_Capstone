@@ -33,6 +33,15 @@ export function formatMinutes(total: number): string {
     return `${hour12}:${String(minute).padStart(2, '0')} ${meridiem}`;
 }
 
+/** "13:05", "13:05:00", or "1:05 PM" → "1:05 PM". Values that are not a clock are returned unchanged. */
+export function formatClockTime(value: string | null | undefined): string {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    const match = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(am|pm)?$/i);
+    if (!match) return raw;
+    return formatMinutes(clockToMinutes(Number(match[1]), Number(match[2]), match[3]));
+}
+
 export function formatShiftStart(time: string): string {
     const window = shiftWindow(time);
     if (!window) return String(time || '').trim() || '—';

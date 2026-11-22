@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../api/api_client.dart';
+import '../json_util.dart';
 import '../realtime_bus.dart';
 
 const Color kBlue = Color(0xFF1D4ED8);
@@ -367,6 +368,83 @@ Future<bool> confirm(BuildContext context, String message) async {
     ),
   );
   return result ?? false;
+}
+
+TimeOfDay clockSeed(String initial) {
+  final match = RegExp(r'^(\d{1,2}):(\d{2})').firstMatch(initial.trim());
+  if (match == null) return const TimeOfDay(hour: 8, minute: 0);
+  final hour = int.parse(match.group(1)!);
+  final minute = int.parse(match.group(2)!);
+  if (hour > 23 || minute > 59) return const TimeOfDay(hour: 8, minute: 0);
+  return TimeOfDay(hour: hour, minute: minute);
+}
+
+Future<String?> pickClock(BuildContext context, {String initial = '08:00', String title = 'Time'}) async {
+  final picked = await showTimePicker(
+    context: context,
+    initialTime: clockSeed(initial),
+    helpText: title,
+    builder: (context, child) {
+      return MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+        child: child ?? const SizedBox.shrink(),
+      );
+    },
+  );
+  if (picked == null) return null;
+  return clockStorage(picked.hour, picked.minute);
+}
+
+class ClockField extends StatefulWidget {
+  const ClockField({super.key, required this.controller, required this.label});
+
+  final TextEditingController controller;
+  final String label;
+
+  @override
+  State<ClockField> createState() => _ClockFieldState();
+}
+
+class _ClockFieldState extends State<ClockField> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_refresh);
+  }
+
+  @override
+  void didUpdateWidget(ClockField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_refresh);
+      widget.controller.addListener(_refresh);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_refresh);
+    super.dispose();
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () async {
+        final next = await pickClock(context, initial: widget.controller.text, title: widget.label);
+        if (next == null) return;
+        widget.controller.text = next;
+      },
+      child: InputDecorator(
+        decoration: InputDecoration(labelText: widget.label),
+        child: Text(whenOf(widget.controller.text)),
+      ),
+    );
+  }
 }
 
 Future<String?> promptText(BuildContext context, String title, {String label = 'Note', bool required = true, String initial = ''}) async {

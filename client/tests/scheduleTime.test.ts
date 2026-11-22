@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { compareSchedules, formatScheduleRange, happensNow, startMinutes } from '../src/utils/scheduleTime.ts';
+import { compareSchedules, formatClockTime, formatScheduleRange, happensNow, startMinutes } from '../src/utils/scheduleTime.ts';
 
 test('schedules sort from morning to evening across 12-hour and 24-hour clocks', () => {
     const rows = [
@@ -13,6 +13,15 @@ test('schedules sort from morning to evening across 12-hour and 24-hour clocks',
     const ordered = [...rows].sort(compareSchedules).map((row) => row.id);
     assert.deepEqual(ordered, [1, 4, 2, 3]);
     assert.ok(startMinutes('9:15 AM - 11:00 AM') < startMinutes('1:00 PM - 5:00 PM'));
+});
+
+test('a single clock displays in 12-hour time with AM and PM', () => {
+    assert.equal(formatClockTime('00:00'), '12:00 AM');
+    assert.equal(formatClockTime('08:05'), '8:05 AM');
+    assert.equal(formatClockTime('12:00'), '12:00 PM');
+    assert.equal(formatClockTime('13:30:00'), '1:30 PM');
+    assert.equal(formatClockTime('1:05 PM'), '1:05 PM');
+    assert.equal(formatClockTime(''), '');
 });
 
 test('schedule ranges display in 12-hour time with AM and PM', () => {

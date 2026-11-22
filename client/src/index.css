@@ -100,6 +100,7 @@
 
   html.dark .bg-white\/95 { background-color: rgb(20 28 46 / 0.95); }
   html.dark .bg-white\/90 { background-color: rgb(20 28 46 / 0.92); }
+  html.dark .bg-white\/85 { background-color: rgb(20 28 46 / 0.9); }
   html.dark .bg-white\/80 { background-color: rgb(20 28 46 / 0.88); }
   html.dark .bg-white\/70 { background-color: rgb(20 28 46 / 0.8); }
   html.dark .bg-white\/60 { background-color: rgb(20 28 46 / 0.72); }
@@ -273,6 +274,17 @@
     color: #cbd5e1;
   }
 
+  /* slate-100/200 are darkened for surfaces. The same utilities are also
+     light labels on permanent dark heroes, so keep that foreground light. */
+  html.dark :is(
+    .text-slate-100,
+    .text-slate-200,
+    .hover\:text-slate-100:hover,
+    .hover\:text-slate-200:hover
+  ) {
+    color: #f8fafc;
+  }
+
   html.dark :is(
     .text-blue-800,
     .hover\:text-blue-800:hover,
@@ -289,8 +301,23 @@
     color: #93c5fd;
   }
 
-  html.dark :is(.text-red-800, .text-red-700, .hover\:text-red-700:hover, .text-red-600, .hover\:text-red-600:hover, .text-rose-800, .text-rose-700, .text-rose-600) {
-    color: #fca5a5;
+  html.dark :is(
+    .text-red-900,
+    .text-red-800,
+    .text-red-700,
+    .hover\:text-red-700:hover,
+    .text-red-600,
+    .hover\:text-red-600:hover,
+    .text-rose-900,
+    .text-rose-800,
+    .text-rose-700,
+    .text-rose-600,
+    [class*='text-red-900/'],
+    [class*='text-red-800/'],
+    [class*='text-rose-900/'],
+    [class*='text-rose-800/']
+  ) {
+    color: #fecdd3;
   }
 
   html.dark .group:hover .group-hover\:text-red-700,
@@ -298,15 +325,44 @@
     color: #fca5a5;
   }
 
-  html.dark :is(.text-emerald-900, .text-emerald-800, .text-emerald-700, .text-emerald-600) {
+  html.dark :is(
+    .text-emerald-950,
+    .text-emerald-900,
+    .text-emerald-800,
+    .text-emerald-700,
+    .text-emerald-600,
+    [class*='text-emerald-950/'],
+    [class*='text-emerald-900/'],
+    [class*='text-emerald-800/']
+  ) {
     color: #6ee7b7;
   }
 
-  html.dark :is(.text-amber-800, .text-amber-700, .text-amber-600) {
-    color: #fcd34d;
+  /* Warning and notice copy sits on darkened amber fills. 900/950 stay
+     dark in the default palette, so lift them with the rest of the amber text. */
+  html.dark :is(
+    .text-amber-950,
+    .text-amber-900,
+    .text-amber-800,
+    .text-amber-700,
+    .text-amber-600,
+    [class*='text-amber-950/'],
+    [class*='text-amber-900/'],
+    [class*='text-amber-800/']
+  ) {
+    color: #fde68a;
   }
 
-  html.dark :is(.text-indigo-900, .text-indigo-700, .hover\:text-indigo-700:hover, .text-indigo-600, .hover\:text-indigo-600:hover) {
+  html.dark :is(
+    .text-indigo-900,
+    .text-indigo-800,
+    .text-indigo-700,
+    .hover\:text-indigo-700:hover,
+    .text-indigo-600,
+    .hover\:text-indigo-600:hover,
+    [class*='text-indigo-900/'],
+    [class*='text-indigo-800/']
+  ) {
     color: #a5b4fc;
   }
 
@@ -318,8 +374,17 @@
     color: #d8b4fe;
   }
 
-  html.dark :is(.text-violet-800, .text-violet-700, .text-violet-600, .text-violet-100) {
-    color: #c4b5fd;
+  html.dark :is(
+    .text-violet-950,
+    .text-violet-900,
+    .text-violet-800,
+    .text-violet-700,
+    .text-violet-600,
+    .text-violet-100,
+    [class*='text-violet-950/'],
+    [class*='text-violet-900/']
+  ) {
+    color: #ddd6fe;
   }
 
   html.dark :is(.text-teal-800, .text-teal-700, .text-teal-600, .text-teal-100) {
@@ -581,5 +646,463 @@ html[data-pwa-install='open'] .install-clearance {
 
   html.dark .chat-composer::placeholder {
     color: #94a3b8;
+  }
+}
+
+/*
+  Authenticated pages share one content column beside the sidebar.
+  Student pages use .app-page. Staff pages repeat a centered cap
+  (max-w-4xl through max-w-7xl, or 1400px) on the page root.
+  Inside .app-content-frame that cap is removed so cards, tables, and
+  forms use the viewport. Page padding stays on the shell (p-4 / sm:p-8).
+  Dialogs inside .fixed, and controls with their own max-width, are unchanged.
+*/
+@media screen {
+  .app-page {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    margin-inline: auto;
+  }
+
+  .app-content-frame :is(
+    .max-w-7xl,
+    .max-w-6xl,
+    .max-w-5xl,
+    .max-w-\[1400px\]
+  ):not(.fixed *) {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+  }
+
+  .app-content-frame .max-w-4xl.mx-auto:not(.fixed *) {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+  }
+
+  /* Help repeats its own padding inside the student shell. */
+  .app-content-frame > .app-page > div > .max-w-5xl {
+    padding: 0;
+  }
+}
+
+/*
+  Data tables stay traditional from the md breakpoint up.
+  Below that, each record becomes a card. Column roles (data-col) are
+  written by responsiveTables.ts from the header text.
+*/
+@media screen and (max-width: 767px) {
+  .overflow-x-auto:has(.app-data-table) {
+    overflow-x: clip;
+    max-width: 100%;
+  }
+
+  .app-data-table {
+    display: block;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100%;
+    border-collapse: separate;
+  }
+
+  .app-data-table thead,
+  .app-data-table tbody {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .app-data-table:not(:has(th[data-col='select'])) thead {
+    display: none;
+  }
+
+  .app-data-table:has(th[data-col='select']) thead {
+    padding: 0.85rem 0.85rem 0;
+  }
+
+  .app-data-table thead tr {
+    display: flex;
+    align-items: center;
+    background: transparent !important;
+    color: inherit !important;
+  }
+
+  .app-data-table thead th {
+    display: none;
+  }
+
+  .app-data-table thead th[data-col='select'] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    width: auto;
+    padding: 0;
+    color: #334155;
+  }
+
+  .app-data-table thead th[data-col='select']::after {
+    content: 'Select all';
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .app-data-table thead th[data-col='select'] input,
+  .app-data-table td[data-col='select'] input {
+    width: 1.15rem;
+    height: 1.15rem;
+  }
+
+  .app-data-table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    padding: 0.75rem;
+  }
+
+  .app-data-table tbody > tr {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    align-content: flex-start;
+    gap: 0.45rem 0.5rem;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+    padding: 0.9rem 0.95rem 0.8rem;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 1.15rem;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  .app-data-table tbody > tr[class*='bg-blue'] {
+    background: #eff6ff;
+    border-color: #93c5fd !important;
+  }
+
+  .app-data-table tbody > tr:has(td[data-col='span']) {
+    display: block;
+    padding: 0;
+    border: 0 !important;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .app-data-table tbody > tr > td {
+    display: block;
+    min-width: 0;
+    padding: 0 !important;
+    text-align: left !important;
+    vertical-align: top;
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
+
+  .app-data-table tbody > tr:has(td[data-col='span']) > td {
+    padding: 2.25rem 1rem !important;
+  }
+
+  .app-data-table td[data-col='select'] {
+    position: absolute;
+    top: 0.45rem;
+    left: 0.2rem;
+    z-index: 1;
+    display: flex;
+    width: 2.75rem;
+    height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .app-data-table tr:has(> td[data-col='select']) > :is(td[data-col='primary'], td[data-col='lead']) {
+    padding-left: 2.15rem !important;
+  }
+
+  .app-data-table td[data-col='primary'],
+  .app-data-table td[data-col='lead'],
+  .app-data-table td[data-col='detail'],
+  .app-data-table td[data-col='field'],
+  .app-data-table td[data-col='actions'],
+  .app-data-table td[data-col='status']:has(p, div) {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100% !important;
+  }
+
+  .app-data-table td[data-col='primary'],
+  .app-data-table td[data-col='lead'] {
+    order: 1;
+  }
+
+  .app-data-table td[data-col='day'],
+  .app-data-table td[data-col='metric'],
+  .app-data-table td[data-col='badge'] {
+    order: 2;
+    flex: 0 1 auto;
+    width: auto;
+    max-width: 100%;
+  }
+
+  .app-data-table td[data-keep-line='true'] {
+    white-space: nowrap;
+  }
+
+  .app-data-table td[data-col='badge'] [class*='whitespace-nowrap'],
+  .app-data-table td[data-col='status'] [class*='whitespace-nowrap'] {
+    white-space: normal;
+  }
+
+  .app-data-table td[data-col='detail'] {
+    order: 3;
+  }
+
+  .app-data-table td[data-col='field'] {
+    order: 4;
+  }
+
+  .app-data-table td[data-col='status'] {
+    order: 5;
+    flex: 0 1 auto;
+    width: auto;
+    max-width: 100%;
+  }
+
+  .app-data-table td[data-col='actions'] {
+    order: 6;
+    display: flex;
+    flex-flow: row wrap;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.2rem;
+    padding-top: 0.7rem !important;
+    border-top: 1px solid #e2e8f0;
+  }
+
+  .app-data-table td[data-col='empty'] {
+    display: none;
+  }
+
+  .app-data-table td[data-col='day'] {
+    align-self: center;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    background: #f8fafc;
+    padding: 0.28rem 0.7rem !important;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .app-data-table td[data-col='metric'] {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    border-radius: 0.85rem;
+    background: rgba(15, 23, 42, 0.045);
+    padding: 0.32rem 0.65rem !important;
+    white-space: nowrap;
+  }
+
+  .app-data-table td[data-col='metric']:has(input, textarea, select),
+  .app-data-table td[data-col='badge']:has(input, textarea, select),
+  .app-data-table td[data-col='day']:has(input, textarea, select) {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
+    white-space: normal;
+    order: 3;
+  }
+
+  .app-data-table td[data-col='metric'][data-emphasis='true'] {
+    background: rgba(37, 99, 235, 0.1);
+    box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.22);
+  }
+
+  .app-data-table td[data-col='field'],
+  .app-data-table td[data-col='detail'] {
+    display: grid;
+    gap: 0.15rem 0.75rem;
+    align-items: start;
+    padding-top: 0.45rem !important;
+    border-top: 1px solid rgba(148, 163, 184, 0.28);
+  }
+
+  .app-data-table td[data-col='field'] {
+    grid-template-columns: 6.75rem minmax(0, 1fr);
+  }
+
+  .app-data-table td[data-col='detail'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-data-table td[data-col='field']::before,
+  .app-data-table td[data-col='detail']::before,
+  .app-data-table td[data-col='metric']::before {
+    content: attr(data-label);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    line-height: 1.3;
+    text-transform: uppercase;
+    color: #64748b;
+  }
+
+  .app-data-table td[data-col='metric']::before {
+    font-size: 9px;
+    letter-spacing: 0.08em;
+  }
+
+  .app-data-table td:not([data-col='metric']):not([data-col='day']) .truncate {
+    overflow: visible;
+    text-overflow: unset;
+    white-space: normal !important;
+  }
+
+  .app-data-table td:not([data-col='metric']):not([data-col='day']) [class*='min-w-'] {
+    min-width: 0 !important;
+  }
+
+  .app-data-table td[data-col='actions'] > :is(div, .inline-flex, .flex) {
+    display: flex !important;
+    flex-flow: row wrap !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    width: 100%;
+    max-width: 100%;
+    gap: 0.45rem;
+  }
+
+  .app-data-table td[data-col='actions'] :is(button, a) {
+    max-width: 100%;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+
+  .app-data-table td[data-col='actions'] button[data-action-tone] {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 2.25rem;
+    padding: 0.4rem 0.75rem !important;
+    border-style: solid;
+    border-width: 1px;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+    box-shadow: none;
+  }
+
+  .app-data-table td[data-col='actions'] button[data-action-tone]::after {
+    content: attr(data-short-label);
+  }
+
+  .app-data-table td[data-col='actions'] button[data-action-tone] svg {
+    flex-shrink: 0;
+  }
+
+  .app-data-table td[data-col='actions'] button[data-action-tone='edit'],
+  .app-data-table td[data-col='actions'] button[data-action-tone='view'] {
+    border-color: #bfdbfe;
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  .app-data-table td[data-col='actions'] button[data-action-tone='delete'],
+  .app-data-table td[data-col='actions'] button[data-action-tone='reject'] {
+    border-color: #fecdd3;
+    background: #fff1f2;
+    color: #be123c;
+  }
+
+  .app-data-table td[data-col='actions'] button[data-action-tone='approve'] {
+    border-color: #a7f3d0;
+    background: #ecfdf5;
+    color: #047857;
+  }
+
+  .app-data-table td[data-col='actions'] button[data-action-tone='neutral'] {
+    border-color: #e2e8f0;
+    background: #f8fafc;
+    color: #334155;
+  }
+
+  .app-data-table :focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+  }
+
+  html.dark .app-data-table thead th[data-col='select'],
+  html.dark .app-data-table td[data-col='field']::before,
+  html.dark .app-data-table td[data-col='detail']::before,
+  html.dark .app-data-table td[data-col='metric']::before {
+    color: #94a3b8;
+  }
+
+  html.dark .app-data-table tbody > tr {
+    border-color: #2a3950 !important;
+    background: #182236;
+    box-shadow: none;
+  }
+
+  html.dark .app-data-table tbody > tr[class*='bg-blue'] {
+    background: #172554;
+    border-color: #1d4ed8 !important;
+  }
+
+  html.dark .app-data-table td[data-col='day'] {
+    border-color: #2a3950;
+    background: #172033;
+    color: #e2e8f0;
+  }
+
+  html.dark .app-data-table td[data-col='metric'] {
+    background: rgba(148, 163, 184, 0.12);
+  }
+
+  html.dark .app-data-table td[data-col='metric'][data-emphasis='true'] {
+    background: rgba(37, 99, 235, 0.22);
+    box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.35);
+  }
+
+  html.dark .app-data-table td[data-col='field'],
+  html.dark .app-data-table td[data-col='detail'],
+  html.dark .app-data-table td[data-col='actions'] {
+    border-color: #2a3950;
+  }
+
+  html.dark .app-data-table td[data-col='actions'] button[data-action-tone='edit'],
+  html.dark .app-data-table td[data-col='actions'] button[data-action-tone='view'] {
+    border-color: #1e3a8a;
+    background: #172554;
+    color: #bfdbfe;
+  }
+
+  html.dark .app-data-table td[data-col='actions'] button[data-action-tone='delete'],
+  html.dark .app-data-table td[data-col='actions'] button[data-action-tone='reject'] {
+    border-color: #7f1d1d;
+    background: #450a0a;
+    color: #fecaca;
+  }
+
+  html.dark .app-data-table td[data-col='actions'] button[data-action-tone='approve'] {
+    border-color: #065f46;
+    background: #022c22;
+    color: #a7f3d0;
+  }
+
+  html.dark .app-data-table td[data-col='actions'] button[data-action-tone='neutral'] {
+    border-color: #2a3950;
+    background: #172033;
+    color: #e2e8f0;
   }
 }

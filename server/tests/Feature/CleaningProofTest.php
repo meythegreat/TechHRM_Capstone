@@ -65,6 +65,13 @@ class CleaningProofTest extends TestCase
 
         Sanctum::actingAs($lead);
         $this->patchJson('/api/attendance/janitorial-reviews/'.$attendanceId, ['status' => 'accepted'])
+            ->assertOk()
+            ->assertJsonPath('entry.status', 'recommended');
+        $this->assertEquals(0.0, (float) Attendance::query()->findOrFail($attendanceId)->rendered_hours);
+
+        $immediate = User::query()->where('role', 'Immediate Supervisor')->firstOrFail();
+        Sanctum::actingAs($immediate);
+        $this->patchJson('/api/attendance/janitorial-reviews/'.$attendanceId, ['status' => 'accepted'])
             ->assertOk();
 
         $accepted = Attendance::query()->findOrFail($attendanceId);
@@ -261,20 +268,37 @@ class CleaningProofTest extends TestCase
             ->assertJsonPath('entries.0.before_captured_at', '2026-11-13T17:16:00+08:00')
             ->assertJsonPath('entries.0.after_captured_at', '2026-11-13T17:40:00+08:00');
 
+        $this->patchJson('/api/attendance/janitorial-reviews/'.$attendanceId, [
+            'status' => 'accepted',
+            'deducted_hours' => 1,
+            'remarks' => 'Left the area early.',
+        ])->assertOk()
+            ->assertJsonPath('entry.status', 'recommended')
+            ->assertJsonPath('entry.deducted_hours', 1);
+        $recommended = Attendance::query()->findOrFail($attendanceId);
+        $this->assertSame('recommended', $recommended->status);
+        $this->assertEquals(0.0, (float) $recommended->rendered_hours);
+        $this->assertSame('Left the area early.', $recommended->janitorial_leader_remarks);
+
+        $this->patchJson('/api/attendance/janitorial-reviews/'.$attendanceId, ['status' => 'rejected'])
+            ->assertStatus(422);
+
+        $immediate = User::query()->where('role', 'Immediate Supervisor')->firstOrFail();
+        Sanctum::actingAs($immediate);
         $this->patchJson('/api/attendance/janitorial-reviews/'.$attendanceId, ['status' => 'accepted'])
             ->assertOk()
             ->assertJsonPath('entry.status', 'accepted');
         $accepted = Attendance::query()->findOrFail($attendanceId);
         $this->assertSame('accepted', $accepted->status);
-        $this->assertEquals(4.0, (float) $accepted->rendered_hours);
+        $this->assertEquals(3.0, (float) $accepted->rendered_hours);
         $this->assertTrue(
-            Carbon::parse($accepted->time_in)->addHours(4)->equalTo(Carbon::parse($accepted->time_out))
+            Carbon::parse($accepted->time_in)->addHours(3)->equalTo(Carbon::parse($accepted->time_out))
         );
 
         $this->patchJson('/api/attendance/janitorial-reviews/'.$attendanceId, ['status' => 'rejected'])
             ->assertStatus(422);
         $this->assertSame('accepted', Attendance::query()->findOrFail($attendanceId)->status);
-        $this->assertEquals(4.0, (float) Attendance::query()->findOrFail($attendanceId)->rendered_hours);
+        $this->assertEquals(3.0, (float) Attendance::query()->findOrFail($attendanceId)->rendered_hours);
     }
 
     public function test_daily_cleaning_time_out_requires_proof(): void
@@ -369,6 +393,7 @@ class CleaningProofTest extends TestCase
         $wspo = $this->makeUser('WSPO Staff', 'WSPO Coordinator', 'Coord');
         $lead = $this->makeUser('Student', 'Library', 'Lead');
         $member = $this->makeUser('Student', 'Library', 'Member');
+        $immediate = $this->makeUser('Immediate Supervisor', 'Library', 'Library Secretary');
 
         Sanctum::actingAs($wspo);
         $groupId = $this->postJson('/api/attendance/janitorial-groups', [
@@ -376,6 +401,7 @@ class CleaningProofTest extends TestCase
             'name' => 'Stacks',
             'area' => 'Second floor',
             'supervisor_user_id' => $lead->id,
+            'immediate_supervisor_user_id' => $immediate->id,
             'member_ids' => [$member->id],
         ])->assertCreated()->json('group.id');
 
@@ -470,6 +496,7 @@ class CleaningProofTest extends TestCase
             $table->string('name', 80);
             $table->string('area', 120);
             $table->foreignId('supervisor_user_id')->constrained('users')->cascadeOnDelete();
+            $table->unsignedBigInteger('immediate_supervisor_user_id')->nullable();
             $table->timestamps();
         });
 
@@ -517,6 +544,14 @@ class CleaningProofTest extends TestCase
             $table->unsignedBigInteger('schedule_id')->nullable();
             $table->unsignedBigInteger('janitorial_group_id')->nullable();
             $table->string('janitorial_area', 120)->nullable();
+            $table->string('janitorial_leader_decision', 20)->nullable();
+            $table->decimal('janitorial_deducted_hours', 8, 2)->nullable();
+            $table->text('janitorial_leader_remarks')->nullable();
+            $table->unsignedBigInteger('janitorial_leader_reviewed_by')->nullable();
+            $table->timestamp('janitorial_leader_reviewed_at')->nullable();
+            $table->unsignedBigInteger('janitorial_final_by')->nullable();
+            $table->boolean('janitorial_final_on_behalf')->default(false);
+            $table->boolean('janitorial_supervision')->default(false);
             $table->string('cleaning_before_path', 500)->nullable();
             $table->string('cleaning_after_path', 500)->nullable();
             $table->timestamp('cleaning_before_captured_at')->nullable();

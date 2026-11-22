@@ -2,7 +2,15 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { motion } from 'framer-motion';
 import Toast from './Toast';
-import { UserCircle, ShieldCheck, Eye, EyeOff } from 'lucide-react';
+import {
+    UserCircle,
+    ShieldCheck,
+    Eye,
+    EyeOff,
+    Lock,
+    Building2,
+    Save,
+} from 'lucide-react';
 import SecureImage from './SecureImage';
 import AvatarCropDialog from './AvatarCropDialog';
 import AvatarPhotoMenu from './AvatarPhotoMenu';
@@ -18,8 +26,12 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
 
     const [name, setName] = useState(localStorage.getItem('user_name') || '');
     const [phoneNumber, setPhoneNumber] = useState('');
-    const [assignedOffice, setAssignedOffice] = useState(localStorage.getItem('assigned_office') || '');
-    const [avatarPath, setAvatarPath] = useState<string | null>(() => normalizeFilePath(localStorage.getItem('profile_picture')));
+    const [assignedOffice, setAssignedOffice] = useState(
+        localStorage.getItem('assigned_office') || ''
+    );
+    const [avatarPath, setAvatarPath] = useState<string | null>(() =>
+        normalizeFilePath(localStorage.getItem('profile_picture'))
+    );
     const [cropSource, setCropSource] = useState<string | null>(null);
 
     const [currentPassword, setCurrentPassword] = useState('');
@@ -30,15 +42,20 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
 
     const [isSaving, setIsSaving] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
-    const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+    const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(
+        null
+    );
 
     useEffect(() => {
-        axios.get('/api/user')
+        axios
+            .get('/api/user')
             .then((response) => {
                 const user = response.data;
                 setName(user.name || '');
                 setPhoneNumber(user.phone_number || '');
-                setAssignedOffice(user.profile?.assigned_office || localStorage.getItem('assigned_office') || '');
+                setAssignedOffice(
+                    user.profile?.assigned_office || localStorage.getItem('assigned_office') || ''
+                );
 
                 if (user.profile_picture) {
                     const path = normalizeFilePath(user.profile_picture);
@@ -158,30 +175,59 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
     const firstName = name.split(' ')[0] || 'U';
 
     return (
-        <div className="space-y-6 max-w-4xl mx-auto p-4 sm:p-8 font-sans">
-            <motion.div
-                initial={{ opacity: 0, y: -20 }}
+        <div className="mx-auto max-w-4xl space-y-6 p-4 font-sans sm:p-8">
+            {/* OBSIDIAN ACCOUNT HERO */}
+            <motion.header
+                initial={{ opacity: 0, y: -12 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
+                transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                className="relative overflow-hidden rounded-[2rem] border border-slate-800 bg-slate-950 p-6 text-white shadow-2xl shadow-slate-900/20 sm:p-8"
             >
-                <div>
-                    <div className="flex items-center gap-2 mb-2">
-                        <UserCircle className="w-5 h-5 text-blue-400" />
-                        <span className="text-sm font-medium text-slate-500">Account Management</span>
+                <div
+                    className="pointer-events-none absolute inset-0 opacity-20"
+                    style={{
+                        backgroundImage:
+                            'radial-gradient(rgba(148,163,184,0.4) 1px, transparent 1px)',
+                        backgroundSize: '20px 20px',
+                    }}
+                    aria-hidden="true"
+                />
+                <div
+                    className="pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full bg-blue-600/25 blur-3xl"
+                    aria-hidden="true"
+                />
+                <div
+                    className="pointer-events-none absolute -bottom-24 left-1/4 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl"
+                    aria-hidden="true"
+                />
+
+                <div className="relative z-10 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+                    <div className="min-w-0 max-w-xl">
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-400/25 bg-blue-500/15 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-blue-300">
+                            <UserCircle className="h-3.5 w-3.5 text-blue-400" />
+                            Account Management
+                        </span>
+                        <h1 className="mt-3.5 text-3xl font-black tracking-tight text-white sm:text-4xl">
+                            Profile Settings
+                        </h1>
+                        <p className="mt-2 text-sm font-medium leading-relaxed text-slate-300">
+                            Update your account details, contact information, profile photo, and password.
+                        </p>
                     </div>
-                    <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Profile Settings</h1>
-                    <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
-                        Update your account details, contact information, and password.
-                    </p>
-                </div>
-                <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex items-center gap-4">
-                    <ShieldCheck className="w-5 h-5 text-blue-400" />
-                    <div className="flex flex-col">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Access Level</span>
-                        <span className="text-sm font-semibold text-slate-900">{userRole}</span>
+
+                    <div className="flex shrink-0 items-center gap-3.5 self-start rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-4 backdrop-blur-xl sm:self-auto">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-500/20 text-blue-300 ring-1 ring-blue-400/30">
+                            <ShieldCheck className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                                Access Level
+                            </p>
+                            <p className="mt-0.5 text-sm font-black text-white">{userRole}</p>
+                        </div>
                     </div>
                 </div>
-            </motion.div>
+            </motion.header>
 
             <Toast
                 message={message?.text ?? null}
@@ -189,20 +235,34 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
                 onClose={() => setMessage(null)}
             />
 
-            <form onSubmit={handleSave} className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] space-y-8">
-                <div className="flex flex-col md:flex-row gap-10 items-start">
-                    <div className="flex flex-col items-center md:w-1/3 w-full">
-                        <div className="relative group cursor-pointer">
-                            <div className="w-40 h-40 bg-slate-100 rounded-full border-4 border-white shadow-xl flex items-center justify-center overflow-hidden">
+            {/* PROFILE & SECURITY FORM */}
+            <motion.form
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+                onSubmit={handleSave}
+                className="space-y-8 rounded-[1.75rem] border border-slate-200/90 bg-white p-6 shadow-sm sm:p-8"
+            >
+                <div className="flex flex-col items-start gap-8 md:flex-row">
+                    {/* Avatar Column */}
+                    <div className="flex w-full flex-col items-center md:w-1/3">
+                        <div className="group relative cursor-pointer">
+                            <div className="flex h-40 w-40 items-center justify-center overflow-hidden rounded-full border-4 border-white bg-slate-100 shadow-xl ring-1 ring-slate-200">
                                 {avatarPath ? (
                                     <SecureImage
                                         filePath={avatarPath}
                                         altText="Profile"
-                                        className="w-full h-full object-cover"
-                                        fallback={<span className="text-slate-400 font-semibold text-5xl">{firstName.charAt(0)}</span>}
+                                        className="h-full w-full object-cover"
+                                        fallback={
+                                            <span className="text-5xl font-black text-slate-400">
+                                                {firstName.charAt(0)}
+                                            </span>
+                                        }
                                     />
                                 ) : (
-                                    <span className="text-slate-400 font-semibold text-5xl">{firstName.charAt(0)}</span>
+                                    <span className="text-5xl font-black text-slate-400">
+                                        {firstName.charAt(0)}
+                                    </span>
                                 )}
                             </div>
                             <AvatarPhotoMenu
@@ -213,104 +273,162 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
                                 onRemove={removeAvatar}
                             />
                         </div>
-                        <p className="text-xs text-slate-500 font-medium mt-4 text-center">Tap the camera button to change or remove your photo. JPG or PNG, up to 2MB.</p>
+                        <p className="mt-4 max-w-[220px] text-center text-xs font-medium leading-relaxed text-slate-500">
+                            Tap the camera button to change or remove your photo. JPG or PNG, up to 2MB.
+                        </p>
                     </div>
 
-                    <div className="flex-1 w-full space-y-6">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    {/* Editable Details Column */}
+                    <div className="w-full flex-1 space-y-5">
+                        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Full Name</label>
+                                <label className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                                    Full Name
+                                </label>
                                 <input
                                     type="text"
                                     required
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
-                                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-bold outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm font-bold text-slate-900 outline-none transition-all focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-600/20"
                                 />
                             </div>
+
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Contact Number</label>
+                                <label className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                                    Contact Number
+                                </label>
                                 <input
                                     type="text"
                                     value={phoneNumber}
                                     onChange={(e) => setPhoneNumber(e.target.value)}
                                     placeholder="Optional"
-                                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm font-semibold text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-600/20"
                                 />
                             </div>
+
                             {(userRole === 'WSPO Staff' || userRole === 'Supervisor') && (
                                 <div className="sm:col-span-2">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                                        {userRole === 'WSPO Staff' ? 'WSPO Position' : 'Supervised Department'}
+                                    <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                                        <Building2 className="h-3.5 w-3.5 text-slate-400" />
+                                        {userRole === 'WSPO Staff'
+                                            ? 'WSPO Position'
+                                            : 'Supervised Department'}
                                     </label>
                                     <input
                                         type="text"
                                         disabled
                                         value={assignedOffice || 'Not assigned'}
-                                        className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-bold opacity-80 cursor-not-allowed"
+                                        className="w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm font-bold text-slate-900 opacity-85"
                                     />
-                                    <p className="text-xs text-slate-400 mt-2">Contact a Super Admin to change organizational assignment.</p>
+                                    <p className="mt-2 text-xs font-medium text-slate-400">
+                                        Contact a Super Admin to change organizational assignment.
+                                    </p>
                                 </div>
                             )}
                         </div>
                     </div>
                 </div>
 
-                <div className="border-t border-slate-100 pt-8 space-y-5">
-                    <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-widest">Change Password</h2>
-                    <p className="text-sm text-slate-500">Leave blank if you do not want to change your password.</p>
+                {/* PASSWORD SECURITY SECTION */}
+                <div className="space-y-5 border-t border-slate-100 pt-7">
+                    <div className="flex items-center gap-3">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-900 text-white">
+                            <Lock className="h-4 w-4" />
+                        </span>
+                        <div>
+                            <h2 className="text-base font-black tracking-tight text-slate-900">
+                                Change Password
+                            </h2>
+                            <p className="text-xs font-medium text-slate-500">
+                                Leave blank if you do not want to change your password.
+                            </p>
+                        </div>
+                    </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
                         <div className="relative">
-                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Current Password</label>
+                            <label className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                                Current Password
+                            </label>
                             <input
                                 type={showCurrentPassword ? 'text' : 'password'}
                                 value={currentPassword}
                                 onChange={(e) => setCurrentPassword(e.target.value)}
-                                className="w-full p-3.5 pr-12 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"
+                                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3.5 pr-11 text-sm font-semibold outline-none transition-all focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-600/20"
                             />
-                            <button type="button" onClick={() => setShowCurrentPassword(!showCurrentPassword)} className="absolute right-3 top-[38px] text-slate-400 hover:text-blue-600">
-                                {showCurrentPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                            <button
+                                type="button"
+                                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                                className="absolute right-3 top-[34px] text-slate-400 transition-colors hover:text-blue-600"
+                                aria-label="Toggle current password visibility"
+                            >
+                                {showCurrentPassword ? (
+                                    <EyeOff className="h-4 w-4" />
+                                ) : (
+                                    <Eye className="h-4 w-4" />
+                                )}
                             </button>
                         </div>
+
                         <div className="relative">
-                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">New Password</label>
+                            <label className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                                New Password
+                            </label>
                             <input
                                 type={showNewPassword ? 'text' : 'password'}
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
                                 minLength={6}
-                                className="w-full p-3.5 pr-12 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"
+                                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3.5 pr-11 text-sm font-semibold outline-none transition-all focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-600/20"
                             />
-                            <button type="button" onClick={() => setShowNewPassword(!showNewPassword)} className="absolute right-3 top-[38px] text-slate-400 hover:text-blue-600">
-                                {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                            <button
+                                type="button"
+                                onClick={() => setShowNewPassword(!showNewPassword)}
+                                className="absolute right-3 top-[34px] text-slate-400 transition-colors hover:text-blue-600"
+                                aria-label="Toggle new password visibility"
+                            >
+                                {showNewPassword ? (
+                                    <EyeOff className="h-4 w-4" />
+                                ) : (
+                                    <Eye className="h-4 w-4" />
+                                )}
                             </button>
                         </div>
+
                         <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Confirm Password</label>
+                            <label className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                                Confirm Password
+                            </label>
                             <input
                                 type="password"
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                 minLength={6}
-                                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"
+                                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm font-semibold outline-none transition-all focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-600/20"
                             />
                         </div>
                     </div>
                 </div>
 
-                <div className="flex justify-end pt-2">
+                <div className="flex justify-end border-t border-slate-100 pt-5">
                     <button
                         type="submit"
                         disabled={isSaving}
-                        className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-600/25 disabled:opacity-50 transition-all"
+                        className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-xs font-extrabold uppercase tracking-wider text-white shadow-sm transition-all hover:bg-blue-600 disabled:opacity-50"
                     >
-                        {isSaving ? 'Saving...' : 'Save Profile'}
+                        <Save className="h-4 w-4" />
+                        {isSaving ? 'Saving…' : 'Save Profile'}
                     </button>
                 </div>
-            </form>
+            </motion.form>
+
             {cropSource && (
-                <AvatarCropDialog imageUrl={cropSource} onCancel={closeCrop} onConfirm={uploadCroppedAvatar} />
+                <AvatarCropDialog
+                    imageUrl={cropSource}
+                    onCancel={closeCrop}
+                    onConfirm={uploadCroppedAvatar}
+                />
             )}
         </div>
     );

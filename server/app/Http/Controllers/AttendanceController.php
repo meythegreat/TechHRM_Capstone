@@ -265,7 +265,7 @@ class AttendanceController extends Controller
     {
         $user = $request->user();
 
-        $query = Attendance::query()->visibleTo($user->role);
+        $query = Attendance::query()->visibleTo($user->role)->withoutMissedLogins();
 
         $accounts = app(\App\Http\Controllers\UserController::class);
         if ($accounts->usesSupervisorScope($user)) {
@@ -286,7 +286,7 @@ class AttendanceController extends Controller
     {
         return $query
             ->whereNotNull('time_out')
-            ->whereRaw("LOWER(COALESCE(status, '')) NOT IN ('accepted', 'approved', 'rejected')");
+            ->whereRaw("LOWER(COALESCE(status, '')) NOT IN ('accepted', 'approved', 'rejected', 'anomaly')");
     }
 
     // 5. Admin View: Export to CSV (Excel)
@@ -295,7 +295,7 @@ class AttendanceController extends Controller
         $fileName = 'WSPO_Timesheet_Export_' . date('Y-m-d') . '.csv';
 
         // Eager load the user AND their student profile for complete data
-        $attendances = Attendance::query()->visibleTo($request->user()->role)->orderBy('time_in', 'desc')->get();
+        $attendances = Attendance::query()->visibleTo($request->user()->role)->withoutMissedLogins()->orderBy('time_in', 'desc')->get();
 
         $headers = array(
             "Content-type"        => "text/csv",
@@ -324,8 +324,12 @@ class AttendanceController extends Controller
                 $row['Student Name'] = $record->user->fullname;
                 $row['Student ID'] = $record->user->profile->student_id_number ?? 'N/A';
                 $row['Assigned Office'] = $record->user->profile->assigned_office ?? 'N/A';
-                $row['Time In'] = $record->time_in;
-                $row['Time Out'] = $record->time_out ?? 'Active Shift';
+                $row['Time In'] = $record->time_in
+                    ? \Carbon\Carbon::parse($record->time_in)->timezone(config('app.timezone'))->format('M j, Y g:i A')
+                    : '';
+                $row['Time Out'] = $record->time_out
+                    ? \Carbon\Carbon::parse($record->time_out)->timezone(config('app.timezone'))->format('M j, Y g:i A')
+                    : 'Active Shift';
                 $row['Rendered Hours'] = $record->rendered_hours ?? '-';
                 $row['Status'] = $record->status;
 
@@ -358,7 +362,7 @@ class AttendanceController extends Controller
         $user = $request->user();
 
         // Fetch attendances and include the user's name and profile data
-        $query = \App\Models\Attendance::query()->visibleTo($user->role)->orderBy('time_in', 'desc');
+        $query = \App\Models\Attendance::query()->visibleTo($user->role)->withoutMissedLogins()->orderBy('time_in', 'desc');
 
         // If it is a Supervisor, strictly filter to show only their department's students
         if ($user->role === 'Supervisor' && $user->department_id) {
@@ -388,6 +392,9 @@ class AttendanceController extends Controller
         }
 
         $attendance = \App\Models\Attendance::with('user.profile')->findOrFail($id);
+        if ($attendance->isMissedDutyLogin()) {
+            return response()->json(['message' => 'A missed login is an anomaly and is not a timesheet to accept or reject.'], 422);
+        }
         if (!$attendance->time_out) {
             return response()->json(['message' => 'The student must time out for the day before this record can be accepted or rejected.'], 422);
         }

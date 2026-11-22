@@ -78,6 +78,12 @@ export interface ChatActiveNowResponse {
   count: number;
 }
 
+export const CHAT_SYNC_EVENT = 'wospis:chat-sync';
+
+export function emitChatSync(conversationId?: number) {
+  window.dispatchEvent(new CustomEvent(CHAT_SYNC_EVENT, { detail: { conversationId } }));
+}
+
 export const chatService = {
   searchUsers: async (q = ''): Promise<ChatUser[]> => {
     const response = await axios.get('/api/chat/users', { params: q ? { q } : undefined });

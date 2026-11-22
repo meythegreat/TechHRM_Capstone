@@ -1,8 +1,18 @@
 import { useMemo, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { BookOpen, ChevronDown, Search, CircleHelp, Lightbulb, ListOrdered } from 'lucide-react';
+import {
+    BookOpen,
+    ChevronDown,
+    Search,
+    CircleHelp,
+    Lightbulb,
+    ListOrdered,
+    Sparkles,
+    X,
+    Info,
+} from 'lucide-react';
 
-type HelpAudience = 'Student' | 'Supervisor' | 'WSPO Staff' | 'Super Admin' | 'all';
+type HelpAudience = 'Student' | 'Supervisor' | 'Department Secretary' | 'Immediate Supervisor' | 'WSPO Staff' | 'Super Admin' | 'all';
 
 interface HelpTopic {
     id: string;
@@ -27,7 +37,7 @@ const HELP_TOPICS: HelpTopic[] = [
             'Check your hours progress and how close you are to the required hours.',
             'Review this week and this month against the 20/25 weekly and 100 monthly limits. Ask your supervisor for an Extra Hours letter if you need up to 25 hours/week.',
             'Look at your assigned office and supervisor names.',
-            'Use the calendar to move between months and select a day to see your work or class lists. Days with classes or work are highlighted, and today\'s schedule stays at the top. Happening now cycles through the blocks in progress, and Expand opens the full list. Click the calendar header to collapse or expand it.',
+            "Use the calendar to move between months and select a day to see your work or class lists. Days with classes or work are highlighted, and today's schedule stays at the top. Happening now cycles through the blocks in progress, and Expand opens the full list. Click the calendar header to collapse or expand it.",
             'Check Upcoming Shifts so you know when to report for duty.',
             'Use the left menu when you need Attendance, Schedule, Requirements, or other pages.',
         ],
@@ -41,7 +51,7 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Attendance / DTR',
         summary: 'Clock in and clock out for your duty.',
         about:
-            'Attendance / DTR is where you record your daily time. You can clock in and out using a supervisor passcode or a live QR code. If you have more than one shift in the morning or afternoon, clock out of the current shift before the next one. Each shift is recorded on the DTR. When the office had no internet, use Offline manual attendance to request time in and time out. You can submit while offline — the request stays on your device and uploads when you are back online; hours appear on your DTR only after your supervisor approves. You can also preview your DTR and check recent logs with statuses like Accepted, Rejected, Pending, or Timed in.',
+            'Attendance / DTR is where you record your daily time. You can clock in and out using a supervisor passcode or a live QR code. If you have more than one shift in the morning or afternoon, clock out of the current shift before the next one. Each shift is recorded on the DTR. If a class is meeting and the teacher does not hold it, use Class-hours clock-in: choose that class, enter the reason, and submit. Your supervisor approves it before you are clocked in. Clock out afterward so the hours are added the same way as a normal clock-in. When the office had no internet, use Offline manual attendance to request time in and time out. You can submit while offline — the request stays on your device and uploads when you are back online; hours appear on your DTR only after your supervisor approves. You can also preview your DTR and check recent logs with statuses like Accepted, Rejected, Pending, or Timed in.',
         audience: ['Student'],
         steps: [
             'Click Attendance / DTR in the left menu.',
@@ -49,6 +59,7 @@ const HELP_TOPICS: HelpTopic[] = [
             'Ask your supervisor for the current passcode, or scan the QR code they show.',
             'Click Clock In when your duty starts.',
             'Click Clock Out any time after you clock in. The recorded time is that moment, and the entry is approved right away.',
+            'If your teacher does not meet during a class, open Class-hours clock-in, choose that class, check the subject, schedule, room, and instructor, enter the reason, and submit. You can submit only while that class is meeting. After your supervisor approves, you are clocked in. Clock out with the passcode or QR when the duty ends.',
             'If the office had no internet, open Offline manual attendance, enter time in and time out (add more shifts if needed), then submit. If you are still offline, the request is saved on this device and uploads automatically when you reconnect (or tap Upload now).',
             'Wait for supervisor approval. Approved shifts are credited on your DTR.',
             'Open DTR Preview to review your recorded times.',
@@ -58,7 +69,7 @@ const HELP_TOPICS: HelpTopic[] = [
             'You can usually clock in starting 30 minutes before your shift begins.',
             'If you are already timed in, clock out first before starting another duty.',
             'Cleaning, devotionals, and assemblies use their own passcode or QR. Clock in, then time out the same way. Hours are added only when you time out, and only if the clock-in was on time.',
-            'Janitorial duty usually needs no code. On Attendance / DTR, choose Photo under Janitorial duty. The first surroundings photo starts your clock-in, and the last photo ends your clock-out. If your janitorial supervisor is with you, you can choose Supervisor code instead. If they accept the entry, the DTR records exactly 4 hours from clock-in.',
+            'Janitorial duty usually needs no code. On Attendance / DTR, choose Photo under Janitorial duty. The first surroundings photo starts your clock-in, and the last photo ends your clock-out. If your janitorial supervisor is with you, you can choose Supervisor code instead. That supervisor can approve, deduct hours, and add a note. The immediate supervisor has the final say. An accepted entry records up to 4 hours from clock-in.',
             'If you have no work schedule yet, follow the attendance rules set by WSPO.',
             'You may work up to 20 hours per week by default. Past 20 hours needs administrator approval (up to 25). The monthly maximum is 100 hours.',
             'Offline requests do not replace normal passcode or QR clock-in when the office is online.',
@@ -69,19 +80,40 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Janitorial code',
         summary: 'Show the live code for your janitorial roster.',
         about:
-            'Janitorial code is for the student assigned as a janitorial group leader. Members normally clock in and out with surroundings photos and no code. Show the passcode or QR only when you are with the group and they choose Supervisor code. Each code lasts 30 seconds. You accept or decline their photos and any offline requests. An accepted entry is recorded as exactly 4 hours from clock-in.',
+            'Janitorial code is for the student assigned as a janitorial supervisor. Members normally clock in and out with surroundings photos and no code. Show the passcode or QR only when you are with the group and they choose Supervisor code. Each code lasts 30 seconds. You can approve, deduct duty hours, and add a note. The immediate supervisor has the final say before hours are recorded. You also take one on-the-spot photo at the area so your own 4 supervising hours can be credited. One supervisor covers at most 3 areas, with one credit per day.',
         audience: ['Student'],
         steps: [
             'Open Janitorial code in the left menu. It appears only if you are the leader of a janitorial group.',
             'If you cover more than one area, choose the group first.',
             'Show the passcode or the QR only when a member chooses Supervisor code because you are with them.',
             'Wait for the code to refresh, then show the new one. An old photo or a copied code stops working after 30 seconds.',
-            'Under Photo review, surroundings photos appear even while the student is still clocked in. Check each timestamp, then Accept or Decline after they clock out. Accepting records exactly 4 hours from their clock-in.',
-            'Under Offline requests, accept or decline manual janitorial entries submitted when a code could not be scanned.',
+            'Under Photo review, surroundings photos appear even while the student is still clocked in. After they clock out, approve or decline, deduct hours if needed, and add a note. That decision waits for the immediate supervisor.',
+            'Under Supervising hours, open the camera and take one photo at the area. Gallery photos are not accepted.',
+            'Under Offline requests, record the same kind of decision for manual janitorial entries submitted when a code could not be scanned.',
         ],
         tips: [
             'Department daily codes and campus activity codes do not clock janitorial duty.',
             'The WSPO Coordinator assigns leaders and their groups. You cannot create a group from this page.',
+        ],
+    },
+    {
+        id: 'janitorial-final-say',
+        title: 'Janitorial final say',
+        summary: 'Confirm janitorial hours after the janitorial supervisor’s decision.',
+        about:
+            'The immediate supervisor is a separate account from the department secretary. The janitorial supervisor can approve, deduct duty hours, and add a note. The immediate supervisor reviews that recommendation and has the final say for their department. If they report one or more future dates with a reason, the department supervisor can approve on those dates. Leave itself stays on the department’s manual application.',
+        audience: ['Immediate Supervisor', 'Supervisor'],
+        steps: [
+            'Immediate supervisors open Janitorial final say on the dashboard.',
+            'Read the janitorial supervisor’s approval or decline, any deducted hours, and the note.',
+            'Accept to record the remaining hours on the DTR, or decline to record none.',
+            'To be away, report a single future date or several, and include a reason. The department supervisor can then decide for those dates.',
+            'A janitorial supervisor’s own 4 supervising hours also wait here, after they submit an on-the-spot photo.',
+        ],
+        tips: [
+            'One janitorial supervisor covers at most 3 areas and is credited once per day.',
+            'Each group has up to 6 members.',
+            'The department secretary and the department supervisor cannot be assigned as the immediate supervisor.',
         ],
     },
     {
@@ -214,8 +246,8 @@ const HELP_TOPICS: HelpTopic[] = [
             'Messages lets you send direct or group chats to supervisors, WSPO staff, or other students. Outbound messages show Sent, then Delivered when the other person receives them in their inbox, then Seen when they open the chat. On phones, use search and New Message from the inbox list; open a chat for a full-screen thread and Back to return.',
         audience: ['Student'],
         steps: [
-            'Click Messages in the left menu, or use a chat head at the bottom-right (desktop).',
-            'On mobile, search the inbox or tap New Message to pick a recipient. On desktop, search or create a group chat.',
+            'Click Messages in the left menu, or open the chat button at the bottom-right. Hover or tap it to pick a person and message them without leaving the page.',
+            'Search people, open a conversation in the floating chat, and press Enter or Send. Use the expand button when you want the full Messages page.',
             'Open their conversation, type your message, then press Enter or click Send.',
             'Archive a chat to hide it, then restore it later from the Archived tab. Delete removes it for you only.',
             'If you get a New Message notification, open it to jump back to Messages.',
@@ -322,7 +354,7 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Attendance Hub',
         summary: 'Show passcodes or QR codes so students can clock in.',
         about:
-            'Attendance Hub is the live attendance tool. Supervisors and WSPO staff can show a rotating passcode or QR code for students. They can also watch for unusual activity. Super Admins see an audit-style login table instead of generating codes.',
+            'Attendance Hub is the live attendance tool. Supervisors and WSPO staff can show a rotating passcode or QR code for students. They can also watch for unusual activity and decide class-hours clock-in requests from students in their assigned departments. Approving one clocks the student in. Hours are added when that student clocks out. Super Admins see an audit-style login table instead of generating codes.',
         audience: ['Supervisor', 'WSPO Staff', 'Super Admin'],
         steps: [
             'Click Attendance Hub in the left menu.',
@@ -330,8 +362,9 @@ const HELP_TOPICS: HelpTopic[] = [
             'Show the current code or QR to students who are ready to time in.',
             'Copy the passcode if you need to share it quickly, or expand the QR for easier scanning.',
             'Check the anomaly count if the page flags unusual attendance activity.',
+            'Review Class-hours clock-in requests. These are students in your departments who asked to duty because a class did not meet. Approve to clock them in, or Reject to leave the DTR unchanged.',
             'WSPO Coordinator or Secretary: open Attendance Hub → Activity QR → Groups (campus cleaning / activity rosters). President can check attendance but cannot edit those rosters. Janitorial leaders and groups are for the WSPO Coordinator only.',
-            'In Groups, choose one leader first, then add members. That leader opens today\'s activity QR. In Janitorial leaders, add a student from any department, then add up to 3 groups in different areas under that leader. That student opens Janitorial code to show each group\'s QR and passcode.',
+            "In Groups, choose one leader first, then add members. That leader opens today's activity QR. In Janitorial leaders, add a student from any department, then add up to 3 groups in different cleaning areas under that leader. Select the department area for each group. The immediate supervisor for that department is assigned automatically. Members can still come from other departments, up to 6. The department supervisor can approve only after the immediate supervisor reports an absence in advance.",
             'Super Admins can browse the login and logout table and move through pages of records.',
         ],
         tips: [
@@ -515,10 +548,10 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Messages',
         summary: 'Chat with students, supervisors, and other staff.',
         about:
-            'Messages supports direct and group chats for any signed-in WoSPIS account. Receipts progress from Sent → Delivered (inbox received) → Seen (thread opened). Mobile uses a full inbox list with search and New Message; desktop keeps the split layout and floating chat heads.',
+            'Messages supports direct and group chats for any signed-in WoSPIS account. Receipts progress from Sent → Delivered (inbox received) → Seen (thread opened). The bottom-right chat button opens the same conversations in a floating window on any page.',
         audience: ['Supervisor', 'WSPO Staff', 'Super Admin'],
         steps: [
-            'Click Messages in the left menu, or open a chat head at the bottom-right (desktop only).',
+            'Click Messages in the left menu, or tap the bottom-right chat button to message someone without leaving the current page.',
             'Search the inbox, tap New Message on mobile to pick a recipient, or create a group chat on desktop.',
             'Type your reply and press Enter or click Send.',
             'Archive chats you want out of the way, restore them from Archived, or delete a chat for yourself only.',
@@ -583,6 +616,12 @@ function matchesAudience(topic: HelpTopic, role: string): boolean {
     if (role === 'WSPO Staff') {
         return topic.audience.includes('WSPO Staff') || topic.audience.includes('Supervisor');
     }
+    if (role === 'Department Secretary') {
+        return topic.audience.includes('Department Secretary');
+    }
+    if (role === 'Immediate Supervisor') {
+        return topic.audience.includes('Immediate Supervisor');
+    }
     return topic.audience.includes(role as HelpAudience);
 }
 
@@ -615,66 +654,161 @@ const HelpPage = ({ userRole }: HelpPageProps) => {
     }, [query, role]);
 
     return (
-        <div className="mx-auto max-w-4xl space-y-8 p-4 sm:p-8">
-            <motion.div
-                initial={reduceMotion ? false : { opacity: 0, y: -16 }}
+        <div className="mx-auto max-w-5xl space-y-6 p-4 font-sans sm:p-8">
+            {/* OBSIDIAN HELP CENTER HERO + INTEGRATED SEARCH */}
+            <motion.header
+                initial={reduceMotion ? false : { opacity: 0, y: -12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: reduceMotion ? 0 : 0.35 }}
+                transition={{ duration: reduceMotion ? 0 : 0.4, ease: [0.22, 1, 0.36, 1] }}
+                className="relative overflow-hidden rounded-[2rem] border border-slate-800 bg-slate-950 p-6 text-white shadow-2xl shadow-slate-900/20 sm:p-8"
             >
-                <div className="mb-2 flex items-center gap-2">
-                    <BookOpen className="h-5 w-5 text-blue-500" />
-                    <span className="text-sm font-medium text-slate-500">Guides</span>
-                </div>
-                <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Help</h1>
-                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-                    Learn what each feature does and how to use it
-                    {role ? ` as a ${role}` : ''}. Click a topic to open the full guide.
-                </p>
-            </motion.div>
-
-            <div className="relative">
-                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                    type="search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search help…"
-                    className="w-full rounded-2xl border border-slate-200 bg-white py-3.5 pl-11 pr-4 text-sm font-medium text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.04)] outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100"
+                <div
+                    className="pointer-events-none absolute inset-0 opacity-20"
+                    style={{
+                        backgroundImage: 'radial-gradient(rgba(148,163,184,0.4) 1px, transparent 1px)',
+                        backgroundSize: '20px 20px',
+                    }}
+                    aria-hidden="true"
                 />
-            </div>
+                <div
+                    className="pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full bg-blue-600/25 blur-3xl"
+                    aria-hidden="true"
+                />
+                <div
+                    className="pointer-events-none absolute -bottom-24 left-1/4 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl"
+                    aria-hidden="true"
+                />
 
-            <div className="space-y-3">
+                <div className="relative z-10 space-y-6">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                        <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2.5">
+                                <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-400/25 bg-blue-500/15 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-blue-300">
+                                    <BookOpen className="h-3.5 w-3.5 text-blue-400" />
+                                    Knowledge Base
+                                </span>
+                                {role && (
+                                    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-bold text-slate-200">
+                                        <Sparkles className="h-3 w-3 text-emerald-400" />
+                                        {role} Guides
+                                    </span>
+                                )}
+                            </div>
+                            <h1 className="mt-3.5 text-3xl font-black tracking-tight text-white sm:text-4xl">
+                                Help &amp; Guides
+                            </h1>
+                            <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-slate-300">
+                                Browse step-by-step guides for every feature available to your account{role ? ` (${role})` : ''}.
+                            </p>
+                        </div>
+
+                        <div className="shrink-0 self-start rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 backdrop-blur-xl sm:self-auto">
+                            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                                Available Topics
+                            </p>
+                            <p className="mt-0.5 font-mono text-2xl font-black tabular-nums text-white">
+                                {topics.length}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Frosted Search Input */}
+                    <div className="relative">
+                        <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <input
+                            type="search"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder="Search guides, e.g. QR, schedule, DTR, password…"
+                            className="w-full rounded-2xl border border-white/15 bg-white/10 py-3.5 pl-11 pr-11 text-sm font-semibold text-white backdrop-blur-md outline-none transition placeholder:font-medium placeholder:text-slate-400 focus:border-blue-400 focus:bg-white/15 focus:ring-2 focus:ring-blue-400/30"
+                        />
+                        {query.trim() && (
+                            <button
+                                type="button"
+                                onClick={() => setQuery('')}
+                                className="absolute right-3 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg bg-white/10 text-slate-300 transition hover:bg-white/20 hover:text-white"
+                                aria-label="Clear search"
+                            >
+                                <X className="h-3.5 w-3.5" />
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </motion.header>
+
+            {/* TOPICS ACCORDION */}
+            <div className="space-y-3.5">
                 {topics.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center">
-                        <CircleHelp className="mx-auto h-8 w-8 text-slate-300" />
-                        <p className="mt-3 text-sm font-semibold text-slate-700">No topics found</p>
-                        <p className="mt-1 text-sm text-slate-500">Try another word, like “schedule”, “QR”, or “password”.</p>
+                    <div className="rounded-[1.75rem] border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
+                        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                            <CircleHelp className="h-7 w-7" />
+                        </div>
+                        <p className="text-base font-extrabold text-slate-700">No topics found</p>
+                        <p className="mt-1 text-xs font-medium text-slate-400">
+                            Try another keyword like &ldquo;schedule&rdquo;, &ldquo;QR&rdquo;, or &ldquo;password&rdquo;.
+                        </p>
+                        {query.trim() && (
+                            <button
+                                type="button"
+                                onClick={() => setQuery('')}
+                                className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white transition hover:bg-blue-600"
+                            >
+                                Clear search
+                            </button>
+                        )}
                     </div>
                 ) : (
                     topics.map((topic, index) => {
                         const isOpen = openId === topic.id;
                         return (
-                            <motion.div
+                            <motion.article
                                 key={topic.id}
                                 initial={reduceMotion ? false : { opacity: 0, y: 12 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: reduceMotion ? 0 : Math.min(index * 0.03, 0.24), duration: reduceMotion ? 0 : 0.3 }}
-                                className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+                                transition={{
+                                    delay: reduceMotion ? 0 : Math.min(index * 0.025, 0.2),
+                                    duration: reduceMotion ? 0 : 0.3,
+                                }}
+                                className={`overflow-hidden rounded-[1.75rem] border bg-white shadow-sm transition-all ${
+                                    isOpen
+                                        ? 'border-blue-200 ring-1 ring-blue-100'
+                                        : 'border-slate-200/90 hover:border-slate-300'
+                                }`}
                             >
                                 <button
                                     type="button"
                                     onClick={() => setOpenId(isOpen ? null : topic.id)}
-                                    className="flex w-full items-start gap-4 px-5 py-4 text-left transition hover:bg-slate-50/80"
+                                    className="flex w-full items-start justify-between gap-4 px-6 py-5 text-left transition hover:bg-slate-50/70"
                                     aria-expanded={isOpen}
                                 >
                                     <div className="min-w-0 flex-1">
-                                        <p className="text-base font-semibold text-slate-900">{topic.title}</p>
-                                        <p className="mt-1 text-sm text-slate-500">{topic.summary}</p>
+                                        <div className="flex flex-wrap items-center gap-2.5">
+                                            <h2 className="text-base font-black tracking-tight text-slate-900">
+                                                {topic.title}
+                                            </h2>
+                                            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                                                {topic.steps.length} steps
+                                            </span>
+                                        </div>
+                                        <p className="mt-1 text-sm font-medium text-slate-500">{topic.summary}</p>
                                     </div>
-                                    <ChevronDown
-                                        className={`mt-1 h-5 w-5 shrink-0 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
-                                    />
+
+                                    <span
+                                        className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all ${
+                                            isOpen
+                                                ? 'border-blue-200 bg-blue-50 text-blue-600'
+                                                : 'border-slate-200 bg-slate-50 text-slate-400'
+                                        }`}
+                                    >
+                                        <ChevronDown
+                                            className={`h-4 w-4 transition-transform duration-200 ${
+                                                isOpen ? 'rotate-180' : ''
+                                            }`}
+                                            aria-hidden="true"
+                                        />
+                                    </span>
                                 </button>
+
                                 <AnimatePresence initial={false}>
                                     {isOpen && (
                                         <motion.div
@@ -682,23 +816,33 @@ const HelpPage = ({ userRole }: HelpPageProps) => {
                                             animate={{ height: 'auto', opacity: 1 }}
                                             exit={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
                                             transition={{ duration: reduceMotion ? 0 : 0.22 }}
-                                            className="overflow-hidden"
+                                            className="overflow-hidden border-t border-slate-100 bg-slate-50/40"
                                         >
-                                            <div className="space-y-5 border-t border-slate-100 px-5 py-5">
-                                                <section>
-                                                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">What this is</p>
-                                                    <p className="mt-2 text-sm leading-relaxed text-slate-600">{topic.about}</p>
+                                            <div className="space-y-6 px-6 py-6">
+                                                {/* About Section */}
+                                                <section className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5">
+                                                    <p className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                                                        <Info className="h-3.5 w-3.5 text-blue-600" />
+                                                        What this is
+                                                    </p>
+                                                    <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600">
+                                                        {topic.about}
+                                                    </p>
                                                 </section>
 
+                                                {/* Step-by-Step Section */}
                                                 <section>
-                                                    <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
-                                                        <ListOrdered className="h-3.5 w-3.5" />
+                                                    <p className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-widest text-slate-400">
+                                                        <ListOrdered className="h-4 w-4 text-blue-600" />
                                                         How to use it
                                                     </p>
-                                                    <ol className="mt-3 space-y-3">
+                                                    <ol className="mt-3.5 space-y-3">
                                                         {topic.steps.map((step, stepIndex) => (
-                                                            <li key={stepIndex} className="flex gap-3 text-sm leading-relaxed text-slate-600">
-                                                                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-700">
+                                                            <li
+                                                                key={stepIndex}
+                                                                className="flex items-start gap-3.5 rounded-2xl border border-slate-200/70 bg-white p-3.5 text-sm font-medium leading-relaxed text-slate-700 shadow-2xs"
+                                                            >
+                                                                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-slate-900 font-mono text-xs font-black text-white">
                                                                     {stepIndex + 1}
                                                                 </span>
                                                                 <span className="pt-0.5">{step}</span>
@@ -707,16 +851,20 @@ const HelpPage = ({ userRole }: HelpPageProps) => {
                                                     </ol>
                                                 </section>
 
+                                                {/* Tips Callout */}
                                                 {topic.tips && topic.tips.length > 0 && (
-                                                    <section className="rounded-xl bg-amber-50/80 px-4 py-3">
-                                                        <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-700/80">
-                                                            <Lightbulb className="h-3.5 w-3.5" />
+                                                    <section className="rounded-2xl border border-amber-200/80 bg-amber-50/80 p-4 sm:p-5">
+                                                        <p className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-widest text-amber-800">
+                                                            <Lightbulb className="h-4 w-4 text-amber-600" />
                                                             Good to know
                                                         </p>
-                                                        <ul className="mt-2 space-y-2">
+                                                        <ul className="mt-3 space-y-2">
                                                             {topic.tips.map((tip, tipIndex) => (
-                                                                <li key={tipIndex} className="flex gap-2 text-sm leading-relaxed text-amber-950/80">
-                                                                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500/70" />
+                                                                <li
+                                                                    key={tipIndex}
+                                                                    className="flex items-start gap-2.5 text-xs font-semibold leading-relaxed text-amber-950 sm:text-sm"
+                                                                >
+                                                                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
                                                                     <span>{tip}</span>
                                                                 </li>
                                                             ))}
@@ -727,7 +875,7 @@ const HelpPage = ({ userRole }: HelpPageProps) => {
                                         </motion.div>
                                     )}
                                 </AnimatePresence>
-                            </motion.div>
+                            </motion.article>
                         );
                     })
                 )}

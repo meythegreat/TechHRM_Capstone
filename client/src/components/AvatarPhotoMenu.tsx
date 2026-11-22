@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Camera, ImagePlus, Trash2 } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Camera, ImagePlus, Trash2, X } from 'lucide-react';
 import { bindPopup } from '../utils/popupDismiss';
 
 interface AvatarPhotoMenuProps {
@@ -56,40 +57,72 @@ export default function AvatarPhotoMenu({
                 disabled={disabled}
             />
             {open && createPortal(
-                <div className="fixed inset-0 z-[90] bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-3 sm:p-4" {...bindPopup(() => setOpen(false))}>
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm border border-slate-200">
-                        <div className="px-5 sm:px-6 pt-6 pb-2">
-                            <h3 className="text-xl font-semibold text-slate-900">Profile picture</h3>
-                            <p className="text-sm font-medium text-slate-500 mt-1">Choose a new photo, or remove the current one and return to your initial.</p>
-                        </div>
-                        <div className="px-5 sm:px-6 py-5 flex flex-col gap-3">
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/75 p-3 backdrop-blur-sm sm:items-center sm:p-4"
+                    {...bindPopup(() => setOpen(false))}
+                >
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.96, y: 16 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                        className="w-full max-w-sm overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl"
+                        onClick={(event) => event.stopPropagation()}
+                        role="dialog"
+                        aria-modal="true"
+                    >
+                        <div className="flex items-center justify-between gap-3 bg-slate-950 px-6 py-4 text-white">
+                            <div className="flex items-center gap-2.5">
+                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/20 text-blue-300 ring-1 ring-blue-400/30">
+                                    <Camera className="h-4 w-4" />
+                                </span>
+                                <h3 className="text-base font-black tracking-tight text-white">Profile Picture</h3>
+                            </div>
                             <button
                                 type="button"
-                                onClick={choosePhoto}
-                                className="min-h-11 px-5 py-3 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-lg shadow-blue-600/25 flex items-center justify-center gap-2"
+                                onClick={() => setOpen(false)}
+                                className="rounded-xl border border-white/10 bg-white/5 p-2 text-slate-300 transition hover:bg-white/15 hover:text-white"
+                                aria-label="Close"
                             >
-                                <ImagePlus className="w-4 h-4" />
-                                Change photo
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setOpen(false);
-                                    onRemove();
-                                }}
-                                className="min-h-11 px-5 py-3 text-sm font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl flex items-center justify-center gap-2"
-                            >
-                                <Trash2 className="w-4 h-4" />
-                                Remove photo
+                                <X className="h-4 w-4" />
                             </button>
                         </div>
-                        <div className="px-5 sm:px-6 pb-6">
-                            <button type="button" onClick={() => setOpen(false)} className="w-full min-h-11 px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors">
-                                Cancel
-                            </button>
+                        <div className="space-y-4 p-6">
+                            <p className="text-xs font-medium leading-relaxed text-slate-500">
+                                Choose a new photo, or remove the current one to return to your monogram initial.
+                            </p>
+                            <div className="flex flex-col gap-2.5">
+                                <button
+                                    type="button"
+                                    onClick={choosePhoto}
+                                    className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-xs font-extrabold uppercase tracking-wider text-white shadow-sm transition hover:bg-blue-600"
+                                >
+                                    <ImagePlus className="h-4 w-4" />
+                                    Change Photo
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setOpen(false);
+                                        onRemove();
+                                    }}
+                                    className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-5 py-3 text-xs font-extrabold uppercase tracking-wider text-rose-700 transition hover:bg-rose-100"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                    Remove Photo
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setOpen(false)}
+                                    className="min-h-11 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-xs font-bold text-slate-600 transition hover:bg-slate-50"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                </div>,
+                    </motion.div>
+                </motion.div>,
                 document.body,
             )}
         </>

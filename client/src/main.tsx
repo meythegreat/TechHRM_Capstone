@@ -9,6 +9,7 @@ import { armSounds } from './sounds'
 import { registerServiceWorker } from './registerServiceWorker'
 import { startOfflineCacheWarming } from './utils/warmOfflineCache'
 import { attachSyncAxiosInterceptors, startSyncMonitor } from './utils/syncStatus'
+import { startResponsiveTables } from './utils/responsiveTables'
 
 scheduleThemeSync()
 armSounds()
@@ -56,6 +57,7 @@ axios.interceptors.response.use(
 
 attachSyncAxiosInterceptors()
 startSyncMonitor()
+startResponsiveTables()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

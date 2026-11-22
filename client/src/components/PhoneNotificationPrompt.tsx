@@ -79,14 +79,18 @@ const PhoneNotificationPrompt = ({ enabled }: PhoneNotificationPromptProps) => {
     <div className="pointer-events-none fixed inset-x-0 bottom-[5.75rem] z-[61] flex justify-center px-4 print:hidden">
       <section
         aria-label="Phone notifications"
-        className="pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_12px_40px_rgba(15,23,42,0.16)]"
+        className="pointer-events-auto relative flex w-full max-w-md items-center gap-3 overflow-hidden rounded-[1.5rem] border border-slate-800 bg-slate-950 p-3.5 text-white shadow-2xl shadow-slate-950/35"
       >
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white">
+        <div
+          className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-indigo-500/25 blur-2xl"
+          aria-hidden="true"
+        />
+        <div className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/20 text-blue-300 ring-1 ring-blue-400/30">
           <Bell className="h-5 w-5" />
         </div>
-        <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold text-slate-900">Phone notifications</h2>
-          <p className="text-xs font-medium leading-relaxed text-slate-600">
+        <div className="relative z-10 min-w-0 flex-1">
+          <h2 className="text-sm font-black tracking-tight text-white">Phone Notifications</h2>
+          <p className="mt-0.5 text-xs font-medium leading-relaxed text-slate-300">
             {detail || 'Alerts can appear on this phone even when WoSPIS is closed.'}
           </p>
         </div>
@@ -94,14 +98,14 @@ const PhoneNotificationPrompt = ({ enabled }: PhoneNotificationPromptProps) => {
           type="button"
           onClick={allow}
           disabled={working}
-          className="shrink-0 rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white disabled:opacity-60"
+          className="relative z-10 shrink-0 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-extrabold uppercase tracking-wider text-white shadow-sm shadow-blue-600/30 transition hover:bg-blue-500 disabled:opacity-60"
         >
           {working ? 'Asking…' : 'Allow'}
         </button>
         <button
           type="button"
           onClick={dismiss}
-          className="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          className="relative z-10 shrink-0 rounded-xl border border-white/10 bg-white/5 p-1.5 text-slate-300 transition hover:bg-white/15 hover:text-white"
           aria-label="Dismiss phone notifications"
         >
           <X className="h-4 w-4" />

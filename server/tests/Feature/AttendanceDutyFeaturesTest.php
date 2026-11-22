@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Attendance;
+use App\Models\ClassClockInRequest;
 use App\Models\DailyToken;
 use App\Models\ManualAttendanceRequest;
 use App\Models\RenderedHourEntry;
@@ -38,6 +39,7 @@ class AttendanceDutyFeaturesTest extends TestCase
     public function test_janitorial_leader_groups_span_departments_and_credit_four_hours_on_approval(): void
     {
         $wspo = $this->makeUser('WSPO Staff', 'WSPO Coordinator', 'WSPO Coord');
+        $immediate = $this->makeUser('Immediate Supervisor', 'Registrar', 'Reg Secretary');
         $lead = $this->makeUser('Student', 'Registrar', 'Jan Lead');
         $regMember = $this->makeUser('Student', 'Registrar', 'Reg Member');
         $clinicMember = $this->makeUser('Student', 'Clinic', 'Clinic Member');
@@ -61,39 +63,51 @@ class AttendanceDutyFeaturesTest extends TestCase
 
         // Members may come from any department. The leader is chosen first.
         $regGroupId = $this->postJson('/api/attendance/janitorial-groups', [
+            'department' => 'Registrar',
             'name' => 'East crew',
             'area' => 'East hallways',
             'supervisor_user_id' => $lead->id,
+            'immediate_supervisor_user_id' => $immediate->id,
             'member_ids' => [$regMember->id, $clinicMember->id],
         ])->assertCreated()
+            ->assertJsonPath('group.immediate_supervisor.id', $immediate->id)
+            ->assertJsonPath('group.immediate_supervisor.name', 'Reg Secretary')
             ->assertJsonPath('group.max_members', 6)
             ->assertJsonPath('group.max_groups', 3)
             ->assertJsonPath('group.area', 'East hallways')
             ->json('group.id');
 
         $this->postJson('/api/attendance/janitorial-groups', [
+            'department' => 'Registrar',
             'name' => 'East again',
             'area' => 'East hallways',
             'supervisor_user_id' => $lead->id,
+            'immediate_supervisor_user_id' => $immediate->id,
             'member_ids' => [$extraMember->id],
         ])->assertStatus(422);
 
         $this->postJson('/api/attendance/janitorial-groups', [
+            'department' => 'Registrar',
             'name' => 'Library clean',
             'area' => 'Stacks',
             'supervisor_user_id' => $lead->id,
+            'immediate_supervisor_user_id' => $immediate->id,
             'member_ids' => [$libMember->id],
         ])->assertCreated();
         $this->postJson('/api/attendance/janitorial-groups', [
+            'department' => 'Registrar',
             'name' => 'CCS clean',
             'area' => 'Labs',
             'supervisor_user_id' => $lead->id,
+            'immediate_supervisor_user_id' => $immediate->id,
             'member_ids' => [$ccsMember->id],
         ])->assertCreated();
         $this->postJson('/api/attendance/janitorial-groups', [
+            'department' => 'Registrar',
             'name' => 'Fourth area',
             'area' => 'Lobby',
             'supervisor_user_id' => $lead->id,
+            'immediate_supervisor_user_id' => $immediate->id,
             'member_ids' => [$fourthMember->id],
         ])->assertStatus(422);
 
@@ -129,7 +143,17 @@ class AttendanceDutyFeaturesTest extends TestCase
         Sanctum::actingAs($lead);
         $this->patchJson('/api/attendance/janitorial-reviews/'.$attendanceId, ['status' => 'accepted'])
             ->assertOk()
-            ->assertJsonPath('entry.status', 'accepted');
+            ->assertJsonPath('entry.status', 'recommended');
+
+        $recommended = Attendance::query()->findOrFail($attendanceId);
+        $this->assertEquals(0.0, (float) $recommended->rendered_hours);
+        $this->assertSame('recommended', $recommended->status);
+
+        Sanctum::actingAs($immediate);
+        $this->patchJson('/api/attendance/janitorial-reviews/'.$attendanceId, ['status' => 'accepted'])
+            ->assertOk()
+            ->assertJsonPath('entry.status', 'accepted')
+            ->assertJsonPath('entry.final_on_behalf', false);
 
         $accepted = Attendance::query()->findOrFail($attendanceId);
         $this->assertEquals(4.0, (float) $accepted->rendered_hours);
@@ -142,6 +166,7 @@ class AttendanceDutyFeaturesTest extends TestCase
     {
         $coordinator = $this->makeUser('WSPO Staff', 'WSPO Coordinator', 'WSPO Coord');
         $officeSupervisor = $this->makeUser('Supervisor', 'Library', 'Lib Supervisor');
+        $immediate = $this->makeUser('Immediate Supervisor', 'Library', 'Lib Secretary');
         $lead = $this->makeUser('Student', 'Library', 'Lib Lead');
         $member = $this->makeUser('Student', 'Library', 'Lib Member');
 
@@ -151,6 +176,7 @@ class AttendanceDutyFeaturesTest extends TestCase
             'name' => 'Stacks',
             'area' => 'Second floor stacks',
             'supervisor_user_id' => $lead->id,
+            'immediate_supervisor_user_id' => $immediate->id,
             'member_ids' => [$member->id],
         ])->assertCreated()->json('group.id');
 
@@ -192,6 +218,18 @@ class AttendanceDutyFeaturesTest extends TestCase
             ->assertJsonPath('requests.0.id', $requestId);
         $this->patchJson('/api/attendance/janitorial-offline-requests/'.$requestId, [
             'status' => 'Approved',
+        ])->assertOk()
+            ->assertJsonPath('request.status', 'Recommended');
+        $this->assertNull(Attendance::query()->where('user_id', $member->id)->first());
+
+        Sanctum::actingAs($officeSupervisor);
+        $this->patchJson('/api/attendance/janitorial-offline-requests/'.$requestId, [
+            'status' => 'Approved',
+        ])->assertForbidden();
+
+        Sanctum::actingAs($immediate);
+        $this->patchJson('/api/attendance/janitorial-offline-requests/'.$requestId, [
+            'status' => 'Approved',
         ])->assertOk();
 
         $attendance = Attendance::query()->where('user_id', $member->id)->first();
@@ -230,6 +268,10 @@ class AttendanceDutyFeaturesTest extends TestCase
         $this->patchJson('/api/attendance/janitorial-offline-requests/'.$futureCreditId, [
             'status' => 'Approved',
         ])->assertOk();
+        Sanctum::actingAs($immediate);
+        $this->patchJson('/api/attendance/janitorial-offline-requests/'.$futureCreditId, [
+            'status' => 'Approved',
+        ])->assertOk();
 
         $late = Attendance::query()->where('user_id', $member->id)->orderByDesc('id')->first();
         $this->assertTrue(Carbon::parse($late->time_in)->addHours(4)->equalTo(Carbon::parse($late->time_out)));
@@ -242,12 +284,15 @@ class AttendanceDutyFeaturesTest extends TestCase
         $secretary = $this->makeUser('WSPO Staff', 'WSPO Secretary', 'Secretary');
         $president = $this->makeUser('WSPO Staff', 'WSPO President', 'President');
         $supervisor = $this->makeUser('Supervisor', 'Library', 'Lib Supervisor');
+        $immediate = $this->makeUser('Immediate Supervisor', 'Library', 'Lib Secretary');
         $lead = $this->makeUser('Student', 'Library', 'Lib Lead');
         $member = $this->makeUser('Student', 'Library', 'Lib Member');
         $payload = [
+            'department' => 'Library',
             'name' => 'Stacks',
             'area' => 'Second floor',
             'supervisor_user_id' => $lead->id,
+            'immediate_supervisor_user_id' => $immediate->id,
             'member_ids' => [$member->id],
         ];
 
@@ -283,9 +328,11 @@ class AttendanceDutyFeaturesTest extends TestCase
             ->json('group.id');
 
         $this->putJson('/api/attendance/janitorial-groups/'.$groupId, [
+            'department' => 'Library',
             'name' => 'Stacks East',
             'area' => 'East wing',
             'supervisor_user_id' => $lead->id,
+            'immediate_supervisor_user_id' => $immediate->id,
             'member_ids' => [$member->id],
         ])->assertOk();
 
@@ -296,6 +343,128 @@ class AttendanceDutyFeaturesTest extends TestCase
         Sanctum::actingAs($coordinator);
         $this->deleteJson('/api/attendance/janitorial-leaders/'.$leaderId)->assertOk();
         $this->assertNull(\App\Models\JanitorialGroup::query()->find($groupId));
+    }
+
+    public function test_dean_is_not_the_immediate_supervisor_and_covers_only_after_advance_notice(): void
+    {
+        $coordinator = $this->makeUser('WSPO Staff', 'WSPO Coordinator', 'Coord');
+        $dean = $this->makeUser('Supervisor', 'Library', 'Library Dean');
+        $immediate = $this->makeUser('Immediate Supervisor', 'Library', 'Library Secretary');
+        $lead = $this->makeUser('Student', 'Library', 'Lead');
+        $member = $this->makeUser('Student', 'Library', 'Member');
+
+        Sanctum::actingAs($coordinator);
+        $this->postJson('/api/attendance/janitorial-groups', [
+            'department' => 'Library',
+            'name' => 'Stacks',
+            'area' => 'Second floor',
+            'supervisor_user_id' => $lead->id,
+            'immediate_supervisor_user_id' => $dean->id,
+            'member_ids' => [$member->id],
+        ])->assertStatus(422);
+
+        $groupId = $this->postJson('/api/attendance/janitorial-groups', [
+            'department' => 'Library',
+            'name' => 'Stacks',
+            'area' => 'Second floor',
+            'supervisor_user_id' => $lead->id,
+            'immediate_supervisor_user_id' => $immediate->id,
+            'member_ids' => [$member->id],
+        ])->assertCreated()->json('group.id');
+
+        Carbon::setTestNow(Carbon::parse('2026-11-13 17:15:00'));
+        Sanctum::actingAs($lead);
+        $code = $this->getJson('/api/attendance/janitorial-passcode?group_id='.$groupId)->json('token_code');
+        Sanctum::actingAs($member);
+        $attendanceId = $this->postJson('/api/attendance/secure-clock-in', [
+            'token_code' => $code,
+            'method' => 'passcode',
+        ])->assertOk()->json('attendance.id');
+        $this->attachCleaningProofs($attendanceId);
+        Carbon::setTestNow(Carbon::parse('2026-11-13 18:00:00'));
+        Sanctum::actingAs($lead);
+        $out = $this->getJson('/api/attendance/janitorial-passcode?group_id='.$groupId)->json('token_code');
+        Sanctum::actingAs($member);
+        $this->putJson('/api/attendance/secure-clock-out/'.$attendanceId, [
+            'token_code' => $out,
+            'method' => 'passcode',
+        ])->assertOk();
+
+        Sanctum::actingAs($lead);
+        $this->patchJson('/api/attendance/janitorial-reviews/'.$attendanceId, [
+            'status' => 'accepted',
+            'deducted_hours' => 0.5,
+            'remarks' => 'Short break.',
+        ])->assertOk();
+
+        Sanctum::actingAs($dean);
+        $this->patchJson('/api/attendance/janitorial-reviews/'.$attendanceId, ['status' => 'accepted'])
+            ->assertForbidden();
+        $this->postJson('/api/attendance/janitorial-immediate-absence', [
+            'absent_on' => '2026-11-14',
+            'absent' => true,
+        ])->assertForbidden();
+
+        Sanctum::actingAs($immediate);
+        $this->postJson('/api/attendance/janitorial-immediate-absence', [
+            'absent_on' => '2026-11-13',
+            'absent' => true,
+        ])->assertStatus(422);
+        Carbon::setTestNow(Carbon::parse('2026-11-12 09:00:00'));
+        $this->postJson('/api/attendance/janitorial-immediate-absence', [
+            'absent_on' => '2026-11-13',
+            'absent' => true,
+            'reason' => 'Campus activity',
+        ])->assertOk()
+            ->assertJsonPath('absences.0', '2026-11-13');
+
+        Carbon::setTestNow(Carbon::parse('2026-11-13 18:10:00'));
+        Sanctum::actingAs($dean);
+        $this->patchJson('/api/attendance/janitorial-reviews/'.$attendanceId, ['status' => 'accepted'])
+            ->assertOk()
+            ->assertJsonPath('entry.final_on_behalf', true)
+            ->assertJsonPath('entry.rendered_hours', 3.5);
+
+        $accepted = Attendance::query()->findOrFail($attendanceId);
+        $this->assertEquals(3.5, (float) $accepted->rendered_hours);
+        $this->assertTrue((bool) $accepted->janitorial_final_on_behalf);
+        $this->assertTrue(
+            Carbon::parse($accepted->time_in)->addMinutes(210)->equalTo(Carbon::parse($accepted->time_out))
+        );
+
+        Storage::fake('local');
+        Sanctum::actingAs($lead);
+        $this->post('/api/attendance/janitorial-supervision', [
+            'group_id' => $groupId,
+            'capture_source' => 'live_camera',
+            'captured_at' => '2026-11-13T08:00:00+08:00',
+            'photo' => UploadedFile::fake()->image('presence.jpg', 640, 480),
+        ], ['Accept' => 'application/json'])->assertCreated();
+
+        $this->post('/api/attendance/janitorial-supervision', [
+            'group_id' => $groupId,
+            'capture_source' => 'live_camera',
+            'captured_at' => '2026-11-13T08:30:00+08:00',
+            'photo' => UploadedFile::fake()->image('presence-again.jpg', 640, 480),
+        ], ['Accept' => 'application/json'])->assertStatus(422);
+
+        $supervision = Attendance::query()
+            ->where('user_id', $lead->id)
+            ->where('janitorial_supervision', true)
+            ->first();
+        $this->assertNotNull($supervision);
+        $this->assertEquals(0.0, (float) $supervision->rendered_hours);
+        $this->assertSame('awaiting_final', $supervision->status);
+        $this->assertNotEmpty($supervision->cleaning_before_path);
+
+        Sanctum::actingAs($dean);
+        $this->patchJson('/api/attendance/janitorial-reviews/'.$supervision->id, ['status' => 'accepted'])
+            ->assertOk()
+            ->assertJsonPath('entry.final_on_behalf', true);
+
+        $credited = Attendance::query()->findOrFail($supervision->id);
+        $this->assertEquals(4.0, (float) $credited->rendered_hours);
+        $this->assertSame('Janitorial', $credited->attendance_type);
     }
 
     public function test_assembly_students_must_use_year_representative_code(): void
@@ -500,6 +669,158 @@ class AttendanceDutyFeaturesTest extends TestCase
         $this->assertSame(ManualAttendanceRequest::APPROVED, ManualAttendanceRequest::query()->find($requestId)->status);
     }
 
+    public function test_class_clock_in_request_opens_a_normal_shift_after_supervisor_approval(): void
+    {
+        $supervisor = $this->makeUser('Supervisor', 'CCS Office', 'CCS Supervisor');
+        $other = $this->makeUser('Supervisor', 'Library', 'Library Supervisor');
+        $student = $this->makeUser('Student', 'CCS Office', 'CCS Student');
+
+        $class = Schedule::create([
+            'user_id' => $student->id,
+            'kind' => 'class',
+            'day' => 'Friday',
+            'time' => '09:00 - 11:00',
+            'subject' => 'Algorithms',
+            'room' => 'CCS 201',
+            'instructor' => 'Dr. Reyes',
+        ]);
+        $work = Schedule::create([
+            'user_id' => $student->id,
+            'kind' => 'work',
+            'day' => 'Friday',
+            'time' => '08:00 - 12:00',
+            'duty_type' => 'Clerical',
+        ]);
+        Schedule::create([
+            'user_id' => $student->id,
+            'kind' => 'class',
+            'day' => 'Monday',
+            'time' => '13:00 - 15:00',
+            'subject' => 'Databases',
+        ]);
+
+        Carbon::setTestNow(Carbon::parse('2026-11-13 10:00:00'));
+        Sanctum::actingAs($student);
+
+        $this->postJson('/api/attendance/class-clock-in-requests', [
+            'schedule_id' => $class->id,
+            'reason' => '   ',
+        ])->assertStatus(422);
+
+        $this->getJson('/api/attendance/class-clock-in-requests/classes')
+            ->assertOk()
+            ->assertJsonPath('classes.0.subject', 'Algorithms')
+            ->assertJsonPath('classes.0.in_session', true)
+            ->assertJsonPath('classes.0.room', 'CCS 201')
+            ->assertJsonPath('classes.0.instructor', 'Dr. Reyes');
+
+        $monday = Schedule::query()->where('subject', 'Databases')->first();
+        $this->postJson('/api/attendance/class-clock-in-requests', [
+            'schedule_id' => $monday->id,
+            'reason' => 'Teacher is out.',
+        ])->assertStatus(422);
+
+        $requestId = $this->postJson('/api/attendance/class-clock-in-requests', [
+            'schedule_id' => $class->id,
+            'reason' => 'The instructor did not meet, so I am rendering duty.',
+        ])->assertCreated()
+            ->assertJsonPath('request.status', 'Pending')
+            ->assertJsonPath('request.class.subject', 'Algorithms')
+            ->json('request.id');
+
+        $this->assertSame(0, Attendance::query()->where('user_id', $student->id)->count());
+
+        $this->postJson('/api/attendance/class-clock-in-requests', [
+            'schedule_id' => $class->id,
+            'reason' => 'Second request should wait.',
+        ])->assertStatus(422);
+
+        Sanctum::actingAs($other);
+        $this->getJson('/api/attendance/class-clock-in-requests')
+            ->assertOk()
+            ->assertJsonCount(0, 'requests');
+        $this->patchJson('/api/attendance/class-clock-in-requests/'.$requestId, [
+            'status' => 'Approved',
+        ])->assertForbidden();
+
+        Sanctum::actingAs($supervisor);
+        $this->getJson('/api/attendance/class-clock-in-requests')
+            ->assertOk()
+            ->assertJsonPath('requests.0.id', $requestId)
+            ->assertJsonPath('requests.0.student_name', 'CCS Student')
+            ->assertJsonPath('requests.0.assigned_office', 'CCS Office')
+            ->assertJsonPath('requests.0.class.room', 'CCS 201');
+
+        $this->patchJson('/api/attendance/class-clock-in-requests/'.$requestId, [
+            'status' => 'Approved',
+        ])->assertOk();
+
+        $attendance = Attendance::query()->where('user_id', $student->id)->first();
+        $this->assertNotNull($attendance);
+        $this->assertNull($attendance->time_out);
+        $this->assertSame('pending', $attendance->status);
+        $this->assertSame('Regular', $attendance->attendance_type);
+        $this->assertSame($work->id, (int) $attendance->schedule_id);
+        $this->assertSame(ClassClockInRequest::APPROVED, ClassClockInRequest::query()->find($requestId)->status);
+        $this->assertSame($attendance->id, (int) ClassClockInRequest::query()->find($requestId)->attendance_id);
+
+        $this->getJson('/api/attendance/student/'.$student->id)
+            ->assertOk()
+            ->assertJsonPath('history.0.id', $attendance->id);
+
+        Carbon::setTestNow(Carbon::parse('2026-11-13 11:00:00'));
+        $token = DailyToken::create([
+            'token_code' => 'CLASSIN',
+            'type' => 'Daily Clock',
+            'channel' => 'passcode',
+            'generated_by' => $supervisor->id,
+            'expires_at' => Carbon::now()->addMinutes(5),
+        ]);
+        Sanctum::actingAs($student);
+        $out = $this->putJson('/api/attendance/secure-clock-out/'.$attendance->id, [
+            'token_code' => $token->token_code,
+            'method' => 'passcode',
+        ])->assertOk();
+
+        $this->assertEquals(1.0, (float) $out->json('hours_rendered'));
+        $closed = Attendance::query()->find($attendance->id);
+        $this->assertNotNull($closed->time_out);
+        $this->assertEquals(1.0, (float) $closed->rendered_hours);
+        $this->assertSame('approved', $closed->status);
+
+        $history = $this->getJson('/api/attendance/my-history')->assertOk();
+        $this->assertEquals(1.0, (float) $history->json('history.0.rendered_hours'));
+        $this->assertSame($attendance->id, $history->json('history.0.id'));
+    }
+
+    public function test_rejected_class_clock_in_request_does_not_touch_the_dtr(): void
+    {
+        $supervisor = $this->makeUser('Supervisor', 'CCS Office', 'CCS Supervisor');
+        $student = $this->makeUser('Student', 'CCS Office', 'CCS Student');
+        $class = Schedule::create([
+            'user_id' => $student->id,
+            'kind' => 'class',
+            'day' => 'Friday',
+            'time' => '09:00 - 11:00',
+            'subject' => 'Algorithms',
+        ]);
+
+        Carbon::setTestNow(Carbon::parse('2026-11-13 10:00:00'));
+        Sanctum::actingAs($student);
+        $requestId = $this->postJson('/api/attendance/class-clock-in-requests', [
+            'schedule_id' => $class->id,
+            'reason' => 'Teacher did not arrive.',
+        ])->assertCreated()->json('request.id');
+
+        Sanctum::actingAs($supervisor);
+        $this->patchJson('/api/attendance/class-clock-in-requests/'.$requestId, [
+            'status' => 'Rejected',
+        ])->assertOk();
+
+        $this->assertSame(0, Attendance::query()->where('user_id', $student->id)->count());
+        $this->assertSame(ClassClockInRequest::REJECTED, ClassClockInRequest::query()->find($requestId)->status);
+    }
+
     private function attachCleaningProofs(int $attendanceId): void
     {
         Storage::fake('local');
@@ -597,6 +918,7 @@ class AttendanceDutyFeaturesTest extends TestCase
             $table->string('penalty')->nullable();
             $table->decimal('penalty_hours', 8, 2)->default(0);
             $table->date('incident_date')->nullable();
+            $table->timestamp('suspension_ends_at')->nullable();
             $table->timestamps();
         });
 
@@ -613,6 +935,7 @@ class AttendanceDutyFeaturesTest extends TestCase
             $table->string('name', 80);
             $table->string('area', 120);
             $table->foreignId('supervisor_user_id')->constrained('users')->cascadeOnDelete();
+            $table->unsignedBigInteger('immediate_supervisor_user_id')->nullable();
             $table->timestamps();
         });
 
@@ -645,6 +968,14 @@ class AttendanceDutyFeaturesTest extends TestCase
             $table->unsignedBigInteger('schedule_id')->nullable();
             $table->unsignedBigInteger('janitorial_group_id')->nullable();
             $table->string('janitorial_area', 120)->nullable();
+            $table->string('janitorial_leader_decision', 20)->nullable();
+            $table->decimal('janitorial_deducted_hours', 8, 2)->nullable();
+            $table->text('janitorial_leader_remarks')->nullable();
+            $table->unsignedBigInteger('janitorial_leader_reviewed_by')->nullable();
+            $table->timestamp('janitorial_leader_reviewed_at')->nullable();
+            $table->unsignedBigInteger('janitorial_final_by')->nullable();
+            $table->boolean('janitorial_final_on_behalf')->default(false);
+            $table->boolean('janitorial_supervision')->default(false);
             $table->string('cleaning_before_path', 500)->nullable();
             $table->string('cleaning_after_path', 500)->nullable();
             $table->timestamp('cleaning_before_captured_at')->nullable();
@@ -655,13 +986,29 @@ class AttendanceDutyFeaturesTest extends TestCase
         Schema::create('manual_attendance_requests', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->string('client_request_id', 80)->nullable();
             $table->string('request_type', 40)->default('regular');
             $table->string('reason', 1000)->default('Office had no internet; submitted for supervisor approval.');
             $table->string('status', 20)->default('Pending');
             $table->text('decision_note')->nullable();
             $table->foreignId('reviewed_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamp('reviewed_at')->nullable();
+            $table->string('janitorial_leader_decision', 20)->nullable();
+            $table->decimal('janitorial_deducted_hours', 8, 2)->nullable();
+            $table->text('janitorial_leader_remarks')->nullable();
+            $table->unsignedBigInteger('janitorial_leader_reviewed_by')->nullable();
+            $table->timestamp('janitorial_leader_reviewed_at')->nullable();
+            $table->boolean('janitorial_final_on_behalf')->default(false);
             $table->timestamps();
+        });
+
+        Schema::create('janitorial_immediate_absences', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->date('absent_on');
+            $table->string('reason', 500)->nullable();
+            $table->timestamps();
+            $table->unique(['user_id', 'absent_on']);
         });
 
         Schema::create('manual_attendance_request_shifts', function (Blueprint $table) {
@@ -784,6 +1131,24 @@ class AttendanceDutyFeaturesTest extends TestCase
             $table->string('status')->nullable();
             $table->timestamp('scanned_at')->nullable();
             $table->unsignedBigInteger('attendance_id')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('class_clock_in_requests', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->unsignedBigInteger('schedule_id')->nullable();
+            $table->string('class_day')->nullable();
+            $table->string('class_time')->nullable();
+            $table->string('class_subject')->nullable();
+            $table->string('class_room')->nullable();
+            $table->string('class_instructor')->nullable();
+            $table->string('reason', 1000);
+            $table->string('status', 20)->default('Pending');
+            $table->text('decision_note')->nullable();
+            $table->foreignId('reviewed_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->timestamp('reviewed_at')->nullable();
+            $table->foreignId('attendance_id')->nullable()->constrained('attendances')->nullOnDelete();
             $table->timestamps();
         });
 

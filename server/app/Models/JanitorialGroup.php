@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class JanitorialGroup extends Model
 {
-    /** A janitorial leader may handle at most this many groups, each in a different area. */
+    /** One janitorial supervisor may cover at most this many areas. */
     public const MAX_GROUPS = 3;
 
     /** Members on one janitorial group. */
@@ -19,11 +19,17 @@ class JanitorialGroup extends Model
         'name',
         'area',
         'supervisor_user_id',
+        'immediate_supervisor_user_id',
     ];
 
     public function supervisor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'supervisor_user_id');
+    }
+
+    public function immediateSupervisor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'immediate_supervisor_user_id');
     }
 
     public function members(): BelongsToMany

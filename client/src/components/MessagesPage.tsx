@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
   Activity,
@@ -17,14 +18,18 @@ import {
   Plus,
   Search,
   Send,
+  Sparkles,
   Trash2,
   Users,
   UsersRound,
   X,
 } from 'lucide-react';
+import AnchoredMenu from './AnchoredMenu';
 import UserAvatar from './UserAvatar';
 import {
+  CHAT_SYNC_EVENT,
   chatService,
+  emitChatSync,
   type ChatConversation,
   type ChatMessage,
   type ChatUser,
@@ -35,12 +40,15 @@ export interface MessagesPageProps {
   initialConversationId?: number | null;
   onClose?: () => void;
   onMinimize?: () => void;
+  onExpand?: () => void;
+  initialDraft?: string;
+  onDraftChange?: (value: string) => void;
 }
 
 function OfficerMark({ user }: { user: ChatUser }) {
   if (!user.organization_officer || !user.officer_position) return null;
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200/80 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
       <Check className="h-3 w-3" />
       {user.officer_position}
     </span>
@@ -67,12 +75,44 @@ function formatClock(value?: string | null): string {
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleString(undefined, {
+  return date.toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    hour12: true,
   });
+}
+
+function formatTimeOnly(value?: string | null): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
+function formatDayDivider(value?: string | null): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((today.getTime() - target.getTime()) / 86_400_000);
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  return date.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function dayKey(value?: string | null): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 }
 
 function formatListClock(value?: string | null): string {
@@ -85,7 +125,7 @@ function formatListClock(value?: string | null): string {
     date.getMonth() === now.getMonth() &&
     date.getDate() === now.getDate();
   if (sameDay) {
-    return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
   }
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
@@ -117,7 +157,7 @@ function MessageReceipt({
       ) : (
         <Check className="h-3 w-3 opacity-80" strokeWidth={2.4} />
       )}
-      <span className="font-medium">{label}</span>
+      <span className="font-semibold">{label}</span>
     </span>
   );
 }
@@ -179,7 +219,7 @@ function AvatarWithPresence({
   return (
     <div className="relative shrink-0">
       {group ? (
-        <div className={`${className} flex items-center justify-center bg-slate-800 font-bold text-white`}>
+        <div className={`${className} flex items-center justify-center bg-slate-900 font-bold text-white`}>
           <UsersRound className="h-4 w-4" />
         </div>
       ) : (
@@ -218,8 +258,8 @@ function conversationOnline(conversation: ChatConversation): boolean {
 function AssignmentChip({ label }: { label?: string | null }) {
   if (!label) return null;
   return (
-    <span className="inline-flex max-w-full items-center gap-1 rounded-lg bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
-      <MapPin className="h-3 w-3 shrink-0" />
+    <span className="inline-flex max-w-full items-center gap-1 rounded-lg border border-slate-200/80 bg-slate-100/80 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">
+      <MapPin className="h-3 w-3 shrink-0 text-slate-400" />
       <span className="truncate">{label}</span>
     </span>
   );
@@ -240,11 +280,16 @@ function ClockedInChip({
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+    <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-200/80 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">
       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
       Clocked in{workType ? ` · ${workType}` : ''}
     </span>
   );
+}
+
+function conversationIdFromSearch(params: URLSearchParams): number | null {
+  const id = Number(params.get('conversation'));
+  return Number.isInteger(id) && id > 0 ? id : null;
 }
 
 export default function MessagesPage({
@@ -252,7 +297,13 @@ export default function MessagesPage({
   initialConversationId = null,
   onClose,
   onMinimize,
+  onExpand,
+  initialDraft = '',
+  onDraftChange,
 }: MessagesPageProps) {
+  const [searchParams] = useSearchParams();
+  const routedConversationId =
+    variant === 'page' ? conversationIdFromSearch(searchParams) : null;
   const reduceMotion = useReducedMotion();
   const isMobileLayout = useIsMobileLayout();
   const isOverlay = variant === 'overlay';
@@ -260,9 +311,11 @@ export default function MessagesPage({
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [directory, setDirectory] = useState<ChatUser[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [activeId, setActiveId] = useState<number | null>(initialConversationId);
+  const [activeId, setActiveId] = useState<number | null>(
+    initialConversationId ?? routedConversationId,
+  );
   const [search, setSearch] = useState('');
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState(initialDraft);
   const [loadingInbox, setLoadingInbox] = useState(true);
   const [loadingThread, setLoadingThread] = useState(false);
   const [sending, setSending] = useState(false);
@@ -287,7 +340,6 @@ export default function MessagesPage({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
-  const [menuId, setMenuId] = useState<number | null>(null);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [groupSearch, setGroupSearch] = useState('');
@@ -328,13 +380,29 @@ export default function MessagesPage({
     );
   };
 
+  const updateDraft = (value: string) => {
+    setDraft(value);
+    onDraftChange?.(value);
+  };
+
   const loadInbox = async (preferId?: number | null, scope: 'active' | 'archived' = inboxScope) => {
     try {
       const rows = await chatService.listConversations(scope);
       setConversations(rows);
       setActiveId((current) => {
+        if (isFloat) {
+          const target = preferId ?? initialConversationId ?? current;
+          return target ?? null;
+        }
         if (preferId && rows.some((row) => row.id === preferId)) return preferId;
         if (current && rows.some((row) => row.id === current)) return current;
+        if (
+          scope === 'active' &&
+          routedConversationId &&
+          rows.some((row) => row.id === routedConversationId)
+        ) {
+          return routedConversationId;
+        }
         if (
           scope === 'active' &&
           initialConversationId &&
@@ -455,17 +523,24 @@ export default function MessagesPage({
 
   useEffect(() => {
     setLoadingInbox(true);
-    loadInbox(initialConversationId, inboxScope);
-    loadDirectory('');
-    void loadActiveNow();
-  }, [initialConversationId, inboxScope]);
+    loadInbox(initialConversationId ?? routedConversationId, inboxScope);
+    if (!isFloat) {
+      loadDirectory('');
+      void loadActiveNow();
+    }
+  }, [initialConversationId, routedConversationId, inboxScope, isFloat]);
+
+  useEffect(() => {
+    if (!routedConversationId) return;
+    setActiveId(routedConversationId);
+    setMobileView('thread');
+  }, [routedConversationId]);
 
   useEffect(() => {
     const shell = shellRef.current;
     if (!shell || typeof ResizeObserver === 'undefined') return;
 
     const observer = new ResizeObserver((entries) => {
-      // Never collapse to avatar-only on mobile — that hid names and the real list.
       if (window.innerWidth < 1024) {
         if (autoCollapsedRef.current) {
           autoCollapsedRef.current = false;
@@ -497,9 +572,10 @@ export default function MessagesPage({
   }, [isMobileLayout, sidebarCollapsed]);
 
   useEffect(() => {
+    if (isFloat) return;
     const timeout = window.setTimeout(() => loadDirectory(search), 250);
     return () => window.clearTimeout(timeout);
-  }, [search]);
+  }, [search, isFloat]);
 
   useEffect(() => {
     if (mobileView !== 'compose') return;
@@ -515,7 +591,10 @@ export default function MessagesPage({
   useEffect(() => {
     if (!showGroupModal) return;
     const timeout = window.setTimeout(() => {
-      void chatService.searchUsers(groupSearch.trim()).then(setGroupCandidates).catch(() => setGroupCandidates([]));
+      void chatService
+        .searchUsers(groupSearch.trim())
+        .then(setGroupCandidates)
+        .catch(() => setGroupCandidates([]));
     }, 200);
     return () => window.clearTimeout(timeout);
   }, [groupSearch, showGroupModal]);
@@ -533,13 +612,11 @@ export default function MessagesPage({
       setOnlineCount(0);
       setMemberCount(0);
       setEditingId(null);
-      setMenuId(null);
       return;
     }
 
     setPeerTyping(false);
     setEditingId(null);
-    setMenuId(null);
     setThreadMenuOpen(false);
     setManagingId(null);
     loadThread(activeId);
@@ -548,7 +625,7 @@ export default function MessagesPage({
     const messagesInterval = window.setInterval(() => {
       loadThread(activeId, true);
       loadInbox(activeId);
-      void loadActiveNow();
+      if (!isFloat) void loadActiveNow();
     }, 5000);
     const stateInterval = window.setInterval(() => {
       void refreshState(activeId);
@@ -573,6 +650,19 @@ export default function MessagesPage({
   }, [activeId]);
 
   useEffect(() => {
+    const onSync = (event: Event) => {
+      const detail = (event as CustomEvent<{ conversationId?: number }>).detail;
+      const conversationId = detail?.conversationId;
+      if (!activeId) return;
+      if (conversationId && conversationId !== activeId) return;
+      loadThread(activeId, true);
+      loadInbox(activeId);
+    };
+    window.addEventListener(CHAT_SYNC_EVENT, onSync);
+    return () => window.removeEventListener(CHAT_SYNC_EVENT, onSync);
+  }, [activeId]);
+
+  useEffect(() => {
     if (!maximized || isOverlay) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setMaximized(false);
@@ -593,14 +683,12 @@ export default function MessagesPage({
     setActiveId(conversationId);
     setThreadMenuOpen(false);
     setManagingId(null);
-    setMenuId(null);
     if (isMobileLayout || isFloat) setMobileView('thread');
   };
 
   const backToInbox = () => {
     setMobileView('inbox');
     setThreadMenuOpen(false);
-    setMenuId(null);
     setComposeSearch('');
   };
 
@@ -635,7 +723,8 @@ export default function MessagesPage({
     await stopTyping(activeId);
     try {
       const created = await chatService.sendMessage(activeId, draft.trim());
-      setDraft('');
+      updateDraft('');
+      emitChatSync(activeId);
       setMessages((current) => (current.some((item) => item.id === created.id) ? current : [...current, created]));
       setConversations((current) => {
         const next = current.map((item) =>
@@ -667,7 +756,6 @@ export default function MessagesPage({
 
   const beginEdit = (message: ChatMessage) => {
     if (!message.can_edit) return;
-    setMenuId(null);
     setEditingId(message.id);
     setEditDraft(message.body);
   };
@@ -696,7 +784,6 @@ export default function MessagesPage({
   const unsend = async (message: ChatMessage) => {
     if (!activeId || !message.can_unsend) return;
     if (!window.confirm('Unsend this message for everyone in the conversation?')) return;
-    setMenuId(null);
     try {
       const updated = await chatService.unsendMessage(activeId, message.id);
       replaceMessage(updated);
@@ -838,34 +925,65 @@ export default function MessagesPage({
   }, [composeDirectory, composeSearch, directory]);
 
   const conversationPane = (
-    <section className="chat-wallpaper flex min-h-0 flex-1 flex-col">
+    <section className="chat-wallpaper flex min-h-0 flex-1 flex-col bg-slate-50/60">
       {!active ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+        isFloat ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+            <div className="h-8 w-8 animate-pulse rounded-full bg-slate-200" />
+            <p className="text-xs font-semibold text-slate-500">
+              {error || 'Loading conversation…'}
+            </p>
+          </div>
+        ) : (
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
           <motion.div
             initial={reduceMotion ? false : { opacity: 0, scale: 0.92 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.35, ease }}
-            className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-slate-400 shadow-sm backdrop-blur"
+            className="flex h-20 w-20 items-center justify-center rounded-3xl border border-slate-200/90 bg-white text-blue-600 shadow-lg shadow-slate-200/60"
           >
-            <MessageCircle className="h-8 w-8" />
+            <MessageCircle className="h-9 w-9" />
           </motion.div>
-          <p className="text-base font-semibold text-slate-800">Select a conversation</p>
-          <p className="max-w-sm text-sm text-slate-500">
-            Choose someone from the left, or start a group chat.
-          </p>
+          <div>
+            <p className="text-lg font-black tracking-tight text-slate-900">Your Workspace Inbox</p>
+            <p className="mx-auto mt-1 max-w-xs text-xs font-medium leading-relaxed text-slate-500">
+              Select a conversation from the left, tap someone who&apos;s on duty, or spin up a new group chat.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowGroupModal(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-600"
+          >
+            <UsersRound className="h-4 w-4" />
+            Create Group Chat
+          </button>
         </div>
+        )
       ) : (
         <>
+          {/* THREAD HEADER */}
           <header
-            className={`flex shrink-0 items-center gap-2 border-b border-slate-200/80 bg-white/90 backdrop-blur sm:gap-3 ${
-              isFloat ? 'px-3 py-2' : 'px-3 py-2.5 sm:px-5 sm:py-3'
+            className={`flex shrink-0 items-center gap-2.5 border-b border-slate-200/80 bg-white/95 backdrop-blur-xl sm:gap-3 ${
+              isFloat ? 'px-3 py-2.5' : 'px-4 py-3 sm:px-6 sm:py-3.5'
             }`}
           >
+            {isFloat && (
+              <button
+                type="button"
+                onClick={() => onMinimize?.()}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 md:hidden"
+                aria-label="Back"
+                title="Back"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+            )}
             {isMobileLayout && !isFloat && (
               <button
                 type="button"
                 onClick={backToInbox}
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
                 aria-label="Back to inbox"
                 title="Back"
               >
@@ -877,12 +995,21 @@ export default function MessagesPage({
               picture={active.peer?.profile_picture}
               online={peerOnline || conversationOnline(active)}
               group={activeIsGroup}
-              className={`rounded-full bg-slate-100 text-sm text-slate-600 ${
+              className={`rounded-full bg-slate-100 text-sm text-slate-600 ring-2 ring-slate-100 ${
                 isFloat || isMobileLayout ? 'h-9 w-9' : 'h-11 w-11'
               }`}
             />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-slate-900">{conversationTitle(active)}</p>
+              <div className="flex items-center gap-2">
+                <p className="truncate text-sm font-black tracking-tight text-slate-900">
+                  {conversationTitle(active)}
+                </p>
+                {activeIsGroup && (
+                  <span className="hidden rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 sm:inline">
+                    Group
+                  </span>
+                )}
+              </div>
               <AnimatePresence mode="wait" initial={false}>
                 <motion.p
                   key={statusLabel}
@@ -891,7 +1018,7 @@ export default function MessagesPage({
                   exit={reduceMotion ? undefined : { opacity: 0, y: -4 }}
                   transition={{ duration: 0.18, ease }}
                   className={`truncate text-xs ${
-                    peerTyping || peerOnline ? 'font-medium text-emerald-600' : 'text-slate-500'
+                    peerTyping || peerOnline ? 'font-bold text-emerald-600' : 'font-medium text-slate-400'
                   }`}
                 >
                   {peerTyping ? (
@@ -914,64 +1041,64 @@ export default function MessagesPage({
                 </div>
               )}
             </div>
-            <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+
+            <div className="flex shrink-0 items-center gap-1">
               {!isFloat && (
-                <div className="relative">
+                <AnchoredMenu
+                  open={threadMenuOpen}
+                  onClose={() => setThreadMenuOpen(false)}
+                  menuClassName="min-w-44 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1 shadow-xl"
+                  trigger={
+                    <button
+                      type="button"
+                      onClick={() => setThreadMenuOpen((value) => !value)}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                      aria-label="Conversation options"
+                      aria-expanded={threadMenuOpen}
+                      title="Conversation options"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </button>
+                  }
+                >
+                  {inboxScope === 'archived' || active.is_archived ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => void restoreConversation(active.id)}
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-50"
+                    >
+                      <ArchiveRestore className="h-3.5 w-3.5" />
+                      Restore conversation
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => void archiveConversation(active.id)}
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-50"
+                    >
+                      <Archive className="h-3.5 w-3.5" />
+                      Archive conversation
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={() => setThreadMenuOpen((value) => !value)}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-                    aria-label="Conversation options"
-                    title="Conversation options"
+                    role="menuitem"
+                    onClick={() => void deleteConversation(active.id)}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-rose-600 hover:bg-rose-50"
                   >
-                    <MoreVertical className="h-4 w-4" />
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete for me
                   </button>
-                  <AnimatePresence>
-                    {threadMenuOpen && (
-                      <motion.div
-                        initial={reduceMotion ? false : { opacity: 0, y: 4, scale: 0.98 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={reduceMotion ? undefined : { opacity: 0, y: 4, scale: 0.98 }}
-                        className="absolute right-0 z-30 mt-1 min-w-44 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg"
-                      >
-                        {inboxScope === 'archived' || active.is_archived ? (
-                          <button
-                            type="button"
-                            onClick={() => void restoreConversation(active.id)}
-                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                          >
-                            <ArchiveRestore className="h-3.5 w-3.5" />
-                            Restore conversation
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => void archiveConversation(active.id)}
-                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                          >
-                            <Archive className="h-3.5 w-3.5" />
-                            Archive conversation
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => void deleteConversation(active.id)}
-                          className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          Delete for me
-                        </button>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
+                </AnchoredMenu>
               )}
               {isFloat && (
                 <>
                   <button
                     type="button"
                     onClick={() => onMinimize?.()}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                    className="hidden h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 md:inline-flex"
                     aria-label="Minimize chat"
                     title="Minimize"
                   >
@@ -979,8 +1106,17 @@ export default function MessagesPage({
                   </button>
                   <button
                     type="button"
+                    onClick={() => onExpand?.()}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                    aria-label="Open in Messages"
+                    title="Open in Messages"
+                  >
+                    <Maximize2 className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => onClose?.()}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
                     aria-label="Close chat"
                     title="Close"
                   >
@@ -992,7 +1128,7 @@ export default function MessagesPage({
                 <button
                   type="button"
                   onClick={() => setMaximized((value) => !value)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
                   aria-label={maximized ? 'Exit maximized conversation' : 'Maximize conversation'}
                   title={maximized ? 'Exit full view' : 'Maximize'}
                 >
@@ -1006,7 +1142,7 @@ export default function MessagesPage({
                     if (isOverlay) onClose?.();
                     else setMaximized(false);
                   }}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
                   aria-label="Close chat"
                 >
                   <X className="h-4 w-4" />
@@ -1015,146 +1151,201 @@ export default function MessagesPage({
             </div>
           </header>
 
-          <div className="custom-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4 sm:px-5">
+          {/* MESSAGES STREAM */}
+          <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
             {loadingThread ? (
-              <p className="py-10 text-center text-sm text-slate-500">Loading messages…</p>
+              <div className="space-y-3 py-6 animate-pulse">
+                <div className="h-12 w-2/3 rounded-2xl bg-slate-200/70" />
+                <div className="ml-auto h-12 w-1/2 rounded-2xl bg-blue-200/60" />
+                <div className="h-16 w-3/5 rounded-2xl bg-slate-200/70" />
+              </div>
             ) : messages.length === 0 ? (
-              <p className="py-10 text-center text-sm text-slate-500">Say hello to start the conversation.</p>
+              <div className="flex flex-col items-center justify-center py-14 text-center">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-blue-500 shadow-xs ring-1 ring-slate-200/70">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <p className="text-sm font-extrabold text-slate-700">No messages yet</p>
+                <p className="mt-1 text-xs font-medium text-slate-400">
+                  Say hello to start the conversation with {conversationTitle(active)}.
+                </p>
+              </div>
             ) : (
               <AnimatePresence initial={false}>
-                {messages.map((message) => {
+                {messages.map((message, idx) => {
                   const mine = Boolean(message.is_mine);
                   const unsent = Boolean(message.is_unsent);
                   const editing = editingId === message.id;
+
+                  const prev = messages[idx - 1];
+                  const next = messages[idx + 1];
+                  const currentDay = dayKey(message.created_at);
+                  const showDayDivider = !prev || dayKey(prev.created_at) !== currentDay;
+
+                  const sameSenderAsPrev =
+                    Boolean(prev) &&
+                    !showDayDivider &&
+                    Boolean(prev.is_mine) === mine &&
+                    prev.sender?.id === message.sender?.id;
+                  const sameSenderAsNext =
+                    Boolean(next) &&
+                    dayKey(next.created_at) === currentDay &&
+                    Boolean(next.is_mine) === mine &&
+                    next.sender?.id === message.sender?.id;
+
+                  const bubbleRadius = unsent
+                    ? 'rounded-2xl'
+                    : mine
+                      ? `${sameSenderAsPrev ? 'rounded-tr-md' : 'rounded-tr-2xl'} ${sameSenderAsNext ? 'rounded-br-md' : 'rounded-br-md'} rounded-l-2xl`
+                      : `${sameSenderAsPrev ? 'rounded-tl-md' : 'rounded-tl-2xl'} ${sameSenderAsNext ? 'rounded-bl-md' : 'rounded-bl-md'} rounded-r-2xl`;
+
                   return (
-                    <motion.div
-                      key={message.id}
-                      layout={!reduceMotion}
-                      initial={reduceMotion ? false : { opacity: 0, y: 10, scale: 0.98 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      transition={{ duration: 0.22, ease }}
-                      className={`group flex ${mine ? 'justify-end' : 'justify-start'}`}
-                    >
-                      <div className={`relative max-w-[85%] sm:max-w-[70%] ${mine ? 'items-end' : 'items-start'}`}>
-                        {activeIsGroup && !mine && !unsent && (
-                          <p className="mb-1 px-1 text-[10px] font-semibold text-slate-400">
-                            {message.sender?.name || 'Member'}
-                          </p>
-                        )}
-                        {editing ? (
-                          <div className="rounded-2xl border border-blue-200 bg-white p-3 shadow-sm">
-                            <textarea
-                              ref={editRef}
-                              value={editDraft}
-                              onChange={(event) => setEditDraft(event.target.value)}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Escape') {
-                                  event.preventDefault();
-                                  cancelEdit();
-                                }
-                                if (event.key === 'Enter' && !event.shiftKey) {
-                                  event.preventDefault();
-                                  void saveEdit(message.id);
-                                }
-                              }}
-                              rows={3}
-                              className="chat-composer w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
-                            />
-                            <div className="mt-2 flex items-center justify-end gap-2">
+                    <div key={message.id}>
+                      {showDayDivider && (
+                        <div className="my-5 flex items-center justify-center">
+                          <span className="rounded-full border border-slate-200/80 bg-white/90 px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-slate-400 shadow-2xs backdrop-blur-sm">
+                            {formatDayDivider(message.created_at)}
+                          </span>
+                        </div>
+                      )}
+
+                      <motion.div
+                        layout={!reduceMotion}
+                        initial={reduceMotion ? false : { opacity: 0, y: 8, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{ duration: 0.2, ease }}
+                        className={`group flex items-end gap-2 ${mine ? 'justify-end' : 'justify-start'} ${
+                          sameSenderAsPrev ? 'mt-1' : 'mt-3.5'
+                        }`}
+                      >
+                        {/* Floating Quick Actions for My Messages (left of bubble) */}
+                        {mine && !editing && (message.can_edit || message.can_unsend) && (
+                          <div className="mb-1 hidden shrink-0 items-center gap-0.5 rounded-xl border border-slate-200/80 bg-white/95 p-0.5 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100 sm:flex">
+                            {message.can_edit && (
                               <button
                                 type="button"
-                                onClick={cancelEdit}
-                                className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100"
+                                onClick={() => beginEdit(message)}
+                                title="Edit message"
+                                aria-label="Edit message"
+                                className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-blue-600"
                               >
-                                <X className="h-3.5 w-3.5" />
-                                Cancel
+                                <Pencil className="h-3.5 w-3.5" />
                               </button>
+                            )}
+                            {message.can_unsend && (
                               <button
                                 type="button"
-                                disabled={savingEdit || !editDraft.trim()}
-                                onClick={() => void saveEdit(message.id)}
-                                className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300"
+                                onClick={() => void unsend(message)}
+                                title="Unsend message"
+                                aria-label="Unsend message"
+                                className="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
                               >
-                                <Check className="h-3.5 w-3.5" />
-                                Save
+                                <Trash2 className="h-3.5 w-3.5" />
                               </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div
-                            className={`rounded-2xl px-3.5 py-2.5 text-sm shadow-sm ${
-                              unsent
-                                ? 'chat-unsent rounded-bl-md border border-dashed border-slate-300 bg-slate-50/80 italic text-slate-500'
-                                : mine
-                                  ? 'rounded-br-md bg-blue-600 text-white'
-                                  : 'chat-bubble-peer rounded-bl-md border border-slate-200 bg-white text-slate-800'
-                            }`}
-                          >
-                            <p className="whitespace-pre-wrap break-words leading-relaxed">
-                              {unsent ? 'Message unsent' : message.body}
-                            </p>
-                            <p
-                              className={`mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] ${
-                                mine && !unsent ? 'justify-end text-blue-100' : 'text-slate-400'
-                              }`}
-                            >
-                              <span>
-                                {formatClock(message.created_at)}
-                                {!unsent && message.edited_at ? ' · edited' : ''}
-                              </span>
-                              {mine && !unsent && (
-                                <MessageReceipt deliveredAt={message.delivered_at} readAt={message.read_at} />
-                              )}
-                            </p>
+                            )}
                           </div>
                         )}
 
-                        {mine && !editing && (message.can_edit || message.can_unsend) && (
-                          <div className={`mt-1 flex ${mine ? 'justify-end' : 'justify-start'}`}>
-                            <div className="relative">
-                              <button
-                                type="button"
-                                onClick={() => setMenuId((current) => (current === message.id ? null : message.id))}
-                                className="rounded-lg px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 opacity-0 transition hover:bg-white/70 hover:text-slate-700 group-hover:opacity-100"
-                              >
-                                Manage
-                              </button>
-                              <AnimatePresence>
-                                {menuId === message.id && (
-                                  <motion.div
-                                    initial={reduceMotion ? false : { opacity: 0, y: 4, scale: 0.98 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    exit={reduceMotion ? undefined : { opacity: 0, y: 4, scale: 0.98 }}
-                                    className="absolute right-0 z-20 mt-1 min-w-36 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg"
-                                  >
-                                    {message.can_edit && (
-                                      <button
-                                        type="button"
-                                        onClick={() => beginEdit(message)}
-                                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                                      >
-                                        <Pencil className="h-3.5 w-3.5" />
-                                        Edit
-                                      </button>
-                                    )}
-                                    {message.can_unsend && (
-                                      <button
-                                        type="button"
-                                        onClick={() => void unsend(message)}
-                                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50"
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                        Unsend
-                                      </button>
-                                    )}
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
+                        <div className={`relative max-w-[85%] sm:max-w-[70%] ${mine ? 'items-end' : 'items-start'}`}>
+                          {activeIsGroup && !mine && !unsent && !sameSenderAsPrev && (
+                            <p className="mb-1 px-1.5 text-[10px] font-extrabold text-slate-400">
+                              {message.sender?.name || 'Member'}
+                            </p>
+                          )}
+
+                          {editing ? (
+                            <div className="min-w-[240px] rounded-2xl border border-blue-300 bg-white p-3 shadow-lg">
+                              <textarea
+                                ref={editRef}
+                                value={editDraft}
+                                onChange={(event) => setEditDraft(event.target.value)}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Escape') {
+                                    event.preventDefault();
+                                    cancelEdit();
+                                  }
+                                  if (event.key === 'Enter' && !event.shiftKey) {
+                                    event.preventDefault();
+                                    void saveEdit(message.id);
+                                  }
+                                }}
+                                rows={3}
+                                className="chat-composer w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                              />
+                              <div className="mt-2 flex items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={cancelEdit}
+                                  className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={savingEdit || !editDraft.trim()}
+                                  onClick={() => void saveEdit(message.id)}
+                                  className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-600 disabled:bg-slate-300"
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                  Save
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        )}
-                      </div>
-                    </motion.div>
+                          ) : (
+                            <div
+                              className={`${bubbleRadius} px-4 py-2.5 text-sm shadow-xs ${
+                                unsent
+                                  ? 'chat-unsent border border-dashed border-slate-300 bg-slate-50/80 italic text-slate-500'
+                                  : mine
+                                    ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-blue-600/15'
+                                    : 'chat-bubble-peer border border-slate-200/90 bg-white text-slate-800'
+                              }`}
+                            >
+                              <p className="whitespace-pre-wrap break-words leading-relaxed">
+                                {unsent ? 'Message unsent' : message.body}
+                              </p>
+                              <p
+                                className={`mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] ${
+                                  mine && !unsent ? 'justify-end text-blue-100/90' : 'text-slate-400'
+                                }`}
+                              >
+                                <span title={formatClock(message.created_at)}>
+                                  {formatTimeOnly(message.created_at)}
+                                  {!unsent && message.edited_at ? ' · edited' : ''}
+                                </span>
+                                {mine && !unsent && (
+                                  <MessageReceipt deliveredAt={message.delivered_at} readAt={message.read_at} />
+                                )}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Mobile quick edit/unsend row */}
+                          {mine && !editing && (message.can_edit || message.can_unsend) && (
+                            <div className="mt-1 flex justify-end gap-2 sm:hidden">
+                              {message.can_edit && (
+                                <button
+                                  type="button"
+                                  onClick={() => beginEdit(message)}
+                                  className="text-[10px] font-bold text-slate-400 hover:text-blue-600"
+                                >
+                                  Edit
+                                </button>
+                              )}
+                              {message.can_unsend && (
+                                <button
+                                  type="button"
+                                  onClick={() => void unsend(message)}
+                                  className="text-[10px] font-bold text-slate-400 hover:text-rose-600"
+                                >
+                                  Unsend
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    </div>
                   );
                 })}
               </AnimatePresence>
@@ -1168,9 +1359,9 @@ export default function MessagesPage({
                   animate={{ opacity: 1, y: 0 }}
                   exit={reduceMotion ? undefined : { opacity: 0, y: 6 }}
                   transition={{ duration: 0.2, ease }}
-                  className="flex justify-start"
+                  className="mt-3 flex justify-start"
                 >
-                  <div className="inline-flex items-center gap-2 rounded-2xl rounded-bl-md border border-slate-200 bg-white/90 px-3.5 py-2.5 text-xs font-medium text-slate-500 shadow-sm backdrop-blur">
+                  <div className="inline-flex items-center gap-2 rounded-2xl rounded-bl-md border border-slate-200 bg-white/95 px-3.5 py-2.5 text-xs font-semibold text-slate-500 shadow-xs backdrop-blur">
                     <TypingDots />
                     {activeIsGroup
                       ? statusLabel
@@ -1182,18 +1373,19 @@ export default function MessagesPage({
             <div ref={bottomRef} />
           </div>
 
+          {/* COMPOSER DOCK */}
           <form
             onSubmit={submit}
-            className="shrink-0 border-t border-slate-200/80 bg-white/90 p-2 backdrop-blur sm:p-3"
-            style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
+            className="shrink-0 border-t border-slate-200/80 bg-white/95 p-2.5 backdrop-blur-xl sm:px-5 sm:py-3.5"
+            style={{ paddingBottom: 'max(0.6rem, env(safe-area-inset-bottom))' }}
           >
-            <div className="chat-composer flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50/90 p-2 transition focus-within:border-blue-300 focus-within:ring-2 focus-within:ring-blue-100">
+            <div className="chat-composer flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50/90 p-1.5 transition focus-within:border-blue-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-500/20">
               <textarea
                 ref={draftRef}
                 value={draft}
                 onChange={(event) => {
                   const value = event.target.value;
-                  setDraft(value);
+                  updateDraft(value);
                   if (!activeId) return;
                   if (value.trim()) bumpTyping(activeId);
                   else void stopTyping(activeId);
@@ -1206,19 +1398,25 @@ export default function MessagesPage({
                   }
                 }}
                 rows={1}
-                placeholder={`Message ${conversationTitle(active)}`}
-                className="max-h-28 min-h-[2.5rem] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-slate-800 outline-none sm:max-h-32 sm:min-h-[2.75rem]"
+                placeholder={`Message ${conversationTitle(active)}…`}
+                className="max-h-28 min-h-[2.5rem] flex-1 resize-none bg-transparent px-3 py-2 text-sm text-slate-800 outline-none placeholder:text-slate-400 sm:max-h-32 sm:min-h-[2.75rem]"
               />
               <motion.button
                 type="submit"
                 disabled={sending || !draft.trim()}
                 whileTap={reduceMotion || sending || !draft.trim() ? undefined : { scale: 0.94 }}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/25 transition hover:from-blue-700 hover:to-indigo-700 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
                 aria-label="Send message"
               >
                 <Send className="h-4 w-4" />
               </motion.button>
             </div>
+            {!isFloat && !isMobileLayout && (
+              <p className="mt-1.5 px-1 text-[10px] font-medium text-slate-400">
+                Press <span className="font-bold text-slate-500">Enter</span> to send ·{' '}
+                <span className="font-bold text-slate-500">Shift + Enter</span> for a new line
+              </p>
+            )}
           </form>
         </>
       )}
@@ -1227,21 +1425,21 @@ export default function MessagesPage({
 
   const inbox = (
     <aside
-      className={`relative flex h-full min-h-0 w-full flex-1 flex-col border-b border-slate-200/80 transition-[width] duration-300 ease-out lg:border-b-0 lg:border-r lg:flex-none ${
-        listCollapsed ? 'lg:w-[4.75rem]' : 'lg:w-[22rem]'
+      className={`relative flex h-full min-h-0 w-full flex-1 flex-col border-b border-slate-200/80 bg-white transition-[width] duration-300 ease-out lg:flex-none lg:border-b-0 lg:border-r ${
+        listCollapsed ? 'lg:w-[4.75rem]' : 'lg:w-[22.5rem]'
       }`}
     >
-      <div className={`border-b border-slate-200/80 ${listCollapsed ? 'p-2' : 'p-3 sm:p-4'}`}>
+      <div className={`border-b border-slate-200/80 bg-slate-50/50 ${listCollapsed ? 'p-2' : 'p-3 sm:p-4'}`}>
         <div
-          className={`mb-2 flex items-center sm:mb-3 ${
+          className={`mb-2.5 flex items-center sm:mb-3 ${
             listCollapsed ? 'justify-center' : 'justify-between gap-2'
           }`}
         >
           {!listCollapsed && (
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Inbox</p>
+              <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Inbox</p>
               {isMobileLayout && (
-                <p className="truncate text-base font-semibold text-slate-900">Messages</p>
+                <p className="truncate text-base font-black tracking-tight text-slate-900">Messages</p>
               )}
             </div>
           )}
@@ -1250,7 +1448,7 @@ export default function MessagesPage({
               <button
                 type="button"
                 onClick={openCompose}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white transition hover:bg-blue-700"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white transition hover:bg-blue-600"
                 title="New message"
                 aria-label="New message"
               >
@@ -1271,8 +1469,8 @@ export default function MessagesPage({
               onClick={() => setInboxScope((value) => (value === 'active' ? 'archived' : 'active'))}
               className={`hidden h-9 w-9 items-center justify-center rounded-xl transition sm:inline-flex ${
                 inboxScope === 'archived'
-                  ? 'bg-amber-50 text-amber-700'
-                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
+                  ? 'bg-amber-100 text-amber-800'
+                  : 'text-slate-500 hover:bg-slate-200/70 hover:text-slate-900'
               }`}
               title={inboxScope === 'archived' ? 'Show active chats' : 'Show archived chats'}
               aria-label={inboxScope === 'archived' ? 'Show active chats' : 'Show archived chats'}
@@ -1285,7 +1483,7 @@ export default function MessagesPage({
                 autoCollapsedRef.current = false;
                 setSidebarCollapsed((value) => !value);
               }}
-              className="hidden h-9 w-9 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 lg:inline-flex"
+              className="hidden h-9 w-9 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-900 lg:inline-flex"
               title={listCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               aria-label={listCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
@@ -1295,7 +1493,7 @@ export default function MessagesPage({
               <button
                 type="button"
                 onClick={onClose}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 lg:hidden"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-200/70 lg:hidden"
                 aria-label="Close"
               >
                 <X className="h-4 w-4" />
@@ -1303,14 +1501,17 @@ export default function MessagesPage({
             )}
           </div>
         </div>
+
         {!listCollapsed && (
           <>
-            <div className="mb-3 hidden grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 sm:grid">
+            <div className="mb-3 hidden grid-cols-2 gap-1 rounded-xl border border-slate-200/80 bg-white p-1 sm:grid">
               <button
                 type="button"
                 onClick={() => setInboxScope('active')}
-                className={`rounded-lg px-2 py-1.5 text-xs font-semibold transition ${
-                  inboxScope === 'active' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                className={`rounded-lg px-2 py-1.5 text-xs font-bold transition ${
+                  inboxScope === 'active'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'text-slate-500 hover:text-slate-900'
                 }`}
               >
                 Active
@@ -1318,8 +1519,10 @@ export default function MessagesPage({
               <button
                 type="button"
                 onClick={() => setInboxScope('archived')}
-                className={`rounded-lg px-2 py-1.5 text-xs font-semibold transition ${
-                  inboxScope === 'archived' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                className={`rounded-lg px-2 py-1.5 text-xs font-bold transition ${
+                  inboxScope === 'archived'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'text-slate-500 hover:text-slate-900'
                 }`}
               >
                 Archived
@@ -1332,13 +1535,13 @@ export default function MessagesPage({
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Search messages or people…"
-                  className="chat-composer w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm text-slate-800 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                  className="chat-composer w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-10 text-xs font-semibold text-slate-800 outline-none transition placeholder:font-medium placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                 />
                 {search.trim() && (
                   <button
                     type="button"
                     onClick={() => setSearch('')}
-                    className="absolute right-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200/70 hover:text-slate-700"
+                    className="absolute right-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                     aria-label="Clear search"
                   >
                     <X className="h-3.5 w-3.5" />
@@ -1351,42 +1554,41 @@ export default function MessagesPage({
       </div>
 
       <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+        {/* HORIZONTAL ACTIVE NOW AVATAR RAIL */}
         {!listCollapsed && inboxScope === 'active' && !search.trim() && (
-          <div className="hidden border-b border-slate-100 px-3 py-3 lg:block">
-            <p className="mb-2 flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-              <Activity className="h-3.5 w-3.5" />
-              Active now
+          <div className="border-b border-slate-100 px-3 py-3">
+            <p className="mb-2.5 flex items-center gap-2 px-1 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+              <Activity className="h-3.5 w-3.5 text-emerald-500" />
+              On Duty Now
               {activeNow.length > 0 && (
-                <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">
+                <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-extrabold text-emerald-700">
                   {activeNow.length}
                 </span>
               )}
             </p>
             {activeNow.length === 0 ? (
-              <p className="px-2 py-2 text-xs text-slate-500">Nobody is clocked in right now.</p>
+              <p className="px-2 py-1 text-xs font-medium text-slate-400">
+                Nobody is clocked in right now.
+              </p>
             ) : (
-              <div className="space-y-1">
-                {activeNow.slice(0, 8).map((user) => (
+              <div className="custom-scrollbar flex gap-2.5 overflow-x-auto pb-1">
+                {activeNow.slice(0, 12).map((user) => (
                   <button
                     key={`active-${user.id}`}
                     type="button"
                     onClick={() => void startChat(user)}
-                    className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition hover:bg-slate-50"
+                    title={`${user.name}${user.assignment ? ` · ${user.assignment}` : ''}`}
+                    className="group flex w-14 shrink-0 flex-col items-center gap-1.5 rounded-xl p-1 text-center transition hover:bg-slate-50"
                   >
                     <AvatarWithPresence
                       name={user.name}
                       picture={user.profile_picture}
                       online={user.online}
-                      className="h-9 w-9 rounded-full bg-slate-100 text-sm text-slate-600"
+                      className="h-11 w-11 rounded-full bg-slate-100 text-xs text-slate-600 ring-2 ring-emerald-400/50 transition group-hover:scale-105"
                     />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-slate-900">{user.name}</p>
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        <OfficerMark user={user} />
-                        <AssignmentChip label={user.assignment} />
-                        <ClockedInChip clockedIn={user.clocked_in} workType={user.work_type} />
-                      </div>
-                    </div>
+                    <span className="w-full truncate text-[10px] font-bold text-slate-700">
+                      {user.name.split(' ')[0]}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -1396,12 +1598,12 @@ export default function MessagesPage({
 
         {!listCollapsed && inboxScope === 'active' && search.trim() && (
           <div className="border-b border-slate-100 px-3 py-3">
-            <p className="mb-2 flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-              <Users className="h-3.5 w-3.5" />
+            <p className="mb-2 flex items-center gap-2 px-1 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+              <Users className="h-3.5 w-3.5 text-blue-600" />
               People
             </p>
             {directory.length === 0 ? (
-              <p className="px-2 py-3 text-sm text-slate-500">No matching users.</p>
+              <p className="px-2 py-3 text-xs font-medium text-slate-500">No matching users.</p>
             ) : (
               directory.map((user) => (
                 <button
@@ -1417,10 +1619,10 @@ export default function MessagesPage({
                     className="h-10 w-10 rounded-full bg-slate-100 text-sm text-slate-600"
                   />
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900">{user.name}</p>
-                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                    <p className="truncate text-sm font-bold text-slate-900">{user.name}</p>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1">
                       <OfficerMark user={user} />
-                      <p className={`truncate text-xs ${user.online ? 'text-emerald-600' : 'text-slate-500'}`}>
+                      <p className={`truncate text-xs font-medium ${user.online ? 'text-emerald-600' : 'text-slate-500'}`}>
                         {user.online ? 'Online' : user.role}
                       </p>
                     </div>
@@ -1431,28 +1633,36 @@ export default function MessagesPage({
           </div>
         )}
 
-        <div className={`py-2 sm:py-3 ${listCollapsed ? 'px-1.5' : 'px-2 sm:px-3'}`}>
+        <div className={`py-2.5 sm:py-3 ${listCollapsed ? 'px-1.5' : 'px-2 sm:px-3'}`}>
           {!listCollapsed && (
-            <p className="mb-1 flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400 sm:mb-2">
-              {inboxScope === 'archived' ? <Archive className="h-3.5 w-3.5" /> : <MessageCircle className="h-3.5 w-3.5" />}
+            <p className="mb-1.5 flex items-center gap-2 px-1 text-[10px] font-extrabold uppercase tracking-widest text-slate-400 sm:mb-2">
+              {inboxScope === 'archived' ? (
+                <Archive className="h-3.5 w-3.5" />
+              ) : (
+                <MessageCircle className="h-3.5 w-3.5" />
+              )}
               {inboxScope === 'archived' ? 'Archived' : 'Conversations'}
             </p>
           )}
           {loadingInbox ? (
-            <p className="px-2 py-6 text-sm text-slate-500">Loading inbox…</p>
+            <div className="space-y-2 px-1 py-2 animate-pulse">
+              <div className="h-14 rounded-2xl bg-slate-100" />
+              <div className="h-14 rounded-2xl bg-slate-100" />
+              <div className="h-14 rounded-2xl bg-slate-100" />
+            </div>
           ) : filteredConversations.length === 0 ? (
             listCollapsed ? (
               <p className="px-1 text-center text-[10px] text-slate-400">—</p>
             ) : (
-              <div className="px-2 py-8 text-sm text-slate-500">
-                <p className="font-medium text-slate-700">
+              <div className="px-2 py-8 text-xs text-slate-500">
+                <p className="font-bold text-slate-700">
                   {search.trim()
                     ? 'No matching conversations.'
                     : inboxScope === 'archived'
                       ? 'No archived conversations.'
                       : 'No conversations yet.'}
                 </p>
-                <p className="mt-1">
+                <p className="mt-1 font-medium text-slate-400">
                   {search.trim()
                     ? 'Try another name, or start a new message.'
                     : inboxScope === 'archived'
@@ -1463,9 +1673,9 @@ export default function MessagesPage({
                   <button
                     type="button"
                     onClick={openCompose}
-                    className="mt-4 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                    className="mt-4 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3.5 py-2 text-xs font-bold text-white hover:bg-blue-600"
                   >
-                    <Pencil className="h-4 w-4" />
+                    <Pencil className="h-3.5 w-3.5" />
                     New Message
                   </button>
                 )}
@@ -1485,8 +1695,8 @@ export default function MessagesPage({
                           className="h-9 w-9 rounded-full bg-slate-100 text-sm text-slate-600"
                         />
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-slate-900">{user.name}</p>
-                          <p className={`truncate text-xs ${user.online ? 'text-emerald-600' : 'text-slate-500'}`}>
+                          <p className="truncate text-xs font-bold text-slate-900">{user.name}</p>
+                          <p className={`truncate text-[11px] font-medium ${user.online ? 'text-emerald-600' : 'text-slate-500'}`}>
                             {user.online ? 'Online' : user.role}
                           </p>
                         </div>
@@ -1509,7 +1719,7 @@ export default function MessagesPage({
                     layout={!reduceMotion}
                     onClick={() => openConversation(conversation.id)}
                     className={`relative mb-1.5 flex w-full items-center justify-center rounded-xl p-1.5 transition ${
-                      selected ? 'bg-blue-50 ring-1 ring-blue-100' : 'hover:bg-slate-50'
+                      selected ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-slate-50'
                     }`}
                     title={conversationTitle(conversation)}
                     aria-label={conversationTitle(conversation)}
@@ -1522,7 +1732,7 @@ export default function MessagesPage({
                       className="h-10 w-10 rounded-full bg-slate-100 text-sm text-slate-600"
                     />
                     {conversation.unread_count > 0 && (
-                      <span className="absolute right-1 top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[9px] font-bold text-white">
+                      <span className="absolute right-1 top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[9px] font-extrabold text-white">
                         {conversation.unread_count > 9 ? '9+' : conversation.unread_count}
                       </span>
                     )}
@@ -1532,10 +1742,18 @@ export default function MessagesPage({
               return (
                 <div
                   key={conversation.id}
-                  className={`group/row mb-0.5 flex min-h-[4.75rem] w-full items-center gap-2 rounded-xl px-2 py-2 transition sm:mb-1 sm:min-h-0 sm:items-start sm:py-2.5 ${
-                    selected ? 'bg-blue-50 ring-1 ring-blue-100' : 'hover:bg-slate-50'
+                  className={`group/row relative mb-1 flex min-h-[4.5rem] w-full items-center gap-2 rounded-2xl px-2.5 py-2 transition sm:min-h-0 sm:items-start sm:py-2.5 ${
+                    selected
+                      ? 'bg-blue-50/90 ring-1 ring-blue-200/80'
+                      : 'hover:bg-slate-50'
                   }`}
                 >
+                  {selected && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-y-2.5 left-0 w-1 rounded-r-full bg-blue-600"
+                    />
+                  )}
                   <button
                     type="button"
                     onClick={() => openConversation(conversation.id)}
@@ -1550,13 +1768,11 @@ export default function MessagesPage({
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-sm font-semibold text-slate-900">
+                        <p className="truncate text-sm font-extrabold text-slate-900">
                           {conversationTitle(conversation)}
                         </p>
-                        <span className="shrink-0 text-[10px] text-slate-400">
-                          {isMobileLayout
-                            ? formatListClock(conversation.last_message_at)
-                            : formatClock(conversation.last_message_at)}
+                        <span className="shrink-0 text-[10px] font-semibold text-slate-400">
+                          {formatListClock(conversation.last_message_at)}
                         </span>
                       </div>
                       {!group && (
@@ -1569,75 +1785,82 @@ export default function MessagesPage({
                         </div>
                       )}
                       {group && (
-                        <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                        <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                           Group · {conversation.member_count || conversation.participants?.length || 0} members
                         </p>
                       )}
                       <div className="mt-0.5 flex items-center justify-between gap-2">
                         <p
                           className={`truncate text-xs ${
-                            conversation.peer_typing ? 'font-medium text-emerald-600' : 'text-slate-500'
+                            conversation.peer_typing
+                              ? 'font-bold text-emerald-600'
+                              : conversation.unread_count > 0
+                                ? 'font-bold text-slate-800'
+                                : 'font-medium text-slate-500'
                           }`}
                         >
                           {preview}
                         </p>
                         {conversation.unread_count > 0 && (
-                          <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 text-[10px] font-bold text-white">
+                          <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-extrabold text-white">
                             {conversation.unread_count}
                           </span>
                         )}
                       </div>
                     </div>
                   </button>
-                  <div className="relative hidden shrink-0 sm:block">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setManagingId((current) => (current === conversation.id ? null : conversation.id))
-                      }
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 opacity-0 transition hover:bg-white hover:text-slate-700 group-hover/row:opacity-100"
-                      aria-label="Manage conversation"
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                    </button>
-                    <AnimatePresence>
-                      {managingId === conversation.id && (
-                        <motion.div
-                          initial={reduceMotion ? false : { opacity: 0, y: 4, scale: 0.98 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={reduceMotion ? undefined : { opacity: 0, y: 4, scale: 0.98 }}
-                          className="absolute right-0 z-30 mt-1 min-w-40 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg"
+                  <div className="hidden shrink-0 sm:block">
+                    <AnchoredMenu
+                      open={managingId === conversation.id}
+                      onClose={() => setManagingId(null)}
+                      menuClassName="min-w-44 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1 shadow-xl"
+                      trigger={
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setManagingId((current) => (current === conversation.id ? null : conversation.id))
+                          }
+                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white hover:text-slate-700 group-hover/row:opacity-100 ${
+                            managingId === conversation.id ? 'opacity-100' : 'opacity-0'
+                          }`}
+                          aria-label="Manage conversation"
+                          aria-expanded={managingId === conversation.id}
                         >
-                          {inboxScope === 'archived' ? (
-                            <button
-                              type="button"
-                              onClick={() => void restoreConversation(conversation.id)}
-                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                            >
-                              <ArchiveRestore className="h-3.5 w-3.5" />
-                              Restore
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => void archiveConversation(conversation.id)}
-                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                            >
-                              <Archive className="h-3.5 w-3.5" />
-                              Archive
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => void deleteConversation(conversation.id)}
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            Delete
-                          </button>
-                        </motion.div>
+                          <MoreVertical className="h-4 w-4" />
+                        </button>
+                      }
+                    >
+                      {inboxScope === 'archived' ? (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => void restoreConversation(conversation.id)}
+                          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-50"
+                        >
+                          <ArchiveRestore className="h-3.5 w-3.5" />
+                          Restore
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => void archiveConversation(conversation.id)}
+                          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-50"
+                        >
+                          <Archive className="h-3.5 w-3.5" />
+                          Archive
+                        </button>
                       )}
-                    </AnimatePresence>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => void deleteConversation(conversation.id)}
+                        className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-rose-600 hover:bg-rose-50"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Delete
+                      </button>
+                    </AnchoredMenu>
                   </div>
                 </div>
               );
@@ -1650,7 +1873,7 @@ export default function MessagesPage({
 
   const composePane = (
     <section className="flex min-h-0 flex-1 flex-col bg-white">
-      <header className="flex shrink-0 items-center gap-2 border-b border-slate-200/80 px-3 py-2.5">
+      <header className="flex shrink-0 items-center gap-2 border-b border-slate-200/80 px-3 py-3">
         <button
           type="button"
           onClick={backToInbox}
@@ -1660,25 +1883,25 @@ export default function MessagesPage({
           <ChevronLeft className="h-5 w-5" />
         </button>
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">New</p>
-          <h2 className="truncate text-base font-semibold text-slate-900">New Message</h2>
+          <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">New</p>
+          <h2 className="truncate text-base font-black tracking-tight text-slate-900">New Message</h2>
         </div>
       </header>
-      <div className="border-b border-slate-200/80 px-3 py-3">
+      <div className="border-b border-slate-200/80 bg-slate-50/60 px-3 py-3">
         <label className="relative block">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             value={composeSearch}
             onChange={(event) => setComposeSearch(event.target.value)}
             placeholder="Search people by name…"
-            className="chat-composer w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm text-slate-800 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+            className="chat-composer w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-10 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
             autoFocus
           />
           {composeSearch.trim() && (
             <button
               type="button"
               onClick={() => setComposeSearch('')}
-              className="absolute right-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200/70"
+              className="absolute right-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100"
               aria-label="Clear recipient search"
             >
               <X className="h-3.5 w-3.5" />
@@ -1688,14 +1911,16 @@ export default function MessagesPage({
       </div>
       <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-2 py-2">
         {composeCandidates.length === 0 ? (
-          <p className="px-3 py-10 text-center text-sm text-slate-500">No signed-in users match that search.</p>
+          <p className="px-3 py-10 text-center text-xs font-semibold text-slate-400">
+            No signed-in users match that search.
+          </p>
         ) : (
           composeCandidates.map((user) => (
             <button
               key={`compose-${user.id}`}
               type="button"
               onClick={() => void startChat(user)}
-              className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left transition hover:bg-slate-50"
+              className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition hover:bg-slate-50"
             >
               <AvatarWithPresence
                 name={user.name}
@@ -1704,8 +1929,8 @@ export default function MessagesPage({
                 className="h-11 w-11 rounded-full bg-slate-100 text-sm text-slate-600"
               />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-slate-900">{user.name}</p>
-                <p className={`truncate text-xs ${user.online ? 'text-emerald-600' : 'text-slate-500'}`}>
+                <p className="truncate text-sm font-bold text-slate-900">{user.name}</p>
+                <p className={`truncate text-xs font-medium ${user.online ? 'text-emerald-600' : 'text-slate-500'}`}>
                   {user.online ? 'Online' : user.role}
                 </p>
               </div>
@@ -1717,7 +1942,7 @@ export default function MessagesPage({
   );
 
   const workspace = isFloat ? (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xl">
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-2xl">
       {conversationPane}
     </div>
   ) : (
@@ -1727,7 +1952,7 @@ export default function MessagesPage({
       className={`flex min-h-0 flex-1 overflow-hidden bg-white ${
         isOverlay || maximized || isMobileLayout
           ? 'h-full w-full rounded-none border-0 shadow-none'
-          : 'rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]'
+          : 'rounded-[1.75rem] border border-slate-200/90 shadow-sm'
       } ${isMobileLayout ? 'flex-col' : 'flex-col lg:flex-row'}`}
     >
       <div
@@ -1754,27 +1979,59 @@ export default function MessagesPage({
     <div
       className={
         isFloat || isOverlay
-          ? 'flex h-full min-h-0 w-full flex-col overflow-hidden'
-          : `flex h-full min-h-0 w-full max-w-none flex-col overflow-hidden ${
-              isMobileLayout ? 'gap-0 p-0' : 'gap-1.5 p-2 sm:gap-3 sm:p-3'
+          ? 'flex h-full min-h-0 w-full flex-col overflow-hidden font-sans'
+          : `flex h-full min-h-0 w-full max-w-none flex-col overflow-hidden font-sans ${
+              isMobileLayout ? 'gap-0 p-0' : 'gap-3 p-2 sm:p-3'
             }`
       }
     >
+      {/* COMPACT OBSIDIAN PAGE HEADER */}
       {!isOverlay && !isFloat && !isMobileLayout && (
-        <motion.div
-          initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+        <motion.header
+          initial={reduceMotion ? false : { opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease }}
-          className="shrink-0 px-0.5 sm:px-1"
+          className="relative shrink-0 overflow-hidden rounded-[1.5rem] border border-slate-800 bg-slate-950 px-5 py-4 text-white shadow-lg shadow-slate-900/15"
         >
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-600 sm:text-[11px]">
-            Inbox
-          </p>
-          <h1 className="mt-0.5 text-lg font-semibold tracking-tight text-slate-900 sm:text-2xl">Messages</h1>
-          <p className="mt-0.5 hidden text-sm text-slate-500 sm:block">
-            Message any signed-in WoSPIS user, create group chats, and stay reachable from the chat heads on desktop.
-          </p>
-        </motion.div>
+          <div
+            className="pointer-events-none absolute inset-0 opacity-20"
+            style={{
+              backgroundImage: 'radial-gradient(rgba(148,163,184,0.4) 1px, transparent 1px)',
+              backgroundSize: '18px 18px',
+            }}
+            aria-hidden="true"
+          />
+          <div
+            className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-blue-600/25 blur-3xl"
+            aria-hidden="true"
+          />
+          <div className="relative z-10 flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-400/25 bg-blue-500/15 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-widest text-blue-300">
+                  <Sparkles className="h-3 w-3" />
+                  Messaging Hub
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold text-emerald-300">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+                  {activeNow.length} on duty
+                </span>
+              </div>
+              <h1 className="mt-1.5 text-xl font-black tracking-tight text-white sm:text-2xl">
+                Messages
+              </h1>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowGroupModal(true)}
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2 text-xs font-bold text-white backdrop-blur-md transition hover:bg-white/20"
+            >
+              <UsersRound className="h-4 w-4 text-blue-300" />
+              New Group
+            </button>
+          </div>
+        </motion.header>
       )}
 
       <AnimatePresence>
@@ -1783,7 +2040,7 @@ export default function MessagesPage({
             initial={reduceMotion ? false : { opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={reduceMotion ? undefined : { opacity: 0, y: -6 }}
-            className="mx-2 shrink-0 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 sm:mx-0 sm:px-4 sm:py-3"
+            className="mx-2 shrink-0 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700 sm:mx-0"
           >
             {error}
           </motion.div>
@@ -1819,10 +2076,11 @@ export default function MessagesPage({
         )}
       </AnimatePresence>
 
+      {/* OBSIDIAN GROUP CHAT MODAL */}
       <AnimatePresence>
         {showGroupModal && (
           <motion.div
-            className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-[2px]"
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm"
             initial={reduceMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={reduceMotion ? undefined : { opacity: 0 }}
@@ -1834,37 +2092,42 @@ export default function MessagesPage({
               initial={reduceMotion ? false : { opacity: 0, y: 12, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={reduceMotion ? undefined : { opacity: 0, y: 8, scale: 0.98 }}
-              className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+              className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl"
             >
-              <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">New</p>
-                  <h2 className="text-lg font-semibold text-slate-900">Group chat</h2>
+              <div className="flex items-center justify-between bg-slate-950 px-6 py-4 text-white">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-blue-300">
+                    <UsersRound className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">New</p>
+                    <h2 className="text-base font-black tracking-tight">Group Chat</h2>
+                  </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowGroupModal(false)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/15 hover:text-white"
                   aria-label="Close group modal"
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
-              <div className="custom-scrollbar space-y-4 overflow-y-auto px-5 py-4">
+              <div className="custom-scrollbar space-y-4 overflow-y-auto px-6 py-5">
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <span className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
                     Group name
                   </span>
                   <input
                     value={groupName}
                     onChange={(event) => setGroupName(event.target.value)}
                     placeholder="e.g. CCS Supervisors"
-                    className="chat-composer w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                    className="chat-composer w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-semibold outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
                     required
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <span className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
                     Add members
                   </span>
                   <div className="relative">
@@ -1872,8 +2135,8 @@ export default function MessagesPage({
                     <input
                       value={groupSearch}
                       onChange={(event) => setGroupSearch(event.target.value)}
-                      placeholder="Search people"
-                      className="chat-composer w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                      placeholder="Search people…"
+                      className="chat-composer w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm font-medium outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
                     />
                   </div>
                 </label>
@@ -1884,7 +2147,7 @@ export default function MessagesPage({
                         key={`selected-${user.id}`}
                         type="button"
                         onClick={() => toggleGroupMember(user)}
-                        className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700"
+                        className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100"
                       >
                         {user.name}
                         <X className="h-3 w-3" />
@@ -1892,9 +2155,11 @@ export default function MessagesPage({
                     ))}
                   </div>
                 )}
-                <div className="max-h-56 space-y-1 overflow-y-auto rounded-2xl border border-slate-100 p-2">
+                <div className="max-h-56 space-y-1 overflow-y-auto rounded-2xl border border-slate-200/80 bg-slate-50/40 p-2">
                   {groupCandidates.length === 0 ? (
-                    <p className="px-2 py-6 text-center text-sm text-slate-500">Search for people to add.</p>
+                    <p className="px-2 py-6 text-center text-xs font-semibold text-slate-400">
+                      Search for people to add.
+                    </p>
                   ) : (
                     groupCandidates.map((user) => {
                       const selected = groupSelected.some((item) => item.id === user.id);
@@ -1903,8 +2168,8 @@ export default function MessagesPage({
                           key={user.id}
                           type="button"
                           onClick={() => toggleGroupMember(user)}
-                          className={`flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition ${
-                            selected ? 'bg-blue-50 ring-1 ring-blue-100' : 'hover:bg-slate-50'
+                          className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition ${
+                            selected ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-white'
                           }`}
                         >
                           <AvatarWithPresence
@@ -1914,30 +2179,34 @@ export default function MessagesPage({
                             className="h-9 w-9 rounded-full bg-slate-100 text-sm text-slate-600"
                           />
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold text-slate-900">{user.name}</p>
-                            <p className="truncate text-xs text-slate-500">{user.role}</p>
+                            <p className="truncate text-sm font-bold text-slate-900">{user.name}</p>
+                            <p className="truncate text-xs font-medium text-slate-500">{user.role}</p>
                           </div>
-                          {selected ? <Check className="h-4 w-4 text-blue-600" /> : <Plus className="h-4 w-4 text-slate-400" />}
+                          {selected ? (
+                            <Check className="h-4 w-4 text-blue-600" />
+                          ) : (
+                            <Plus className="h-4 w-4 text-slate-400" />
+                          )}
                         </button>
                       );
                     })
                   )}
                 </div>
               </div>
-              <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-4">
+              <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/70 px-6 py-4">
                 <button
                   type="button"
                   onClick={() => setShowGroupModal(false)}
-                  className="rounded-xl px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-100"
+                  className="rounded-xl px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-200/70"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={creatingGroup || !groupName.trim() || groupSelected.length === 0}
-                  className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300"
+                  className="rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-600 disabled:bg-slate-300"
                 >
-                  {creatingGroup ? 'Creating…' : 'Create group'}
+                  {creatingGroup ? 'Creating…' : 'Create Group'}
                 </button>
               </div>
             </motion.form>

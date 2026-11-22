@@ -10,6 +10,9 @@ class Attendance extends Model
 {
     use HasFactory, RecordsActivity;
 
+    /** Closed anomaly written when a student never signs in during a scheduled duty. */
+    public const MISSED_LOGIN = 'missed_login';
+
     protected $fillable = [
         'user_id',
         'attendance_type',
@@ -30,6 +33,14 @@ class Attendance extends Model
         'schedule_id',
         'janitorial_group_id',
         'janitorial_area',
+        'janitorial_leader_decision',
+        'janitorial_deducted_hours',
+        'janitorial_leader_remarks',
+        'janitorial_leader_reviewed_by',
+        'janitorial_leader_reviewed_at',
+        'janitorial_final_by',
+        'janitorial_final_on_behalf',
+        'janitorial_supervision',
         'cleaning_before_path',
         'cleaning_after_path',
         'cleaning_before_captured_at',
@@ -44,6 +55,10 @@ class Attendance extends Model
         'activity_hours' => 'float',
         'cleaning_before_captured_at' => 'datetime',
         'cleaning_after_captured_at' => 'datetime',
+        'janitorial_leader_reviewed_at' => 'datetime',
+        'janitorial_deducted_hours' => 'float',
+        'janitorial_final_on_behalf' => 'boolean',
+        'janitorial_supervision' => 'boolean',
     ];
 
     protected $appends = ['account_deleted'];
@@ -67,13 +82,31 @@ class Attendance extends Model
     /** Official DTR rows are ordinary shift clock-ins. Meeting scans stay off the timesheet. */
     public function isNormalClockIn(): bool
     {
-        if ($this->rendered_hour_event_id) {
+        if ($this->isMissedDutyLogin() || $this->rendered_hour_event_id) {
             return false;
         }
 
         $label = strtolower(trim((string) $this->attendance_type.' '.$this->work_type));
 
         return !str_contains($label, 'meeting');
+    }
+
+    public function isMissedDutyLogin(): bool
+    {
+        return $this->check_in_method === self::MISSED_LOGIN;
+    }
+
+    /** Timesheet lists skip the no-login anomaly so it is not treated as hours worked. */
+    public function scopeWithoutMissedLogins($query)
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasColumn($this->getTable(), 'check_in_method')) {
+            return $query;
+        }
+
+        return $query->where(function ($rows) {
+            $rows->whereNull('check_in_method')
+                ->orWhere('check_in_method', '!=', self::MISSED_LOGIN);
+        });
     }
 
     /**

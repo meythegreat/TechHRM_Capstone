@@ -1,10 +1,9 @@
 import type { ClientRequest, IncomingMessage } from 'node:http'
 import { createRequire } from 'node:module'
-import os from 'node:os'
 import { defineConfig, type Plugin, type ProxyOptions } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import { generate } from 'selfsigned'
+import { DEV_CA_PORT, devCaPlugin, lanIPv4, loadDevHttps } from './pwa/devCertificate.ts'
 import { pwaPlugin } from './pwa/plugin.ts'
 
 const require = createRequire(import.meta.url)
@@ -44,18 +43,6 @@ function apiProxy(): ProxyOptions {
   }
 }
 
-function lanIPv4() {
-  const rows: { iface: string; address: string }[] = []
-  for (const [iface, addrs] of Object.entries(os.networkInterfaces())) {
-    for (const addr of addrs ?? []) {
-      if (addr.family === 'IPv4' && !addr.internal) {
-        rows.push({ iface, address: addr.address })
-      }
-    }
-  }
-  return rows
-}
-
 function lanPhonePlugin(): Plugin {
   return {
     name: 'lan-phone-urls',
@@ -70,9 +57,9 @@ function lanPhonePlugin(): Plugin {
         const id = ++seq
         const logger = server.config.logger
         if (reason) {
-          logger.info(`\n  Network changed (${reason}). New phone URLs:`)
+          logger.info(`\n  Network changed (${reason}). Phone setup:`)
         } else {
-          logger.info('\n  Phone URLs (use the IP on the same network as the phone):')
+          logger.info('\n  Phone setup (Safari, same Wi-Fi). Trust the certificate, then open the app:')
         }
         if (!rows.length) {
           logger.warn('  No LAN address yet. Join Wi-Fi or plug in Ethernet.')
@@ -81,10 +68,12 @@ function lanPhonePlugin(): Plugin {
         const port = server.config.server.port ?? 5173
         for (const row of rows) {
           if (id !== seq) return
+          const setup = `http://${row.address}:${DEV_CA_PORT}`
           const url = `https://${row.address}:${port}`
-          logger.info(`    ${url}  (${row.iface})`)
-          logger.info('    Scan to open:')
-          const qr = await QRCode.toString(url, { type: 'terminal', small: true })
+          logger.info(`    ${setup}  (${row.iface})`)
+          logger.info(`    Then open ${url}`)
+          logger.info('    Scan to trust this computer:')
+          const qr = await QRCode.toString(setup, { type: 'terminal', small: true })
           if (id !== seq) return
           process.stdout.write(qr.endsWith('\n') ? qr : `${qr}\n`)
         }
@@ -106,34 +95,17 @@ function lanPhonePlugin(): Plugin {
   }
 }
 
-async function devCertificate() {
-  const ips = lanIPv4().map((row) => row.address)
-  const pems = await generate([{ name: 'commonName', value: 'localhost' }], {
-    keySize: 2048,
-    algorithm: 'sha256',
-    extensions: [
-      { name: 'basicConstraints', cA: false },
-      { name: 'keyUsage', digitalSignature: true, keyEncipherment: true },
-      { name: 'extKeyUsage', serverAuth: true },
-      {
-        name: 'subjectAltName',
-        altNames: [
-          { type: 2, value: 'localhost' },
-          { type: 7, ip: '127.0.0.1' },
-          ...ips.map((ip) => ({ type: 7 as const, ip })),
-        ],
-      },
-    ],
-  })
-
-  return { key: pems.private, cert: pems.cert }
-}
-
 export default defineConfig(async ({ command }) => {
-  // HTTPS certs are only needed for local `vite` / phone testing — skip on production builds.
-  const https = command === 'serve' ? await devCertificate() : undefined
+  // HTTPS is only needed while `vite` is serving the app for a phone.
+  const devHttps = command === 'serve' ? await loadDevHttps() : undefined
   return {
-    plugins: [react(), tailwindcss(), lanPhonePlugin(), pwaPlugin()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      lanPhonePlugin(),
+      ...(devHttps ? [devCaPlugin(devHttps.caCert)] : []),
+      pwaPlugin(),
+    ],
     // Keep React and React DOM singletons when dependencies such as
     // Framer Motion are optimized by Vite. Without this, Vite can resolve a
     // second React copy from the repository root and crash at runtime.
@@ -146,7 +118,7 @@ export default defineConfig(async ({ command }) => {
       strictPort: true,
       allowedHosts: true as const,
       // Phones only show the camera prompt on HTTPS. A LAN http:// address never asks.
-      https,
+      https: devHttps ? { key: devHttps.key, cert: devHttps.cert } : undefined,
       // Do not pin hmr.host. The browser uses the hostname it loaded
       // (localhost, Wi-Fi IP, or Ethernet IP).
       proxy: {

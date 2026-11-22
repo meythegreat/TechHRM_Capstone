@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AssemblyYearRepresentative;
 use App\Models\CampusSetting;
 use App\Models\DailyCleaningGroup;
+use App\Models\Notification;
 use App\Models\RenderedHourEntry;
 use App\Models\RenderedHourEvent;
+use App\Models\ShiftReminder;
 use App\Models\User;
 use App\Support\HourLimits;
 use App\Support\InfractionEscalation;
@@ -14,6 +17,7 @@ use App\Support\SuperAdminAudit;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class RenderedHourController extends Controller
@@ -124,20 +128,25 @@ class RenderedHourController extends Controller
         ]);
     }
 
-    /** Group leaders see every activity for their group. Issued QR/passcodes work for all year levels. */
+    /** Group leaders see every activity for their group; assembly year reps see devotionals and assemblies for their year. */
     public function leaderIndex(Request $request)
     {
         $user = $request->user()->loadMissing('profile');
         if ($user->role !== 'Student') {
-            return response()->json(['message' => 'Only a group leader can open this.'], 403);
+            return response()->json(['message' => 'Only a group leader or assembly representative can open this.'], 403);
         }
 
         $accounts = app(UserController::class);
         $membership = $accounts->leaderMembership($user);
+        $assemblyRep = AssemblyYearRepresentative::forUser((int) $user->id);
         $year = (int) ($user->profile?->year_level ?? 0);
-        if (!$membership) {
+        if (!$membership && !$assemblyRep) {
             return response()->json([
                 'leader' => false,
+                'group_leader' => false,
+                'assembly_representative' => false,
+                'rep_year_level' => null,
+                'rep_year_label' => null,
                 'year_level' => $year ?: null,
                 'year_label' => RenderedHours::yearLabel($year ?: null),
                 'group_name' => null,
@@ -145,24 +154,47 @@ class RenderedHourController extends Controller
             ]);
         }
 
-        $group = \App\Models\DailyCleaningGroup::query()->find($membership->group_id);
+        $group = $membership ? \App\Models\DailyCleaningGroup::query()->find($membership->group_id) : null;
+        $repYear = $assemblyRep ? (int) $assemblyRep->year_level : null;
         $start = now()->subDays(30)->toDateString();
         $end = now()->addDays(14)->toDateString();
 
         $events = RenderedHourEvent::query()
             ->with(['entries.student:id,name', 'entries.student.profile:id,user_id,student_id_number,year_level'])
-            ->where('group_id', $membership->group_id)
             ->where('kind', '!=', RenderedHourEvent::SPECIAL)
             ->whereDate('event_date', '>=', $start)
             ->whereDate('event_date', '<=', $end)
+            ->where(function ($query) use ($membership, $repYear) {
+                if ($membership) {
+                    $query->orWhere('group_id', $membership->group_id);
+                }
+                if ($repYear) {
+                    $query->orWhere(function ($campus) use ($repYear) {
+                        $campus->whereIn('kind', [RenderedHourEvent::ASSEMBLY, RenderedHourEvent::DEVOTIONAL])
+                            ->where(function ($years) use ($repYear) {
+                                $years->whereNull('year_level')
+                                    ->orWhere('year_level', 0)
+                                    ->orWhere('year_level', $repYear);
+                            });
+                    });
+                }
+            })
             ->orderBy('event_date')
             ->orderBy('title')
             ->get()
-            ->map(fn (RenderedHourEvent $event) => $this->present($event))
+            ->map(function (RenderedHourEvent $event) use ($repYear) {
+                $cohortYear = RenderedHourEvent::coversEveryStudent($event->kind) ? $repYear : null;
+
+                return $this->present($event, $cohortYear);
+            })
             ->values();
 
         return response()->json([
             'leader' => true,
+            'group_leader' => (bool) $membership,
+            'assembly_representative' => (bool) $assemblyRep,
+            'rep_year_level' => $repYear,
+            'rep_year_label' => RenderedHours::yearLabel($repYear),
             'year_level' => $year ?: null,
             'year_label' => RenderedHours::yearLabel($year ?: null),
             'group_name' => $group?->name,
@@ -265,6 +297,8 @@ class RenderedHourController extends Controller
             return $event;
         });
 
+        $this->notifyStudentsOfScheduledActivity($event);
+
         return response()->json([
             'message' => 'Activity saved.',
             'event' => $this->present($event->load('entries.student.profile')),
@@ -282,7 +316,9 @@ class RenderedHourController extends Controller
         DB::transaction(function () use ($event, $validated, $studentIds) {
             $event->fill($this->attributes($validated));
             $event->save();
-            if ($event->kind === RenderedHourEvent::SPECIAL || $event->group_id) {
+            if ($event->kind === RenderedHourEvent::SPECIAL
+                || $event->group_id
+                || RenderedHourEvent::coversEveryStudent($event->kind)) {
                 $this->syncRoster($event, $studentIds, true);
             } else {
                 $this->refreshDeltas($event);
@@ -432,7 +468,10 @@ class RenderedHourController extends Controller
 
         return response()->json([
             'message' => $message,
-            'event' => $this->present($event->load('entries.student.profile')),
+            'event' => $this->present(
+                $event->load('entries.student.profile'),
+                $this->repCohortYearForEditor($request->user(), $event)
+            ),
         ]);
     }
 
@@ -524,7 +563,10 @@ class RenderedHourController extends Controller
 
         return response()->json([
             'message' => $message,
-            'event' => $this->present($event->load('entries.student.profile')),
+            'event' => $this->present(
+                $event->load('entries.student.profile'),
+                $this->repCohortYearForEditor($request->user(), $event)
+            ),
         ]);
     }
 
@@ -606,7 +648,11 @@ class RenderedHourController extends Controller
             }
         }
 
-        if ($kind !== RenderedHourEvent::SPECIAL) {
+        if (RenderedHourEvent::coversEveryStudent($kind)) {
+            // Everybody is required to attend, so a cleaning group cannot limit the roster.
+            $validated['group_id'] = null;
+            $validated['group_name'] = null;
+        } elseif ($kind !== RenderedHourEvent::SPECIAL) {
             $group = $this->cleaningGroup($request);
             $validated['group_id'] = $group->id;
             $validated['group_name'] = $group->name;
@@ -630,6 +676,7 @@ class RenderedHourController extends Controller
     {
         $yearLevel = isset($validated['year_level']) ? (int) $validated['year_level'] : 0;
         $label = $validated['kind'] === RenderedHourEvent::DEVOTIONAL ? 'a devotional meeting' : 'general cleaning';
+        $audience = empty($validated['group_id']) ? 'Campus-wide attendance' : 'This group';
         $existingEvents = RenderedHourEvent::query()
             ->where('kind', $validated['kind'])
             ->where('group_id', $validated['group_id'])
@@ -644,7 +691,7 @@ class RenderedHourController extends Controller
         });
 
         if ($overlaps) {
-            abort(422, 'This group already has '.$label.' on that date for the selected year.');
+            abort(422, $audience.' already has '.$label.' on that date for the selected year.');
         }
     }
 
@@ -671,12 +718,44 @@ class RenderedHourController extends Controller
     }
 
     /**
+     * Working students required at a devotional meeting or meeting assembly.
+     *
+     * @return \Illuminate\Support\Collection<int, int>
+     */
+    private function campusStudentIds(int $yearLevel)
+    {
+        $query = User::query()->with('profile');
+        app(UserController::class)->constrainSchedulableStudents($query);
+        $students = $query->get();
+        if ($yearLevel >= 1 && $yearLevel <= 4) {
+            $students = $students->filter(
+                fn (User $student) => (int) ($student->profile?->year_level ?? 0) === $yearLevel
+            );
+        }
+
+        $ids = $students
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+        if ($ids->isEmpty()) {
+            abort(422, $yearLevel >= 1
+                ? 'There are no '.RenderedHours::yearLabel($yearLevel).' students.'
+                : 'There are no working students to include.');
+        }
+
+        return $ids;
+    }
+
+    /**
      * @param  array<string, mixed>  $validated
      * @return list<int>
      */
     private function rosterIds(Request $request, string $kind, ?RenderedHourEvent $existing = null): array
     {
-        if ($kind !== RenderedHourEvent::SPECIAL) {
+        if (RenderedHourEvent::coversEveryStudent($kind)) {
+            $ids = $this->campusStudentIds((int) $request->input('year_level', 0));
+        } elseif ($kind !== RenderedHourEvent::SPECIAL) {
             $group = $this->cleaningGroup($request);
             $yearLevel = (int) $request->input('year_level', 0);
             $members = $group->students;
@@ -888,7 +967,7 @@ class RenderedHourController extends Controller
         }
     }
 
-    /** Clock-in / time-out corrections: WSPO activity checkers, or the leader of this activity's group. */
+    /** Clock-in / time-out corrections: WSPO activity checkers, group leaders, or assembly year reps for their cohort. */
     private function assertActivityTimeEditor(Request $request, RenderedHourEvent $event): void
     {
         $user = $request->user()->loadMissing('profile');
@@ -897,7 +976,47 @@ class RenderedHourController extends Controller
             return;
         }
 
-        abort(403, 'Only the WSPO secretary (or coordinator/president) or this group\'s leader can change this attendance time.');
+        if ($this->isAssemblyRepForEvent($user, $event)) {
+            $targetUserId = (int) $request->input('user_id', 0);
+            if ($targetUserId > 0) {
+                $rep = AssemblyYearRepresentative::forUser((int) $user->id);
+                $student = User::query()->with('profile')->find($targetUserId);
+                if ($student && $rep && (int) ($student->profile?->year_level ?? 0) !== (int) $rep->year_level) {
+                    abort(403, 'You can only update attendance times for students in your represented year level.');
+                }
+            }
+
+            return;
+        }
+
+        abort(403, 'Only the WSPO secretary (or coordinator/president), this group\'s leader, or the year-level assembly representative can change this attendance time.');
+    }
+
+    private function isAssemblyRepForEvent(User $user, RenderedHourEvent $event): bool
+    {
+        if ($user->role !== 'Student' || !RenderedHourEvent::coversEveryStudent($event->kind)) {
+            return false;
+        }
+
+        $rep = AssemblyYearRepresentative::forUser((int) $user->id);
+        if (!$rep) {
+            return false;
+        }
+
+        return !$event->year_level || (int) $event->year_level === (int) $rep->year_level;
+    }
+
+    private function repCohortYearForEditor(?User $user, RenderedHourEvent $event): ?int
+    {
+        if (!$user || !RenderedHourEvent::coversEveryStudent($event->kind)) {
+            return null;
+        }
+        if (app(UserController::class)->canCheckActivityAttendance($user)) {
+            return null;
+        }
+        $rep = AssemblyYearRepresentative::forUser((int) $user->id);
+
+        return $rep ? (int) $rep->year_level : null;
     }
 
     /**
@@ -921,11 +1040,84 @@ class RenderedHourController extends Controller
         return $ids;
     }
 
-    private function present(RenderedHourEvent $event): array
+    private function notifyStudentsOfScheduledActivity(RenderedHourEvent $event): void
+    {
+        if (! $event->usesAttendance() || ! Schema::hasTable('notifications')) {
+            return;
+        }
+
+        $now = Carbon::now();
+        if ($event->event_date->lt($now->copy()->startOfDay())) {
+            return;
+        }
+
+        $start = $event->officialStart();
+        $end = $event->officialEnd();
+        if ($start && ! $end) {
+            $end = $start->copy()->addMinutes(max(60, (int) round(((float) $event->hours) * 60)));
+        }
+
+        if ($event->event_date->isSameDay($now) && $end && $now->gt($end)) {
+            return;
+        }
+
+        $kindLabel = RenderedHourEvent::KINDS[$event->kind]['label'] ?? 'Campus activity';
+        $isToday = $event->event_date->isSameDay($now);
+        $isOngoing = $isToday && $start && $end && $now->betweenIncluded($start, $end);
+
+        $title = $isOngoing
+            ? "Happening now: {$kindLabel}"
+            : ($isToday ? "Today's {$kindLabel}" : "Upcoming {$kindLabel}");
+
+        $dateText = $event->event_date->format('M j, Y');
+        $rangeText = $start && $end
+            ? " from {$start->format('g:i A')} to {$end->format('g:i A')}"
+            : ($start ? " at {$start->format('g:i A')}" : '');
+        $hoursText = number_format((float) $event->hours, 2);
+
+        $message = $isOngoing
+            ? "{$event->title} ({$kindLabel}) is currently in session{$rangeText} ({$hoursText} hrs). Open Attendance / DTR to clock in on time."
+            : "{$event->title} ({$kindLabel}) is scheduled on {$dateText}{$rangeText} ({$hoursText} hrs). Check your Dashboard for details.";
+
+        $hasRemindersTable = Schema::hasTable('shift_reminders');
+        $cutoff = $start ? $start->copy()->addMinutes($event->windowMinutes()) : null;
+        $lead = $start ? $start->copy()->subMinutes(30) : null;
+
+        foreach ($this->eligibleIds($event) as $userId) {
+            Notification::create([
+                'user_id' => $userId,
+                'title' => $title,
+                'message' => $message,
+            ]);
+
+            if ($hasRemindersTable && $start) {
+                $dateKey = $start->toDateString();
+                if ($isOngoing && $cutoff && $now->betweenIncluded($start, $cutoff)) {
+                    ShiftReminder::query()->firstOrCreate(
+                        ['dedupe_key' => "activity:{$userId}:{$event->id}:{$dateKey}:ongoing"],
+                        ['user_id' => $userId, 'kind' => 'activity_ongoing']
+                    );
+                } elseif ($lead && $now->greaterThanOrEqualTo($lead) && $now->lt($start)) {
+                    ShiftReminder::query()->firstOrCreate(
+                        ['dedupe_key' => "activity:{$userId}:{$event->id}:{$dateKey}:upcoming"],
+                        ['user_id' => $userId, 'kind' => 'activity_upcoming']
+                    );
+                }
+            }
+        }
+    }
+
+    private function present(RenderedHourEvent $event, ?int $cohortYear = null): array
     {
         $event->loadMissing('entries.student.profile');
-        $eligibleCount = count($this->eligibleIds($event));
-        $marked = $event->entries->whereNotNull('status')->count();
+        $roster = $this->roster($event, $cohortYear);
+        if ($cohortYear !== null) {
+            $eligibleCount = count($roster);
+            $marked = collect($roster)->filter(fn (array $row) => $row['status'] !== null)->count();
+        } else {
+            $eligibleCount = count($this->eligibleIds($event));
+            $marked = $event->entries->whereNotNull('status')->count();
+        }
 
         return [
             'id' => $event->id,
@@ -937,6 +1129,8 @@ class RenderedHourController extends Controller
             'direction' => $event->direction,
             'year_level' => $event->year_level,
             'year_label' => $event->year_level ? RenderedHours::yearLabel((int) $event->year_level) : null,
+            'cohort_year_level' => $cohortYear,
+            'cohort_year_label' => $cohortYear ? RenderedHours::yearLabel($cohortYear) : null,
             'group_name' => $event->group_name,
             'group_id' => $event->group_id ? (int) $event->group_id : null,
             'starts_at' => $event->starts_at ? substr((string) $event->starts_at, 0, 5) : null,
@@ -946,12 +1140,12 @@ class RenderedHourController extends Controller
             'notes' => $event->notes,
             'uses_attendance' => $event->usesAttendance(),
             'eligible_count' => $eligibleCount,
-            'marked_count' => $event->usesAttendance() ? $marked : $event->entries->count(),
-            'entries' => $this->roster($event),
+            'marked_count' => $event->usesAttendance() ? $marked : ($cohortYear !== null ? count($roster) : $event->entries->count()),
+            'entries' => $roster,
         ];
     }
 
-    private function roster(RenderedHourEvent $event): array
+    private function roster(RenderedHourEvent $event, ?int $cohortYear = null): array
     {
         $event->loadMissing('entries.student.profile');
         $byUser = $event->entries->keyBy('user_id');
@@ -959,11 +1153,13 @@ class RenderedHourController extends Controller
         $attendances = $attendanceIds === []
             ? collect()
             : \App\Models\Attendance::query()->whereIn('id', $attendanceIds)->get()->keyBy('id');
-        $students = User::query()
+        $studentsQuery = User::query()
             ->with('profile:id,user_id,student_id_number,year_level')
-            ->whereIn('id', $this->eligibleIds($event))
-            ->orderBy('name')
-            ->get();
+            ->whereIn('id', $this->eligibleIds($event));
+        if ($cohortYear !== null) {
+            $studentsQuery->whereHas('profile', fn ($profile) => $profile->where('year_level', $cohortYear));
+        }
+        $students = $studentsQuery->orderBy('name')->get();
 
         return $students->map(function (User $student) use ($byUser, $attendances) {
             $entry = $byUser->get($student->id);

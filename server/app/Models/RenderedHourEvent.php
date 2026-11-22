@@ -19,6 +19,12 @@ class RenderedHourEvent extends Model
 
     public const ASSEMBLY = 'meeting_assembly';
 
+    /** Attendance is required for every student, so these activities are not limited to a group. */
+    public static function coversEveryStudent(string $kind): bool
+    {
+        return in_array($kind, [self::DEVOTIONAL, self::ASSEMBLY], true);
+    }
+
     public const KINDS = [
         self::SPECIAL => ['label' => 'Special request', 'hours' => null],
         self::DAILY_CLEANING => ['label' => 'Daily cleaning', 'hours' => 1, 'window' => 60],
@@ -111,7 +117,8 @@ class RenderedHourEvent extends Model
     /**
      * Students who may be marked for this activity.
      * Grouped activities use the roster saved with the event.
-     * Older activities that were not tied to a group keep their previous audience.
+     * Devotional meetings and meeting assemblies include every working student,
+     * or one year level when that cohort was selected.
      *
      * @return list<int>
      */
@@ -123,7 +130,7 @@ class RenderedHourEvent extends Model
 
         $query = User::query();
         app(\App\Http\Controllers\UserController::class)->constrainSchedulableStudents($query);
-        if ($this->kind === self::GENERAL_CLEANING && $this->year_level) {
+        if ($this->year_level) {
             $query->whereHas('profile', fn ($profile) => $profile->where('year_level', $this->year_level));
         }
 

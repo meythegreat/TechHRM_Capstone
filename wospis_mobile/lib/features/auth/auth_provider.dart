@@ -181,17 +181,18 @@ class AuthProvider with ChangeNotifier {
   bool _looksLikeActivityChecker(String? role, String office, String? officer) {
     final officerNorm = (officer ?? '').trim().toLowerCase();
     if (role == 'Student') {
-      return officerNorm == 'wspo secretary' || officerNorm == 'wspo president';
+      return officerNorm == 'wspo secretary' || officerNorm.contains('wspo secretary');
     }
     if (role != 'WSPO Staff') return false;
     final normalized = office.trim().toLowerCase();
+    if (officerNorm == 'wspo secretary' || officerNorm.contains('wspo secretary')) {
+      return true;
+    }
     if (normalized.isEmpty || normalized == 'wspo' || normalized == 'unassigned') return true;
     return normalized == 'wspo secretary'
         || normalized == 'wspo coordinator'
-        || normalized == 'wspo president'
         || normalized.contains('wspo secretary')
-        || normalized.contains('wspo coordinator')
-        || normalized.contains('wspo president');
+        || normalized.contains('wspo coordinator');
   }
 
   void _clear() {

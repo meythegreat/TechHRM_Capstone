@@ -1,6 +1,16 @@
 import { useState } from 'react';
 import axios from 'axios';
-import { Eye, EyeOff, KeyRound, Loader2 } from 'lucide-react';
+import { motion, useReducedMotion } from 'framer-motion';
+import {
+    AlertCircle,
+    CheckCircle2,
+    Eye,
+    EyeOff,
+    KeyRound,
+    Loader2,
+    Lock,
+    ShieldCheck,
+} from 'lucide-react';
 
 interface ForcePasswordChangeProps {
     onChanged: () => void;
@@ -12,6 +22,10 @@ export default function ForcePasswordChange({ onChanged }: ForcePasswordChangePr
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+    const reduceMotion = useReducedMotion();
+
+    const meetsLength = password.length >= 6;
+    const passwordsMatch = confirmation.length > 0 && password === confirmation;
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
@@ -37,9 +51,9 @@ export default function ForcePasswordChange({ onChanged }: ForcePasswordChangePr
         } catch (err: any) {
             const message = !err.response
                 ? 'Cannot reach the server. Ensure Laravel is running.'
-                : (err.response?.data?.message
-                    || err.response?.data?.errors?.password?.[0]
-                    || 'Could not update the password.');
+                : err.response?.data?.message ||
+                  err.response?.data?.errors?.password?.[0] ||
+                  'Could not update the password.';
             setError(message);
         } finally {
             setIsSaving(false);
@@ -47,24 +61,56 @@ export default function ForcePasswordChange({ onChanged }: ForcePasswordChangePr
     };
 
     return (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/55 p-6 backdrop-blur-sm">
-            <div
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm sm:p-6">
+            <motion.div
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="change-password-title"
-                className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
+                initial={reduceMotion ? false : { opacity: 0, scale: 0.96, y: 16 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: reduceMotion ? 0 : 0.25, ease: [0.22, 1, 0.36, 1] }}
+                className="w-full max-w-md overflow-hidden rounded-[2rem] border border-slate-200 bg-white font-sans shadow-2xl"
             >
-                <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
-                        <KeyRound className="h-5 w-5" />
-                    </div>
-                    <div>
-                        <h2 id="change-password-title" className="text-lg font-semibold text-slate-900">Choose a new password</h2>
-                        <p className="text-sm font-medium text-slate-500">The temporary password only lasts until you replace it.</p>
+                {/* OBSIDIAN HEADER */}
+                <div className="relative overflow-hidden bg-slate-950 px-6 py-6 text-white sm:px-7">
+                    <div
+                        className="pointer-events-none absolute inset-0 opacity-20"
+                        style={{
+                            backgroundImage:
+                                'radial-gradient(rgba(148,163,184,0.4) 1px, transparent 1px)',
+                            backgroundSize: '18px 18px',
+                        }}
+                        aria-hidden="true"
+                    />
+                    <div
+                        className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-blue-600/25 blur-3xl"
+                        aria-hidden="true"
+                    />
+
+                    <div className="relative z-10 flex items-start gap-4">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-500/20 text-blue-300 ring-1 ring-blue-400/30">
+                            <KeyRound className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-widest text-blue-300">
+                                <ShieldCheck className="h-3 w-3" />
+                                Security Requirement
+                            </span>
+                            <h2
+                                id="change-password-title"
+                                className="mt-1 text-xl font-black tracking-tight text-white"
+                            >
+                                Choose a new password
+                            </h2>
+                            <p className="mt-1 text-xs font-medium leading-relaxed text-slate-300">
+                                Your temporary password only lasts until you replace it.
+                            </p>
+                        </div>
                     </div>
                 </div>
 
-                <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+                {/* FORM BODY */}
+                <form className="space-y-4 p-6 sm:p-7" onSubmit={handleSubmit}>
                     <PasswordField
                         id="new-password"
                         label="New password"
@@ -82,28 +128,64 @@ export default function ForcePasswordChange({ onChanged }: ForcePasswordChangePr
                         onChange={setConfirmation}
                     />
 
+                    {/* Live Requirement Pills */}
+                    <div className="flex flex-wrap gap-2 pt-0.5">
+                        <span
+                            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                                meetsLength
+                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                    : 'border-slate-200 bg-slate-50 text-slate-500'
+                            }`}
+                        >
+                            <CheckCircle2
+                                className={`h-3.5 w-3.5 ${
+                                    meetsLength ? 'text-emerald-600' : 'text-slate-300'
+                                }`}
+                            />
+                            6+ characters
+                        </span>
+                        <span
+                            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                                passwordsMatch
+                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                    : 'border-slate-200 bg-slate-50 text-slate-500'
+                            }`}
+                        >
+                            <CheckCircle2
+                                className={`h-3.5 w-3.5 ${
+                                    passwordsMatch ? 'text-emerald-600' : 'text-slate-300'
+                                }`}
+                            />
+                            Passwords match
+                        </span>
+                    </div>
+
                     {error && (
-                        <p className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-                            {error}
-                        </p>
+                        <div
+                            role="alert"
+                            className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs font-bold text-rose-700"
+                        >
+                            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+                            <span>{error}</span>
+                        </div>
                     )}
 
                     <button
                         type="submit"
                         disabled={isSaving}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-600/25 disabled:cursor-not-allowed disabled:opacity-70"
+                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-slate-900 via-blue-700 to-indigo-600 py-3.5 text-xs font-extrabold uppercase tracking-wider text-white shadow-lg shadow-blue-600/25 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
                     >
                         {isSaving ? (
                             <>
                                 <Loader2 className="h-4 w-4 animate-spin" />
-                                Saving password...
+                                Saving password…
                             </>
                         ) : (
                             'Save new password'
                         )}
                     </button>
                 </form>
-            </div>
+            </motion.div>
         </div>
     );
 }
@@ -126,7 +208,10 @@ function PasswordField({
     autoFocus?: boolean;
 }) {
     return (
-        <div className="relative">
+        <div className="group relative">
+            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
+                <Lock className="h-4 w-4 text-slate-400 transition-colors group-focus-within:text-blue-600" />
+            </div>
             <input
                 id={id}
                 type={shown ? 'text' : 'password'}
@@ -134,12 +219,12 @@ function PasswordField({
                 autoFocus={autoFocus}
                 value={value}
                 onChange={(event) => onChange(event.target.value)}
-                className="block w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 pb-3 pt-6 pr-14 text-base text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="peer block w-full appearance-none rounded-2xl border border-slate-200 bg-slate-50/70 pb-3 pl-11 pr-14 pt-6 text-base font-bold text-slate-900 transition-all focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-600/10"
                 placeholder=" "
             />
             <label
                 htmlFor={id}
-                className="absolute left-4 top-4 z-10 origin-left -translate-y-3 scale-75 text-base font-medium text-slate-500"
+                className="absolute left-11 top-4 z-10 origin-left -translate-y-3 scale-75 transform cursor-text text-base font-medium text-slate-500 duration-300 peer-placeholder-shown:translate-y-0 peer-placeholder-shown:scale-100 peer-focus:-translate-y-3 peer-focus:scale-75 peer-focus:text-blue-600"
             >
                 {label}
             </label>
@@ -147,10 +232,10 @@ function PasswordField({
                 <button
                     type="button"
                     onClick={onToggle}
-                    className="absolute inset-y-0 right-1 flex w-12 items-center justify-center rounded-xl text-slate-400 hover:text-blue-600"
+                    className="absolute inset-y-0 right-1 flex w-12 items-center justify-center rounded-xl text-slate-400 transition hover:bg-blue-50/60 hover:text-blue-600"
                     aria-label={shown ? 'Hide password' : 'Show password'}
                 >
-                    {shown ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    {shown ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
             )}
         </div>

@@ -1,4 +1,4 @@
-/** WSPO Secretary (primary) / Coordinator / President may check campus activity attendance. */
+/** WSPO Secretary (primary) / Coordinator may check campus activity attendance. */
 
 const ACTIVITY_CHECKER_OFFICES = [
   '',
@@ -6,7 +6,6 @@ const ACTIVITY_CHECKER_OFFICES = [
   'unassigned',
   'wspo coordinator',
   'wspo secretary',
-  'wspo president',
 ];
 
 export function canCheckActivityAttendance(role?: string | null, office?: string | null): boolean {
@@ -20,10 +19,17 @@ export function canCheckActivityAttendance(role?: string | null, office?: string
   const officer = (localStorage.getItem('officer_position') ?? '').trim().toLowerCase();
 
   if (resolvedRole === 'Student') {
-    return officer === 'wspo secretary' || officer === 'wspo president';
+    return officer === 'wspo secretary' || officer.includes('wspo secretary');
   }
 
   if (resolvedRole !== 'WSPO Staff') return false;
+
+  // Elected officers on legacy WSPO Staff logins: secretary only.
+  if (localStorage.getItem('is_student_officer') === '1') {
+    return officer === 'wspo secretary'
+      || officer.includes('wspo secretary')
+      || resolvedOffice.includes('wspo secretary');
+  }
 
   if (ACTIVITY_CHECKER_OFFICES.includes(resolvedOffice)) return true;
 
@@ -31,7 +37,6 @@ export function canCheckActivityAttendance(role?: string | null, office?: string
   return (
     resolvedOffice.includes('wspo secretary')
     || resolvedOffice.includes('wspo coordinator')
-    || resolvedOffice.includes('wspo president')
   );
 }
 
@@ -41,13 +46,7 @@ export function canManageActivityGroups(role?: string | null, office?: string | 
   // Do not hard-fail on a stale can_manage_activity_groups=0 from an older login.
   // Fall through to role/office so Coordinator / Secretary keep Groups + Janitorial.
 
-  if (!canCheckActivityAttendance(role, office)) return false;
-
-  const officer = (localStorage.getItem('officer_position') ?? '').trim().toLowerCase();
-  if (officer === 'wspo president') return false;
-
-  const resolvedOffice = (office ?? localStorage.getItem('assigned_office') ?? '').trim().toLowerCase();
-  return !resolvedOffice.includes('wspo president');
+  return canCheckActivityAttendance(role, office);
 }
 
 /** Janitorial leaders and area groups: WSPO Coordinator only. */
@@ -56,7 +55,11 @@ export function canManageJanitorialGroups(role?: string | null, office?: string 
   const resolvedOffice = (office ?? localStorage.getItem('assigned_office') ?? '').trim().toLowerCase();
   const officer = (localStorage.getItem('officer_position') ?? '').trim().toLowerCase();
 
-  if (resolvedRole === 'Student' || officer === 'wspo secretary' || officer === 'wspo president') {
+  if (
+    resolvedRole === 'Student'
+    || officer === 'wspo secretary'
+    || officer.includes('wspo secretary')
+  ) {
     return false;
   }
   if (localStorage.getItem('is_student_officer') === '1') return false;
@@ -84,7 +87,7 @@ export function canIssueDailyAttendance(): boolean {
   }
   if (role !== 'WSPO Staff') return false;
 
-  // Coordinator only — Secretary/President are student officers.
+  // Coordinator only — student officers clock in as workers.
   if (localStorage.getItem('is_student_officer') === '1') return false;
   const office = (localStorage.getItem('assigned_office') ?? '').trim().toLowerCase();
   return office === '' || office === 'wspo' || office === 'unassigned' || office === 'wspo coordinator';
@@ -97,7 +100,7 @@ export function mustClockAsStudent(): boolean {
   if (localStorage.getItem('is_student_officer') === '1') return true;
   if (localStorage.getItem('user_role') === 'Student') return true;
   const office = (localStorage.getItem('assigned_office') ?? '').trim().toLowerCase();
-  return office.includes('wspo secretary') || office.includes('wspo president');
+  return office.includes('wspo secretary') || office.includes('wspo president') || office.includes('president');
 }
 
 /** Persist login /api/user capability flags for staff UIs. */
@@ -125,13 +128,19 @@ export function storeActivityAttendanceCapability(payload: {
   }
 
   if (payload.can_manage_janitorial_groups !== undefined && payload.can_manage_janitorial_groups !== null) {
-    localStorage.setItem('can_manage_janitorial_groups', payload.can_manage_janitorial_groups ? '1' : '0');
+    localStorage.setItem(
+      'can_manage_janitorial_groups',
+      payload.can_manage_janitorial_groups ? '1' : '0',
+    );
   } else {
     localStorage.removeItem('can_manage_janitorial_groups');
   }
 
   if (payload.can_issue_daily_attendance !== undefined && payload.can_issue_daily_attendance !== null) {
-    localStorage.setItem('can_issue_daily_attendance', payload.can_issue_daily_attendance ? '1' : '0');
+    localStorage.setItem(
+      'can_issue_daily_attendance',
+      payload.can_issue_daily_attendance ? '1' : '0',
+    );
   } else {
     localStorage.removeItem('can_issue_daily_attendance');
   }
@@ -161,3 +170,18 @@ export function storeActivityAttendanceCapability(payload: {
     localStorage.setItem('assigned_office', payload.office);
   }
 }
+
+export const WSPO_OFFICER_POSITIONS = [
+  'WSPO Secretary',
+  'President',
+  'Vice President',
+  'Assistant Secretary',
+  'Treasurer',
+  'Auditor',
+  'Public Information Officer',
+  'First Year Representative',
+  'Second Year Representative',
+  'Third Year Representative',
+  'Fourth Year Representative',
+  'Business Manager',
+] as const;

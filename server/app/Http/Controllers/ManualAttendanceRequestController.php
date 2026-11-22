@@ -8,8 +8,12 @@ use App\Models\ManualAttendanceRequestShift;
 use App\Models\Notification;
 use App\Models\User;
 use App\Support\ClassHoursDuty;
+use App\Support\DutyHours;
+use App\Support\JanitorialApproval;
 use App\Support\ManualDtrEntry;
 use App\Support\SuperAdminAudit;
+use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -359,7 +363,7 @@ class ManualAttendanceRequestController extends Controller
                 'title' => $title,
                 'message' => $user->name.' submitted a janitorial offline request with '
                     .count($shiftRows).(count($shiftRows) === 1 ? ' shift' : ' shifts')
-                    .' for '.$janitorialGroup->area.'. Accepting it records exactly 4 hours from clock-in.',
+                    .' for '.$janitorialGroup->area.'. Your decision is recorded first. The immediate supervisor has the final say.',
             ]);
         } else {
             $this->notifyReviewers(
@@ -371,7 +375,7 @@ class ManualAttendanceRequestController extends Controller
         }
 
         $message = match ($requestType) {
-            ManualAttendanceRequest::TYPE_JANITORIAL => 'Janitorial offline request submitted. Your janitorial supervisor approves it. If accepted, the DTR records exactly 4 hours from your time in.',
+            ManualAttendanceRequest::TYPE_JANITORIAL => 'Janitorial offline request submitted. Your janitorial supervisor reviews it first. The immediate supervisor has the final say. If it is accepted, the DTR records up to 4 hours from your time in.',
             ManualAttendanceRequest::TYPE_CLASS_HOURS => 'Class-hours duty request submitted. Hours appear on DTR after supervisor approval.',
             default => 'Offline attendance request submitted. It will appear on your DTR after your supervisor approves it.',
         };
@@ -421,19 +425,32 @@ class ManualAttendanceRequestController extends Controller
         }
 
         $requestType = $manualAttendanceRequest->request_type ?: ManualAttendanceRequest::TYPE_REGULAR;
+        $janitorialStage = null;
+        $janitorialCredit = DutyHours::JANITORIAL_FIXED_HOURS;
+        $janitorialOnBehalf = false;
         if ($requestType === ManualAttendanceRequest::TYPE_JANITORIAL) {
-            if (! $this->janitorialSupervisorCanReview($reviewer, $manualAttendanceRequest)) {
-                return response()->json([
-                    'message' => 'Only this group\'s janitorial supervisor can approve or decline this offline request.',
-                ], 403);
+            $gate = $this->gateJanitorialOffline($reviewer, $manualAttendanceRequest);
+            if ($gate instanceof JsonResponse) {
+                return $gate;
             }
+            $janitorialStage = $gate['stage'];
+            $janitorialCredit = $gate['hours'];
+            $janitorialOnBehalf = $gate['on_behalf'];
         } elseif (! in_array($reviewer->role, ['Supervisor', 'WSPO Staff'], true)) {
             return response()->json(['message' => 'Only a supervisor or WSPO staff can decide this request.'], 403);
         } elseif (! $this->canReviewStudent($reviewer, $student)) {
             return response()->json(['message' => 'You can only review offline attendance for students in your scope.'], 403);
         }
 
-        if (!$manualAttendanceRequest->isPending()) {
+        if ($janitorialStage === 'leader') {
+            return $this->recordJanitorialOfflineRecommendation($request, $manualAttendanceRequest, $reviewer);
+        }
+
+        if ($janitorialStage === 'final') {
+            if ($manualAttendanceRequest->status !== ManualAttendanceRequest::RECOMMENDED) {
+                return response()->json(['message' => 'This request was already decided.'], 422);
+            }
+        } elseif (!$manualAttendanceRequest->isPending()) {
             return response()->json(['message' => 'This request was already decided.'], 422);
         }
 
@@ -450,11 +467,17 @@ class ManualAttendanceRequestController extends Controller
                 'reviewed_at' => now(),
             ]);
 
+            if ($requestType === ManualAttendanceRequest::TYPE_JANITORIAL) {
+                $manualAttendanceRequest->update(['janitorial_final_on_behalf' => $janitorialOnBehalf]);
+            }
+
             Notification::create([
                 'user_id' => $student->id,
                 'title' => 'Offline attendance declined',
                 'message' => $requestType === ManualAttendanceRequest::TYPE_JANITORIAL
-                    ? 'Your janitorial supervisor declined the offline request.'
+                    ? ($janitorialOnBehalf
+                        ? 'The department dean or person-in-charge declined the offline request on behalf of your immediate supervisor.'
+                        : 'Your immediate supervisor declined the offline request.')
                     : 'Your offline manual attendance request was declined by your supervisor.',
             ]);
 
@@ -468,7 +491,7 @@ class ManualAttendanceRequestController extends Controller
         $createdIds = [];
 
         try {
-            DB::transaction(function () use ($manualAttendanceRequest, $student, $reviewer, $validated, $noteBase, $requestType, &$createdIds) {
+            DB::transaction(function () use ($manualAttendanceRequest, $student, $reviewer, $validated, $noteBase, $requestType, $janitorialCredit, $janitorialOnBehalf, &$createdIds) {
                 foreach ($manualAttendanceRequest->shifts as $index => $shift) {
                     $date = $shift->work_date->toDateString();
                     $options = match ($requestType) {
@@ -480,6 +503,7 @@ class ManualAttendanceRequestController extends Controller
                             'skip_schedule_match' => true,
                             'apply_lunch' => false,
                             'cap_at_schedule_end' => false,
+                            'credited_hours' => $janitorialCredit,
                         ],
                         ManualAttendanceRequest::TYPE_CLASS_HOURS => [
                             'attendance_type' => 'Regular',
@@ -501,8 +525,10 @@ class ManualAttendanceRequestController extends Controller
                     );
 
                     if (! $created['ok']) {
+                        $shownIn = \Carbon\Carbon::parse($shift->time_in)->format('g:i A');
+                        $shownOut = \Carbon\Carbon::parse($shift->time_out)->format('g:i A');
                         throw new \RuntimeException(
-                            'Shift '.($index + 1).' ('.$date.' '.$shift->time_in.'–'.$shift->time_out.'): '.$created['message']
+                            'Shift '.($index + 1).' ('.$date.' '.$shownIn.'–'.$shownOut.'): '.$created['message']
                         );
                     }
 
@@ -519,12 +545,16 @@ class ManualAttendanceRequestController extends Controller
                     $createdIds[] = $created['attendance']->id;
                 }
 
-                $manualAttendanceRequest->update([
+                $approvedUpdate = [
                     'status' => ManualAttendanceRequest::APPROVED,
                     'decision_note' => trim((string) ($validated['decision_note'] ?? '')) ?: null,
                     'reviewed_by' => $reviewer->id,
                     'reviewed_at' => now(),
-                ]);
+                ];
+                if ($requestType === ManualAttendanceRequest::TYPE_JANITORIAL) {
+                    $approvedUpdate['janitorial_final_on_behalf'] = $janitorialOnBehalf;
+                }
+                $manualAttendanceRequest->update($approvedUpdate);
             });
         } catch (\RuntimeException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
@@ -539,9 +569,13 @@ class ManualAttendanceRequestController extends Controller
         Notification::create([
             'user_id' => $student->id,
             'title' => $approvedTitle,
-            'message' => 'Your '.$requestType.' attendance request was approved. '
-                .count($createdIds).(count($createdIds) === 1 ? ' shift was' : ' shifts were')
-                .' credited on your DTR.',
+            'message' => $requestType === ManualAttendanceRequest::TYPE_JANITORIAL
+                ? ($janitorialOnBehalf
+                    ? 'The department dean or person-in-charge approved your janitorial offline request on behalf of the immediate supervisor. Hours were credited on your DTR.'
+                    : 'Your immediate supervisor approved the janitorial offline request. Hours were credited on your DTR.')
+                : ('Your '.$requestType.' attendance request was approved. '
+                    .count($createdIds).(count($createdIds) === 1 ? ' shift was' : ' shifts were')
+                    .' credited on your DTR.'),
         ]);
 
         return response()->json([
@@ -582,6 +616,124 @@ class ManualAttendanceRequestController extends Controller
             ->map(fn (ManualAttendanceRequest $row) => $this->serialize($row, true));
 
         return response()->json(['requests' => $rows]);
+    }
+
+    /**
+     * @return array{stage: string, hours: float, on_behalf: bool}|JsonResponse
+     */
+    private function gateJanitorialOffline(User $reviewer, ManualAttendanceRequest $manualAttendanceRequest): array|JsonResponse
+    {
+        $manualAttendanceRequest->loadMissing('shifts');
+        $group = $this->janitorialGroupForRequest($manualAttendanceRequest);
+        if (! $group) {
+            return response()->json(['message' => 'This offline request is not tied to a janitorial group.'], 422);
+        }
+        if (! $group->immediate_supervisor_user_id) {
+            return response()->json(['message' => 'This janitorial group needs an immediate supervisor before it can be reviewed.'], 422);
+        }
+
+        $isLeader = JanitorialApproval::isJanitorialSupervisor($reviewer, $group);
+        $isImmediate = JanitorialApproval::isImmediateSupervisor($reviewer, $group);
+
+        if ($manualAttendanceRequest->isPending()) {
+            if (! $isLeader) {
+                return response()->json([
+                    'message' => 'Only this group\'s janitorial supervisor can record the first decision. The immediate supervisor has the final say.',
+                ], 403);
+            }
+
+            return ['stage' => 'leader', 'hours' => DutyHours::JANITORIAL_FIXED_HOURS, 'on_behalf' => false];
+        }
+
+        if ($manualAttendanceRequest->status !== ManualAttendanceRequest::RECOMMENDED) {
+            return response()->json(['message' => 'This request was already decided.'], 422);
+        }
+
+        if ($isLeader && ! $isImmediate) {
+            return response()->json([
+                'message' => 'You already recorded your decision. The immediate supervisor has the final say.',
+            ], 422);
+        }
+
+        $onBehalf = false;
+        if (! $isImmediate) {
+            foreach ($manualAttendanceRequest->shifts as $shift) {
+                $date = Carbon::parse($shift->work_date);
+                if (! JanitorialApproval::canCover($reviewer, $group, $date)) {
+                    return response()->json([
+                        'message' => 'The immediate supervisor has the final say. A department dean or person-in-charge can decide only after that immediate supervisor reports an absence in advance.',
+                    ], 403);
+                }
+            }
+            $onBehalf = true;
+        }
+
+        $leaderApproved = $manualAttendanceRequest->janitorial_leader_decision === 'approved';
+        $hours = $leaderApproved
+            ? JanitorialApproval::creditedHours((float) ($manualAttendanceRequest->janitorial_deducted_hours ?? 0))
+            : DutyHours::JANITORIAL_FIXED_HOURS;
+
+        return ['stage' => 'final', 'hours' => $hours, 'on_behalf' => $onBehalf];
+    }
+
+    private function recordJanitorialOfflineRecommendation(Request $request, ManualAttendanceRequest $manualAttendanceRequest, User $reviewer): JsonResponse
+    {
+        $validated = $request->validate([
+            'status' => 'required|in:Approved,Rejected',
+            'deducted_hours' => 'nullable|numeric|min:0|max:'.DutyHours::JANITORIAL_FIXED_HOURS,
+            'remarks' => 'nullable|string|max:1000',
+            'decision_note' => 'nullable|string|max:1000',
+        ]);
+
+        $approved = $validated['status'] === ManualAttendanceRequest::APPROVED;
+        $deducted = $approved ? round((float) ($validated['deducted_hours'] ?? 0), 2) : 0.0;
+        $remarks = trim((string) ($validated['remarks'] ?? $validated['decision_note'] ?? ''));
+        $group = $this->janitorialGroupForRequest($manualAttendanceRequest);
+
+        $manualAttendanceRequest->update([
+            'status' => ManualAttendanceRequest::RECOMMENDED,
+            'janitorial_leader_decision' => $approved ? 'approved' : 'declined',
+            'janitorial_deducted_hours' => $deducted,
+            'janitorial_leader_remarks' => $remarks !== '' ? $remarks : null,
+            'janitorial_leader_reviewed_by' => $reviewer->id,
+            'janitorial_leader_reviewed_at' => now(),
+            'decision_note' => $remarks !== '' ? $remarks : null,
+        ]);
+
+        $hours = JanitorialApproval::creditedHours($deducted);
+        Notification::create([
+            'user_id' => $manualAttendanceRequest->user_id,
+            'title' => 'Janitorial supervisor recorded a decision',
+            'message' => $approved
+                ? 'Your janitorial supervisor approved the offline request'
+                    .($deducted > 0 ? ' and deducted '.$deducted.' hours ('.$hours.' would be recorded)' : '')
+                    .'. The immediate supervisor still has the final say.'
+                : 'Your janitorial supervisor declined the offline request. The immediate supervisor still has the final say.',
+        ]);
+        if ($group?->immediate_supervisor_user_id) {
+            Notification::create([
+                'user_id' => $group->immediate_supervisor_user_id,
+                'title' => 'Janitorial offline request needs your final say',
+                'message' => $reviewer->name.' '.($approved ? 'approved' : 'declined').' an offline janitorial request. You have the final say.',
+            ]);
+        }
+
+        return response()->json([
+            'message' => $approved
+                ? 'Your approval was recorded. It is not final until the immediate supervisor decides.'
+                : 'Your decline was recorded. It is not final until the immediate supervisor decides.',
+            'request' => $this->serialize($manualAttendanceRequest->fresh(['shifts', 'student.profile', 'reviewer:id,name']), true),
+        ]);
+    }
+
+    private function janitorialGroupForRequest(ManualAttendanceRequest $manualAttendanceRequest): ?JanitorialGroup
+    {
+        $groupId = (int) ($manualAttendanceRequest->shifts->pluck('janitorial_group_id')->filter()->first() ?? 0);
+        if ($groupId <= 0) {
+            return null;
+        }
+
+        return JanitorialGroup::query()->find($groupId);
     }
 
     private function janitorialSupervisorCanReview(User $reviewer, ManualAttendanceRequest $manualAttendanceRequest): bool
@@ -689,6 +841,11 @@ class ManualAttendanceRequestController extends Controller
             'reason' => $row->reason,
             'status' => $row->status,
             'decision_note' => $row->decision_note,
+            'leader_decision' => $row->janitorial_leader_decision,
+            'deducted_hours' => $row->janitorial_leader_decision === 'approved'
+                ? round((float) ($row->janitorial_deducted_hours ?? 0), 2)
+                : 0,
+            'leader_remarks' => $row->janitorial_leader_remarks,
             'reviewed_by' => $row->reviewer?->name,
             'reviewed_at' => $row->reviewed_at,
             'created_at' => $row->created_at,
