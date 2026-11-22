@@ -2,20 +2,19 @@
 
 namespace Tests\Feature;
 
+use App\Mail\TemporaryPasswordMail;
 use App\Models\Application;
 use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Mail\PendingMail;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Sleep;
 use Tests\TestCase;
 
 class ForgotPasswordEmailDeliveryTest extends TestCase
 {
-    private const WEBHOOK = 'http://n8n.test/webhook/wospis/forgot-password';
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -24,13 +23,9 @@ class ForgotPasswordEmailDeliveryTest extends TestCase
         $this->configureMail();
     }
 
-    public function test_every_address_is_sent_through_n8n_and_not_resend(): void
+    public function test_every_address_is_sent_through_resend(): void
     {
-        Http::preventStrayRequests();
-        Http::fake([
-            'https://api.resend.com/*' => Http::response(['id' => 'should-not-send'], 200),
-            self::WEBHOOK => Http::response(['ok' => true], 200),
-        ]);
+        Mail::fake();
 
         $school = $this->makeUser('student.one', 'student.one@school.edu');
         $yahoo = $this->makeUser('other.person', 'other.person@yahoo.com');
@@ -48,25 +43,18 @@ class ForgotPasswordEmailDeliveryTest extends TestCase
         $this->assertFalse(Hash::check('old-password', $school->fresh()->password));
         $this->assertFalse(Hash::check('old-password', $yahoo->fresh()->password));
 
-        $recipients = Http::recorded()
-            ->filter(fn (array $pair) => $pair[0]->url() === self::WEBHOOK)
-            ->map(fn (array $pair) => $pair[0]->data()['email'])
-            ->values()
-            ->all();
-
-        $this->assertSame([
-            'student.one@school.edu',
-            'other.person@yahoo.com',
-        ], $recipients);
-        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'api.resend.com'));
+        Mail::assertSent(TemporaryPasswordMail::class, function (TemporaryPasswordMail $mail) {
+            return $mail->hasTo('student.one@school.edu')
+                && $mail->envelope()->subject === 'Your WoSPIS temporary password'
+                && str_contains($mail->render(), 'TEMPORARY PASSWORD');
+        });
+        Mail::assertSent(TemporaryPasswordMail::class, fn (TemporaryPasswordMail $mail) => $mail->hasTo('other.person@yahoo.com'));
+        Mail::assertSentCount(2);
     }
 
     public function test_application_email_is_delivered_when_the_account_email_is_missing(): void
     {
-        Http::preventStrayRequests();
-        Http::fake([
-            self::WEBHOOK => Http::response(['ok' => true], 200),
-        ]);
+        Mail::fake();
 
         $user = $this->makeUser('ana.cruz', null);
         Application::create([
@@ -78,18 +66,12 @@ class ForgotPasswordEmailDeliveryTest extends TestCase
         $this->postJson('/api/forgot-password', ['username' => 'ana.cruz'])
             ->assertOk();
 
-        Http::assertSent(function ($request) {
-            return $request->url() === self::WEBHOOK
-                && $request->data()['email'] === 'ana.cruz@filamer.edu.ph';
-        });
+        Mail::assertSent(TemporaryPasswordMail::class, fn (TemporaryPasswordMail $mail) => $mail->hasTo('ana.cruz@filamer.edu.ph'));
     }
 
-    public function test_password_is_unchanged_when_n8n_rejects_the_message(): void
+    public function test_password_is_unchanged_when_resend_is_not_configured(): void
     {
-        Http::preventStrayRequests();
-        Http::fake([
-            self::WEBHOOK => Http::response(['message' => 'Workflow is not active'], 404),
-        ]);
+        config(['services.resend.key' => '']);
 
         $user = $this->makeUser('student.two', 'student.two@school.edu');
         $original = $user->password;
@@ -97,89 +79,38 @@ class ForgotPasswordEmailDeliveryTest extends TestCase
         $this->postJson('/api/forgot-password', ['username' => 'student.two@school.edu'])
             ->assertStatus(502)
             ->assertJsonFragment([
-                'message' => 'The Gmail password reset webhook rejected the message: Workflow is not active',
+                'message' => 'Password reset email is not configured. Set RESEND_API_KEY.',
             ]);
 
         $fresh = $user->fresh();
         $this->assertSame($original, $fresh->password);
         $this->assertFalse($fresh->must_change_password);
-        Http::assertSentCount(1);
     }
 
-    public function test_a_short_gmail_rate_limit_is_retried_until_the_message_sends(): void
+    public function test_password_is_unchanged_when_resend_rejects_the_message(): void
     {
-        Sleep::fake();
-        Http::preventStrayRequests();
-        Http::fake([
-            self::WEBHOOK => Http::sequence()
-                ->push('Too many requests', 429)
-                ->push(['ok' => true], 200),
-        ]);
+        $pending = \Mockery::mock(PendingMail::class);
+        $pending->shouldReceive('send')->once()->andThrow(new \RuntimeException('mailbox unavailable'));
+        Mail::shouldReceive('to')->once()->with('student.three@school.edu')->andReturn($pending);
 
         $user = $this->makeUser('student.three', 'student.three@school.edu');
-
-        $this->postJson('/api/forgot-password', ['username' => 'student.three@school.edu'])
-            ->assertOk()
-            ->assertJsonPath('masked_email', 'st***********@school.edu');
-
-        $this->assertTrue($user->fresh()->must_change_password);
-        $this->assertFalse(Hash::check('old-password', $user->fresh()->password));
-        Http::assertSentCount(2);
-        Sleep::assertSleptTimes(1);
-    }
-
-    public function test_password_is_unchanged_when_gmail_stays_rate_limited(): void
-    {
-        Sleep::fake();
-        Http::preventStrayRequests();
-        Http::fake([
-            self::WEBHOOK => Http::response('Too many requests', 429),
-        ]);
-
-        $user = $this->makeUser('student.four', 'student.four@school.edu');
         $original = $user->password;
 
-        $this->postJson('/api/forgot-password', ['username' => 'student.four@school.edu'])
+        $this->postJson('/api/forgot-password', ['username' => 'student.three@school.edu'])
             ->assertStatus(502)
             ->assertJsonFragment([
-                'message' => 'Gmail is limiting password-reset emails right now (Too many requests). Wait a minute and try again. Your password was not changed.',
+                'message' => 'Could not send the password reset email. Your password was not changed.',
             ]);
 
         $fresh = $user->fresh();
         $this->assertSame($original, $fresh->password);
         $this->assertFalse($fresh->must_change_password);
-        Http::assertSentCount(3);
-        Sleep::assertSleptTimes(2);
-    }
-
-    public function test_a_long_retry_after_is_not_sent_again(): void
-    {
-        Sleep::fake();
-        Http::preventStrayRequests();
-        Http::fake([
-            self::WEBHOOK => Http::response('', 429, ['Retry-After' => '3600']),
-        ]);
-
-        $user = $this->makeUser('student.five', 'student.five@school.edu');
-        $original = $user->password;
-
-        $this->postJson('/api/forgot-password', ['username' => 'student.five'])
-            ->assertStatus(502)
-            ->assertJsonFragment([
-                'message' => 'Gmail is limiting password-reset emails right now. Wait a minute and try again. Your password was not changed.',
-            ]);
-
-        $this->assertSame($original, $user->fresh()->password);
-        $this->assertFalse($user->fresh()->must_change_password);
-        Http::assertSentCount(1);
-        Sleep::assertSleptTimes(0);
     }
 
     private function configureMail(): void
     {
         config([
             'services.resend.key' => 're_test_key',
-            'services.n8n.forgot_password_webhook' => self::WEBHOOK,
             'mail.from.address' => 'onboarding@resend.dev',
             'mail.from.name' => 'WoSPIS WSPO',
         ]);

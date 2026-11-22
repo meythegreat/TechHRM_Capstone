@@ -2,15 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\TemporaryPasswordMail;
 use App\Models\ActivityLog; // Imported your new ActivityLog model!
 use App\Models\Application;
 use App\Models\User;
 use Carbon\Carbon;
-use Illuminate\Http\Client\RequestException;
-use Illuminate\Http\Client\Response;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
 class AuthController extends Controller
@@ -259,82 +258,22 @@ class AuthController extends Controller
     }
 
     /**
-     * Send the temporary password through the n8n Gmail workflow.
+     * Send the temporary password through Resend.
      * Returns an error message on failure, or null on success.
      */
     private function sendPasswordResetEmail(string $email, User $user, string $temporaryPassword): ?string
     {
-        $webhook = config('services.n8n.forgot_password_webhook');
-        if (! is_string($webhook) || trim($webhook) === '') {
-            return 'Gmail password reset is not configured. Set N8N_FORGOT_PASSWORD_WEBHOOK to the forgot-password workflow.';
+        $key = config('services.resend.key');
+        if (! is_string($key) || trim($key) === '') {
+            return 'Password reset email is not configured. Set RESEND_API_KEY.';
         }
 
         try {
-            $response = Http::timeout(25)
-                ->acceptJson()
-                ->asJson()
-                ->retry(3, fn (int $attempt) => $attempt * 750, function ($exception) {
-                    // A plain 429 is a short Gmail or n8n limit. A long Retry-After is a
-                    // quota lock; another call would only push that lock further out.
-                    if (! $exception instanceof RequestException) {
-                        return false;
-                    }
-
-                    $response = $exception->response;
-                    if ($response->status() !== 429) {
-                        return false;
-                    }
-
-                    $retryAfter = $response->header('Retry-After');
-
-                    return ! (is_numeric($retryAfter) && (int) $retryAfter > 8);
-                }, throw: false)
-                ->post($webhook, [
-                    'email' => $email,
-                    'subject' => 'Your WoSPIS temporary password',
-                    'message' => $this->resetEmailBody($user, $temporaryPassword),
-                    'from_name' => config('mail.from.name', 'WoSPIS WSPO'),
-                ]);
+            Mail::to($email)->send(new TemporaryPasswordMail($user, $temporaryPassword));
         } catch (\Throwable $e) {
             report($e);
 
-            return 'Could not reach the Gmail password reset webhook. Confirm n8n is running and N8N_FORGOT_PASSWORD_WEBHOOK is correct.';
-        }
-
-        if ($response->successful()) {
-            return null;
-        }
-
-        $message = $this->webhookErrorMessage($response);
-        report(new \RuntimeException(
-            'Forgot-password webhook failed with HTTP '.$response->status().': '.($message ?? 'no message')
-        ));
-
-        if ($response->status() === 429) {
-            $detail = $message !== null ? ' ('.$message.')' : '';
-
-            return 'Gmail is limiting password-reset emails right now'.$detail.'. Wait a minute and try again. Your password was not changed.';
-        }
-
-        if ($message !== null) {
-            return 'The Gmail password reset webhook rejected the message: '.$message;
-        }
-
-        return 'The Gmail password reset webhook rejected the message (HTTP '.$response->status().').';
-    }
-
-    private function webhookErrorMessage(Response $response): ?string
-    {
-        $decoded = $response->json();
-        foreach ([data_get($decoded, 'message'), data_get($decoded, 'error.message'), data_get($decoded, 'error')] as $candidate) {
-            if (is_string($candidate) && trim($candidate) !== '') {
-                return trim($candidate);
-            }
-        }
-
-        $body = trim($response->body());
-        if ($body !== '' && ! str_starts_with($body, '<') && ! str_starts_with($body, '{') && ! str_starts_with($body, '[')) {
-            return mb_substr($body, 0, 240);
+            return 'Could not send the password reset email. Your password was not changed.';
         }
 
         return null;
@@ -357,74 +296,6 @@ class AuthController extends Controller
         }
 
         return null;
-    }
-
-    private function resetEmailBody(User $user, string $temporaryPassword): string
-    {
-        $name = htmlspecialchars($user->name ?: $user->username, ENT_QUOTES, 'UTF-8');
-        $username = htmlspecialchars($user->username, ENT_QUOTES, 'UTF-8');
-        $accountEmail = is_string($user->email) && filter_var($user->email, FILTER_VALIDATE_EMAIL)
-            ? $user->email
-            : (filter_var($user->username, FILTER_VALIDATE_EMAIL) ? $user->username : 'Not on file');
-        $accountEmail = htmlspecialchars($accountEmail, ENT_QUOTES, 'UTF-8');
-        $password = htmlspecialchars($temporaryPassword, ENT_QUOTES, 'UTF-8');
-        $contactEmail = htmlspecialchars((string) config('mail.contact_address', 'miguel102104@gmail.com'), ENT_QUOTES, 'UTF-8');
-
-        return <<<HTML
-<!DOCTYPE html>
-<html lang="en">
-<body style="margin:0;padding:0;background:#FFD500;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FFD500;padding:32px 12px;">
-    <tr>
-      <td align="center">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#FFFFFF;border-radius:18px;overflow:hidden;border:2px solid #000000;font-family:Arial,Helvetica,sans-serif;">
-          <tr>
-            <td style="background:#4AECED;height:8px;font-size:0;line-height:0;">&nbsp;</td>
-          </tr>
-          <tr>
-            <td style="background:#1D54D3;padding:28px 32px 22px;">
-              <p style="margin:0;color:#4AECED;font-size:11px;letter-spacing:1.8px;font-weight:bold;">FILAMER CHRISTIAN UNIVERSITY</p>
-              <h1 style="margin:10px 0 0;color:#FFD500;font-size:30px;line-height:1.1;">WoSPIS</h1>
-              <p style="margin:8px 0 0;color:#FFFFFF;font-size:14px;">A Work Study Program Information System for Filamer Christian University, Inc.</p>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:0;font-size:0;line-height:0;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td width="34%" style="background:#102179;height:6px;">&nbsp;</td>
-                  <td width="33%" style="background:#1D54D3;height:6px;">&nbsp;</td>
-                  <td width="33%" style="background:#CC1E1B;height:6px;">&nbsp;</td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:32px;background:#FFFFFF;">
-              <p style="margin:0 0 14px;color:#102179;font-size:18px;font-weight:bold;">Hello {$name},</p>
-              <p style="margin:0 0 22px;color:#000000;font-size:15px;line-height:1.6;">A password reset was requested for your WoSPIS account. Use the temporary password below to sign in. You will be asked to choose a new password before you can continue.</p>
-              <p style="margin:0 0 6px;color:#1D54D3;font-size:11px;font-weight:bold;letter-spacing:1.2px;">USERNAME</p>
-              <p style="margin:0 0 18px;color:#102179;font-size:16px;font-weight:bold;">{$username}</p>
-              <p style="margin:0 0 6px;color:#1D54D3;font-size:11px;font-weight:bold;letter-spacing:1.2px;">EMAIL</p>
-              <p style="margin:0 0 18px;color:#102179;font-size:16px;font-weight:bold;">{$accountEmail}</p>
-              <p style="margin:0 0 8px;color:#1D54D3;font-size:11px;font-weight:bold;letter-spacing:1.2px;">TEMPORARY PASSWORD</p>
-              <p style="margin:0 0 24px;background:#FFD500;border:2px solid #000000;border-radius:12px;padding:16px 12px;color:#102179;font-size:22px;font-weight:bold;letter-spacing:1px;text-align:center;">{$password}</p>
-              <p style="margin:0;color:#000000;font-size:13px;line-height:1.6;">If you did not request this, contact the Work-Study Program office.</p>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:18px 32px;background:#102179;">
-              <p style="margin:0;color:#FFD500;font-size:13px;font-weight:bold;">WoSPIS WSPO</p>
-              <p style="margin:4px 0 0;color:#4AECED;font-size:13px;">{$contactEmail}</p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
-HTML;
     }
 
     private function pendingApplicantResponse(User $user)

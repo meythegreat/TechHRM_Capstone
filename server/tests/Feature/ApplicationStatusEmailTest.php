@@ -2,35 +2,32 @@
 
 namespace Tests\Feature;
 
+use App\Mail\ApplicationStatusMail;
 use App\Models\Application;
 use App\Models\User;
 use App\Services\CompletedApplicationForm;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class ApplicationStatusEmailTest extends TestCase
 {
-    private const WEBHOOK = 'https://n8n.test/webhook/wospis/application-submitted';
-
     protected function setUp(): void
     {
         parent::setUp();
         $this->createSchema();
         config([
-            'services.n8n.application_status_webhook' => self::WEBHOOK,
+            'services.resend.key' => 're_test_key',
+            'mail.from.address' => 'onboarding@resend.dev',
             'mail.from.name' => 'WoSPIS WSPO',
         ]);
     }
 
-    public function test_status_changes_email_the_applicant_through_n8n(): void
+    public function test_status_changes_email_the_applicant_through_resend(): void
     {
-        Http::preventStrayRequests();
-        Http::fake([
-            self::WEBHOOK => Http::response(['ok' => true], 200),
-        ]);
+        Mail::fake();
 
         $staff = User::create([
             'name' => 'WSPO Coordinator',
@@ -59,29 +56,26 @@ class ApplicationStatusEmailTest extends TestCase
         ])->assertOk()
             ->assertJsonPath('message', 'Applicant declined, and their tracker now shows Not Approved. A rejection email has been sent.');
 
-        $messages = Http::recorded()
-            ->filter(fn (array $pair) => $pair[0]->url() === self::WEBHOOK)
-            ->map(fn (array $pair) => $pair[0]->data())
-            ->values();
-
-        $this->assertCount(2, $messages);
-        $this->assertSame('ana.cruz@school.edu', $messages[0]['email']);
-        $this->assertSame('Ana Cruz', $messages[0]['applicant_name']);
-        $this->assertSame('Training', $messages[0]['status']);
-        $this->assertSame('WSPO-ANA01', $messages[0]['tracking_code']);
-        $this->assertSame('ana.cruz@school.edu', $messages[1]['email']);
-        $this->assertSame('Rejected', $messages[1]['status']);
-        $this->assertSame('Incomplete requirements.', $messages[1]['rejection_reason']);
-        $this->assertArrayNotHasKey('attachment', $messages[0]);
-        $this->assertArrayNotHasKey('attachment', $messages[1]);
+        Mail::assertSent(ApplicationStatusMail::class, function (ApplicationStatusMail $mail) {
+            return $mail->hasTo('ana.cruz@school.edu')
+                && $mail->applicantName === 'Ana Cruz'
+                && $mail->status === 'Training'
+                && $mail->trackingCode === 'WSPO-ANA01'
+                && $mail->attachmentPdf === null
+                && $mail->envelope()->subject === 'WoSPIS Application — Training Stage';
+        });
+        Mail::assertSent(ApplicationStatusMail::class, function (ApplicationStatusMail $mail) {
+            return $mail->hasTo('ana.cruz@school.edu')
+                && $mail->status === 'Rejected'
+                && $mail->rejectionReason() === 'Incomplete requirements.'
+                && $mail->attachmentPdf === null;
+        });
+        Mail::assertSentCount(2);
     }
 
     public function test_the_first_email_attaches_the_completed_form(): void
     {
-        Http::preventStrayRequests();
-        Http::fake([
-            self::WEBHOOK => Http::response(['ok' => true], 200),
-        ]);
+        Mail::fake();
 
         $staff = User::create([
             'name' => 'WSPO Coordinator',
@@ -120,15 +114,13 @@ class ApplicationStatusEmailTest extends TestCase
             'status' => 'Pending',
         ])->assertOk();
 
-        Http::assertSent(function ($request) {
-            if ($request->url() !== self::WEBHOOK) {
-                return false;
-            }
-            $attachment = $request->data()['attachment'] ?? null;
-            $pdf = is_array($attachment) ? base64_decode((string) ($attachment['data'] ?? ''), true) : false;
+        Mail::assertSent(ApplicationStatusMail::class, function (ApplicationStatusMail $mail) {
+            $pdf = $mail->attachmentPdf;
 
-            return ($attachment['filename'] ?? '') === 'WSPO-ANA01-completed-forms.pdf'
-                && ($attachment['mimeType'] ?? '') === 'application/pdf'
+            return $mail->hasTo('ana.cruz@school.edu')
+                && $mail->status === 'Pending'
+                && $mail->envelope()->subject === 'WoSPIS Application Received'
+                && $mail->attachmentName === 'WSPO-ANA01-completed-forms.pdf'
                 && is_string($pdf)
                 && str_starts_with($pdf, '%PDF');
         });
@@ -145,12 +137,9 @@ class ApplicationStatusEmailTest extends TestCase
         $this->assertStringNotContainsString('Completed application form', $html);
     }
 
-    public function test_status_is_saved_when_the_webhook_rejects_the_email(): void
+    public function test_status_is_saved_when_resend_is_not_configured(): void
     {
-        Http::preventStrayRequests();
-        Http::fake([
-            self::WEBHOOK => Http::response(['message' => 'Workflow is not active'], 404),
-        ]);
+        config(['services.resend.key' => '']);
 
         $staff = User::create([
             'name' => 'WSPO Coordinator',
@@ -171,7 +160,7 @@ class ApplicationStatusEmailTest extends TestCase
         $this->putJson('/api/applications/'.$application->id.'/status', [
             'status' => 'For Result',
         ])->assertOk()
-            ->assertJsonPath('message', 'Workflow status updated to For Result. The status email was not sent: Workflow is not active');
+            ->assertJsonPath('message', 'Workflow status updated to For Result. The status email was not sent: Set RESEND_API_KEY before status emails can be sent.');
 
         $this->assertSame('For Result', $application->fresh()->status);
     }

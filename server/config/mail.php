@@ -117,7 +117,7 @@ return [
 
     /*
     | Contact address shown in outbound email footers. Separate from MAIL_FROM_ADDRESS
-    | because Resend cannot send from an @gmail.com address without a verified domain.
+    | because Resend sends from onboarding@resend.dev until a domain is verified.
     */
     'contact_address' => env('MAIL_CONTACT_ADDRESS', 'miguel102104@gmail.com'),
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\ApplicationStatusMail;
 use App\Models\ActivityLog;
 use App\Models\Application;
 use App\Models\ApplicationStatusEvent;
@@ -18,7 +19,7 @@ use App\Support\SuperAdminAudit;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -205,7 +206,7 @@ class ApplicationController extends Controller
             $reason = trim((string) $request->input('rejection_reason'));
             $application->update(['status' => 'Rejected']);
             $this->recordStatus($application, 'Rejected', $reason);
-            $sendError = $this->notifyN8nApplicationStatus($application, 'Rejected', [
+            $sendError = $this->notifyApplicationStatus($application, 'Rejected', [
                 'rejection_reason' => $reason,
             ]);
 
@@ -222,7 +223,7 @@ class ApplicationController extends Controller
         ]);
 
         $this->recordStatus($application, $request->status);
-        $sendError = $this->notifyN8nApplicationStatus($application, $request->status);
+        $sendError = $this->notifyApplicationStatus($application, $request->status);
         $message = 'Workflow status updated to '.$request->status.'.';
         if ($sendError) {
             $message .= ' The status email was not sent: '.$sendError;
@@ -361,7 +362,7 @@ class ApplicationController extends Controller
         $application->refresh();
         $this->recordStatus($application, 'Approved');
         $this->recordStatus($application, 'Assigned', "{$office} · {$dutyLabel}");
-        $sendError = $this->notifyN8nApplicationStatus($application, 'Approved', [
+        $sendError = $this->notifyApplicationStatus($application, 'Approved', [
             'assigned_department' => $office,
             'assigned_duty' => $dutyLabel,
         ]);
@@ -409,7 +410,7 @@ class ApplicationController extends Controller
             $note .= '. '.$validated['interview_remarks'];
         }
         $this->recordStatus($application, 'Interview', $note);
-        $sendError = $this->notifyN8nApplicationStatus($application, 'Interview', [
+        $sendError = $this->notifyApplicationStatus($application, 'Interview', [
             'interview_date' => $interviewLabel,
             'interview_remarks' => $application->interview_remarks,
         ]);
@@ -471,66 +472,52 @@ class ApplicationController extends Controller
     }
 
     /**
-     * Email the applicant through the n8n Gmail workflow.
+     * Email the applicant through Resend.
      * Returns an error message when the email was not sent.
+     *
+     * @param  array<string, mixed>  $extra
      */
-    private function notifyN8nApplicationStatus(Application $application, string $status, array $extra = []): ?string
+    private function notifyApplicationStatus(Application $application, string $status, array $extra = []): ?string
     {
         $email = is_string($application->email) ? trim($application->email) : '';
         if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return 'This application has no email address on file.';
         }
 
-        $webhook = config('services.n8n.application_status_webhook');
-        if (! is_string($webhook) || trim($webhook) === '') {
-            return 'Set N8N_APPLICATION_STATUS_WEBHOOK to the application-status workflow.';
+        $key = config('services.resend.key');
+        if (! is_string($key) || trim($key) === '') {
+            return 'Set RESEND_API_KEY before status emails can be sent.';
         }
 
-        unset($extra['digital_forms']);
-        $payload = array_merge([
-            'event' => 'application_status_updated',
-            'application_id' => $application->id,
-            'applicant_name' => $this->applicantName($application),
-            'email' => $email,
-            'status' => $status,
-            'tracking_code' => $application->tracking_code,
-            'updated_at' => now()->toIso8601String(),
-        ], $extra);
+        unset($extra['digital_forms'], $extra['event'], $extra['submitted_at']);
 
+        $attachmentPdf = null;
+        $attachmentName = null;
         if ($status === 'Pending') {
             $form = app(CompletedApplicationForm::class);
-            $payload['attachment'] = [
-                'filename' => $form->filename($application),
-                'mimeType' => 'application/pdf',
-                'data' => base64_encode($form->pdf($application)),
-            ];
+            $attachmentPdf = $form->pdf($application);
+            $attachmentName = $form->filename($application);
         }
 
         try {
-            $response = Http::timeout(20)
-                ->acceptJson()
-                ->asJson()
-                ->post($webhook, $payload);
+            Mail::to($email)->send(new ApplicationStatusMail(
+                applicantName: $this->applicantName($application),
+                status: $status,
+                trackingCode: (string) $application->tracking_code,
+                details: $extra,
+                attachmentPdf: $attachmentPdf,
+                attachmentName: $attachmentName,
+            ));
         } catch (\Throwable $exception) {
             report($exception);
+            $detail = trim($exception->getMessage());
 
-            return 'Could not reach the application status webhook.';
+            return $detail !== ''
+                ? mb_substr($detail, 0, 240)
+                : 'The status email could not be sent.';
         }
 
-        if ($response->successful()) {
-            return null;
-        }
-
-        $webhookMessage = data_get($response->json(), 'message');
-        report(new \RuntimeException(
-            'Application status webhook failed with HTTP '.$response->status().': '.(is_string($webhookMessage) && $webhookMessage !== '' ? $webhookMessage : 'no message')
-        ));
-
-        if (is_string($webhookMessage) && $webhookMessage !== '') {
-            return $webhookMessage;
-        }
-
-        return 'The application status webhook rejected the message (HTTP '.$response->status().').';
+        return null;
     }
 
     private function recordStatus(Application $application, string $status, ?string $note = null): void
@@ -902,7 +889,7 @@ class ApplicationController extends Controller
             'Official application forms',
             "{$applicantName} filed the Personal Information Sheet (FCU-EOMS-WP-012) and the Parents Consent ({$application->tracking_code}). Both forms are saved on the application and can be printed on long coupon."
         );
-        $this->notifyN8nApplicationStatus($application, 'Pending', [
+        $this->notifyApplicationStatus($application, 'Pending', [
             'event' => 'application_submitted',
             'submitted_at' => $application->created_at,
             'digital_forms' => $this->digitalFormSummary($application),
