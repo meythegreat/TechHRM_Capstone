@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\JanitorialGroup;
+use App\Services\AccountEventMailer;
 use App\Models\ManualAttendanceRequest;
 use App\Models\ManualAttendanceRequestShift;
 use App\Models\Notification;
@@ -379,6 +380,7 @@ class ManualAttendanceRequestController extends Controller
             ManualAttendanceRequest::TYPE_CLASS_HOURS => 'Class-hours duty request submitted. Hours appear on DTR after supervisor approval.',
             default => 'Offline attendance request submitted. It will appear on your DTR after your supervisor approves it.',
         };
+        app(AccountEventMailer::class)->duty($user, $title, 'Request submitted', $message);
 
         return response()->json([
             'message' => $message,
@@ -471,15 +473,17 @@ class ManualAttendanceRequestController extends Controller
                 $manualAttendanceRequest->update(['janitorial_final_on_behalf' => $janitorialOnBehalf]);
             }
 
+            $declinedMessage = $requestType === ManualAttendanceRequest::TYPE_JANITORIAL
+                ? ($janitorialOnBehalf
+                    ? 'The department dean or person-in-charge declined the offline request on behalf of your immediate supervisor.'
+                    : 'Your immediate supervisor declined the offline request.')
+                : 'Your offline manual attendance request was declined by your supervisor.';
             Notification::create([
                 'user_id' => $student->id,
                 'title' => 'Offline attendance declined',
-                'message' => $requestType === ManualAttendanceRequest::TYPE_JANITORIAL
-                    ? ($janitorialOnBehalf
-                        ? 'The department dean or person-in-charge declined the offline request on behalf of your immediate supervisor.'
-                        : 'Your immediate supervisor declined the offline request.')
-                    : 'Your offline manual attendance request was declined by your supervisor.',
+                'message' => $declinedMessage,
             ]);
+            app(AccountEventMailer::class)->duty($student, 'Offline attendance declined', 'Request declined', $declinedMessage);
 
             return response()->json([
                 'message' => 'Offline attendance request declined.',
@@ -566,17 +570,19 @@ class ManualAttendanceRequestController extends Controller
             default => 'Offline attendance approved',
         };
 
+        $approvedMessage = $requestType === ManualAttendanceRequest::TYPE_JANITORIAL
+            ? ($janitorialOnBehalf
+                ? 'The department dean or person-in-charge approved your janitorial offline request on behalf of the immediate supervisor. Hours were credited on your DTR.'
+                : 'Your immediate supervisor approved the janitorial offline request. Hours were credited on your DTR.')
+            : ('Your '.$requestType.' attendance request was approved. '
+                .count($createdIds).(count($createdIds) === 1 ? ' shift was' : ' shifts were')
+                .' credited on your DTR.');
         Notification::create([
             'user_id' => $student->id,
             'title' => $approvedTitle,
-            'message' => $requestType === ManualAttendanceRequest::TYPE_JANITORIAL
-                ? ($janitorialOnBehalf
-                    ? 'The department dean or person-in-charge approved your janitorial offline request on behalf of the immediate supervisor. Hours were credited on your DTR.'
-                    : 'Your immediate supervisor approved the janitorial offline request. Hours were credited on your DTR.')
-                : ('Your '.$requestType.' attendance request was approved. '
-                    .count($createdIds).(count($createdIds) === 1 ? ' shift was' : ' shifts were')
-                    .' credited on your DTR.'),
+            'message' => $approvedMessage,
         ]);
+        app(AccountEventMailer::class)->duty($student, $approvedTitle, 'Request approved', $approvedMessage);
 
         return response()->json([
             'message' => 'Request approved. Hours were credited on the student DTR.',
@@ -701,15 +707,22 @@ class ManualAttendanceRequestController extends Controller
         ]);
 
         $hours = JanitorialApproval::creditedHours($deducted);
+        $leaderMessage = $approved
+            ? 'Your janitorial supervisor approved the offline request'
+                .($deducted > 0 ? ' and deducted '.$deducted.' hours ('.$hours.' would be recorded)' : '')
+                .'. The immediate supervisor still has the final say.'
+            : 'Your janitorial supervisor declined the offline request. The immediate supervisor still has the final say.';
         Notification::create([
             'user_id' => $manualAttendanceRequest->user_id,
             'title' => 'Janitorial supervisor recorded a decision',
-            'message' => $approved
-                ? 'Your janitorial supervisor approved the offline request'
-                    .($deducted > 0 ? ' and deducted '.$deducted.' hours ('.$hours.' would be recorded)' : '')
-                    .'. The immediate supervisor still has the final say.'
-                : 'Your janitorial supervisor declined the offline request. The immediate supervisor still has the final say.',
+            'message' => $leaderMessage,
         ]);
+        app(AccountEventMailer::class)->dutyFor(
+            (int) $manualAttendanceRequest->user_id,
+            'Janitorial offline attendance decision',
+            'Supervisor decision',
+            $leaderMessage,
+        );
         if ($group?->immediate_supervisor_user_id) {
             Notification::create([
                 'user_id' => $group->immediate_supervisor_user_id,

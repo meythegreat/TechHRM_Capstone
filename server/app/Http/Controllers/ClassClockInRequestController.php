@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Attendance;
 use App\Models\ClassClockInRequest;
+use App\Services\AccountEventMailer;
 use App\Models\DisciplinaryRecord;
 use App\Models\Notification;
 use App\Models\Schedule;
@@ -154,6 +155,16 @@ class ClassClockInRequestController extends Controller
             'Class-hours clock-in request',
             $user->name.' requested to clock in during '.$detail.'. Reason: '.$reason,
         );
+        app(AccountEventMailer::class)->duty(
+            $user,
+            'Class-hours clock-in submitted',
+            'Request submitted',
+            'Your class-hours clock-in was submitted. You are clocked in only after your supervisor approves it.',
+            [
+                ['label' => 'Class', 'value' => $detail],
+                ['label' => 'Reason', 'value' => $reason],
+            ],
+        );
 
         return response()->json([
             'message' => 'Class-hours clock-in submitted. Your supervisor still has to approve it. You are clocked in only after that approval.',
@@ -262,6 +273,13 @@ class ClassClockInRequestController extends Controller
                 'title' => 'Class-hours clock-in declined',
                 'message' => 'Your supervisor declined the clock-in request for '.$detail.'.',
             ]);
+            app(AccountEventMailer::class)->duty(
+                $student,
+                'Class-hours clock-in declined',
+                'Request declined',
+                'Your supervisor declined the clock-in request for '.$detail.'.',
+                $note !== '' ? [['label' => 'Note', 'value' => $note]] : [],
+            );
 
             return response()->json([
                 'message' => 'Class-hours clock-in declined.',
@@ -333,13 +351,21 @@ class ClassClockInRequestController extends Controller
             ], 422);
         }
 
+        $approvedMessage = 'Your clock-in for '.$detail.' was approved. You are clocked in. '
+            .'Clock out with your supervisor\'s passcode or QR when the duty ends. '
+            .'Hours are added to your DTR then, the same as a normal clock-in.';
         Notification::create([
             'user_id' => $student->id,
             'title' => 'Class-hours clock-in approved',
-            'message' => 'Your clock-in for '.$detail.' was approved. You are clocked in. '
-                .'Clock out with your supervisor\'s passcode or QR when the duty ends. '
-                .'Hours are added to your DTR then, the same as a normal clock-in.',
+            'message' => $approvedMessage,
         ]);
+        app(AccountEventMailer::class)->duty(
+            $student,
+            'Class-hours clock-in approved',
+            'Request approved',
+            $approvedMessage,
+            $note !== '' ? [['label' => 'Note', 'value' => $note]] : [],
+        );
 
         return response()->json([
             'message' => 'Request approved. The student is clocked in. Hours are added when they clock out.',

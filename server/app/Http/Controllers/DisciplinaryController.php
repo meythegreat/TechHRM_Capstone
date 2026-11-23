@@ -7,6 +7,7 @@ use App\Models\Notification;
 use App\Models\StudentAward;
 use App\Models\StudentPerformanceReview;
 use App\Models\User;
+use App\Services\AccountEventMailer;
 use App\Services\DepartmentAssignmentNotifier;
 use App\Support\InfractionEscalation;
 use App\Support\OffenseCatalog;
@@ -165,6 +166,17 @@ class DisciplinaryController extends Controller
         }
 
         $record->update($updates);
+        $record->refresh();
+        $verdict = $record->status === 'Dismissed'
+            ? 'The '.$record->violation_type.' case was dismissed. No penalty remains.'
+            : 'The '.$record->violation_type.' case was closed as resolved.';
+        app(AccountEventMailer::class)->dutyFor(
+            (int) $record->student_id,
+            'Infraction verdict',
+            'Case closed',
+            $verdict,
+            [['label' => 'Remarks', 'value' => (string) $record->resolution_remarks]],
+        );
 
         return response()->json(['message' => 'Case officially closed.']);
     }
@@ -446,13 +458,22 @@ class DisciplinaryController extends Controller
     private function notifyStudentOfDecision(DisciplinaryRecord $record): void
     {
         if ($record->penalty === 'Pending') {
-            Notification::create([
-                'user_id' => $record->student_id,
-                'title' => 'Infraction Reported',
-                'message' => "A {$record->violation_type} report was filed. The WSPO coordinator will decide the penalty.",
-            ]);
-            return;
-        }
+        $reported = "A {$record->violation_type} report was filed. The WSPO coordinator will decide the penalty.";
+        Notification::create([
+            'user_id' => $record->student_id,
+            'title' => 'Infraction Reported',
+            'message' => $reported,
+        ]);
+        app(AccountEventMailer::class)->dutyFor(
+            (int) $record->student_id,
+            'Infraction reported',
+            'Violation reported',
+            $reported,
+            [['label' => 'Violation', 'value' => (string) $record->violation_type]],
+        );
+
+        return;
+    }
 
         $message = match ($record->penalty) {
             'Suspension' => $record->suspensionNotice() . " This is for {$record->violation_type}.",
@@ -466,6 +487,16 @@ class DisciplinaryController extends Controller
             'title' => 'Infraction Decision',
             'message' => $message,
         ]);
+        app(AccountEventMailer::class)->dutyFor(
+            (int) $record->student_id,
+            'Infraction decision',
+            'Penalty decision',
+            $message,
+            [
+                ['label' => 'Violation', 'value' => (string) $record->violation_type],
+                ['label' => 'Penalty', 'value' => (string) $record->penalty],
+            ],
+        );
     }
 
     private function studentRelation($relation, User $user)

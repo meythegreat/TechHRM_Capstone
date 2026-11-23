@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Http\Controllers\UserController;
+use App\Services\AccountEventMailer;
 use App\Models\Attendance;
 use App\Models\Notification;
 use App\Models\RenderedHourEntry;
@@ -81,7 +82,7 @@ class ShiftClockReminder
         $schedules = Schedule::query()
             ->where('kind', 'work')
             ->whereHas('user', fn ($query) => $query->where('role', 'Student'))
-            ->with('user:id,name,role')
+            ->with('user:id,name,role,email,username')
             ->get()
             ->groupBy(fn (Schedule $shift) => (int) $shift->user_id);
 
@@ -445,6 +446,8 @@ class ShiftClockReminder
         } catch (UniqueConstraintViolationException) {
             return 0;
         }
+
+        app(AccountEventMailer::class)->duty($user, $title, $title, $message);
 
         return 1;
     }

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Mail\AccountEventMail;
 use App\Models\Attendance;
 use App\Models\Notification;
 use App\Models\Schedule;
@@ -9,6 +10,7 @@ use App\Models\User;
 use App\Services\ShiftClockReminder;
 use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -29,7 +31,11 @@ class ShiftClockReminderTest extends TestCase
 
     public function test_a_student_is_reminded_to_clock_in_before_the_shift(): void
     {
+        Mail::fake();
+        config(['services.resend.key' => 're_test_key']);
         $student = $this->makeStudent('Ana Cruz');
+        $student->email = 'ana.cruz@filamer.edu.ph';
+        $student->save();
         $this->makeShift($student, 'Monday', '08:00 - 12:00');
 
         $this->at('2026-11-09 07:29:00');
@@ -44,6 +50,8 @@ class ShiftClockReminderTest extends TestCase
         $this->assertSame('Clock in before your shift', $notice->title);
         $this->assertStringContainsString('8:00 AM', $notice->message);
         $this->assertStringContainsString('Clock in before it begins.', $notice->message);
+        Mail::assertSent(AccountEventMail::class, fn (AccountEventMail $mail) => $mail->hasTo('ana.cruz@filamer.edu.ph')
+            && $mail->subjectLine === 'Clock in before your shift');
     }
 
     public function test_clock_in_reminder_is_skipped_after_the_student_clocks_in(): void

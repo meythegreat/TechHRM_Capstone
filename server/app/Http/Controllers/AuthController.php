@@ -6,6 +6,7 @@ use App\Mail\TemporaryPasswordMail;
 use App\Models\ActivityLog; // Imported your new ActivityLog model!
 use App\Models\Application;
 use App\Models\User;
+use App\Services\AccountEventMailer;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -61,6 +62,8 @@ class AuthController extends Controller
         } catch (\Throwable $e) {
             report($e);
         }
+
+        app(AccountEventMailer::class)->signedIn($user, $request->ip());
 
         // 7. Return the exact payload React is expecting
         return response()->json([
@@ -196,6 +199,7 @@ class AuthController extends Controller
 
         // 3. Create the Sanctum Token (valid until 11:59 PM today)
         $token = $this->issueSessionToken($user, 'mobile-auth-token');
+        app(AccountEventMailer::class)->signedIn($user, $request->ip());
 
         // Load the profile so the mobile app has their department/course info
         $user->load('profile');

@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Http\Controllers\UserController;
+use App\Services\AccountEventMailer;
 use App\Models\Attendance;
 use App\Models\Notification;
 use App\Models\RenderedHourEntry;
@@ -266,17 +267,19 @@ class ForceClockOut
             'anomaly_reason' => $anomalyReason,
         ]);
 
+        $forcedMessage = 'A Super Admin closed your open '
+            .($isJanitorial ? 'janitorial' : 'duty')
+            .' session from '
+            .$clockInTime->format('M j, g:i A')
+            .' and credited '
+            .HourLimits::hoursLabel($credited)
+            .' hours.';
         Notification::create([
             'user_id' => $user->id,
             'title' => 'Forced clock-out',
-            'message' => 'A Super Admin closed your open '
-                .($isJanitorial ? 'janitorial' : 'duty')
-                .' session from '
-                .$clockInTime->format('M j, g:i A')
-                .' and credited '
-                .HourLimits::hoursLabel($credited)
-                .' hours.',
+            'message' => $forcedMessage,
         ]);
+        app(AccountEventMailer::class)->duty($user, 'Forced clock-out', 'Clocked out', $forcedMessage);
 
         return [
             'ok' => true,
@@ -397,11 +400,13 @@ class ForceClockOut
         });
 
         if ($attendance->user_id) {
+            $forcedMessage = 'A Super Admin closed your open '.$label.' session. '.$message;
             Notification::create([
                 'user_id' => $attendance->user_id,
                 'title' => 'Forced activity clock-out',
-                'message' => 'A Super Admin closed your open '.$label.' session. '.$message,
+                'message' => $forcedMessage,
             ]);
+            app(AccountEventMailer::class)->dutyFor((int) $attendance->user_id, 'Forced activity clock-out', 'Clocked out', $forcedMessage);
         }
 
         return [

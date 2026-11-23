@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Attendance;
+use App\Services\AccountEventMailer;
 use App\Support\HourLimits;
 use App\Support\ManualDtrEntry;
 use App\Support\WorkSchedule;
@@ -76,6 +77,8 @@ class AttendanceController extends Controller
             return response()->json(['message' => 'You are already clocked in. Clock out of this shift before starting the next one.'], 422);
         }
 
+        app(AccountEventMailer::class)->clock($user, 'in', $now, 'Your duty clock-in was recorded.');
+
         return response()->json([
             'message' => 'Successfully clocked in! Have a great shift.',
             'record' => $attendance,
@@ -142,6 +145,8 @@ class AttendanceController extends Controller
         if ($fit['capped'] && $fit['message']) {
             $message .= ' ' . $fit['message'];
         }
+
+        app(AccountEventMailer::class)->clock($user, 'out', $timeOut, $message);
 
         return response()->json([
             'message' => $message,

@@ -6,6 +6,7 @@ use App\Models\Notification;
 use App\Models\Office;
 use App\Models\User;
 use App\Models\UserProfile;
+use App\Services\AccountEventMailer;
 use App\Services\DepartmentAssignmentNotifier;
 use App\Services\StaffNotifier;
 use App\Support\AccountLogin;
@@ -1132,6 +1133,8 @@ class UserController extends Controller
         }
         $this->ensureOfficeIsAllowed($request);
         $previousOffice = trim((string) $user->profile?->assigned_office);
+        $previousEmail = $user->email;
+        $passwordChanged = $request->filled('password');
         $user->update($validated);
 
         if ($this->roleUsesProfile($user->role)) {
@@ -1148,6 +1151,8 @@ class UserController extends Controller
         if ($user->role === 'Student' && $newOffice !== '' && $newOffice !== $previousOffice) {
             $this->notifySupervisorsIfStudentPlaced($user);
         }
+
+        $this->notifyAccountChanges($user, $previousEmail, $passwordChanged, byAdministrator: true);
 
         return response()->json(['message' => 'User updated successfully', 'user' => $user->load('profile')]);
     }
@@ -1175,6 +1180,8 @@ class UserController extends Controller
         $user->must_change_password = false;
         $user->save();
 
+        app(AccountEventMailer::class)->passwordChanged($user, byAdministrator: false);
+
         return response()->json(['message' => 'Password updated.']);
     }
 
@@ -1193,7 +1200,10 @@ class UserController extends Controller
             'current_password' => 'required_with:password|string',
         ]);
 
-        if ($request->filled('password')) {
+        $previousEmail = $user->email;
+        $passwordChanged = $request->filled('password');
+
+        if ($passwordChanged) {
             if (!Hash::check($request->current_password, $user->password)) {
                 return response()->json(['message' => 'Current password is incorrect.'], 422);
             }
@@ -1217,11 +1227,22 @@ class UserController extends Controller
 
         $user->save();
         $this->updateSelfIdentity($user, $request, $validated);
+        $this->notifyAccountChanges($user, $previousEmail, $passwordChanged, byAdministrator: false);
 
         return response()->json([
             'message' => 'Profile updated successfully.',
             'user' => $user->load('profile'),
         ]);
+    }
+
+    private function notifyAccountChanges(User $user, mixed $previousEmail, bool $passwordChanged, bool $byAdministrator): void
+    {
+        $mailer = app(AccountEventMailer::class);
+        $mailer->emailChanged($user, is_string($previousEmail) ? $previousEmail : null, $user->email, $byAdministrator);
+
+        if ($passwordChanged) {
+            $mailer->passwordChanged($user, $byAdministrator);
+        }
     }
 
     /**

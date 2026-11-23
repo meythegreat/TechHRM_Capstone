@@ -338,6 +338,7 @@ class AdvancedAttendanceController extends Controller
         }
 
         $this->notifyCodeOwner($validToken->generated_by, $user->name, $attendanceType, $method, false);
+        app(\App\Services\AccountEventMailer::class)->clock($user, 'in', $now, 'Your '.$attendanceType.' clock-in was recorded.');
 
         return response()->json([
             'message' => 'Verified entry approved!',
@@ -519,6 +520,8 @@ class AdvancedAttendanceController extends Controller
         if ($fit['capped'] && $fit['message']) {
             $message .= ' '.$fit['message'];
         }
+
+        app(\App\Services\AccountEventMailer::class)->clock($user, 'out', $clockOutTime, $message);
 
         $scheduledEnd = DutyHours::scheduledEndFor($clockInTime, $shift);
 
@@ -904,6 +907,7 @@ class AdvancedAttendanceController extends Controller
         $attendance = $attendance['attendance'];
 
         $this->notifyCodeOwner($token->generated_by, $user->name, $label, $method, false);
+        app(\App\Services\AccountEventMailer::class)->clock($user, 'in', $now, $message);
 
         return response()->json([
             'message' => $message,
@@ -1040,6 +1044,7 @@ class AdvancedAttendanceController extends Controller
 
         $user = $request->user();
         $this->notifyCodeOwner($token->generated_by, $user->name, $label, $method, true);
+        app(\App\Services\AccountEventMailer::class)->clock($user, 'out', $clockOutTime, $message);
 
         return response()->json([
             'message' => $message,
@@ -1434,6 +1439,7 @@ class AdvancedAttendanceController extends Controller
         }
 
         $this->notifyCodeOwner($validToken->generated_by, $user->name, 'Janitorial', $method, false);
+        app(\App\Services\AccountEventMailer::class)->clock($user, 'in', $now, 'Your janitorial clock-in for '.$group->area.' was recorded.');
 
         return response()->json([
             'message' => 'Janitorial clock-in verified. Photograph your surroundings now, with the date and time on the photo. You can clock out anytime, and you must take one last photo before clock-out. Your janitorial supervisor reviews the entry first. The immediate supervisor has the final say. If accepted, it is recorded as up to '

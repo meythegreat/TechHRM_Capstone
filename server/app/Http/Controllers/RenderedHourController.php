@@ -854,6 +854,7 @@ class RenderedHourController extends Controller
                 'event_id' => $event->id,
                 'user_id' => $userId,
             ]);
+            $isNew = ! $entry->exists;
             if ($event->kind === RenderedHourEvent::SPECIAL) {
                 $entry->status = 'applied';
                 $entry->scanned_at = null;
@@ -862,6 +863,17 @@ class RenderedHourController extends Controller
             }
             $entry->hours_delta = $event->deltaFor($entry->status);
             $entry->save();
+
+            if ($isNew && $event->kind === RenderedHourEvent::SPECIAL) {
+                $hours = number_format(abs((float) $entry->hours_delta), 2);
+                $direction = $event->direction === 'deduct' ? 'deducted from' : 'added to';
+                app(\App\Services\AccountEventMailer::class)->dutyFor(
+                    (int) $userId,
+                    'Special attendance hours recorded',
+                    'Special attendance',
+                    $event->title.' recorded '.$hours.' hours '.$direction.' your hours on '.$event->event_date->format('M j, Y').'.',
+                );
+            }
         }
     }
 

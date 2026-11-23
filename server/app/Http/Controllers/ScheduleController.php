@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Office;
+use App\Services\AccountEventMailer;
 use App\Models\Schedule;
 use App\Support\GoogleCalendarSync;
 use Illuminate\Support\Facades\Schema;
@@ -510,6 +511,13 @@ class ScheduleController extends Controller
                 'message' => $request->user()->name . ' requested an edit for their ' . $schedule->day . ' shift.'
             ]);
         }
+        app(AccountEventMailer::class)->duty(
+            $request->user(),
+            'Schedule edit request submitted',
+            'Request submitted',
+            'Your request to change the '.$schedule->day.' shift was sent to the WSPO office.',
+            [['label' => 'Note', 'value' => $validated['note']]],
+        );
 
         return response()->json(['message' => 'Edit request sent. The WSPO office will review it.']);
     }
@@ -544,12 +552,19 @@ class ScheduleController extends Controller
         $schedule->update(['edit_request_status' => $status]);
 
         $decision = $status === 'approved' ? 'approved' : 'rejected';
+        $decisionMessage = 'Your request to change the '.$schedule->day.' shift was '.$decision.'.'
+            .($status === 'approved' ? ' The office will update the shift if the day or time should change.' : '');
         \App\Models\Notification::create([
             'user_id' => $schedule->user_id,
             'title' => 'Schedule edit '.$decision,
-            'message' => 'Your request to change the '.$schedule->day.' shift was '.$decision.'.'
-                .($status === 'approved' ? ' The office will update the shift if the day or time should change.' : ''),
+            'message' => $decisionMessage,
         ]);
+        app(AccountEventMailer::class)->dutyFor(
+            (int) $schedule->user_id,
+            'Schedule edit '.$decision,
+            $status === 'approved' ? 'Request approved' : 'Request declined',
+            $decisionMessage,
+        );
 
         return response()->json([
             'message' => $status === 'approved'
