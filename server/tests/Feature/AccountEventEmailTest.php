@@ -3,12 +3,14 @@
 namespace Tests\Feature;
 
 use App\Mail\AccountEventMail;
+use App\Models\Attendance;
 use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Mail\PendingMail;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -190,6 +192,35 @@ class AccountEventEmailTest extends TestCase
         Mail::fake();
         app(\App\Services\AccountEventMailer::class)->clock($user, 'out', now());
         Mail::assertNothingSent();
+    }
+
+    public function test_janitorial_clock_out_attaches_the_before_and_after_photos(): void
+    {
+        Mail::fake();
+        Storage::fake('local');
+        Storage::disk('local')->put('cleaning-proofs/9/before.jpg', 'before');
+        Storage::disk('local')->put('cleaning-proofs/9/after.jpg', 'after');
+
+        $user = $this->makeUser('Student', 'ana.cruz', 'ana.cruz@filamer.edu.ph');
+        $attendance = new Attendance([
+            'janitorial_area' => 'Lobby',
+            'time_out' => '2026-11-23 11:00:00',
+            'cleaning_before_path' => 'cleaning-proofs/9/before.jpg',
+            'cleaning_after_path' => 'cleaning-proofs/9/after.jpg',
+        ]);
+
+        app(\App\Services\AccountEventMailer::class)->janitorialClockOut(
+            $user,
+            $attendance,
+            'Clock-out saved at the time of your closing photo.',
+        );
+
+        Mail::assertSent(AccountEventMail::class, function (AccountEventMail $mail) {
+            return $mail->hasTo('ana.cruz@filamer.edu.ph')
+                && $mail->subjectLine === 'You clocked out of janitorial duty'
+                && count($mail->files) === 2
+                && count($mail->attachments()) === 2;
+        });
     }
 
     public function test_a_profile_save_without_email_or_password_changes_sends_nothing(): void

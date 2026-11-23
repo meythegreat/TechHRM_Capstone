@@ -521,7 +521,12 @@ class AdvancedAttendanceController extends Controller
             $message .= ' '.$fit['message'];
         }
 
-        app(\App\Services\AccountEventMailer::class)->clock($user, 'out', $clockOutTime, $message);
+        $mailer = app(\App\Services\AccountEventMailer::class);
+        if ($isJanitorial) {
+            $mailer->janitorialClockOut($user, $attendance->fresh(), $message);
+        } else {
+            $mailer->clock($user, 'out', $clockOutTime, $message);
+        }
 
         $scheduledEnd = DutyHours::scheduledEndFor($clockInTime, $shift);
 

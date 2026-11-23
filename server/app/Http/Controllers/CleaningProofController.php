@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Attendance;
 use App\Models\JanitorialGroup;
 use App\Models\Notification;
+use App\Services\AccountEventMailer;
 use App\Support\CleaningProof;
 use App\Support\DutyHours;
 use App\Support\HourLimits;
@@ -178,6 +179,12 @@ class CleaningProofController extends Controller
             'title' => 'Janitorial photo clock-in',
             'message' => $user->name.' started janitorial duty at '.$group->area.' with a surroundings photo.',
         ]);
+        app(AccountEventMailer::class)->clock(
+            $user,
+            'in',
+            $capturedAt,
+            'Your janitorial clock-in for '.$group->area.' was recorded from the surroundings photo.',
+        );
 
         return response()->json([
             'message' => 'Clock-in started with your surroundings photo. Take one last photo when you finish. No code is required. Your janitorial supervisor reviews it first, and the immediate supervisor has the final say. If accepted, it is recorded as up to '
@@ -237,6 +244,11 @@ class CleaningProofController extends Controller
                 'message' => $user->name.' finished janitorial duty with a closing photo. Accept or decline the entry.',
             ]);
         }
+        app(AccountEventMailer::class)->janitorialClockOut(
+            $user,
+            $fresh,
+            'Clock-out saved at the time of your closing photo. Your janitorial supervisor reviews it first. The immediate supervisor has the final say.',
+        );
 
         return response()->json([
             'message' => 'Clock-out saved at the time of this photo. Your janitorial supervisor reviews it first. The immediate supervisor has the final say before up to '

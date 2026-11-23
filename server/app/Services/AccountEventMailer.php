@@ -3,9 +3,11 @@
 namespace App\Services;
 
 use App\Mail\AccountEventMail;
+use App\Models\Attendance;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 
 class AccountEventMailer
 {
@@ -64,8 +66,9 @@ class AccountEventMailer
 
     /**
      * @param  list<array{label: string, value: string}>  $details
+     * @param  list<array{path: string, name: string, mime?: string}>  $files
      */
-    public function duty(?User $user, string $subject, string $heading, string $paragraph, array $details = [], ?string $notice = null): void
+    public function duty(?User $user, string $subject, string $heading, string $paragraph, array $details = [], ?string $notice = null, array $files = []): void
     {
         if (! $user) {
             return;
@@ -79,6 +82,30 @@ class AccountEventMailer
             [$paragraph],
             $details,
             $notice ?? 'If this does not look right, contact the Work-Study Program Office.',
+            $files,
+        );
+    }
+
+    public function janitorialClockOut(User $user, Attendance $attendance, string $paragraph): void
+    {
+        $when = $attendance->time_out
+            ? Carbon::parse($attendance->time_out)->timezone(config('app.timezone'))->format('M j, Y g:i A')
+            : Carbon::now()->timezone(config('app.timezone'))->format('M j, Y g:i A');
+        $area = trim((string) ($attendance->janitorial_area ?: 'Janitorial'));
+        $photos = $this->cleaningPhotos($attendance);
+
+        $this->duty(
+            $user,
+            'You clocked out of janitorial duty',
+            'Clocked out',
+            $paragraph.' The before and after surroundings photos are attached.',
+            [
+                ['label' => 'When', 'value' => $when],
+                ['label' => 'Area', 'value' => $area],
+                ['label' => 'Photos', 'value' => count($photos) === 2 ? 'Before and after attached' : count($photos).' attached'],
+            ],
+            'If you did not clock out, contact the Work-Study Program Office.',
+            $photos,
         );
     }
 
@@ -145,6 +172,7 @@ class AccountEventMailer
         array $paragraphs,
         array $details,
         ?string $notice = null,
+        array $files = [],
     ): void {
         $recipient = $this->deliverable($user) ?? $user;
         $to = $to ?? $this->accountAddress($recipient);
@@ -160,6 +188,7 @@ class AccountEventMailer
                 paragraphs: $paragraphs,
                 details: $details,
                 notice: $notice ?? "Didn't do this? Contact the Work-Study Program Office immediately so the account can be secured.",
+                files: $files,
             ));
         } catch (\Throwable $exception) {
             report($exception);
@@ -179,6 +208,36 @@ class AccountEventMailer
         $fresh = User::query()->find($user->id);
 
         return $fresh && $this->accountAddress($fresh) ? $fresh : null;
+    }
+
+    /**
+     * @return list<array{path: string, name: string, mime: string}>
+     */
+    private function cleaningPhotos(Attendance $attendance): array
+    {
+        $files = [];
+        foreach ([
+            'cleaning_before_path' => 'before-surroundings',
+            'cleaning_after_path' => 'after-surroundings',
+        ] as $column => $name) {
+            $relative = $attendance->{$column};
+            if (! is_string($relative) || $relative === '' || ! Storage::disk('local')->exists($relative)) {
+                continue;
+            }
+
+            $extension = strtolower(pathinfo($relative, PATHINFO_EXTENSION) ?: 'jpg');
+            $files[] = [
+                'path' => Storage::disk('local')->path($relative),
+                'name' => $name.'.'.$extension,
+                'mime' => match ($extension) {
+                    'png' => 'image/png',
+                    'webp' => 'image/webp',
+                    default => 'image/jpeg',
+                },
+            ];
+        }
+
+        return $files;
     }
 
     private function canSend(): bool

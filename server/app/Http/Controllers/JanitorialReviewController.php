@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Attendance;
+use App\Services\AccountEventMailer;
 use App\Models\JanitorialGroup;
 use App\Models\ManualAttendanceRequest;
 use App\Models\Notification;
@@ -387,15 +388,23 @@ class JanitorialReviewController extends Controller
 
         $when = Carbon::parse($attendance->time_in)->timezone(config('app.timezone'))->format('M j');
         $hours = JanitorialApproval::creditedHours($deducted);
+        $leaderMessage = $approved
+            ? 'Your janitorial supervisor approved the '.$when.' entry'
+                .($deducted > 0 ? ' and deducted '.$deducted.' duty hours ('.$hours.' would be recorded)' : '')
+                .'. The immediate supervisor still has the final say.'
+            : 'Your janitorial supervisor declined the '.$when.' entry. The immediate supervisor still has the final say.';
         Notification::create([
             'user_id' => $attendance->user_id,
             'title' => 'Janitorial supervisor recorded a decision',
-            'message' => $approved
-                ? 'Your janitorial supervisor approved the '.$when.' entry'
-                    .($deducted > 0 ? ' and deducted '.$deducted.' duty hours ('.$hours.' would be recorded)' : '')
-                    .'. The immediate supervisor still has the final say.'
-                : 'Your janitorial supervisor declined the '.$when.' entry. The immediate supervisor still has the final say.',
+            'message' => $leaderMessage,
         ]);
+        app(AccountEventMailer::class)->dutyFor(
+            (int) $attendance->user_id,
+            'Janitorial supervisor decision',
+            'Janitorial supervisor',
+            $leaderMessage,
+            $remarks !== '' ? [['label' => 'Remarks', 'value' => $remarks]] : [],
+        );
 
         if ($group->immediate_supervisor_user_id) {
             Notification::create([
@@ -466,12 +475,19 @@ class JanitorialReviewController extends Controller
                 $update['time_out'] = Carbon::parse($attendance->time_in);
             }
             $attendance->update($update);
+            $declinedMessage = $who.' declined the '.$when.' entry. No hours were recorded.'
+                .($onBehalf ? ' This was on behalf of the immediate supervisor, who reported an absence.' : '');
             Notification::create([
                 'user_id' => $attendance->user_id,
                 'title' => 'Janitorial entry declined',
-                'message' => $who.' declined the '.$when.' entry. No hours were recorded.'
-                    .($onBehalf ? ' This was on behalf of the immediate supervisor, who reported an absence.' : ''),
+                'message' => $declinedMessage,
             ]);
+            app(AccountEventMailer::class)->dutyFor(
+                (int) $attendance->user_id,
+                'Immediate supervisor decision',
+                'Final decision',
+                $declinedMessage,
+            );
 
             return response()->json([
                 'message' => 'Janitorial entry declined.',
@@ -511,12 +527,19 @@ class JanitorialReviewController extends Controller
             'janitorial_final_on_behalf' => $onBehalf,
         ]);
 
+        $acceptedMessage = $who.' accepted the '.$when.' entry. '.$hours.' hours were recorded from clock-in.'
+            .($onBehalf ? ' This was on behalf of the immediate supervisor, who reported an absence.' : '');
         Notification::create([
             'user_id' => $attendance->user_id,
             'title' => 'Janitorial entry accepted',
-            'message' => $who.' accepted the '.$when.' entry. '.$hours.' hours were recorded from clock-in.'
-                .($onBehalf ? ' This was on behalf of the immediate supervisor, who reported an absence.' : ''),
+            'message' => $acceptedMessage,
         ]);
+        app(AccountEventMailer::class)->dutyFor(
+            (int) $attendance->user_id,
+            'Immediate supervisor decision',
+            'Final decision',
+            $acceptedMessage,
+        );
 
         return response()->json([
             'message' => 'Janitorial entry accepted. '.$hours.' hours were recorded.',
