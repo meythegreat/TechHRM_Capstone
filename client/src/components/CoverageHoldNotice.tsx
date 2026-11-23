@@ -9,10 +9,10 @@ export default function CoverageHoldNotice() {
         </div>
         <div>
           <p className="text-sm font-extrabold text-slate-900">
-            Waiting for the supervisor to be marked absent
+            Department tools are available
           </p>
           <p className="mt-1 text-sm font-medium leading-relaxed text-slate-500">
-            Department tools turn on for today once the supervisor is marked absent. Janitorial final approval stays on the dashboard.
+            You can time students in for your department even when the supervisor is busy.
           </p>
         </div>
       </div>

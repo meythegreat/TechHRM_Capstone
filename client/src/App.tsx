@@ -175,7 +175,7 @@ function App() {
           localStorage.setItem('user_name', response.data.name);
         }
         if (role === 'Department Secretary') {
-          localStorage.setItem('secretary_acting', response.data.acting ? '1' : '0');
+          localStorage.setItem('secretary_acting', '1');
         } else {
           localStorage.removeItem('secretary_acting');
         }
@@ -213,7 +213,7 @@ function App() {
             localStorage.setItem('user_name', response.data.name);
           }
           if (response.data.role === 'Department Secretary') {
-            localStorage.setItem('secretary_acting', response.data.acting ? '1' : '0');
+            localStorage.setItem('secretary_acting', '1');
           }
           storeActivityAttendanceCapability(response.data);
           if (response.data.profile_picture) {

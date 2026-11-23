@@ -657,7 +657,7 @@ const OfficeDirectory = () => {
                                                 Department Secretary
                                             </h4>
                                             <p className="mb-2.5 text-xs font-medium text-slate-500">
-                                                Acts with the supervisor&apos;s access while every supervisor of this office is marked absent.
+                                                Times students in with the same department access as the supervisor, including when the supervisor is busy.
                                             </p>
                                             {(breakdown.secretaries || []).length === 0 ? (
                                                 <p className="text-xs font-medium text-slate-500">

@@ -83,30 +83,16 @@ class DepartmentSecretaryAndWeekScheduleTest extends TestCase
         $this->assertFalse($names->contains('WSPO Coordinator'));
     }
 
-    public function test_secretary_acts_only_while_the_supervisor_is_absent(): void
+    public function test_secretary_can_act_while_the_supervisor_is_present(): void
     {
         $supervisor = $this->makeUser('Supervisor', 'Library', 'Library Supervisor');
         $supervisor->profile->update(['supervised_departments' => ['Library']]);
         $secretary = $this->makeUser('Department Secretary', 'Library', 'Library Secretary');
         $secretary->profile->update(['secretary_departments' => ['Library']]);
         $student = $this->makeUser('Student', 'Library', 'Library Worker');
-        $coordinator = $this->makeUser('WSPO Staff', 'WSPO Coordinator', 'WSPO Coordinator');
 
         $accounts = app(UserController::class);
-        $this->assertFalse($accounts->isActingDepartmentSecretary($secretary->fresh('profile')));
-
-        Sanctum::actingAs($secretary->fresh('profile'));
-        $this->getJson('/api/schedules')->assertForbidden();
-
-        Sanctum::actingAs($supervisor);
-        $this->postJson('/api/supervisor-absence', ['absent' => true])->assertForbidden();
-
-        Sanctum::actingAs($coordinator);
-        $this->postJson('/api/supervisor-absence', [
-            'absent' => true,
-            'user_id' => $supervisor->id,
-        ])->assertOk();
-
+        $this->assertFalse($accounts->supervisorIsAbsentToday($supervisor->fresh('profile')));
         $this->assertTrue($accounts->isActingDepartmentSecretary($secretary->fresh('profile')));
 
         Sanctum::actingAs($secretary->fresh('profile'));

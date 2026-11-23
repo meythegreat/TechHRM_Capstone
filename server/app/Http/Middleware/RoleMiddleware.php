@@ -29,11 +29,11 @@ class RoleMiddleware
         // Clean route roles
         $cleanRoles = array_map('trim', $roles);
 
-        // A department secretary uses the supervisor's access only while that supervisor is absent.
+        // A department secretary uses the supervisor's tools for their assigned departments.
         if ($user->role === 'Department Secretary' && in_array('Supervisor', $cleanRoles, true)) {
             if (!app(\App\Http\Controllers\UserController::class)->isActingDepartmentSecretary($user)) {
                 return response()->json([
-                    'message' => 'The department supervisor is on duty. You can act for them after they are marked absent.',
+                    'message' => 'Your secretary account has no assigned departments. Ask WSPO to set them first.',
                 ], 403);
             }
 

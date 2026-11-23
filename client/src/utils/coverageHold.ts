@@ -1,11 +1,8 @@
 import axios from 'axios';
 
-/** Department secretary tools stay off until the supervisor is marked absent for today. */
+/** Department secretaries keep supervisor tools even when the supervisor is present. */
 export function secretaryCoverageLocked(): boolean {
-  return (
-    localStorage.getItem('user_role') === 'Department Secretary' &&
-    localStorage.getItem('secretary_acting') !== '1'
-  );
+  return false;
 }
 
 export function isCoverageHold(error: unknown): boolean {

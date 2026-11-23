@@ -173,7 +173,6 @@ const UserManagement = () => {
     special_hours_request: false,
     supervised_departments: [] as string[],
     secretary_departments: [] as string[],
-    supervisor_absent: false,
     duty_type: "Clerical",
     duty_request: "",
     gender: "",
@@ -389,14 +388,6 @@ const UserManagement = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const localDateKey = () => {
-    const today = new Date();
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(
-      2,
-      "0"
-    )}-${String(today.getDate()).padStart(2, "0")}`;
-  };
-
   const toggleNamedDepartments = (
     key: "supervised_departments" | "secretary_departments",
     department: string
@@ -537,12 +528,6 @@ const UserManagement = () => {
         }
 
         await axios.put(`/api/users/${editingUserId}`, payload);
-        if (formData.role === "Supervisor") {
-          await axios.post("/api/supervisor-absence", {
-            absent: formData.supervisor_absent,
-            user_id: editingUserId,
-          });
-        }
         showToast("User updated successfully.", "success");
         setIsModalOpen(false);
       } else {
@@ -590,13 +575,7 @@ const UserManagement = () => {
           payload.special_hours_request = formData.special_hours_request;
         }
 
-        const created = await axios.post("/api/users", payload);
-        if (formData.role === "Supervisor" && created.data?.user?.id) {
-          await axios.post("/api/supervisor-absence", {
-            absent: formData.supervisor_absent,
-            user_id: created.data.user.id,
-          });
-        }
+        await axios.post("/api/users", payload);
 
         setIsModalOpen(false);
         setGeneratedCredentials({
@@ -683,11 +662,6 @@ const UserManagement = () => {
         (user.role === "Department Secretary" && user.profile?.assigned_office
           ? [user.profile.assigned_office]
           : []),
-      supervisor_absent: Boolean(
-        user.profile?.supervisor_absent_on &&
-          String(user.profile.supervisor_absent_on).slice(0, 10) ===
-            localDateKey()
-      ),
       duty_type: user.profile?.duty_type || "Clerical",
       duty_request: user.profile?.duty_request || "",
       gender: user.profile?.gender || "",
@@ -718,7 +692,6 @@ const UserManagement = () => {
       special_hours_request: false,
       supervised_departments: [],
       secretary_departments: [],
-      supervisor_absent: false,
       duty_type: "Clerical",
       duty_request: "",
       gender: "",
@@ -1429,7 +1402,7 @@ const UserManagement = () => {
                   </select>
                   {isWspoStaff && (
                     <p className="mt-2 text-xs font-medium text-slate-500">
-                      WSPO staff can provision students, department secretaries, and immediate supervisors. A secretary gains supervisor access only while that supervisor is absent. An immediate supervisor only reviews janitorial attendance.
+                      WSPO staff can provision students, department secretaries, and immediate supervisors. A secretary can time students in with the supervisor’s access even when the supervisor is busy. An immediate supervisor only reviews janitorial attendance.
                     </p>
                   )}
                 </div>
@@ -1845,28 +1818,6 @@ const UserManagement = () => {
                             selected
                           </p>
                         )}
-                        <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3">
-                          <input
-                            type="checkbox"
-                            checked={formData.supervisor_absent}
-                            onChange={(event) =>
-                              setFormData((current) => ({
-                                ...current,
-                                supervisor_absent: event.target.checked,
-                              }))
-                            }
-                            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-amber-700 focus:ring-amber-600"
-                          />
-                          <span>
-                            <span className="block text-xs font-extrabold text-amber-950">
-                              Absent today
-                            </span>
-                            <span className="mt-0.5 block text-[11px] font-medium text-amber-800">
-                              While this is on, the department secretary can act
-                              with this supervisor&apos;s access.
-                            </span>
-                          </span>
-                        </label>
                       </div>
                     )}
 
@@ -1900,8 +1851,8 @@ const UserManagement = () => {
                           Secretary For
                         </label>
                         <p className="mb-3 text-xs font-medium text-slate-500">
-                          Same access as the supervisor of these offices, and
-                          only while that supervisor is marked absent.
+                          Same department access as the supervisor, including
+                          timing students in when the supervisor is busy.
                         </p>
                         <div className="custom-scrollbar max-h-56 divide-y divide-slate-100 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50">
                           {officeChoices(formData.secretary_departments).map(

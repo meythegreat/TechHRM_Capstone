@@ -26,7 +26,6 @@ import UserAvatar from '../../components/UserAvatar';
 import OrganizationScheduleCalendar from '../../components/OrganizationScheduleCalendar';
 import { formatYearLevel, homeDepartment } from '../../utils/studentAssignment';
 import { JanitorialFinalReview } from '../../components/hours/JanitorialFinalReview';
-import { isCoverageHold } from '../../utils/coverageHold';
 
 const AdminDashboard = () => {
     const navigate = useNavigate();
@@ -78,9 +77,6 @@ const AdminDashboard = () => {
         { id: number; message: string; created_at: string }[]
     >([]);
     const [selectedStudent, setSelectedStudent] = useState<AssignedStudent | null>(null);
-    const [secretaryActing, setSecretaryActing] = useState(
-        localStorage.getItem('secretary_acting') === '1'
-    );
 
     const [isLoading, setIsLoading] = useState(true);
 
@@ -120,7 +116,7 @@ const AdminDashboard = () => {
 
     useEffect(() => {
         const fetchStats = async () => {
-            if ((userRole === 'Department Secretary' && !secretaryActing) || userRole === 'Immediate Supervisor') {
+            if (userRole === 'Immediate Supervisor') {
                 setIsLoading(false);
                 return;
             }
@@ -138,7 +134,7 @@ const AdminDashboard = () => {
                         : [],
                 });
             } catch (err) {
-                if (!isCoverageHold(err)) console.error('Failed to load dashboard stats', err);
+                console.error('Failed to load dashboard stats', err);
             } finally {
                 setIsLoading(false);
             }
@@ -182,7 +178,7 @@ const AdminDashboard = () => {
                 .catch(() => setPendingApplications(0));
         };
         const fetchActiveNow = async () => {
-            if ((userRole === 'Department Secretary' && !secretaryActing) || userRole === 'Immediate Supervisor') {
+            if (userRole === 'Immediate Supervisor') {
                 setActiveStudents([]);
                 setOnlineStaff([]);
                 setSignedIn([]);
@@ -195,26 +191,14 @@ const AdminDashboard = () => {
                 setOnlineStaff(Array.isArray(payload.staff) ? payload.staff : []);
                 setSignedIn(Array.isArray(payload.signed_in) ? payload.signed_in : []);
             } catch (err) {
-                if (!isCoverageHold(err)) console.error('Failed to load active now list', err);
+                console.error('Failed to load active now list', err);
             }
-        };
-        const fetchCoverage = () => {
-            axios
-                .get('/api/user')
-                .then((response) => {
-                    setSecretaryActing(Boolean(response.data.acting));
-                    if (response.data.role === 'Department Secretary') {
-                        localStorage.setItem('secretary_acting', response.data.acting ? '1' : '0');
-                    }
-                })
-                .catch(() => {});
         };
         const refresh = () => {
             fetchStats();
             fetchAssignmentNotices();
             fetchPendingApplications();
             fetchActiveNow();
-            fetchCoverage();
         };
         refresh();
         const interval = setInterval(refresh, 5000);
@@ -223,7 +207,7 @@ const AdminDashboard = () => {
             clearInterval(interval);
             window.removeEventListener(REALTIME_EVENT, refresh);
         };
-    }, [isWspo, userRole, secretaryActing]);
+    }, [isWspo, userRole]);
 
     const dismissAssignmentNotice = async (id: number) => {
         setAssignmentNotices((current) => current.filter((notice) => notice.id !== id));
@@ -345,40 +329,8 @@ const AdminDashboard = () => {
                 </div>
             </motion.header>
 
-            {userRole === 'Department Secretary' && !secretaryActing && (
-                <div className="flex items-start gap-3 rounded-2xl border border-slate-200/90 bg-white px-5 py-4 shadow-xs">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
-                        <Clock className="h-5 w-5" />
-                    </div>
-                    <div>
-                        <p className="text-sm font-extrabold text-slate-900">
-                            Waiting for the supervisor to be marked absent
-                        </p>
-                        <p className="mt-0.5 text-xs font-medium text-slate-500">
-                            You have the same access as the supervisor, and it turns on for today once they are marked absent.
-                        </p>
-                    </div>
-                </div>
-            )}
-
             {(userRole === 'Supervisor' || isImmediateSupervisor) && (
                 <JanitorialFinalReview />
-            )}
-
-            {userRole === 'Department Secretary' && secretaryActing && (
-                <div className="flex items-start gap-3 rounded-2xl border border-violet-200 bg-violet-50/80 px-5 py-4 shadow-xs">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
-                        <ShieldCheck className="h-5 w-5" />
-                    </div>
-                    <div>
-                        <p className="text-sm font-extrabold text-violet-950">
-                            You are acting for the supervisor
-                        </p>
-                        <p className="mt-0.5 text-xs font-medium text-violet-800">
-                            Their departments are covered with your account until they are marked present again.
-                        </p>
-                    </div>
-                </div>
             )}
 
             {/* WSPO APPLICANT PIPELINE BANNER */}
@@ -421,7 +373,7 @@ const AdminDashboard = () => {
                 </motion.button>
             )}
 
-            {!(userRole === 'Department Secretary' && !secretaryActing) && !isImmediateSupervisor && (
+            {!isImmediateSupervisor && (
             <>
             {/* 4-COLUMN TELEMETRY BENTO */}
             <motion.div
@@ -541,7 +493,7 @@ const AdminDashboard = () => {
             {/* ORGANIZATION SCHEDULE CALENDAR */}
             {!isImmediateSupervisor && <OrganizationScheduleCalendar />}
 
-            {!(userRole === 'Department Secretary' && !secretaryActing) && !isImmediateSupervisor && (
+            {!isImmediateSupervisor && (
             <>
             {/* ASSIGNED WORKING STUDENTS */}
             <motion.section

@@ -76,15 +76,12 @@ export function canManageJanitorialGroups(role?: string | null, office?: string 
 }
 
 export function canIssueDailyAttendance(): boolean {
+  const role = localStorage.getItem('user_role') ?? '';
+  if (role === 'Supervisor' || role === 'Department Secretary') return true;
+
   const storedFlag = localStorage.getItem('can_issue_daily_attendance');
   if (storedFlag === '1') return true;
   if (storedFlag === '0') return false;
-
-  const role = localStorage.getItem('user_role') ?? '';
-  if (role === 'Supervisor') return true;
-  if (role === 'Department Secretary') {
-    return localStorage.getItem('secretary_acting') === '1';
-  }
   if (role !== 'WSPO Staff') return false;
 
   // Coordinator only — student officers clock in as workers.

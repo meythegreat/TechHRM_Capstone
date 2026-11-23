@@ -120,7 +120,7 @@ const Login = ({
 
         try {
             const response = await axios.post('/api/login', { username, password });
-            const { token, role, name, office, profile_picture, must_change_password, acting } =
+            const { token, role, name, office, profile_picture, must_change_password } =
                 response.data;
 
             localStorage.setItem('auth_token', token);
@@ -132,7 +132,7 @@ const Login = ({
                 localStorage.setItem('assigned_office', office || 'System Administrator');
             }
             if (role === 'Department Secretary') {
-                localStorage.setItem('secretary_acting', acting ? '1' : '0');
+                localStorage.setItem('secretary_acting', '1');
             } else {
                 localStorage.removeItem('secretary_acting');
             }

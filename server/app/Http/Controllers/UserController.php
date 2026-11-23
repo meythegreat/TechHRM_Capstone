@@ -620,7 +620,7 @@ class UserController extends Controller
         return str_contains($office, 'wspo secretary') || str_contains($office, 'wspo president');
     }
 
-    /** Department secretary covers a supervisor only while that supervisor is absent today. */
+    /** Department secretary uses the supervisor's department tools whenever assigned. */
     public function isActingDepartmentSecretary(User $user): bool
     {
         return $user->role === 'Department Secretary' && $this->actingDepartments($user) !== [];
@@ -649,7 +649,7 @@ class UserController extends Controller
     }
 
     /**
-     * Departments whose supervisors are all absent today, so the secretary may act.
+     * Departments this secretary covers. Access does not wait for a supervisor absence.
      *
      * @return list<string>
      */
@@ -661,10 +661,7 @@ class UserController extends Controller
 
         $user->loadMissing('profile');
 
-        return array_values(array_filter(
-            $this->secretaryDepartments($user),
-            fn (string $department) => $this->departmentSupervisorsAreAbsent($department)
-        ));
+        return $this->secretaryDepartments($user);
     }
 
     public function supervisorIsAbsentToday(User $user): bool
@@ -676,29 +673,6 @@ class UserController extends Controller
         }
 
         return \Carbon\Carbon::parse($absentOn)->isSameDay(\Carbon\Carbon::today());
-    }
-
-    private function departmentSupervisorsAreAbsent(string $department): bool
-    {
-        $targets = array_map(fn (string $name) => $this->normalizeDepartment($name), $this->departmentAliases($department));
-        $supervisors = User::with('profile')
-            ->where('role', 'Supervisor')
-            ->get()
-            ->filter(function (User $supervisor) use ($targets) {
-                foreach ($this->supervisedDepartments($supervisor) as $assigned) {
-                    if (in_array($this->normalizeDepartment($assigned), $targets, true)) {
-                        return true;
-                    }
-                }
-
-                return false;
-            });
-
-        if ($supervisors->isEmpty()) {
-            return true;
-        }
-
-        return $supervisors->every(fn (User $supervisor) => $this->supervisorIsAbsentToday($supervisor));
     }
 
     /**
