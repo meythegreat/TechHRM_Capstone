@@ -16,6 +16,7 @@ use App\Support\WorkSchedule;
 use App\Support\SuperAdminAudit;
 use App\Models\DailyToken;
 use App\Models\Notification;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\Request;
@@ -26,6 +27,9 @@ class AdvancedAttendanceController extends Controller
 {
     /** Passcodes and live QR codes rotate on this interval so a captured code cannot be reused. */
     public const ACCESS_TTL_SECONDS = 30;
+
+    /** @var array<string, list<int>> */
+    private array $scopeIssuerIds = [];
 
     public const JANITORIAL_TOKEN_TYPE = 'Janitorial';
 
@@ -757,16 +761,46 @@ class AdvancedAttendanceController extends Controller
 
     private function forgetScopeTokens(string $type, string $channel, string $scopeKey, UserController $accounts): void
     {
-        DailyToken::with('creator.profile')
+        $ids = $this->scopeIssuerIds($accounts, $scopeKey);
+        if ($ids === []) {
+            return;
+        }
+
+        DailyToken::query()
             ->where('type', $type)
             ->where('channel', $channel)
+            ->whereIn('generated_by', $ids)
+            ->where('expires_at', '>', Carbon::now())
+            ->update(['expires_at' => Carbon::now()]);
+    }
+
+    /**
+     * Accounts that share one live passcode. Resolved from the small staff
+     * list so a code refresh does not scan every historical token.
+     *
+     * @return list<int>
+     */
+    private function scopeIssuerIds(UserController $accounts, string $scopeKey): array
+    {
+        if ($scopeKey === '') {
+            return [];
+        }
+
+        if (isset($this->scopeIssuerIds[$scopeKey])) {
+            return $this->scopeIssuerIds[$scopeKey];
+        }
+
+        $ids = User::query()
+            ->with('profile')
+            ->whereIn('role', ['Supervisor', 'WSPO Staff', 'Super Admin'])
             ->get()
-            ->each(function (DailyToken $token) use ($accounts, $scopeKey) {
-                $creator = $token->creator;
-                if ($creator && $accounts->attendanceScopeKey($creator) === $scopeKey) {
-                    $token->update(['expires_at' => Carbon::now()]);
-                }
-            });
+            ->filter(fn (User $user) => $accounts->attendanceScopeKey($user) === $scopeKey)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+
+        return $this->scopeIssuerIds[$scopeKey] = $ids;
     }
 
     private function clockInActivity(Request $request, DailyToken $token)
@@ -1262,17 +1296,19 @@ class AdvancedAttendanceController extends Controller
 
     private function liveScopeToken(string $type, string $channel, string $scopeKey, UserController $accounts): ?DailyToken
     {
-        return DailyToken::with('creator.profile')
+        $ids = $this->scopeIssuerIds($accounts, $scopeKey);
+        if ($ids === []) {
+            return null;
+        }
+
+        return DailyToken::query()
             ->where('type', $type)
             ->where('channel', $channel)
+            ->whereIn('generated_by', $ids)
             ->where('expires_at', '>', Carbon::now())
             ->where('created_at', '>', Carbon::now()->subSeconds(self::ACCESS_TTL_SECONDS))
-            ->get()
-            ->first(function (DailyToken $token) use ($accounts, $scopeKey) {
-                $creator = $token->creator;
-
-                return $creator && $accounts->attendanceScopeKey($creator) === $scopeKey;
-            });
+            ->orderByDesc('id')
+            ->first();
     }
 
     private function issueJanitorialTokenResponse(Request $request, string $channel)

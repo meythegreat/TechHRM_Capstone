@@ -5,19 +5,22 @@ set -u
 
 port="${PORT:-10000}"
 
-# ServeCommand ignores PHP_CLI_SERVER_WORKERS unless --no-reload is set, and
-# then the built-in server handles one request at a time. Dashboard polls
-# (/api/user, /api/notifications, /up, bulletins, schedules) queue behind
-# whichever request is running, and the supervisor only reports completions
-# every 500ms — so the log fills with ~500ms, 1s, 2s, … stalls.
-# Four workers keep a slow call from freezing the rest of the app.
+# php artisan serve checks the child every 500ms (usleep in ServeCommand).
+# Dashboard polls fill the stdout pipe, workers block until the next read,
+# and the log fills with ~500ms, 1s, 2s, … stalls — including /up.
+# Run php -S directly so each worker logs and returns without that wait.
 export PHP_CLI_SERVER_WORKERS="${PHP_CLI_SERVER_WORKERS:-4}"
 
-php artisan serve --host=0.0.0.0 --port="$port" --no-reload &
+root="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+cd "$root/public"
+
+setsid php -d variables_order=EGPCS -S "0.0.0.0:${port}" "$root/serve.php" &
 server_pid=$!
 
+cd "$root"
+
 shutdown() {
-    kill "$server_pid" 2>/dev/null || true
+    kill -TERM -"$server_pid" 2>/dev/null || kill -TERM "$server_pid" 2>/dev/null || true
     wait "$server_pid" 2>/dev/null || true
     exit 0
 }
