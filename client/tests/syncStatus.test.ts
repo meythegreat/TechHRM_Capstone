@@ -9,6 +9,7 @@ import {
   isConnectivityFailure,
   shouldTrackRequestAsSync,
   summarizeOutbox,
+  syncDisplayDelay,
   type SyncStatusData,
 } from '../src/utils/syncStatusCore.ts';
 
@@ -56,6 +57,16 @@ test('deriveSyncState maps all 4 device states with proper precedence', () => {
     ),
     'offline',
   );
+});
+
+test('syncDisplayDelay keeps brief blips from changing the badge', () => {
+  assert.equal(syncDisplayDelay('connected', 'connected'), 0);
+  assert.equal(syncDisplayDelay('connected', 'offline'), 0);
+  assert.equal(syncDisplayDelay('offline', 'connected'), 0);
+  assert.ok(syncDisplayDelay('connected', 'syncing') >= 500);
+  assert.ok(syncDisplayDelay('syncing', 'connected') >= 500);
+  assert.ok(syncDisplayDelay('connected', 'error') >= 2000);
+  assert.equal(syncDisplayDelay('error', 'syncing'), 0);
 });
 
 test('buildSyncSnapshot includes derived state alongside raw telemetry', () => {

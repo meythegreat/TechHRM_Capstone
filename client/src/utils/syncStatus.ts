@@ -10,11 +10,14 @@ import { emitRealtimeRefresh } from './realtime';
 import {
   buildSyncSnapshot,
   connectivityErrorMessage,
+  deriveSyncState,
   isCanceledRequestError,
   isConnectivityFailure,
   shouldTrackRequestAsSync,
   summarizeOutbox,
+  syncDisplayDelay,
   type SyncSnapshot,
+  type SyncState,
   type SyncStatusData,
 } from './syncStatusCore';
 
@@ -26,7 +29,7 @@ type SyncAxiosConfig = InternalAxiosRequestConfig & {
   __syncExplicit?: boolean;
 };
 
-const SYNC_HOLD_MS = 450;
+const SYNC_HOLD_MS = 0;
 const RECOVERY_POLL_MS = 15000;
 
 const initialBrowserOnline =
@@ -45,11 +48,34 @@ const stateData: SyncStatusData = {
   lastSyncedAt: null,
 };
 
-let currentSnapshot: SyncSnapshot = buildSyncSnapshot(stateData);
+let displayedState: SyncState = deriveSyncState(stateData);
+let currentSnapshot: SyncSnapshot = withDisplayedState(buildSyncSnapshot(stateData));
 const listeners = new Set<() => void>();
 
 let syncStartedAt: number | null = null;
 let holdTimer: number | null = null;
+let transitionTimer: number | null = null;
+let pendingDisplay: SyncState | null = null;
+
+function withDisplayedState(snapshot: SyncSnapshot): SyncSnapshot {
+  return snapshot.state === displayedState ? snapshot : { ...snapshot, state: displayedState };
+}
+
+function sameSnapshot(left: SyncSnapshot, right: SyncSnapshot): boolean {
+  return (
+    left.state === right.state &&
+    left.browserOnline === right.browserOnline &&
+    left.serverReachable === right.serverReachable &&
+    left.activeSyncCount === right.activeSyncCount &&
+    left.outboxSyncing === right.outboxSyncing &&
+    left.syncHoldActive === right.syncHoldActive &&
+    left.pendingCount === right.pendingCount &&
+    left.outboxErrorCount === right.outboxErrorCount &&
+    left.outboxErrorMessage === right.outboxErrorMessage &&
+    left.lastError === right.lastError &&
+    left.lastSyncedAt === right.lastSyncedAt
+  );
+}
 let interceptorsAttached = false;
 let monitorStarted = false;
 let activeManualSync: Promise<SyncSnapshot> | null = null;
@@ -61,11 +87,67 @@ function clearHoldTimer() {
   }
 }
 
-function emit() {
-  currentSnapshot = buildSyncSnapshot(stateData);
+function clearTransitionTimer() {
+  if (transitionTimer !== null && typeof window !== 'undefined') {
+    window.clearTimeout(transitionTimer);
+  }
+  transitionTimer = null;
+  pendingDisplay = null;
+}
+
+function publish() {
+  const next = withDisplayedState(buildSyncSnapshot(stateData));
+  if (sameSnapshot(currentSnapshot, next)) return;
+  currentSnapshot = next;
   for (const listener of listeners) {
     listener();
   }
+}
+
+function showStateNow(next: SyncState) {
+  clearTransitionTimer();
+  if (displayedState === next) {
+    publish();
+    return;
+  }
+  displayedState = next;
+  publish();
+}
+
+function emit() {
+  const raw = deriveSyncState(stateData);
+  if (raw === displayedState) {
+    clearTransitionTimer();
+    publish();
+    return;
+  }
+
+  const delay = syncDisplayDelay(displayedState, raw);
+  if (delay <= 0 || typeof window === 'undefined') {
+    showStateNow(raw);
+    return;
+  }
+
+  if (pendingDisplay === raw && transitionTimer !== null) {
+    publish();
+    return;
+  }
+
+  clearTransitionTimer();
+  pendingDisplay = raw;
+  transitionTimer = window.setTimeout(() => {
+    transitionTimer = null;
+    const expected = pendingDisplay;
+    pendingDisplay = null;
+    const latest = deriveSyncState(stateData);
+    if (latest === expected) {
+      displayedState = latest;
+      publish();
+      return;
+    }
+    emit();
+  }, delay);
+  publish();
 }
 
 function isActivelySyncing(): boolean {
@@ -106,13 +188,16 @@ function scheduleHoldReleaseIfNeeded() {
   }, remaining);
 }
 
-function beginSyncActivity() {
+function beginSyncActivity(immediate = false) {
   clearHoldTimer();
   if (!isActivelySyncing()) {
     syncStartedAt = Date.now();
   }
   stateData.activeSyncCount += 1;
   stateData.syncHoldActive = false;
+  if (immediate) {
+    showStateNow('syncing');
+  }
   emit();
 }
 
@@ -319,7 +404,7 @@ export async function syncNow(options: { silent?: boolean } = {}): Promise<SyncS
 
   activeManualSync = (async () => {
     setBrowserOnline(true);
-    beginSyncActivity();
+    beginSyncActivity(true);
 
     try {
       const hasToken =

@@ -29,7 +29,21 @@ export interface OutboxSummary {
  * - syncing (Yellow): actively uploading/saving/reconnecting/checking
  * - error (Red): device is online, but server is unreachable or queued items failed/remain unsynced
  * - connected (Green): device is online, server is reachable, and everything is synced
+ *
+ * The badge waits before changing color so a fast save or a single failed poll
+ * does not flash. Losing the device network is immediate.
  */
+export function syncDisplayDelay(from: SyncState, to: SyncState): number {
+  if (from === to) return 0;
+  if (to === 'offline' || from === 'offline') return 0;
+  if (from === 'connected' && to === 'syncing') return 700;
+  if (from === 'syncing' && to === 'connected') return 600;
+  if (to === 'error') return 2500;
+  if (from === 'error' && to === 'syncing') return 0;
+  if (from === 'error' && to === 'connected') return 900;
+  return 500;
+}
+
 export function deriveSyncState(data: SyncStatusData): SyncState {
   if (!data.browserOnline) {
     return 'offline';

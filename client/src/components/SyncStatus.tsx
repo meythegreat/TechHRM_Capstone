@@ -216,12 +216,6 @@ export default function SyncStatus() {
                 className={`relative inline-flex h-10 items-center justify-center gap-2 rounded-xl border px-2.5 text-xs font-extrabold tracking-tight transition-all focus:outline-none focus:ring-2 focus:ring-slate-900/15 sm:px-3 ${visual.buttonClass}`}
             >
                 <span className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center">
-                    {visual.pingClass && (
-                        <span
-                            aria-hidden="true"
-                            className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${visual.pingClass}`}
-                        />
-                    )}
                     <span
                         aria-hidden="true"
                         className={`relative inline-flex h-2.5 w-2.5 rounded-full ${visual.dotClass}`}

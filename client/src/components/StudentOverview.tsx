@@ -549,10 +549,12 @@ const StudentOverview = () => {
                             }`}>
                                 <span className={`h-1.5 w-1.5 rounded-full ${
                                     sync.state === 'connected'
-                                        ? 'animate-pulse bg-emerald-400'
+                                        ? 'bg-emerald-400'
                                         : sync.state === 'syncing'
-                                          ? 'animate-pulse bg-amber-300'
-                                          : 'bg-slate-400'
+                                          ? 'bg-amber-300'
+                                          : sync.state === 'error'
+                                            ? 'bg-red-400'
+                                            : 'bg-slate-400'
                                 }`} />
                                 {sync.state === 'connected'
                                     ? 'Live Sync'
