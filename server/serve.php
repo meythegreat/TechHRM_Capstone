@@ -20,7 +20,17 @@ $started = microtime(true);
 
 require_once $publicPath.'/index.php';
 
-$milliseconds = (microtime(true) - $started) * 1000;
-$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-fwrite(STDOUT, sprintf("[%s] %s %s %.1fms\n", date('Y-m-d H:i:s'), $method, $uri, $milliseconds));
-fflush(STDOUT);
+// The built-in server does not define the STDOUT constant. Writing after the
+// response must not throw, or Laravel turns it into a second 500.
+try {
+    $milliseconds = (microtime(true) - $started) * 1000;
+    $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+    file_put_contents('php://stdout', sprintf(
+        "[%s] %s %s %.1fms\n",
+        date('Y-m-d H:i:s'),
+        $method,
+        $uri,
+        $milliseconds
+    ));
+} catch (Throwable) {
+}
