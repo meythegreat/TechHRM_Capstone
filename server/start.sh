@@ -5,7 +5,15 @@ set -u
 
 port="${PORT:-10000}"
 
-php artisan serve --host=0.0.0.0 --port="$port" &
+# ServeCommand ignores PHP_CLI_SERVER_WORKERS unless --no-reload is set, and
+# then the built-in server handles one request at a time. Dashboard polls
+# (/api/user, /api/notifications, /up, bulletins, schedules) queue behind
+# whichever request is running, and the supervisor only reports completions
+# every 500ms — so the log fills with ~500ms, 1s, 2s, … stalls.
+# Four workers keep a slow call from freezing the rest of the app.
+export PHP_CLI_SERVER_WORKERS="${PHP_CLI_SERVER_WORKERS:-4}"
+
+php artisan serve --host=0.0.0.0 --port="$port" --no-reload &
 server_pid=$!
 
 shutdown() {
