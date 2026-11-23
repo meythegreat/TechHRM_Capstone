@@ -86,6 +86,30 @@ class AccountEventMailer
         );
     }
 
+    public function accountCreated(User $user, string $plainPassword, bool $fromSignup): void
+    {
+        $intro = $fromSignup
+            ? 'Your WoSPIS account is ready. The email you entered when you signed up is now the email for this login.'
+            : 'An administrator created your WoSPIS account in User Management.';
+
+        $this->send(
+            null,
+            $user,
+            'Your WoSPIS account is ready',
+            'Account created',
+            [$intro, 'Sign in with the username or the email below.'],
+            [
+                ['label' => 'Username', 'value' => (string) $user->username],
+                ['label' => 'Email', 'value' => (string) ($user->email ?: 'Not on file')],
+                ['label' => 'Password', 'value' => $plainPassword],
+                ['label' => 'Role', 'value' => (string) $user->role],
+            ],
+            'If you did not expect this account, contact the Work-Study Program Office.',
+            [],
+            false,
+        );
+    }
+
     public function janitorialClockOut(User $user, Attendance $attendance, string $paragraph): void
     {
         $when = $attendance->time_out
@@ -173,6 +197,7 @@ class AccountEventMailer
         array $details,
         ?string $notice = null,
         array $files = [],
+        bool $hidesPassword = true,
     ): void {
         $recipient = $this->deliverable($user) ?? $user;
         $to = $to ?? $this->accountAddress($recipient);
@@ -189,6 +214,7 @@ class AccountEventMailer
                 details: $details,
                 notice: $notice ?? "Didn't do this? Contact the Work-Study Program Office immediately so the account can be secured.",
                 files: $files,
+                hidesPassword: $hidesPassword,
             ));
         } catch (\Throwable $exception) {
             report($exception);

@@ -10,6 +10,7 @@ use App\Models\Notification;
 use App\Models\Office;
 use App\Models\User;
 use App\Models\UserProfile;
+use App\Services\AccountEventMailer;
 use App\Services\CompletedApplicationForm;
 use App\Services\DepartmentAssignmentNotifier;
 use App\Services\StaffNotifier;
@@ -368,6 +369,7 @@ class ApplicationController extends Controller
         ]);
 
         app(DepartmentAssignmentNotifier::class)->notify($applicant, $office, $dutyLabel);
+        app(AccountEventMailer::class)->accountCreated($applicant, $tempPassword, fromSignup: true);
 
         $message = 'Student successfully matched and placed!';
         if ($sendError) {

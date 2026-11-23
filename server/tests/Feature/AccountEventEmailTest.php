@@ -194,6 +194,29 @@ class AccountEventEmailTest extends TestCase
         Mail::assertNothingSent();
     }
 
+    public function test_a_new_account_email_includes_the_login_password(): void
+    {
+        Mail::fake();
+        $user = $this->makeUser('Student', 'ana.cruz', 'ana.cruz@filamer.edu.ph');
+
+        app(\App\Services\AccountEventMailer::class)->accountCreated($user, 'FCU-START1', fromSignup: true);
+        app(\App\Services\AccountEventMailer::class)->accountCreated($user, 'office-pass', fromSignup: false);
+
+        Mail::assertSent(AccountEventMail::class, function (AccountEventMail $mail) {
+            $html = $mail->render();
+
+            return $mail->hasTo('ana.cruz@filamer.edu.ph')
+                && $mail->subjectLine === 'Your WoSPIS account is ready'
+                && str_contains($html, 'FCU-START1')
+                && str_contains($html, 'signed up')
+                && str_contains($html, 'wspo.wospis@gmail.com');
+        });
+        Mail::assertSent(AccountEventMail::class, function (AccountEventMail $mail) {
+            return str_contains($mail->render(), 'office-pass')
+                && str_contains($mail->render(), 'User Management');
+        });
+    }
+
     public function test_janitorial_clock_out_attaches_the_before_and_after_photos(): void
     {
         Mail::fake();

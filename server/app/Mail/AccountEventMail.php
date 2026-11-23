@@ -26,6 +26,7 @@ class AccountEventMail extends Mailable
         public array $details = [],
         public string $notice = '',
         public array $files = [],
+        public bool $hidesPassword = true,
     ) {}
 
     public function envelope(): Envelope
@@ -43,6 +44,7 @@ class AccountEventMail extends Mailable
                 'paragraphs' => $this->paragraphs,
                 'details' => $this->details,
                 'notice' => $this->notice,
+                'hidesPassword' => $this->hidesPassword,
             ],
         );
     }

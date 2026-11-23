@@ -79,7 +79,11 @@
                 <a href="mailto:{{ $contactEmail }}" style="color:#1D4ED8;text-decoration:none;">{{ $contactEmail }}</a>
               </p>
               <p style="margin:10px 0 0;color:#94A3B8;font-size:11px;">
-                This is an automated security message from WoSPIS. It never includes your password.
+                @if ($hidesPassword)
+                  This is an automated security message from WoSPIS. It never includes your password.
+                @else
+                  This is an automated message from WoSPIS. Sign in with the password above, then change it. Do not share it.
+                @endif
               </p>
             </td>
           </tr>
