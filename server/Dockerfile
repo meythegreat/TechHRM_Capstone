@@ -16,13 +16,10 @@ COPY . .
 
 RUN mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache \
     && chmod -R 775 storage bootstrap/cache \
+    && chmod +x start.sh \
     && composer dump-autoload --optimize \
     && php artisan package:discover --ansi || true
 
 EXPOSE 10000
 
-CMD php artisan migrate --force \
-    && php artisan db:seed --force \
-    && php artisan config:cache \
-    && (nohup php artisan schedule:work --no-interaction > /tmp/shift-reminders.log 2>&1 &) \
-    && php artisan serve --host=0.0.0.0 --port=${PORT:-10000}
+CMD ["./start.sh"]
