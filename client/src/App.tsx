@@ -8,6 +8,7 @@ import { FinancialManagement } from './components/FinancialManagement';
 import { REALTIME_EVENT } from './utils/realtime';
 
 import Login from './components/Login';
+import GoogleCalendarCallback from './components/GoogleCalendarCallback';
 import LandingPage from './components/LandingPage';
 import ForcePasswordChange from './components/ForcePasswordChange';
 import Toast from './components/Toast';
@@ -364,6 +365,8 @@ function App() {
           </div>
         </div>
       </div>
+    ) : location.pathname === '/calendar/google/callback' ? (
+      <GoogleCalendarCallback />
     ) : !hasToken ? (
       <PageTransition pageKey={guestView}>
         {guestView === 'home' ? (

@@ -37,7 +37,9 @@ axios.interceptors.response.use(
   (error) => {
     const status = error.response?.status
     const requestUrl = String(error.config?.url || '')
-    const isLoginAttempt = requestUrl.includes('/api/login') || requestUrl.includes('/api/mobile/login')
+    const isLoginAttempt = requestUrl.includes('/api/login')
+      || requestUrl.includes('/api/mobile/login')
+      || requestUrl.includes('/api/calendar/google/connect')
 
     if (status === 401 && !isLoginAttempt && localStorage.getItem('auth_token')) {
       localStorage.removeItem('auth_token')

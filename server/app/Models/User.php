@@ -10,6 +10,7 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use App\Traits\RecordsActivity;
 
 class User extends Authenticatable
@@ -41,6 +42,8 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'calendar_token',
+        'google_refresh_token',
     ];
 
     /**
@@ -126,5 +129,32 @@ class User extends Authenticatable
     public function requirements()
     {
         return $this->hasMany(Requirement::class);
+    }
+
+    /**
+     * Secret used in the public calendar feed URL. Stored without an activity-log entry.
+     */
+    public function ensureCalendarToken(): string
+    {
+        $existing = trim((string) ($this->calendar_token ?? ''));
+        if ($existing !== '') {
+            return $existing;
+        }
+
+        $token = Str::random(48);
+        $claimed = DB::table('users')
+            ->where('id', $this->getKey())
+            ->where(function ($query) {
+                $query->whereNull('calendar_token')->orWhere('calendar_token', '');
+            })
+            ->update(['calendar_token' => $token]);
+
+        if ($claimed === 0) {
+            $token = (string) DB::table('users')->where('id', $this->getKey())->value('calendar_token');
+        }
+
+        $this->calendar_token = $token;
+
+        return $token;
     }
 }

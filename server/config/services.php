@@ -35,6 +35,13 @@ return [
         ],
     ],
 
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI', 'http://127.0.0.1/calendar/google/callback'),
+        'sync_in_tests' => false,
+    ],
+
     'webpush' => [
         'subject' => env('VAPID_SUBJECT', 'https://techhrm-capstone.onrender.com'),
         'public_key' => env('VAPID_PUBLIC_KEY'),

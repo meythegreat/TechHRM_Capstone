@@ -18,6 +18,7 @@ use App\Http\Controllers\RequirementController;
 use App\Http\Controllers\FinancialController;
 use App\Http\Controllers\OfficeController;
 use App\Http\Controllers\HolidayController;
+use App\Http\Controllers\GoogleCalendarController;
 use App\Http\Controllers\SemesterTermController;
 use App\Http\Controllers\HourLimitController;
 use App\Http\Controllers\ExtraHoursController;
@@ -33,6 +34,11 @@ Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->midd
 Route::post('/mobile/login', [\App\Http\Controllers\AuthController::class, 'mobileLogin']);
 Route::post('/apply', [\App\Http\Controllers\ApplicationController::class, 'publicApply']);
 Route::post('/apply/status', [\App\Http\Controllers\ApplicationController::class, 'publicStatus'])->middleware('throttle:8,1');
+Route::get('/calendar/{token}.ics', [GoogleCalendarController::class, 'feed'])
+    ->where('token', '[A-Za-z0-9]{48}')
+    ->middleware('throttle:60,1');
+Route::post('/calendar/google/connect', [GoogleCalendarController::class, 'finish'])
+    ->middleware('throttle:20,1');
 
 
 // =========================================================
@@ -145,6 +151,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/attendance/assembly-year-representatives', [\App\Http\Controllers\AssemblyYearRepresentativeController::class, 'index']);
 
     Route::get('/holidays', [HolidayController::class, 'index']);
+    Route::get('/calendar/google', [GoogleCalendarController::class, 'link']);
+    Route::get('/calendar/google/status', [GoogleCalendarController::class, 'status']);
+    Route::get('/calendar/google/connect', [GoogleCalendarController::class, 'connect']);
+    Route::delete('/calendar/google/connection', [GoogleCalendarController::class, 'disconnect']);
 
     Route::get('/student/dashboard', [DashboardController::class, 'studentOverview']);
 

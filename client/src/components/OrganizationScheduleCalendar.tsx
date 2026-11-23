@@ -3,6 +3,7 @@ import axios from 'axios';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
     CalendarDays,
+    CalendarPlus,
     ChevronDown,
     ChevronLeft,
     ChevronRight,
@@ -499,6 +500,10 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
     const [scope, setScope] = useState<'organization' | 'office'>('organization');
     const [category, setCategory] = useState<'all' | 'work' | 'class' | 'activity' | 'holiday' | 'break'>('all');
     const [clock, setClock] = useState(() => new Date());
+    const [googleBusy, setGoogleBusy] = useState(false);
+    const [googleNote, setGoogleNote] = useState<string | null>(null);
+    const [googleConnected, setGoogleConnected] = useState(false);
+    const [googleEmail, setGoogleEmail] = useState<string | null>(null);
     const [isExpanded, setIsExpanded] = useState(() => {
         if (typeof window === 'undefined') return true;
         const key = personal ? 'wospis-calendar-expanded-personal' : 'wospis-calendar-expanded-org';
@@ -507,6 +512,23 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
         if (stored === '1') return true;
         return true;
     });
+
+    useEffect(() => {
+        let active = true;
+        axios
+            .get('/api/calendar/google/status')
+            .then((response) => {
+                if (!active) return;
+                setGoogleConnected(Boolean(response.data?.connected));
+                setGoogleEmail(typeof response.data?.email === 'string' ? response.data.email : null);
+            })
+            .catch(() => {
+                if (active) setGoogleConnected(false);
+            });
+        return () => {
+            active = false;
+        };
+    }, []);
 
     useEffect(() => {
         let active = true;
@@ -731,6 +753,31 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
         setCursor(new Date(today.getFullYear(), today.getMonth(), 1));
     };
 
+    const connectGoogleCalendar = async () => {
+        setGoogleBusy(true);
+        setGoogleNote(null);
+        try {
+            if (googleConnected) {
+                await axios.delete('/api/calendar/google/connection');
+                setGoogleConnected(false);
+                setGoogleEmail(null);
+                setGoogleNote('Google Calendar is disconnected. New duty and holiday changes stay in TechHRM.');
+                return;
+            }
+            const response = await axios.get('/api/calendar/google/connect');
+            if (response.data?.url) {
+                window.location.assign(response.data.url);
+                return;
+            }
+            setGoogleNote('Google Calendar is not configured on the server.');
+        } catch (error) {
+            const message = axios.isAxiosError(error) ? error.response?.data?.message : null;
+            setGoogleNote(typeof message === 'string' && message.trim() !== '' ? message : 'Google Calendar could not be connected.');
+        } finally {
+            setGoogleBusy(false);
+        }
+    };
+
     const semesterLine = semester
         ? `${semester.label} runs ${formatSemesterDate(semester.starts_on)} through ${formatSemesterDate(semester.ends_on)}.`
         : '';
@@ -910,6 +957,19 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
                             </div>
                             <button
                                 type="button"
+                                onClick={connectGoogleCalendar}
+                                disabled={googleBusy}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-xs transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-wait disabled:opacity-60"
+                            >
+                                <CalendarPlus className="h-3.5 w-3.5" aria-hidden="true" />
+                                {googleBusy
+                                    ? 'Working…'
+                                    : googleConnected
+                                      ? 'Disconnect Google'
+                                      : 'Connect Google'}
+                            </button>
+                            <button
+                                type="button"
                                 onClick={goToToday}
                                 className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-xs transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
                             >
@@ -917,6 +977,19 @@ const OrganizationScheduleCalendar = ({ personal = false }: OrganizationSchedule
                             </button>
                         </div>
                     </div>
+
+                    {googleNote && (
+                        <p className="border-b border-slate-100 bg-slate-50/70 px-5 py-2.5 text-xs font-medium leading-relaxed text-slate-600 sm:px-6">
+                            {googleNote}
+                        </p>
+                    )}
+                    {googleConnected && !googleNote && (
+                        <p className="border-b border-slate-100 bg-slate-50/70 px-5 py-2.5 text-xs font-medium leading-relaxed text-slate-600 sm:px-6">
+                            {googleEmail
+                                ? `Connected to ${googleEmail}. Duty, class, and holiday changes appear in that Google Calendar when they are saved.`
+                                : 'Connected to Google Calendar. Duty, class, and holiday changes appear there when they are saved.'}
+                        </p>
+                    )}
 
                     {/* HAPPENING NOW SLIDESHOW */}
                     {liveShifts.length > 0 && (

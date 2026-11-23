@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Office;
 use App\Models\Schedule;
+use App\Support\GoogleCalendarSync;
 use Illuminate\Support\Facades\Schema;
 use App\Models\SemesterTerm;
 use App\Models\User;
@@ -322,6 +323,10 @@ class ScheduleController extends Controller
             return $created->values();
         });
 
+        foreach ($schedules as $schedule) {
+            app(GoogleCalendarSync::class)->pushSchedule($schedule);
+        }
+
         $classBlocks = 0;
         $workBlocks = 0;
         $classDays = 0;
@@ -420,6 +425,8 @@ class ScheduleController extends Controller
             'edit_request_note' => null,
         ]);
 
+        app(GoogleCalendarSync::class)->pushSchedule($schedule->fresh());
+
         return response()->json([
             'message' => $kind === 'class' ? 'Class schedule updated.' : 'Work schedule updated.',
             'schedule' => $schedule->fresh(['user:id,name,profile_picture']),
@@ -435,7 +442,9 @@ class ScheduleController extends Controller
             'Only a super admin or the WSPO coordinator/secretary can remove a work schedule.'
         );
         $schedule = Schedule::findOrFail($id);
+        $scheduleId = $schedule->id;
         $schedule->delete();
+        app(GoogleCalendarSync::class)->deleteScheduleEvent($scheduleId);
 
         return response()->json([
             'message' => 'Schedule removed successfully!'
@@ -456,7 +465,11 @@ class ScheduleController extends Controller
             'ids.*' => ['integer', 'distinct'],
         ]);
 
-        $deleted = Schedule::query()->whereIn('id', $validated['ids'])->delete();
+        $ids = Schedule::query()->whereIn('id', $validated['ids'])->pluck('id');
+        $deleted = Schedule::query()->whereIn('id', $ids)->delete();
+        foreach ($ids as $id) {
+            app(GoogleCalendarSync::class)->deleteScheduleEvent((int) $id);
+        }
 
         return response()->json([
             'message' => $deleted === 1

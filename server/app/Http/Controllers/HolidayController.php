@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Holiday;
+use App\Support\GoogleCalendarSync;
 use App\Support\SuperAdminAudit;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -59,6 +60,8 @@ class HolidayController extends Controller
             'created_by' => $request->user()?->id,
         ]);
 
+        app(GoogleCalendarSync::class)->syncConnectedUsers();
+
         return response()->json($this->payload($holiday), 201);
     }
 
@@ -87,6 +90,8 @@ class HolidayController extends Controller
             'ends_at' => $endsAt,
         ]);
 
+        app(GoogleCalendarSync::class)->syncConnectedUsers();
+
         return response()->json($this->payload($holiday->fresh()));
     }
 
@@ -94,6 +99,7 @@ class HolidayController extends Controller
     {
         SuperAdminAudit::denyMutation($request);
         $holiday->delete();
+        app(GoogleCalendarSync::class)->syncConnectedUsers();
 
         return response()->json(['message' => 'Holiday removed.']);
     }
