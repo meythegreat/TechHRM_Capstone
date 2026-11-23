@@ -1,5 +1,5 @@
 @php
-    $contactEmail = (string) config('mail.contact_address', 'miguel102104@gmail.com');
+    $contactEmail = (string) config('mail.contact_address', 'wspo.wospis@gmail.com');
 @endphp
 <!DOCTYPE html>
 <html lang="en">

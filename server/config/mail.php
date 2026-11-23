@@ -116,9 +116,9 @@ return [
     ],
 
     /*
-    | Contact address shown in outbound email footers. Separate from MAIL_FROM_ADDRESS
-    | because Resend sends from onboarding@resend.dev until a domain is verified.
+    | Contact address shown in outbound email footers. Separate from MAIL_FROM_ADDRESS,
+    | which stays on the verified fcu-wospis.com domain.
     */
-    'contact_address' => env('MAIL_CONTACT_ADDRESS', 'miguel102104@gmail.com'),
+    'contact_address' => env('MAIL_CONTACT_ADDRESS', 'wspo.wospis@gmail.com'),
 
 ];

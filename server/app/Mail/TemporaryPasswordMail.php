@@ -34,7 +34,7 @@ class TemporaryPasswordMail extends Mailable
             : (filter_var($this->user->username, FILTER_VALIDATE_EMAIL) ? $this->user->username : 'Not on file');
         $accountEmail = e($accountEmail);
         $password = e($this->temporaryPassword);
-        $contactEmail = e((string) config('mail.contact_address', 'miguel102104@gmail.com'));
+        $contactEmail = e((string) config('mail.contact_address', 'wspo.wospis@gmail.com'));
 
         return new Content(
             htmlString: <<<HTML
