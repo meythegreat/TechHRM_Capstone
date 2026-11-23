@@ -967,7 +967,7 @@ export default function BulletinManagement() {
                         <div className="flex items-start justify-between gap-4 pl-2">
                             <div className="min-w-0 flex-1">
                                 <div className="flex flex-wrap items-center gap-2">
-                                    <h3 className="text-sm font-black text-slate-950">
+                                    <h3 className="text-sm font-black text-slate-900">
                                         {bulletin.title}
                                     </h3>
                                     <span

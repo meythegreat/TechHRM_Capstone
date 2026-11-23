@@ -162,7 +162,7 @@ export function BulletinBoard() {
                                 className={`absolute inset-y-4 left-0 w-1 rounded-r-full ${style.accent}`}
                             />
                             <div className="pl-1">
-                                <h2 className="text-base font-black tracking-tight text-slate-950">
+                                <h2 className="text-base font-black tracking-tight text-slate-900">
                                     {bulletin.title}
                                 </h2>
                                 <p className="mt-2 whitespace-pre-wrap text-sm font-medium leading-relaxed text-slate-600">
@@ -254,7 +254,7 @@ export function BulletinPopup() {
                                     className={`absolute inset-y-3 left-0 w-1 rounded-r-full ${style.accent}`}
                                 />
                                 <div className="pl-1.5">
-                                    <h2 className="text-sm font-black tracking-tight text-slate-950">
+                                    <h2 className="text-sm font-black tracking-tight text-slate-900">
                                         {bulletin.title}
                                     </h2>
                                     <p className="mt-1 line-clamp-4 whitespace-pre-wrap text-xs font-medium leading-relaxed text-slate-600">
