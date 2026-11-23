@@ -28,6 +28,7 @@ import {
     Users,
 } from 'lucide-react';
 import OrganizationScheduleCalendar from './OrganizationScheduleCalendar';
+import { BulletinBoard } from './Bulletins';
 import { type HourLimitStatus } from '../services/hourLimitService';
 import { formatClockTime } from '../utils/scheduleTime';
 import { type StudentActivityItem } from '../types/studentActivity';
@@ -394,6 +395,7 @@ const StudentOverview = () => {
             animate="show"
             className="space-y-6 font-sans"
         >
+            <BulletinBoard />
             {/* LIVE ACTIVITY ALERT BANNER (Assemblies, Devotionals, Cleaning Happening Right Now) */}
             {currentActivities.length > 0 && (
                 <motion.section

@@ -12,6 +12,7 @@ use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\SecureFileController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\BulletinController;
 use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\RequirementController;
 use App\Http\Controllers\FinancialController;
@@ -81,6 +82,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/notifications', [NotificationController::class, 'clearAll']);
     Route::patch('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
     Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
+
+    Route::get('/bulletins/mine', [BulletinController::class, 'mine']);
+    Route::post('/bulletins/{bulletin}/dismiss', [BulletinController::class, 'dismiss']);
 
     // =====================================================
     // CHAT (ALL AUTHENTICATED USERS)
@@ -370,6 +374,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/requirements', [RequirementController::class, 'index']);
 
         Route::patch('/requirements/{id}/status', [RequirementController::class, 'updateStatus']);
+
+        Route::get('/admin/bulletins', [BulletinController::class, 'index']);
+        Route::post('/admin/bulletins', [BulletinController::class, 'store']);
+        Route::delete('/admin/bulletins/{bulletin}', [BulletinController::class, 'destroy']);
+        Route::get('/admin/bulletins/offices', [BulletinController::class, 'offices']);
+        Route::get('/admin/bulletins/students', [BulletinController::class, 'students']);
 
     });
 

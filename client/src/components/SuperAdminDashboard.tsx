@@ -25,6 +25,7 @@ import { REALTIME_EVENT } from '../utils/realtime';
 import { bindPopup } from '../utils/popupDismiss';
 import UserAvatar from './UserAvatar';
 import OrganizationScheduleCalendar from './OrganizationScheduleCalendar';
+import { BulletinBoard } from './Bulletins';
 
 interface EnrolledOffice {
     office: string;
@@ -157,7 +158,9 @@ const SuperAdminDashboard = () => {
         } catch (err) {
             console.error('Failed to mark notification as read', err);
         }
-        if (notice.title.includes('Signup') || notice.title.includes('Application')) {
+        if (notice.title.toLowerCase().includes('announcement:')) {
+            return;
+        } else if (notice.title.includes('Signup') || notice.title.includes('Application')) {
             navigate('/pipeline');
         } else if (notice.title.includes('Account')) {
             navigate('/users');
@@ -369,6 +372,8 @@ const SuperAdminDashboard = () => {
                     </div>
                 </div>
             </motion.header>
+
+            <BulletinBoard />
 
             {/* LIVE NOTIFICATIONS CARD */}
             {notices.length > 0 && (

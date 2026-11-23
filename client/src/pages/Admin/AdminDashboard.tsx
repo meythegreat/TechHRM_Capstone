@@ -26,6 +26,7 @@ import UserAvatar from '../../components/UserAvatar';
 import OrganizationScheduleCalendar from '../../components/OrganizationScheduleCalendar';
 import { formatYearLevel, homeDepartment } from '../../utils/studentAssignment';
 import { JanitorialFinalReview } from '../../components/hours/JanitorialFinalReview';
+import { BulletinBoard } from '../../components/Bulletins';
 
 const AdminDashboard = () => {
     const navigate = useNavigate();
@@ -328,6 +329,8 @@ const AdminDashboard = () => {
                     </div>
                 </div>
             </motion.header>
+
+            <BulletinBoard />
 
             {(userRole === 'Supervisor' || isImmediateSupervisor) && (
                 <JanitorialFinalReview />

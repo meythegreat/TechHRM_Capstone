@@ -38,6 +38,7 @@ interface SidebarProps {
 
 const staffNavItems: NavItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2 7-7 7 7M5 10v10h4v-6h6v6h4V10" /> },
+    { id: 'bulletins', label: 'Bulletins', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" /> },
     { id: 'attendance', label: 'Timesheets', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /> },
     { id: 'schedules', label: 'Schedules', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M8 3v4m8-4v4M5 9h14M5 5h14v16H5z" /> },
     { id: 'requirements', label: 'Document Review', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7V3h7l5 5v11a2 2 0 01-2 2z" /> },
@@ -97,6 +98,7 @@ const Sidebar: FC<SidebarProps> = ({
     const visibleNavItems =
         navItems ??
         staffNavItems.filter((item) => {
+            if (item.id === 'bulletins') return userRole === 'Super Admin';
             if (userRole === 'Immediate Supervisor') {
                 return ['dashboard', 'messages', 'help', 'settings'].includes(item.id);
             }

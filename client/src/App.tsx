@@ -47,6 +47,7 @@ const STAFF_PAGE_TITLES: Record<string, string> = {
   messages: 'Messages',
   help: 'Help',
   settings: 'Profile Settings',
+  bulletins: 'Bulletins',
 };
 
 const STUDENT_PAGE_TITLES: Record<string, string> = {
@@ -74,6 +75,8 @@ import HelpPage from './components/HelpPage';
 import MessagesPage from './components/MessagesPage';
 import ChatPresence from './components/ChatPresence';
 import ChatHeads from './components/ChatHeads';
+import { BulletinPopup } from './components/Bulletins';
+import BulletinManagement from './components/BulletinManagement';
 import InstallAppPrompt from './components/InstallAppPrompt';
 import PhoneNotificationPrompt from './components/PhoneNotificationPrompt';
 import { unsubscribePhoneNotifications } from './phoneNotifications';
@@ -389,12 +392,14 @@ function App() {
       <>
         <ChatPresence enabled />
         <ChatHeads />
+        <BulletinPopup />
         <StudentDashboard onLogout={handleLogout} />
       </>
     ) : (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans selection:bg-blue-200 selection:text-blue-900 print:h-auto print:overflow-visible print:bg-white">
       <ChatPresence enabled />
       <ChatHeads />
+      <BulletinPopup />
       <Sidebar 
         isSidebarOpen={isSidebarOpen} 
         setIsSidebarOpen={setIsSidebarOpen} 
@@ -489,6 +494,9 @@ function App() {
                 <Route path="/attendance-hub" element={userRole === 'Super Admin' ? <SuperAdminAttendanceAudit /> : <SupervisorAttendanceHub />} />
                 <Route path="/compliance" element={<DisciplinaryManager />} />
                 
+                {userRole === 'Super Admin' && (
+                  <Route path="/bulletins" element={<BulletinManagement />} />
+                )}
                 {canManageUsers && (
                   <>
                     <Route path="/logs" element={<ActivityLogs />} />

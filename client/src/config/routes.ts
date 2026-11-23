@@ -40,7 +40,10 @@ export function getStaffPathsForRole(role: string): Set<string> {
     STAFF_ADMIN_PATHS.forEach((p) => paths.add(p));
     paths.add('pipeline');
   }
-  if (role === 'Super Admin') paths.add('requirements');
+  if (role === 'Super Admin') {
+    paths.add('requirements');
+    paths.add('bulletins');
+  }
   return paths;
 }
 

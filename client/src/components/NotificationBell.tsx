@@ -132,7 +132,9 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
         await markAsRead(notif);
 
         const title = notif.title.toLowerCase();
-        if (
+        if (title.includes('announcement:')) {
+            onNavigate('dashboard');
+        } else if (
             title.includes('clock in') ||
             title.includes('clock out') ||
             title.includes('overtime') ||

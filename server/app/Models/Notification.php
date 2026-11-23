@@ -7,7 +7,12 @@ use Illuminate\Database\Eloquent\Model;
 
 class Notification extends Model
 {
-    protected $fillable = ['user_id', 'title', 'message', 'is_read'];
+    protected $fillable = ['user_id', 'bulletin_id', 'title', 'message', 'is_read'];
+
+    public function bulletin()
+    {
+        return $this->belongsTo(Bulletin::class);
+    }
 
     protected static function booted(): void
     {
