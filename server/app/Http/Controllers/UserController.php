@@ -1094,6 +1094,8 @@ class UserController extends Controller
             array_values(array_filter([(int) $request->user()->id, (int) $user->id]))
         );
 
+        app(AccountEventMailer::class)->accountCreated($user, (string) $validated['password'], fromSignup: false);
+
         return response()->json(['message' => 'User created successfully', 'user' => $user]);
     }
 
@@ -1192,6 +1194,7 @@ class UserController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
+            'username' => ['sometimes', 'required', 'string', 'max:255'],
             'phone_number' => 'sometimes|nullable|string|max:50',
             'email' => 'sometimes|required|string|email|max:255',
             'student_id_number' => 'sometimes|required|string|max:50',
@@ -1219,10 +1222,20 @@ class UserController extends Controller
             $user->phone_number = $phone !== '' ? $phone : null;
         }
 
-        if ($request->exists('email')) {
-            $email = strtolower(trim((string) $validated['email']));
-            $this->assertLoginIdentityAvailable($user->username, $email, (int) $user->id);
-            $user->email = $email;
+        if ($request->exists('username') || $request->exists('email')) {
+            $loginUsername = $request->exists('username')
+                ? trim((string) $validated['username'])
+                : $user->username;
+            $email = $request->exists('email')
+                ? strtolower(trim((string) $validated['email']))
+                : $user->email;
+            $this->assertLoginIdentityAvailable($loginUsername, is_string($email) ? $email : null, (int) $user->id);
+            if ($request->exists('email')) {
+                $user->email = $email;
+            }
+            if ($request->exists('username')) {
+                $user->username = $loginUsername;
+            }
         }
 
         $user->save();

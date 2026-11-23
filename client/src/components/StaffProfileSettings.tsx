@@ -33,6 +33,7 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
     const canEditEmployeeId = ROLES_WITH_EMPLOYEE_ID.includes(userRole);
 
     const [name, setName] = useState(localStorage.getItem('user_name') || '');
+    const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
     const [phoneNumber, setPhoneNumber] = useState('');
     const [employeeId, setEmployeeId] = useState('');
@@ -62,6 +63,7 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
             .then((response) => {
                 const user = response.data;
                 setName(user.name || '');
+                setUsername(user.username || '');
                 setEmail(user.email || '');
                 setPhoneNumber(user.phone_number || '');
                 setEmployeeId(user.profile?.employee_id || '');
@@ -157,6 +159,7 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
         try {
             const payload: Record<string, string> = {
                 name: name.trim(),
+                username: username.trim(),
                 email: email.trim(),
                 phone_number: phoneNumber.trim(),
             };
@@ -236,8 +239,8 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
                         </h1>
                         <p className="mt-2 text-sm font-medium leading-relaxed text-slate-300">
                             {canEditEmployeeId
-                                ? 'Update your email, phone number, employee ID, profile photo, and password.'
-                                : 'Update your email, phone number, profile photo, and password.'}
+                                ? 'Update your username, email, phone number, employee ID, profile photo, and password.'
+                                : 'Update your username, email, phone number, profile photo, and password.'}
                         </p>
                     </div>
 
@@ -318,6 +321,23 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
                                     onChange={(e) => setName(e.target.value)}
                                     className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm font-bold text-slate-900 outline-none transition-all focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-600/20"
                                 />
+                            </div>
+
+                            <div>
+                                <label className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                                    Username
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={username}
+                                    onChange={(e) => setUsername(e.target.value)}
+                                    autoComplete="username"
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3.5 font-mono text-sm font-bold text-slate-900 outline-none transition-all focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-600/20"
+                                />
+                                <p className="mt-2 text-xs font-medium text-slate-400">
+                                    You can sign in with this username or your email.
+                                </p>
                             </div>
 
                             <div>

@@ -123,6 +123,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
     const [uploadFile, setUploadFile] = useState<File | null>(null);
     const maxDocumentBytes = 2 * 1024 * 1024;
     const [accountPhone, setAccountPhone] = useState('');
+    const [accountUsername, setAccountUsername] = useState('');
     const [accountEmail, setAccountEmail] = useState('');
     const [accountStudentId, setAccountStudentId] = useState('');
     const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -205,6 +206,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                 supervisors: Array.isArray(user.department_supervisors) ? user.department_supervisors : [],
             });
             setAccountPhone(user.phone_number || '');
+            setAccountUsername(user.username || '');
             setAccountEmail(user.email || '');
             setAccountStudentId(user.profile?.student_id_number || '');
             setProfileReady(true);
@@ -425,10 +427,11 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
 
     const handleSaveProfile = async (e: React.FormEvent) => {
         e.preventDefault();
+        const username = accountUsername.trim();
         const email = accountEmail.trim();
         const studentId = accountStudentId.trim();
-        if (!email || !studentId) {
-            setMessage({ text: 'Email address and student ID are required.', type: 'error' });
+        if (!username || !email || !studentId) {
+            setMessage({ text: 'Username, email address, and student ID are required.', type: 'error' });
             return;
         }
 
@@ -436,11 +439,13 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
         try {
             const response = await axios.put('/api/user', {
                 name: fullName,
+                username,
                 email,
                 phone_number: accountPhone.trim(),
                 student_id_number: studentId,
             });
             const user = response.data.user;
+            setAccountUsername(user.username || username);
             setAccountEmail(user.email || email);
             setAccountPhone(user.phone_number || '');
             setAccountStudentId(user.profile?.student_id_number || studentId);
@@ -1412,7 +1417,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                                         Profile Settings
                                                     </h1>
                                                     <p className="mt-2 text-sm font-medium leading-relaxed text-slate-300">
-                                                        Manage your profile photo, update your email, phone number, and student ID, and change your password.
+                                                        Manage your profile photo, update your username, email, phone number, and student ID, and change your password.
                                                     </p>
                                                 </div>
 
@@ -1487,6 +1492,22 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                                                 value={fullName}
                                                                 className="w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm font-bold text-slate-900 opacity-85"
                                                             />
+                                                        </div>
+                                                        <div>
+                                                            <label className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                                                                Username
+                                                            </label>
+                                                            <input
+                                                                type="text"
+                                                                required
+                                                                value={accountUsername}
+                                                                onChange={(e) => setAccountUsername(e.target.value)}
+                                                                autoComplete="username"
+                                                                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3.5 font-mono text-sm font-bold text-slate-900 outline-none transition-all focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-600/20"
+                                                            />
+                                                            <p className="mt-2 text-xs font-medium text-slate-400">
+                                                                You can sign in with this username or your email.
+                                                            </p>
                                                         </div>
                                                         <div>
                                                             <label className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
@@ -1567,7 +1588,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                                             disabled={isSavingProfile || !profileReady}
                                                             className="rounded-xl bg-slate-900 px-6 py-3 text-xs font-extrabold uppercase tracking-wider text-white shadow-sm transition-all hover:bg-blue-600 disabled:opacity-50"
                                                         >
-                                                            {isSavingProfile ? 'Saving…' : 'Save Contact Details'}
+                                                            {isSavingProfile ? 'Saving…' : 'Save Profile'}
                                                         </button>
                                                     </div>
                                                 </motion.form>

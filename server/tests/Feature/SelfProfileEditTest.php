@@ -97,6 +97,41 @@ class SelfProfileEditTest extends TestCase
         $this->assertNull($admin->profile);
     }
 
+    public function test_any_role_can_change_their_username(): void
+    {
+        foreach (['Student', 'Supervisor', 'WSPO Staff', 'Department Secretary', 'Immediate Supervisor', 'Super Admin'] as $index => $role) {
+            $user = $this->makeUser($role, 'login.'.$index, "login.{$index}@filamer.edu.ph");
+            Sanctum::actingAs($user);
+
+            $this->putJson('/api/user', [
+                'name' => $user->name,
+                'username' => 'renamed.'.$index,
+            ])->assertOk()
+                ->assertJsonPath('user.username', 'renamed.'.$index);
+
+            $this->assertSame('renamed.'.$index, $user->fresh()->username);
+        }
+    }
+
+    public function test_a_taken_username_is_rejected(): void
+    {
+        $this->makeUser('Student', 'taken.name', 'taken@filamer.edu.ph');
+        $editor = $this->makeUser('Supervisor', 'free.name', 'free@filamer.edu.ph');
+        Sanctum::actingAs($editor);
+
+        $this->putJson('/api/user', [
+            'name' => $editor->name,
+            'username' => 'Taken.Name',
+        ])->assertStatus(422);
+
+        $this->putJson('/api/user', [
+            'name' => $editor->name,
+            'username' => 'taken@filamer.edu.ph',
+        ])->assertStatus(422);
+
+        $this->assertSame('free.name', $editor->fresh()->username);
+    }
+
     public function test_duplicate_email_phone_and_ids_are_rejected(): void
     {
         $owner = $this->makeUser('Student', 'owner.user', 'owner@filamer.edu.ph', '09170000000');
