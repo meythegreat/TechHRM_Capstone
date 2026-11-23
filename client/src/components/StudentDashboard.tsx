@@ -123,6 +123,9 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
     const [uploadFile, setUploadFile] = useState<File | null>(null);
     const maxDocumentBytes = 2 * 1024 * 1024;
     const [accountPhone, setAccountPhone] = useState('');
+    const [accountEmail, setAccountEmail] = useState('');
+    const [accountStudentId, setAccountStudentId] = useState('');
+    const [isSavingProfile, setIsSavingProfile] = useState(false);
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -202,6 +205,8 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                 supervisors: Array.isArray(user.department_supervisors) ? user.department_supervisors : [],
             });
             setAccountPhone(user.phone_number || '');
+            setAccountEmail(user.email || '');
+            setAccountStudentId(user.profile?.student_id_number || '');
             setProfileReady(true);
             if (user.profile_picture) {
                 const path = normalizeFilePath(user.profile_picture);
@@ -392,7 +397,6 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
         try {
             await axios.put('/api/user', {
                 name: fullName,
-                phone_number: accountPhone,
                 password: newPassword,
                 password_confirmation: confirmPassword,
                 current_password: currentPassword,
@@ -410,6 +414,46 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
             });
         } finally {
             setIsSavingPassword(false);
+        }
+    };
+
+    const profileErrorText = (error: any, fallback: string) => {
+        const validation = error.response?.data?.errors;
+        const firstError = validation ? Object.values(validation).flat()[0] : null;
+        return (typeof firstError === 'string' ? firstError : null) || error.response?.data?.message || fallback;
+    };
+
+    const handleSaveProfile = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const email = accountEmail.trim();
+        const studentId = accountStudentId.trim();
+        if (!email || !studentId) {
+            setMessage({ text: 'Email address and student ID are required.', type: 'error' });
+            return;
+        }
+
+        setIsSavingProfile(true);
+        try {
+            const response = await axios.put('/api/user', {
+                name: fullName,
+                email,
+                phone_number: accountPhone.trim(),
+                student_id_number: studentId,
+            });
+            const user = response.data.user;
+            setAccountEmail(user.email || email);
+            setAccountPhone(user.phone_number || '');
+            setAccountStudentId(user.profile?.student_id_number || studentId);
+            setStudentProfile((current) => ({
+                ...current,
+                student_id_number: user.profile?.student_id_number || studentId,
+                phone_number: user.phone_number || 'No Contact Provided',
+            }));
+            setMessage({ text: 'Profile updated.', type: 'success' });
+        } catch (error: any) {
+            setMessage({ text: profileErrorText(error, 'Failed to update profile.'), type: 'error' });
+        } finally {
+            setIsSavingProfile(false);
         }
     };
 
@@ -1368,7 +1412,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                                         Profile Settings
                                                     </h1>
                                                     <p className="mt-2 text-sm font-medium leading-relaxed text-slate-300">
-                                                        Manage your profile photo, review your locked academic details, and update your password.
+                                                        Manage your profile photo, update your email, phone number, and student ID, and change your password.
                                                     </p>
                                                 </div>
 
@@ -1427,8 +1471,9 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                                     </p>
                                                 </motion.div>
 
-                                                <motion.div
+                                                <motion.form
                                                     variants={cardVariants}
+                                                    onSubmit={handleSaveProfile}
                                                     className="w-full flex-1 space-y-5"
                                                 >
                                                     <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -1449,9 +1494,36 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                                             </label>
                                                             <input
                                                                 type="text"
-                                                                disabled
-                                                                value={studentProfile.student_id_number}
-                                                                className="w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 p-3.5 font-mono text-sm font-bold text-slate-900 opacity-85"
+                                                                required
+                                                                value={accountStudentId}
+                                                                onChange={(e) => setAccountStudentId(e.target.value)}
+                                                                placeholder="FCU-2026-001"
+                                                                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3.5 font-mono text-sm font-bold text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-600/20"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                                                                Email Address
+                                                            </label>
+                                                            <input
+                                                                type="email"
+                                                                required
+                                                                value={accountEmail}
+                                                                onChange={(e) => setAccountEmail(e.target.value)}
+                                                                placeholder="name@filamer.edu.ph"
+                                                                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm font-semibold text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-600/20"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                                                                Contact Number
+                                                            </label>
+                                                            <input
+                                                                type="text"
+                                                                value={accountPhone}
+                                                                onChange={(e) => setAccountPhone(e.target.value)}
+                                                                placeholder="09XXXXXXXXX"
+                                                                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm font-semibold text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-600/20"
                                                             />
                                                         </div>
                                                         <div>
@@ -1489,7 +1561,16 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                                             </p>
                                                         </div>
                                                     </div>
-                                                </motion.div>
+                                                    <div className="flex justify-end">
+                                                        <button
+                                                            type="submit"
+                                                            disabled={isSavingProfile || !profileReady}
+                                                            className="rounded-xl bg-slate-900 px-6 py-3 text-xs font-extrabold uppercase tracking-wider text-white shadow-sm transition-all hover:bg-blue-600 disabled:opacity-50"
+                                                        >
+                                                            {isSavingProfile ? 'Saving…' : 'Save Contact Details'}
+                                                        </button>
+                                                    </div>
+                                                </motion.form>
                                             </div>
                                         </section>
 

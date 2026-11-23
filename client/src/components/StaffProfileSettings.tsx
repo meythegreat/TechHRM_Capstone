@@ -21,11 +21,21 @@ interface StaffProfileSettingsProps {
     onProfileUpdated?: (name: string, avatarPath: string | null) => void;
 }
 
+const ROLES_WITH_EMPLOYEE_ID = [
+    'Supervisor',
+    'WSPO Staff',
+    'Department Secretary',
+    'Immediate Supervisor',
+];
+
 const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) => {
     const userRole = localStorage.getItem('user_role') || 'Supervisor';
+    const canEditEmployeeId = ROLES_WITH_EMPLOYEE_ID.includes(userRole);
 
     const [name, setName] = useState(localStorage.getItem('user_name') || '');
+    const [email, setEmail] = useState('');
     const [phoneNumber, setPhoneNumber] = useState('');
+    const [employeeId, setEmployeeId] = useState('');
     const [assignedOffice, setAssignedOffice] = useState(
         localStorage.getItem('assigned_office') || ''
     );
@@ -52,7 +62,9 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
             .then((response) => {
                 const user = response.data;
                 setName(user.name || '');
+                setEmail(user.email || '');
                 setPhoneNumber(user.phone_number || '');
+                setEmployeeId(user.profile?.employee_id || '');
                 setAssignedOffice(
                     user.profile?.assigned_office || localStorage.getItem('assigned_office') || ''
                 );
@@ -145,8 +157,13 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
         try {
             const payload: Record<string, string> = {
                 name: name.trim(),
+                email: email.trim(),
                 phone_number: phoneNumber.trim(),
             };
+
+            if (canEditEmployeeId) {
+                payload.employee_id = employeeId.trim();
+            }
 
             if (newPassword) {
                 payload.password = newPassword;
@@ -166,7 +183,14 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
             setConfirmPassword('');
             showFeedback('Profile saved successfully.', 'success');
         } catch (err: any) {
-            showFeedback(err.response?.data?.message || 'Failed to save profile.', 'error');
+            const validation = err.response?.data?.errors;
+            const firstError = validation ? Object.values(validation).flat()[0] : null;
+            showFeedback(
+                (typeof firstError === 'string' ? firstError : null) ||
+                    err.response?.data?.message ||
+                    'Failed to save profile.',
+                'error'
+            );
         } finally {
             setIsSaving(false);
         }
@@ -211,7 +235,9 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
                             Profile Settings
                         </h1>
                         <p className="mt-2 text-sm font-medium leading-relaxed text-slate-300">
-                            Update your account details, contact information, profile photo, and password.
+                            {canEditEmployeeId
+                                ? 'Update your email, phone number, employee ID, profile photo, and password.'
+                                : 'Update your email, phone number, profile photo, and password.'}
                         </p>
                     </div>
 
@@ -296,6 +322,20 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
 
                             <div>
                                 <label className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                                    Email Address
+                                </label>
+                                <input
+                                    type="email"
+                                    required
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    placeholder="name@filamer.edu.ph"
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm font-semibold text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-600/20"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
                                     Contact Number
                                 </label>
                                 <input
@@ -306,6 +346,21 @@ const StaffProfileSettings = ({ onProfileUpdated }: StaffProfileSettingsProps) =
                                     className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm font-semibold text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-600/20"
                                 />
                             </div>
+
+                            {canEditEmployeeId && (
+                                <div>
+                                    <label className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                                        Employee ID
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={employeeId}
+                                        onChange={(e) => setEmployeeId(e.target.value)}
+                                        placeholder="EMP-2026-001"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3.5 font-mono text-sm font-bold text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-600/20"
+                                    />
+                                </div>
+                            )}
 
                             {(userRole === 'WSPO Staff' || userRole === 'Supervisor') && (
                                 <div className="sm:col-span-2">

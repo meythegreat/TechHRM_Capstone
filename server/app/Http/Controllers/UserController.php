@@ -1185,7 +1185,10 @@ class UserController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'phone_number' => 'nullable|string|max:50',
+            'phone_number' => 'sometimes|nullable|string|max:50',
+            'email' => 'sometimes|required|string|email|max:255',
+            'student_id_number' => 'sometimes|required|string|max:50',
+            'employee_id' => 'sometimes|nullable|string|max:50',
             'password' => 'nullable|string|min:6|confirmed',
             'current_password' => 'required_with:password|string',
         ]);
@@ -1199,13 +1202,90 @@ class UserController extends Controller
         }
 
         $user->name = $validated['name'];
-        $user->phone_number = $validated['phone_number'] ?? null;
+
+        if ($request->exists('phone_number')) {
+            $phone = trim((string) ($validated['phone_number'] ?? ''));
+            $this->assertPhoneAvailable($phone, (int) $user->id);
+            $user->phone_number = $phone !== '' ? $phone : null;
+        }
+
+        if ($request->exists('email')) {
+            $email = strtolower(trim((string) $validated['email']));
+            $this->assertLoginIdentityAvailable($user->username, $email, (int) $user->id);
+            $user->email = $email;
+        }
+
         $user->save();
+        $this->updateSelfIdentity($user, $request, $validated);
 
         return response()->json([
             'message' => 'Profile updated successfully.',
             'user' => $user->load('profile'),
         ]);
+    }
+
+    /**
+     * Working students edit their student ID. Department supervisors, WSPO
+     * staff, department secretaries, and immediate supervisors edit an
+     * employee ID. Super admins only edit email and phone.
+     */
+    private function updateSelfIdentity(User $user, Request $request, array $validated): void
+    {
+        $idField = match ($user->role) {
+            'Student' => 'student_id_number',
+            'Supervisor', 'WSPO Staff', 'Department Secretary', 'Immediate Supervisor' => 'employee_id',
+            default => null,
+        };
+
+        if ($idField === null || !$request->exists($idField)) {
+            return;
+        }
+
+        if ($idField === 'employee_id' && !Schema::hasColumn('user_profiles', 'employee_id')) {
+            abort(422, 'Employee ID cannot be saved until the latest database update is applied.');
+        }
+
+        $value = trim((string) ($validated[$idField] ?? ''));
+        if ($value === '') {
+            $user->profile()->updateOrCreate(
+                ['user_id' => $user->id],
+                [$idField => null]
+            );
+
+            return;
+        }
+
+        $taken = UserProfile::query()
+            ->where('user_id', '!=', $user->id)
+            ->where($idField, $value)
+            ->exists();
+
+        if ($taken) {
+            abort(422, $idField === 'employee_id'
+                ? 'This employee ID is already used.'
+                : 'This student ID number is already used.');
+        }
+
+        $user->profile()->updateOrCreate(
+            ['user_id' => $user->id],
+            [$idField => $value]
+        );
+    }
+
+    private function assertPhoneAvailable(string $phone, int $ignoreUserId): void
+    {
+        if ($phone === '') {
+            return;
+        }
+
+        $taken = User::query()
+            ->where('phone_number', $phone)
+            ->where('id', '!=', $ignoreUserId)
+            ->exists();
+
+        if ($taken) {
+            abort(422, 'A user with this contact number already exists.');
+        }
     }
 
     private function assertStudentAccountProfile(Request $request, ?int $ignoreUserId = null): void
