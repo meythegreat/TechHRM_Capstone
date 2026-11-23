@@ -15,6 +15,9 @@ class RequirementController extends Controller
     $request->validate([
         'document_type' => 'required|string',
         'file' => 'required|file|mimes:jpg,jpeg,png,pdf|max:2048',
+    ], [
+        'file.max' => 'Each document must be 2 MB or smaller.',
+        'file.mimes' => 'Documents must be a PDF, JPG, or PNG.',
     ]);
 
     $existing = Requirement::where(

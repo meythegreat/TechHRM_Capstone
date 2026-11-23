@@ -121,6 +121,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
     const [requirements, setRequirements] = useState<RequirementRecord[]>([]);
     const [docType, setDocType] = useState('Medical Clearance');
     const [uploadFile, setUploadFile] = useState<File | null>(null);
+    const maxDocumentBytes = 2 * 1024 * 1024;
     const [accountPhone, setAccountPhone] = useState('');
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
@@ -292,6 +293,10 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
         e.preventDefault();
         if (!uploadFile) {
             setMessage({ text: 'Please select a file to upload.', type: 'error' });
+            return;
+        }
+        if (uploadFile.size > maxDocumentBytes) {
+            setMessage({ text: 'Each document must be 2 MB or smaller.', type: 'error' });
             return;
         }
 
@@ -1139,7 +1144,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                                             Submit Document
                                                         </h3>
                                                         <p className="text-xs font-medium text-slate-500">
-                                                            PDF, JPG, or PNG accepted
+                                                            PDF, JPG, or PNG, up to 2 MB
                                                         </p>
                                                     </div>
                                                 </div>
@@ -1177,9 +1182,19 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                                                 type="file"
                                                                 id="fileUpload"
                                                                 accept=".pdf,.jpg,.jpeg,.png"
-                                                                onChange={(e) =>
-                                                                    setUploadFile(e.target.files ? e.target.files[0] : null)
-                                                                }
+                                                                onChange={(e) => {
+                                                                    const file = e.target.files?.[0] ?? null;
+                                                                    if (file && file.size > maxDocumentBytes) {
+                                                                        e.target.value = '';
+                                                                        setUploadFile(null);
+                                                                        setMessage({
+                                                                            text: 'Each document must be 2 MB or smaller.',
+                                                                            type: 'error',
+                                                                        });
+                                                                        return;
+                                                                    }
+                                                                    setUploadFile(file);
+                                                                }}
                                                                 className="h-28 w-full cursor-pointer opacity-0"
                                                             />
                                                         </div>
