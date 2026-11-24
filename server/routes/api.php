@@ -32,6 +32,8 @@ use App\Http\Controllers\ManualAttendanceRequestController;
 // =========================================================
 
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/login/otp', [AuthController::class, 'requestLoginOtp'])->middleware('throttle:5,1');
+Route::post('/login/otp/verify', [AuthController::class, 'verifyLoginOtp'])->middleware('throttle:8,1');
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
 Route::post('/mobile/login', [\App\Http\Controllers\AuthController::class, 'mobileLogin']);
 Route::post('/apply', [\App\Http\Controllers\ApplicationController::class, 'publicApply']);

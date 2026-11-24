@@ -354,16 +354,18 @@
   }
 
   html.dark :is(
+    .text-indigo-950,
     .text-indigo-900,
     .text-indigo-800,
     .text-indigo-700,
     .hover\:text-indigo-700:hover,
     .text-indigo-600,
     .hover\:text-indigo-600:hover,
+    [class*='text-indigo-950/'],
     [class*='text-indigo-900/'],
     [class*='text-indigo-800/']
   ) {
-    color: #a5b4fc;
+    color: #c7d2fe;
   }
 
   html.dark .group:hover .group-hover\:text-indigo-700 {

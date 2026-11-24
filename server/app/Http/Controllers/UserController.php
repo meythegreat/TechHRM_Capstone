@@ -143,6 +143,7 @@ class UserController extends Controller
         $data['must_clock_as_student'] = $this->mustClockAsStudent($user);
         $data['required_hours'] = \App\Support\WorkRequirement::hoursFor($user);
         $data['special_hours_request'] = (bool) $user->profile?->special_hours_request;
+        $data['profile_notice'] = app(\App\Support\AccountProfileNotice::class)->message($user);
 
         return response()->json($data);
     }

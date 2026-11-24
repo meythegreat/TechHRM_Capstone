@@ -14,6 +14,7 @@ import {
     Sparkles,
     AlertCircle,
     ShieldCheck,
+    KeyRound,
 } from 'lucide-react';
 import Toast from './Toast';
 import { GuestBackdrop, GuestFooter, GuestHeader, WorkStudyGraphic } from './GuestChrome';
@@ -26,7 +27,8 @@ interface LoginProps {
         role: string,
         name: string,
         profilePic: string | null,
-        mustChangePassword: boolean
+        mustChangePassword: boolean,
+        profileNotice?: string | null
     ) => void;
     onNavigateToApply: () => void;
     onNavigateToTrack?: () => void;
@@ -52,6 +54,10 @@ const Login = ({
     const [forgotSuccess, setForgotSuccess] = useState<string | null>(null);
     const [forgotMaskedEmail, setForgotMaskedEmail] = useState<string | null>(null);
     const [forgotAccount, setForgotAccount] = useState<string | null>(null);
+    const [signInMethod, setSignInMethod] = useState<'password' | 'otp'>('password');
+    const [otpStep, setOtpStep] = useState<'request' | 'code'>('request');
+    const [otpCode, setOtpCode] = useState('');
+    const [otpMaskedEmail, setOtpMaskedEmail] = useState<string | null>(null);
 
     const reduceMotion = useReducedMotion();
     const ease = [0.22, 1, 0.36, 1] as const;
@@ -112,6 +118,37 @@ const Login = ({
         }
     };
 
+    const finishAuthenticated = (data: any) => {
+        const { token, role, name, office, profile_picture, must_change_password } = data;
+        localStorage.setItem('auth_token', token);
+        localStorage.setItem('user_role', role);
+        localStorage.setItem('user_name', name || username);
+        localStorage.setItem('profile_picture', normalizeFilePath(profile_picture) || '');
+        storeActivityAttendanceCapability(data);
+        if (!localStorage.getItem('assigned_office')) {
+            localStorage.setItem('assigned_office', office || 'System Administrator');
+        }
+        if (role === 'Department Secretary') {
+            localStorage.setItem('secretary_acting', '1');
+        } else {
+            localStorage.removeItem('secretary_acting');
+        }
+        localStorage.setItem('can_file_evaluations', data.can_file_evaluations ? '1' : '0');
+        localStorage.setItem('can_review_evaluations', data.can_review_evaluations ? '1' : '0');
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        setSuccessMsg(`Welcome back, ${name || username}!`);
+        setTimeout(() => {
+            onLoginSuccess(
+                token,
+                role,
+                name || username,
+                profile_picture || null,
+                Boolean(must_change_password),
+                data?.profile_notice || null
+            );
+        }, 1100);
+    };
+
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
@@ -120,37 +157,7 @@ const Login = ({
 
         try {
             const response = await axios.post('/api/login', { username, password });
-            const { token, role, name, office, profile_picture, must_change_password } =
-                response.data;
-
-            localStorage.setItem('auth_token', token);
-            localStorage.setItem('user_role', role);
-            localStorage.setItem('user_name', name || username);
-            localStorage.setItem('profile_picture', normalizeFilePath(profile_picture) || '');
-            storeActivityAttendanceCapability(response.data);
-            if (!localStorage.getItem('assigned_office')) {
-                localStorage.setItem('assigned_office', office || 'System Administrator');
-            }
-            if (role === 'Department Secretary') {
-                localStorage.setItem('secretary_acting', '1');
-            } else {
-                localStorage.removeItem('secretary_acting');
-            }
-            localStorage.setItem('can_file_evaluations', response.data.can_file_evaluations ? '1' : '0');
-            localStorage.setItem('can_review_evaluations', response.data.can_review_evaluations ? '1' : '0');
-
-            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-
-            setSuccessMsg(`Welcome back, ${name || username}!`);
-            setTimeout(() => {
-                onLoginSuccess(
-                    token,
-                    role,
-                    name || username,
-                    profile_picture || null,
-                    Boolean(must_change_password)
-                );
-            }, 1100);
+            finishAuthenticated(response.data);
         } catch (err: any) {
             const message = !err.response
                 ? 'Cannot reach the server. Ensure Laravel is running.'
@@ -160,6 +167,63 @@ const Login = ({
             setIsLoading(false);
         }
     };
+
+    const switchSignInMethod = (method: 'password' | 'otp') => {
+        setSignInMethod(method);
+        setError(null);
+        setOtpStep('request');
+        setOtpCode('');
+        setOtpMaskedEmail(null);
+    };
+
+    const handleRequestOtp = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const response = await axios.post('/api/login/otp', { username: username.trim() });
+            setOtpMaskedEmail(response.data?.masked_email || null);
+            setOtpStep('code');
+            setOtpCode('');
+        } catch (err: any) {
+            const data = err.response?.data;
+            if (data?.use_password) {
+                switchSignInMethod('password');
+                setError(data.message);
+                return;
+            }
+            const message = !err.response
+                ? 'Cannot reach the server. Ensure Laravel is running.'
+                : data?.message || 'Could not send the sign-in code.';
+            setError(message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleVerifyOtp = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const response = await axios.post('/api/login/otp/verify', {
+                username: username.trim(),
+                code: otpCode.trim(),
+            });
+            finishAuthenticated(response.data);
+        } catch (err: any) {
+            const message = !err.response
+                ? 'Cannot reach the server. Ensure Laravel is running.'
+                : err.response?.data?.message || 'That sign-in code could not be verified.';
+            setError(message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const isOtpLocked = signInMethod === 'otp' && otpStep === 'code';
 
     return (
         <div className="install-clearance relative flex min-h-screen flex-col overflow-x-hidden bg-slate-50 font-sans selection:bg-indigo-200 selection:text-indigo-900">
@@ -172,7 +236,7 @@ const Login = ({
                     initial={reduceMotion ? false : { opacity: 0, x: -16 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: reduceMotion ? 0 : 0.45, ease }}
-                    className="relative order-last mx-auto w-full max-w-md overflow-hidden rounded-[2rem] border border-slate-800 bg-slate-950 p-6 text-white shadow-2xl shadow-slate-900/20 lg:order-none lg:mx-0 lg:max-w-none sm:p-8"
+                    className="relative order-last mx-auto w-full max-w-md overflow-hidden rounded-[2rem] border border-slate-800 bg-slate-950 p-6 text-white shadow-2xl shadow-slate-900/20 sm:p-8 lg:order-none lg:mx-0 lg:max-w-none"
                 >
                     <div
                         className="pointer-events-none absolute inset-0 opacity-20"
@@ -218,7 +282,7 @@ const Login = ({
                     variants={formVariants}
                     initial="hidden"
                     animate="show"
-                    className="w-full max-w-md justify-self-center space-y-7 rounded-[2rem] border border-slate-200/90 bg-white p-6 shadow-xl shadow-slate-900/5 sm:p-8 lg:justify-self-end"
+                    className="w-full max-w-md justify-self-center space-y-6 rounded-[2rem] border border-slate-200/90 bg-white p-6 shadow-xl shadow-slate-900/5 sm:p-8 lg:justify-self-end"
                 >
                     <motion.div variants={itemVariants}>
                         <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200/80 bg-indigo-50 px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-indigo-700">
@@ -235,7 +299,49 @@ const Login = ({
 
                     <Toast message={error} type="error" onClose={() => setError(null)} />
 
-                    <motion.form variants={itemVariants} className="space-y-4" onSubmit={handleLogin}>
+                    {/* SIGN-IN METHOD SWITCHER */}
+                    <motion.div
+                        variants={itemVariants}
+                        className="grid grid-cols-2 gap-1 rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1"
+                    >
+                        <button
+                            type="button"
+                            onClick={() => switchSignInMethod('password')}
+                            className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-extrabold uppercase tracking-wider transition ${
+                                signInMethod === 'password'
+                                    ? 'bg-slate-900 text-white shadow-sm'
+                                    : 'text-slate-500 hover:text-slate-900'
+                            }`}
+                        >
+                            <Lock className="h-3.5 w-3.5" />
+                            Password
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => switchSignInMethod('otp')}
+                            className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-extrabold uppercase tracking-wider transition ${
+                                signInMethod === 'otp'
+                                    ? 'bg-slate-900 text-white shadow-sm'
+                                    : 'text-slate-500 hover:text-slate-900'
+                            }`}
+                        >
+                            <Mail className="h-3.5 w-3.5" />
+                            Email code
+                        </button>
+                    </motion.div>
+
+                    <motion.form
+                        variants={itemVariants}
+                        className="space-y-4"
+                        onSubmit={
+                            signInMethod === 'password'
+                                ? handleLogin
+                                : otpStep === 'request'
+                                  ? handleRequestOtp
+                                  : handleVerifyOtp
+                        }
+                    >
+                        {/* USERNAME / EMAIL INPUT */}
                         <div className="group relative">
                             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
                                 <User className="h-5 w-5 text-slate-400 transition-colors group-focus-within:text-indigo-600" />
@@ -245,9 +351,14 @@ const Login = ({
                                 type="text"
                                 autoComplete="username"
                                 required
+                                readOnly={isOtpLocked}
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
-                                className="peer block w-full appearance-none rounded-2xl border border-slate-200 bg-slate-50/70 pb-3 pl-12 pr-4 pt-6 text-base font-bold text-slate-900 transition-all focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-600/10"
+                                className={`peer block w-full appearance-none rounded-2xl border pb-3 pl-12 pt-6 text-base font-bold transition-all focus:outline-none ${
+                                    isOtpLocked
+                                        ? 'border-slate-200 bg-slate-100/80 pr-20 text-slate-600'
+                                        : 'border-slate-200 bg-slate-50/70 pr-4 text-slate-900 focus:border-indigo-600 focus:bg-white focus:ring-4 focus:ring-indigo-600/10'
+                                }`}
                                 placeholder=" "
                             />
                             <label
@@ -256,52 +367,128 @@ const Login = ({
                             >
                                 Username or Email
                             </label>
+                            {isOtpLocked && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setOtpStep('request');
+                                        setOtpCode('');
+                                        setError(null);
+                                    }}
+                                    className="absolute inset-y-0 right-2 my-auto h-8 rounded-xl border border-slate-200 bg-white px-2.5 text-[11px] font-extrabold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                                >
+                                    Change
+                                </button>
+                            )}
                         </div>
 
-                        <div className="space-y-2">
-                            <div className="group relative">
-                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
-                                    <Lock className="h-5 w-5 text-slate-400 transition-colors group-focus-within:text-indigo-600" />
+                        {signInMethod === 'password' ? (
+                            <div className="space-y-2">
+                                <div className="group relative">
+                                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
+                                        <Lock className="h-5 w-5 text-slate-400 transition-colors group-focus-within:text-indigo-600" />
+                                    </div>
+                                    <input
+                                        id="password"
+                                        type={showPassword ? 'text' : 'password'}
+                                        autoComplete="current-password"
+                                        required
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className="peer block w-full appearance-none rounded-2xl border border-slate-200 bg-slate-50/70 pb-3 pl-12 pr-14 pt-6 text-base font-bold text-slate-900 transition-all focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-600/10"
+                                        placeholder=" "
+                                    />
+                                    <label
+                                        htmlFor="password"
+                                        className="absolute left-12 top-4 z-10 origin-left -translate-y-3 scale-75 transform cursor-text text-base font-medium text-slate-500 duration-300 peer-placeholder-shown:translate-y-0 peer-placeholder-shown:scale-100 peer-focus:-translate-y-3 peer-focus:scale-75 peer-focus:text-indigo-600"
+                                    >
+                                        Password
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="absolute inset-y-0 right-1 flex w-12 items-center justify-center rounded-xl text-slate-400 transition-all hover:bg-indigo-50/60 hover:text-indigo-600"
+                                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                    >
+                                        {showPassword ? (
+                                            <EyeOff className="h-5 w-5" />
+                                        ) : (
+                                            <Eye className="h-5 w-5" />
+                                        )}
+                                    </button>
                                 </div>
-                                <input
-                                    id="password"
-                                    type={showPassword ? 'text' : 'password'}
-                                    autoComplete="current-password"
-                                    required
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    className="peer block w-full appearance-none rounded-2xl border border-slate-200 bg-slate-50/70 pb-3 pl-12 pr-14 pt-6 text-base font-bold text-slate-900 transition-all focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-600/10"
-                                    placeholder=" "
-                                />
-                                <label
-                                    htmlFor="password"
-                                    className="absolute left-12 top-4 z-10 origin-left -translate-y-3 scale-75 transform cursor-text text-base font-medium text-slate-500 duration-300 peer-placeholder-shown:translate-y-0 peer-placeholder-shown:scale-100 peer-focus:-translate-y-3 peer-focus:scale-75 peer-focus:text-indigo-600"
-                                >
-                                    Password
-                                </label>
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute inset-y-0 right-1 flex w-12 items-center justify-center rounded-xl text-slate-400 transition-all hover:bg-indigo-50/60 hover:text-indigo-600"
-                                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                                >
-                                    {showPassword ? (
-                                        <EyeOff className="h-5 w-5" />
-                                    ) : (
-                                        <Eye className="h-5 w-5" />
-                                    )}
-                                </button>
+                                <div className="flex justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={openForgotPassword}
+                                        className="px-1 py-1 text-xs font-bold text-indigo-600 transition-colors hover:text-indigo-800"
+                                    >
+                                        Forgot password?
+                                    </button>
+                                </div>
                             </div>
-                            <div className="flex justify-end">
-                                <button
-                                    type="button"
-                                    onClick={openForgotPassword}
-                                    className="px-1 py-1 text-xs font-bold text-indigo-600 transition-colors hover:text-indigo-800"
-                                >
-                                    Forgot password?
-                                </button>
+                        ) : otpStep === 'request' ? (
+                            <div className="flex items-start gap-2.5 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3.5 text-xs font-medium leading-relaxed text-indigo-950">
+                                <Mail className="mt-0.5 h-4 w-4 shrink-0 text-indigo-600" />
+                                <span>
+                                    We will email an 8-digit sign-in code if this account has an email address on file.
+                                </span>
                             </div>
-                        </div>
+                        ) : (
+                            <div className="space-y-3">
+                                <div className="flex items-start gap-2.5 rounded-2xl border border-emerald-200/80 bg-emerald-50/70 p-3.5 text-xs font-medium leading-relaxed text-emerald-950">
+                                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                                    <span>
+                                        Enter the 8-digit code sent to{' '}
+                                        <strong className="font-mono font-bold">
+                                            {otpMaskedEmail || 'your email'}
+                                        </strong>
+                                        . Expires in 10 minutes.
+                                    </span>
+                                </div>
+
+                                <div className="group relative">
+                                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
+                                        <KeyRound className="h-5 w-5 text-slate-400 transition-colors group-focus-within:text-indigo-600" />
+                                    </div>
+                                    <input
+                                        id="otp-code"
+                                        type="text"
+                                        inputMode="numeric"
+                                        autoComplete="one-time-code"
+                                        autoFocus
+                                        required
+                                        maxLength={8}
+                                        pattern="[0-9]{8}"
+                                        value={otpCode}
+                                        onChange={(e) =>
+                                            setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 8))
+                                        }
+                                        className="peer block w-full appearance-none rounded-2xl border border-slate-200 bg-slate-50/70 pb-3 pl-12 pr-4 pt-6 text-center font-mono text-xl font-black tracking-[0.35em] text-slate-900 transition-all focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-600/10"
+                                        placeholder=" "
+                                    />
+                                    <label
+                                        htmlFor="otp-code"
+                                        className="absolute left-12 top-4 z-10 origin-left -translate-y-3 scale-75 transform cursor-text text-base font-medium text-slate-500 duration-300 peer-placeholder-shown:translate-y-0 peer-placeholder-shown:scale-100 peer-focus:-translate-y-3 peer-focus:scale-75 peer-focus:text-indigo-600"
+                                    >
+                                        8-digit code
+                                    </label>
+                                </div>
+
+                                <div className="flex items-center justify-between px-1">
+                                    <span className="font-mono text-[11px] font-bold text-slate-400">
+                                        {otpCode.length}/8 digits
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => switchSignInMethod('password')}
+                                        className="text-xs font-bold text-indigo-600 transition-colors hover:text-indigo-800"
+                                    >
+                                        Use password instead
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
                         <button
                             type="submit"
@@ -311,7 +498,19 @@ const Login = ({
                             {isLoading ? (
                                 <>
                                     <Loader2 className="h-5 w-5 animate-spin" />
-                                    Authenticating…
+                                    {signInMethod === 'otp' && otpStep === 'request'
+                                        ? 'Sending code…'
+                                        : 'Authenticating…'}
+                                </>
+                            ) : signInMethod === 'otp' && otpStep === 'request' ? (
+                                <>
+                                    Send email code
+                                    <Mail className="h-4 w-4" />
+                                </>
+                            ) : signInMethod === 'otp' ? (
+                                <>
+                                    Verify code
+                                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                                 </>
                             ) : (
                                 <>

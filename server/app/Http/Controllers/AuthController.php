@@ -2,13 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\LoginOtpMail;
 use App\Mail\TemporaryPasswordMail;
 use App\Models\ActivityLog; // Imported your new ActivityLog model!
 use App\Models\Application;
 use App\Models\User;
 use App\Services\AccountEventMailer;
+use App\Support\AccountProfileNotice;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
@@ -64,6 +67,7 @@ class AuthController extends Controller
         }
 
         app(AccountEventMailer::class)->signedIn($user, $request->ip());
+        $profileNotice = app(AccountProfileNotice::class)->notify($user);
 
         // 7. Return the exact payload React is expecting
         return response()->json([
@@ -89,6 +93,146 @@ class AuthController extends Controller
             'supervisor_absent' => $user->role === 'Supervisor' ? $accounts->supervisorIsAbsentToday($user) : null,
             'special_hours_request' => (bool) $user->profile?->special_hours_request,
             'required_hours' => \App\Support\WorkRequirement::hoursFor($user),
+            'profile_notice' => $profileNotice,
+        ]);
+    }
+
+    /**
+     * Second sign-in option. Password remains the default.
+     * Accounts with no email stay on the password form and are told to add their details.
+     */
+    public function requestLoginOtp(Request $request)
+    {
+        $request->validate([
+            'username' => 'required|string|max:255',
+        ]);
+
+        $user = $this->userForIdentifier($request->username);
+        if (! $user) {
+            return response()->json([
+                'message' => 'No account matches that username or email.',
+            ], 404);
+        }
+
+        $pendingApplicantResponse = $this->pendingApplicantResponse($user);
+        if ($pendingApplicantResponse) {
+            return $pendingApplicantResponse;
+        }
+
+        $notice = app(AccountProfileNotice::class);
+        $email = $this->resetDestination($user, $request->username);
+        if (! $email) {
+            return response()->json([
+                'message' => $notice->passwordFallbackMessage($user),
+                'use_password' => true,
+            ], 422);
+        }
+
+        $code = str_pad((string) random_int(0, 99999999), 8, '0', STR_PAD_LEFT);
+        $sendError = $this->sendLoginOtpEmail($email, $user, $code);
+        if ($sendError !== null) {
+            return response()->json(['message' => $sendError], 502);
+        }
+
+        Cache::put($this->otpCacheKey($user->id), [
+            'hash' => Hash::make($code),
+            'attempts' => 0,
+        ], now()->addMinutes(10));
+
+        return response()->json([
+            'message' => 'An 8-digit sign-in code was sent to '.$this->maskEmail($email).'. It expires in 10 minutes.',
+            'masked_email' => $this->maskEmail($email),
+        ]);
+    }
+
+    public function verifyLoginOtp(Request $request)
+    {
+        $request->validate([
+            'username' => 'required|string|max:255',
+            'code' => 'required|string|size:8',
+        ]);
+
+        $user = $this->userForIdentifier($request->username)?->load('profile');
+        if (! $user) {
+            return response()->json([
+                'message' => 'No account matches that username or email.',
+            ], 404);
+        }
+
+        $pendingApplicantResponse = $this->pendingApplicantResponse($user);
+        if ($pendingApplicantResponse) {
+            return $pendingApplicantResponse;
+        }
+
+        $cached = Cache::get($this->otpCacheKey($user->id));
+        $code = preg_replace('/\D/', '', (string) $request->code) ?? '';
+        if (! is_array($cached) || ! isset($cached['hash']) || strlen($code) !== 8 || ! Hash::check($code, $cached['hash'])) {
+            if (is_array($cached)) {
+                $attempts = (int) ($cached['attempts'] ?? 0) + 1;
+                if ($attempts >= 5) {
+                    Cache::forget($this->otpCacheKey($user->id));
+                } else {
+                    Cache::put($this->otpCacheKey($user->id), [
+                        'hash' => $cached['hash'],
+                        'attempts' => $attempts,
+                    ], now()->addMinutes(10));
+                }
+            }
+
+            return response()->json([
+                'message' => 'That sign-in code is incorrect or has expired. Request a new code, or sign in with your password.',
+            ], 422);
+        }
+
+        Cache::forget($this->otpCacheKey($user->id));
+
+        $office = match ($user->role) {
+            'Student', 'Supervisor', 'WSPO Staff', 'Department Secretary', 'Immediate Supervisor' => $user->profile?->assignment_label
+                ?: ($user->profile?->assigned_office ?? 'Unassigned'),
+            default => 'Management',
+        };
+        $accounts = app(\App\Http\Controllers\UserController::class);
+        $token = $this->issueSessionToken($user, 'auth_token');
+
+        try {
+            ActivityLog::create([
+                'admin_id' => $user->id,
+                'admin_name' => $user->name ?? $user->username,
+                'action' => 'System Login',
+                'description' => 'logged into the system with an email code.',
+                'ip_address' => $request->ip(),
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        app(AccountEventMailer::class)->signedIn($user, $request->ip());
+        $profileNotice = app(AccountProfileNotice::class)->notify($user);
+
+        return response()->json([
+            'message' => 'Login successful',
+            'token' => $token,
+            'role' => $user->role,
+            'name' => $user->name,
+            'office' => $office,
+            'assigned_office' => $user->profile?->assigned_office,
+            'can_check_activity_attendance' => $accounts->canCheckActivityAttendance($user),
+            'can_issue_activity_attendance' => $accounts->canCheckActivityAttendance($user),
+            'can_manage_activity_groups' => $accounts->canManageActivityGroups($user),
+            'can_manage_janitorial_groups' => $accounts->canManageJanitorialGroups($user),
+            'can_issue_daily_attendance' => $accounts->canIssueDailyAttendance($user),
+            'can_file_evaluations' => $accounts->canFileEvaluation($user),
+            'can_review_evaluations' => $accounts->canReviewEvaluation($user),
+            'is_student_officer' => $accounts->isStudentOfficer($user),
+            'officer_position' => $accounts->officerPosition($user) ?: null,
+            'must_clock_as_student' => $accounts->mustClockAsStudent($user),
+            'profile_picture' => $user->profile_picture,
+            'must_change_password' => (bool) $user->must_change_password,
+            'acting' => $user->role === 'Department Secretary' ? $accounts->isActingDepartmentSecretary($user) : null,
+            'supervisor_absent' => $user->role === 'Supervisor' ? $accounts->supervisorIsAbsentToday($user) : null,
+            'special_hours_request' => (bool) $user->profile?->special_hours_request,
+            'required_hours' => \App\Support\WorkRequirement::hoursFor($user),
+            'profile_notice' => $profileNotice,
         ]);
     }
 
@@ -202,6 +346,7 @@ class AuthController extends Controller
         // 3. Create the Sanctum Token (valid until 11:59 PM today)
         $token = $this->issueSessionToken($user, 'mobile-auth-token');
         app(AccountEventMailer::class)->signedIn($user, $request->ip());
+        $profileNotice = app(AccountProfileNotice::class)->notify($user);
 
         // Load the profile so the mobile app has their department/course info
         $user->load('profile');
@@ -216,6 +361,7 @@ class AuthController extends Controller
         $payload['is_student_officer'] = $accounts->isStudentOfficer($user);
         $payload['officer_position'] = $accounts->officerPosition($user) ?: null;
         $payload['must_clock_as_student'] = $accounts->mustClockAsStudent($user);
+        $payload['profile_notice'] = $profileNotice;
 
         return response()->json([
             'token' => $token,
@@ -299,6 +445,29 @@ class AuthController extends Controller
 
         if (is_string($applicationEmail) && filter_var($applicationEmail, FILTER_VALIDATE_EMAIL)) {
             return strtolower($applicationEmail);
+        }
+
+        return null;
+    }
+
+    private function otpCacheKey(int $userId): string
+    {
+        return 'login-otp:'.$userId;
+    }
+
+    private function sendLoginOtpEmail(string $email, User $user, string $code): ?string
+    {
+        $key = config('services.resend.key');
+        if (! is_string($key) || trim($key) === '') {
+            return 'Sign-in email is not configured. Set RESEND_API_KEY, or sign in with your password.';
+        }
+
+        try {
+            Mail::to($email)->send(new LoginOtpMail($user, $code));
+        } catch (\Throwable $e) {
+            report($e);
+
+            return 'Could not send the sign-in code. Sign in with your password instead.';
         }
 
         return null;

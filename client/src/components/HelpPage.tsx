@@ -621,7 +621,7 @@ const HELP_TOPICS: HelpTopic[] = [
             'WoSPIS may ask you to change your password the first time you sign in. This protects your account. You can also reset a forgotten password from the login page without needing someone to open the system for you.',
         audience: ['all'],
         steps: [
-            'Sign in with the username and temporary password given to you.',
+            'Sign in with the username and password given to you. Password is the default. Email code is a second option: if the account has an email, WoSPIS sends an 8-digit code. Accounts with no email, especially usernames that start with FCU-, keep using a password and are asked to add an email and personal information in Settings.',
             'If the system asks for a new password, create one that only you know.',
             'Enter the new password carefully, then confirm it.',
             'After saving, continue into your Dashboard or the page you need.',

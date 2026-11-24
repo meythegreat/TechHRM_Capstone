@@ -3,7 +3,7 @@ import axios from 'axios';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import PageTransition from './components/PageTransition';
-import { Menu, ShieldCheck } from 'lucide-react';
+import { Menu, ShieldCheck, Mail } from 'lucide-react';
 import { FinancialManagement } from './components/FinancialManagement';
 import { REALTIME_EVENT } from './utils/realtime';
 
@@ -144,6 +144,10 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isVerifying, setIsVerifying] = useState(true);
   const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [profileNotice, setProfileNotice] = useState<string | null>(null);
+  const [profileNoticeHidden, setProfileNoticeHidden] = useState(
+    () => sessionStorage.getItem('wospis_profile_notice_hidden') === '1',
+  );
   const [passwordToast, setPasswordToast] = useState<string | null>(null);
 
   const [adminName, setAdminName] = useState(localStorage.getItem('user_name') || 'Admin');
@@ -195,6 +199,7 @@ function App() {
         setShowEvaluation(canFileEvaluation || canReviewEvaluation);
         storeActivityAttendanceCapability(response.data);
         setMustChangePassword(Boolean(response.data.must_change_password));
+        setProfileNotice(response.data.profile_notice || null);
         
         if (response.data.profile_picture) {
            const path = normalizeFilePath(response.data.profile_picture);
@@ -230,6 +235,7 @@ function App() {
             localStorage.setItem('secretary_acting', '1');
           }
           storeActivityAttendanceCapability(response.data);
+          setProfileNotice(response.data.profile_notice || null);
           if (response.data.profile_picture) {
             const path = normalizeFilePath(response.data.profile_picture);
             setAdminAvatar(path);
@@ -280,7 +286,7 @@ function App() {
     document.title = feature ? `${feature} · WoSPIS` : 'WoSPIS';
   }, [hasToken, guestView, userRole, location.pathname]);
 
-  const handleLoginSuccess = (token: string, role: string, name: string, profilePic: string | null, mustChangePassword = false) => {
+  const handleLoginSuccess = (token: string, role: string, name: string, profilePic: string | null, mustChangePassword = false, profileNotice: string | null = null) => {
     localStorage.setItem('auth_token', token);
     localStorage.setItem('user_role', role);
     localStorage.setItem('user_name', name);
@@ -302,6 +308,13 @@ function App() {
     );
     setAdminName(name);
     setMustChangePassword(mustChangePassword);
+    if (profileNotice) {
+      sessionStorage.removeItem('wospis_profile_notice_hidden');
+      setProfileNoticeHidden(false);
+      setProfileNotice(profileNotice);
+    } else {
+      setProfileNotice(null);
+    }
   };
 
   const handleLogout = async () => {
@@ -333,6 +346,9 @@ function App() {
       setUserRole(null);
       setAdminAvatar(null);
       setMustChangePassword(false);
+      setProfileNotice(null);
+      sessionStorage.removeItem('wospis_profile_notice_hidden');
+      setProfileNoticeHidden(false);
       setGuestView('home');
       navigate('/');
     }
@@ -548,6 +564,36 @@ function App() {
         </main>
       </div>
     </div>
+    )}
+    {hasToken && profileNotice && !profileNoticeHidden && (
+      <div className="fixed bottom-4 left-1/2 z-[70] w-[min(40rem,calc(100%-1.5rem))] -translate-x-1/2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950 shadow-xl shadow-amber-900/10 print:hidden">
+        <div className="flex items-start gap-3">
+          <Mail className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-extrabold">Add your email and personal information</p>
+            <p className="mt-1 text-xs font-medium leading-relaxed text-amber-900">{profileNotice}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => navigate('/settings')}
+                className="rounded-xl bg-amber-900 px-3 py-2 text-[11px] font-extrabold uppercase tracking-wider text-white"
+              >
+                Open settings
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  sessionStorage.setItem('wospis_profile_notice_hidden', '1');
+                  setProfileNoticeHidden(true);
+                }}
+                className="rounded-xl border border-amber-300 bg-white px-3 py-2 text-[11px] font-extrabold uppercase tracking-wider text-amber-900"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     )}
     {hasToken && mustChangePassword && (
       <ForcePasswordChange onChanged={() => {
