@@ -69,7 +69,7 @@ const HELP_TOPICS: HelpTopic[] = [
             'You can usually clock in starting 30 minutes before your shift begins.',
             'If you are already timed in, clock out first before starting another duty.',
             'Cleaning, devotionals, and assemblies use their own passcode or QR. Clock in, then time out the same way. Hours are added only when you time out, and only if the clock-in was on time.',
-            'Janitorial duty usually needs no code. On Attendance / DTR, choose Photo under Janitorial duty. You can record it twice a day: morning 5:00–7:00 AM and afternoon 5:00–9:00 PM, one entry in each window. The first surroundings photo starts your clock-in, and the last photo ends your clock-out. If your janitorial supervisor is with you, you can choose Supervisor code instead. That supervisor can approve, deduct hours, and add a note. The immediate supervisor has the final say. An accepted entry records up to 4 hours from clock-in.',
+            'Janitorial duty usually needs no code. On Attendance / DTR, choose Photo under Janitorial duty. You can record it twice a day: morning 5:00–7:00 AM and afternoon 5:00–9:00 PM, one entry in each window. The first surroundings photo starts your clock-in, and the last photo ends your clock-out. The rear camera light turns on while you frame the photo. Tap Light on if it stays dark. The phone’s own flashlight stays locked while this page is using the camera, so use Camera with flash if Light on does not light the scene. If your janitorial supervisor is with you, you can choose Supervisor code instead. That supervisor can approve, deduct hours, and add a note. The immediate supervisor has the final say. An accepted entry records up to 4 hours from clock-in.',
             'If you have no work schedule yet, follow the attendance rules set by WSPO.',
             'You may work up to 20 hours per week by default. Past 20 hours needs administrator approval (up to 25). The monthly maximum is 100 hours.',
             'Offline requests do not replace normal passcode or QR clock-in when the office is online.',
@@ -88,7 +88,7 @@ const HELP_TOPICS: HelpTopic[] = [
             'Show the passcode or the QR only when a member chooses Supervisor code because you are with them.',
             'Wait for the code to refresh, then show the new one. An old photo or a copied code stops working after 30 seconds.',
             'Under Photo review, surroundings photos appear even while the student is still clocked in. After they clock out, approve or decline, deduct hours if needed, and add a note. That decision waits for the immediate supervisor.',
-            'Under Supervising hours, open the camera and take one photo at the area. Gallery photos are not accepted.',
+            'Under Supervising hours, open the camera and take one photo at the area. Gallery photos are not accepted. The rear camera light turns on when the phone allows it.',
             'Under Offline requests, record the same kind of decision for manual janitorial entries submitted when a code could not be scanned.',
         ],
         tips: [

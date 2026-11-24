@@ -569,6 +569,7 @@ const ManualAttendanceRequestForm = ({ onToast }) => {
                   </p>
                   <CleaningProofCapture
                     collect
+                    janitorial
                     insecureCamera={typeof window !== 'undefined' && !window.isSecureContext}
                     restored={{
                       before: shift.before_photo
