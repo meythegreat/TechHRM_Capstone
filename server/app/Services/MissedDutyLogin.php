@@ -21,19 +21,6 @@ class MissedDutyLogin
     /** How far back a finished shift can still be flagged, so a quiet weekend is not missed. */
     public const LOOKBACK_DAYS = 7;
 
-    public function flagIfDue(): void
-    {
-        if (! Cache::add('missed-duty-login:tick', true, 60)) {
-            return;
-        }
-
-        try {
-            $this->flag();
-        } catch (\Throwable $exception) {
-            report($exception);
-        }
-    }
-
     public function flag(?Carbon $moment = null): int
     {
         if (

@@ -209,7 +209,7 @@ class ShiftClockReminderTest extends TestCase
         ]);
     }
 
-    public function test_opening_notifications_sends_a_due_reminder(): void
+    public function test_opening_notifications_does_not_scan_for_reminders(): void
     {
         $student = $this->makeStudent('Mia Ocampo');
         $this->makeShift($student, 'Monday', '08:00 - 12:00');
@@ -218,10 +218,9 @@ class ShiftClockReminderTest extends TestCase
 
         $this->getJson('/api/notifications')
             ->assertOk()
-            ->assertJsonFragment(['title' => 'Clock in before your shift']);
+            ->assertExactJson([]);
 
-        $this->getJson('/api/notifications')->assertOk();
-        $this->assertSame(1, Notification::query()->where('user_id', $student->id)->count());
+        $this->assertSame(0, Notification::query()->where('user_id', $student->id)->count());
     }
 
     public function test_shift_reminders_are_scheduled_every_minute(): void

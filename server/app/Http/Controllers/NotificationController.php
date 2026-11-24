@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\ShiftClockReminder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 
@@ -11,8 +10,6 @@ class NotificationController extends Controller
     // Get all notifications for the logged-in user
     public function index(Request $request)
     {
-        app(ShiftClockReminder::class)->dispatchIfDue();
-
         $notifications = $this->visibleNotifications($request)
             ->orderBy('created_at', 'desc')
             ->get();

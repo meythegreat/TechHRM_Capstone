@@ -205,17 +205,26 @@ class AccountEventMailer
             return;
         }
 
+        $message = new AccountEventMail(
+            recipientName: $recipient->name ?: $recipient->username,
+            subjectLine: $subject,
+            heading: $heading,
+            paragraphs: $paragraphs,
+            details: $details,
+            notice: $notice ?? "Didn't do this? Contact the Work-Study Program Office immediately so the account can be secured.",
+            files: $files,
+            hidesPassword: $hidesPassword,
+        );
+
         try {
-            Mail::to($to)->send(new AccountEventMail(
-                recipientName: $recipient->name ?: $recipient->username,
-                subjectLine: $subject,
-                heading: $heading,
-                paragraphs: $paragraphs,
-                details: $details,
-                notice: $notice ?? "Didn't do this? Contact the Work-Study Program Office immediately so the account can be secured.",
-                files: $files,
-                hidesPassword: $hidesPassword,
-            ));
+            $pending = Mail::to($to);
+            // The sync driver (tests) sends now. A real queue keeps SMTP off the
+            // web workers so a slow mail server cannot pin every PHP process.
+            if (config('queue.default') === 'sync') {
+                $pending->send($message);
+            } else {
+                $pending->queue($message);
+            }
         } catch (\Throwable $exception) {
             report($exception);
         }

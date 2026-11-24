@@ -15,7 +15,6 @@ use App\Support\WorkSchedule;
 use Carbon\Carbon;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -32,34 +31,6 @@ class ShiftClockReminder
 
     /** Stop chasing a forgotten clock-out after this long so old open rows are not replayed. */
     public const MISSED_CLOCK_OUT_FOR_HOURS = 72;
-
-    public function dispatchIfDue(): void
-    {
-        if (
-            ! Schema::hasTable('shift_reminders')
-            || ! Schema::hasTable('attendances')
-            || ! Schema::hasTable('notifications')
-            || (! Schema::hasTable('schedules') && ! Schema::hasTable('rendered_hour_events'))
-        ) {
-            return;
-        }
-
-        if (! Cache::add('shift-clock-reminders:tick', true, 60)) {
-            return;
-        }
-
-        try {
-            $this->dispatch();
-        } catch (\Throwable $exception) {
-            report($exception);
-        }
-
-        try {
-            app(MissedDutyLogin::class)->flagIfDue();
-        } catch (\Throwable $exception) {
-            report($exception);
-        }
-    }
 
     public function dispatch(?Carbon $moment = null): int
     {

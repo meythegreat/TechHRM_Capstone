@@ -29,5 +29,7 @@ trap shutdown TERM INT
 php artisan migrate --force || echo "migrate failed"
 php artisan db:seed --force || echo "seed failed"
 php artisan schedule:work --no-interaction > /tmp/shift-reminders.log 2>&1 &
+# Account mail is queued so a slow SMTP connection cannot occupy a web worker.
+php artisan queue:work --no-interaction --tries=3 --timeout=90 --sleep=1 > /tmp/queue.log 2>&1 &
 
 wait "$server_pid"
