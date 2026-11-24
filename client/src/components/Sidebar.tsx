@@ -210,7 +210,7 @@ const Sidebar: FC<SidebarProps> = ({
 
                     <div className="relative z-10 flex w-full items-center justify-center gap-3 overflow-hidden whitespace-nowrap">
                         <div
-                            className="relative h-10 w-10 shrink-0"
+                            className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full"
                             onMouseEnter={() => {
                                 if (window.matchMedia(DESKTOP_SIDEBAR_QUERY).matches) setLogoHovered(true);
                             }}
@@ -225,7 +225,7 @@ const Sidebar: FC<SidebarProps> = ({
                             <img
                                 src="/logo.jpg"
                                 alt="WoSPIS"
-                                className={`h-10 w-10 rounded-xl border border-white/15 object-cover shadow-lg shadow-black/40 transition-opacity duration-200 ${
+                                className={`h-10 w-10 rounded-full border border-white/15 object-cover shadow-lg shadow-black/40 transition-opacity duration-200 ${
                                     showLogoMenu ? 'opacity-0' : 'opacity-100'
                                 }`}
                             />
@@ -235,7 +235,7 @@ const Sidebar: FC<SidebarProps> = ({
                                 aria-label={isSidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
                                 aria-expanded={isSidebarOpen}
                                 title={isSidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-                                className={`absolute inset-0 hidden items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white shadow-lg shadow-black/40 outline-none transition-opacity duration-200 lg:flex ${
+                                className={`absolute inset-0 hidden items-center justify-center rounded-full border border-white/15 bg-white/10 text-white shadow-lg shadow-black/40 outline-none transition-opacity duration-200 lg:flex ${
                                     showLogoMenu ? 'opacity-100' : 'pointer-events-none opacity-0'
                                 }`}
                             >
