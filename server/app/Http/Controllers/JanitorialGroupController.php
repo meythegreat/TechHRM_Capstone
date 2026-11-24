@@ -4,10 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\JanitorialGroup;
 use App\Models\JanitorialLeader;
+use App\Models\JanitorialSupervisorAbsence;
+use App\Models\Notification;
 use App\Models\User;
 use App\Support\JanitorialApproval;
 use App\Support\RenderedHours;
 use App\Support\SuperAdminAudit;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -60,6 +63,120 @@ class JanitorialGroupController extends Controller
         return response()->json([
             'groups' => $presented,
             'leaders' => $this->leaderPayloads($actor, $manages, $groups),
+            'absence_requests' => $this->absencePayloads($actor, $manages),
+        ]);
+    }
+
+    /** Janitorial supervisor asks to be marked absent. The WSPO coordinator approves it. */
+    public function requestAbsence(Request $request)
+    {
+        $actor = $request->user();
+        if ($actor->role !== 'Student' || ! Schema::hasTable('janitorial_leaders')) {
+            return response()->json(['message' => 'Only a janitorial supervisor can request an absence.'], 403);
+        }
+
+        $leader = JanitorialLeader::query()->where('user_id', $actor->id)->first();
+        if (! $leader) {
+            return response()->json(['message' => 'Only a janitorial supervisor can request an absence.'], 403);
+        }
+
+        if (! Schema::hasTable('janitorial_supervisor_absences')) {
+            return response()->json(['message' => 'Absence requests are not available yet.'], 503);
+        }
+
+        $validated = $request->validate([
+            'absent_on' => 'required|date|after_or_equal:today',
+            'reason' => 'required|string|max:500',
+        ]);
+
+        $day = Carbon::parse($validated['absent_on'])->toDateString();
+        $reason = trim($validated['reason']);
+        $existing = JanitorialSupervisorAbsence::query()
+            ->where('user_id', $actor->id)
+            ->whereDate('absent_on', $day)
+            ->first();
+
+        if ($existing && $existing->status === JanitorialSupervisorAbsence::PENDING) {
+            return response()->json(['message' => 'You already have a pending absence request for that date.'], 422);
+        }
+        if ($existing && $existing->status === JanitorialSupervisorAbsence::APPROVED) {
+            return response()->json(['message' => 'The WSPO coordinator already approved your absence for that date.'], 422);
+        }
+
+        $row = $existing ?? new JanitorialSupervisorAbsence(['user_id' => $actor->id]);
+        $row->fill([
+            'absent_on' => $day,
+            'reason' => $reason,
+            'status' => JanitorialSupervisorAbsence::PENDING,
+            'decision_note' => null,
+            'reviewed_by' => null,
+            'reviewed_at' => null,
+        ]);
+        $row->save();
+
+        $label = Carbon::parse($day)->format('M j, Y');
+        foreach ($this->coordinators() as $coordinator) {
+            Notification::create([
+                'user_id' => $coordinator->id,
+                'title' => 'Janitorial supervisor absence request',
+                'message' => $actor->name.' requested to be absent on '.$label.'. Reason: '.$reason,
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Absence request sent. It takes effect after the WSPO coordinator approves it.',
+            'absence' => $this->presentAbsence($row->fresh(['user', 'reviewer'])),
+        ], 201);
+    }
+
+    /** WSPO coordinator approves or declines a janitorial supervisor's absence request. */
+    public function decideAbsence(Request $request, JanitorialSupervisorAbsence $janitorialSupervisorAbsence)
+    {
+        $this->assertCanManage($request);
+        if (! Schema::hasTable('janitorial_supervisor_absences')) {
+            return response()->json(['message' => 'Absence requests are not available yet.'], 503);
+        }
+
+        $validated = $request->validate([
+            'status' => 'required|in:Approved,Rejected',
+            'decision_note' => 'nullable|string|max:500',
+        ]);
+
+        if ($janitorialSupervisorAbsence->status !== JanitorialSupervisorAbsence::PENDING) {
+            return response()->json(['message' => 'This absence request was already decided.'], 422);
+        }
+
+        $reviewer = $request->user();
+        $approved = $validated['status'] === JanitorialSupervisorAbsence::APPROVED;
+        $janitorialSupervisorAbsence->update([
+            'status' => $approved ? JanitorialSupervisorAbsence::APPROVED : JanitorialSupervisorAbsence::REJECTED,
+            'decision_note' => trim((string) ($validated['decision_note'] ?? '')) ?: null,
+            'reviewed_by' => $reviewer->id,
+            'reviewed_at' => now(),
+        ]);
+
+        $day = Carbon::parse($janitorialSupervisorAbsence->absent_on);
+        if ($approved && $day->isSameDay(now())) {
+            JanitorialLeader::query()
+                ->where('user_id', $janitorialSupervisorAbsence->user_id)
+                ->update(['is_present' => false]);
+        }
+
+        $label = $day->format('M j, Y');
+        $message = $approved
+            ? 'The WSPO coordinator approved your absence for '.$label.'. Members record that duty as offline attendance.'
+            : 'The WSPO coordinator declined your absence request for '.$label.'.';
+        Notification::create([
+            'user_id' => $janitorialSupervisorAbsence->user_id,
+            'title' => $approved ? 'Janitorial absence approved' : 'Janitorial absence declined',
+            'message' => $message,
+        ]);
+
+        return response()->json([
+            'message' => $approved
+                ? 'Absence approved. The janitorial supervisor is off duty on '.$label.'.'
+                : 'Absence request declined.',
+            'absence' => $this->presentAbsence($janitorialSupervisorAbsence->fresh(['user', 'reviewer'])),
         ]);
     }
 
@@ -85,9 +202,23 @@ class JanitorialGroupController extends Controller
             'is_present' => 'required|boolean',
         ]);
 
+        $present = $request->boolean('is_present');
         $janitorialLeader->update([
-            'is_present' => $request->boolean('is_present'),
+            'is_present' => $present,
         ]);
+
+        if ($present && Schema::hasTable('janitorial_supervisor_absences')) {
+            JanitorialSupervisorAbsence::query()
+                ->where('user_id', $janitorialLeader->user_id)
+                ->where('status', JanitorialSupervisorAbsence::APPROVED)
+                ->whereDate('absent_on', now()->toDateString())
+                ->update([
+                    'status' => JanitorialSupervisorAbsence::REJECTED,
+                    'decision_note' => 'Marked present by the WSPO coordinator.',
+                    'reviewed_by' => $request->user()->id,
+                    'reviewed_at' => now(),
+                ]);
+        }
 
         return response()->json([
             'message' => $janitorialLeader->is_present
@@ -414,6 +545,62 @@ class JanitorialGroupController extends Controller
             'max_groups' => JanitorialGroup::MAX_GROUPS,
             'leader_present' => JanitorialLeader::isOnDuty((int) $group->supervisor_user_id),
         ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function absencePayloads(User $actor, bool $manages): array
+    {
+        if (! Schema::hasTable('janitorial_supervisor_absences')) {
+            return [];
+        }
+
+        $query = JanitorialSupervisorAbsence::query()->with(['user:id,name', 'reviewer:id,name']);
+        if ($manages) {
+            $query->orderByRaw("CASE status WHEN 'Pending' THEN 0 WHEN 'Approved' THEN 1 ELSE 2 END");
+        } elseif ($actor->role === 'Student') {
+            $query->where('user_id', $actor->id);
+        } else {
+            return [];
+        }
+
+        return $query->orderByDesc('absent_on')->limit(40)->get()
+            ->map(fn (JanitorialSupervisorAbsence $row) => $this->presentAbsence($row))
+            ->values()
+            ->all();
+    }
+
+    private function presentAbsence(JanitorialSupervisorAbsence $row): array
+    {
+        $row->loadMissing(['user:id,name', 'reviewer:id,name']);
+
+        return [
+            'id' => $row->id,
+            'user_id' => $row->user_id,
+            'leader_name' => $row->user?->name,
+            'absent_on' => optional($row->absent_on)?->toDateString(),
+            'reason' => $row->reason,
+            'status' => $row->status,
+            'decision_note' => $row->decision_note,
+            'reviewed_by' => $row->reviewer?->name,
+            'reviewed_at' => $row->reviewed_at,
+        ];
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, User>
+     */
+    private function coordinators()
+    {
+        $accounts = app(UserController::class);
+
+        return User::query()
+            ->with('profile')
+            ->where('role', 'WSPO Staff')
+            ->get()
+            ->filter(fn (User $user) => $accounts->canManageJanitorialGroups($user))
+            ->values();
     }
 
     private function studentPayload(User $student): array

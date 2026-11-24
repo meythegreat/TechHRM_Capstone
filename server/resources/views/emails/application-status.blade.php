@@ -1,92 +1,179 @@
+@php
+$badgeStyles = match ($status) {
+'Pending' => 'background-color:#FEF3C7;color:#92400E;border:1px solid #FDE68A;',
+'Interview' => 'background-color:#DBEAFE;color:#1E40AF;border:1px solid #BFDBFE;',
+'Training' => 'background-color:#E0E7FF;color:#3730A3;border:1px solid #C7D2FE;',
+'For Result' => 'background-color:#F3E8FF;color:#6B21A8;border:1px solid #E9D5FF;',
+'Approved' => 'background-color:#DCFCE7;color:#166534;border:1px solid #BBF7D0;',
+'Rejected' => 'background-color:#FEE2E2;color:#991B1B;border:1px solid #FECACA;',
+default => 'background-color:#F1F5F9;color:#334155;border:1px solid #E2E8F0;',
+};
+
+$contactEmail = (string) config('mail.contact_address', 'wspo.wospis@gmail.com');
+@endphp
+
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WoSPIS Application Update</title>
+    <title>{{ $heading }}</title>
 </head>
-<body style="margin:0;padding:0;background-color:#FFD500;font-family:Arial,Helvetica,sans-serif;color:#000000;">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#FFD500;padding:35px 12px;">
-    <tr>
-        <td align="center">
-            <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;background-color:#FFFFFF;border:2px solid #102179;border-radius:16px;overflow:hidden;">
-                <tr>
-                    <td align="center" style="background-color:#102179;padding:32px 24px 28px;">
-                        <h1 style="margin:0 0 6px;font-size:28px;line-height:1.3;font-weight:800;color:#FFFFFF;letter-spacing:1px;">WoSPIS</h1>
-                        <p style="margin:0;font-size:13px;line-height:1.6;color:#4AECED;letter-spacing:1.5px;text-transform:uppercase;">Work-Study Program</p>
-                    </td>
-                </tr>
-                <tr>
-                    <td height="5" style="background-color:#CC1E1B;font-size:0;line-height:0;">&nbsp;</td>
-                </tr>
-                <tr>
-                    <td style="padding:35px 32px 20px;">
-                        <p style="margin:0 0 18px;font-size:16px;line-height:1.7;">Dear <strong style="color:#102179;">{{ $applicantName }}</strong>,</p>
-                        <h2 style="margin:0 0 16px;font-size:23px;line-height:1.4;color:#102179;">{{ $heading }}</h2>
-                        @foreach ($paragraphs as $paragraph)
-                            <p style="margin:0 0 16px;font-size:15px;line-height:1.8;color:#333333;">{{ $paragraph }}</p>
-                        @endforeach
-                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#F4F7FF;border:1px solid #D6DFF8;border-left:5px solid #FFD500;border-radius:8px;">
-                            <tr>
-                                <td style="padding:22px 20px;">
-                                    <p style="margin:0 0 12px;font-size:12px;font-weight:700;color:#102179;text-transform:uppercase;letter-spacing:1.2px;">Current Application Status</p>
-                                    <p style="margin:0;font-size:14px;font-weight:800;color:#102179;letter-spacing:1px;">{{ $badgeLabel }}</p>
-                                    <p style="margin:15px 0 0;font-size:13px;line-height:1.7;color:#444444;">{{ $statusNote }}</p>
-                                </td>
-                            </tr>
-                        </table>
-                        @if ($status === 'Interview')
-                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:18px;background-color:#FFF8E8;border:1px solid #FFD500;border-radius:8px;">
+
+<body style="margin:0;padding:0;background-color:#F4F6F9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1E293B;-webkit-font-smoothing:antialiased;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F4F6F9;padding:40px 16px;">
+        <tr>
+            <td align="center">
+                <!-- Main Card -->
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;background-color:#FFFFFF;border-radius:12px;overflow:hidden;border:1px solid #E2E8F0;box-shadow:0 4px 12px rgba(15,23,42,0.05);">
+
+                    <!-- Gold Accent Bar -->
+                    <tr>
+                        <td style="background-color:#D4A017;height:4px;font-size:0;line-height:0;">&nbsp;</td>
+                    </tr>
+
+                    <!-- Institutional Header -->
+                    <tr>
+                        <td style="background-color:#0F2557;padding:32px 36px 28px;">
+                            <p style="margin:0;color:#CBD5E1;font-size:11px;letter-spacing:1.6px;font-weight:600;text-transform:uppercase;">
+                                Filamer Christian University, Inc.
+                            </p>
+                            <h1 style="margin:8px 0 0;color:#FFFFFF;font-size:24px;font-weight:700;letter-spacing:-0.3px;line-height:1.2;">
+                                WoSPIS
+                            </h1>
+                            <p style="margin:6px 0 0;color:#94A3B8;font-size:13px;line-height:1.4;">
+                                Work-Study Program Information System
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Status & Tracking Strip -->
+                    <tr>
+                        <td style="padding:18px 36px;background-color:#F8FAFC;border-bottom:1px solid #E2E8F0;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                                 <tr>
-                                    <td style="padding:18px 20px;">
-                                        <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#102179;text-transform:uppercase;letter-spacing:1.2px;">Interview Schedule</p>
-                                        <p style="margin:0;font-size:15px;line-height:1.7;font-weight:700;color:#102179;">{{ $interviewDate }}</p>
-                                        <p style="margin:8px 0 0;font-size:13px;line-height:1.7;color:#444444;">{{ $interviewRemarks }}</p>
+                                    <td align="left" valign="middle">
+                                        <span style="display:inline-block;padding:5px 12px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;{{ $badgeStyles }}">
+                                            {{ $badgeLabel }}
+                                        </span>
+                                    </td>
+                                    <td align="right" valign="middle">
+                                        <span style="color:#64748B;font-size:11px;font-weight:600;letter-spacing:0.6px;text-transform:uppercase;">Tracking Code: </span>
+                                        <span style="font-family:Consolas,'Courier New',monospace;color:#0F2557;font-size:13px;font-weight:700;">
+                                            {{ $trackingCode }}
+                                        </span>
                                     </td>
                                 </tr>
                             </table>
-                        @endif
-                        @if ($status === 'Approved')
-                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:18px;background-color:#ECFDF5;border:1px solid #6EE7B7;border-radius:8px;">
+                        </td>
+                    </tr>
+
+                    <!-- Email Body -->
+                    <tr>
+                        <td style="padding:36px 36px 32px;background-color:#FFFFFF;">
+                            <h2 style="margin:0 0 18px;color:#0F2557;font-size:20px;font-weight:700;line-height:1.3;">
+                                {{ $heading }}
+                            </h2>
+
+                            <p style="margin:0 0 16px;color:#0F172A;font-size:15px;font-weight:600;">
+                                Dear {{ $applicantName }},
+                            </p>
+
+                            @foreach ($paragraphs as $paragraph)
+                            <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:1.65;">
+                                {{ $paragraph }}
+                            </p>
+                            @endforeach
+
+                            <!-- Interview Stage Details -->
+                            @if ($status === 'Interview')
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;margin:24px 0;">
                                 <tr>
-                                    <td style="padding:18px 20px;">
-                                        <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#065F46;text-transform:uppercase;letter-spacing:1.2px;">Office Assignment</p>
-                                        <p style="margin:0;font-size:16px;line-height:1.6;font-weight:800;color:#102179;">{{ $assignedDepartment }}</p>
-                                        <p style="margin:6px 0 0;font-size:14px;line-height:1.6;color:#333333;">Duty: {{ $assignedDuty }}</p>
+                                    <td style="padding:14px 18px;border-bottom:1px solid #E2E8F0;">
+                                        <p style="margin:0;color:#64748B;font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;">Interview Schedule</p>
+                                        <p style="margin:4px 0 0;color:#0F172A;font-size:15px;font-weight:600;">{{ $interviewDate }}</p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:14px 18px;">
+                                        <p style="margin:0;color:#64748B;font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;">Remarks / Instructions</p>
+                                        <p style="margin:4px 0 0;color:#334155;font-size:14px;line-height:1.55;">{{ $interviewRemarks }}</p>
                                     </td>
                                 </tr>
                             </table>
-                        @endif
-                        @if ($status === 'Rejected' && $rejectionReason !== '')
-                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:18px;background-color:#FEF2F2;border:1px solid #FECACA;border-radius:8px;">
+                            @endif
+
+                            <!-- Approved Placement Details -->
+                            @if ($status === 'Approved')
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;margin:24px 0;">
                                 <tr>
-                                    <td style="padding:18px 20px;">
-                                        <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#CC1E1B;text-transform:uppercase;letter-spacing:1.2px;">Reason</p>
-                                        <p style="margin:0;font-size:15px;line-height:1.7;color:#333333;">{{ $rejectionReason }}</p>
+                                    <td style="padding:14px 18px;border-bottom:1px solid #BBF7D0;">
+                                        <p style="margin:0;color:#166534;font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;">Assigned Department / Office</p>
+                                        <p style="margin:4px 0 0;color:#0F172A;font-size:15px;font-weight:700;">{{ $assignedDepartment }}</p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:14px 18px;">
+                                        <p style="margin:0;color:#166534;font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;">Assigned Duty</p>
+                                        <p style="margin:4px 0 0;color:#0F172A;font-size:15px;font-weight:600;">{{ $assignedDuty }}</p>
                                     </td>
                                 </tr>
                             </table>
-                        @endif
-                        @if ($status !== 'Rejected')
-                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:26px;background-color:#102179;border-radius:10px;">
+                            @endif
+
+                            <!-- Rejection Reason (if provided) -->
+                            @if ($status === 'Rejected' && $rejectionReason !== '')
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#FEF2F2;border:1px solid #FECACA;border-radius:8px;margin:24px 0;">
                                 <tr>
-                                    <td align="center" style="padding:23px 18px;">
-                                        <p style="margin:0 0 8px;font-size:12px;font-weight:700;color:#4AECED;letter-spacing:1.5px;text-transform:uppercase;">Your Application Tracking Code</p>
-                                        <p style="margin:0 0 12px;font-size:23px;line-height:1.5;font-weight:800;color:#FFD500;letter-spacing:2px;">{{ $trackingCode }}</p>
-                                        <p style="margin:0;font-size:12px;line-height:1.7;color:#FFFFFF;">Keep this code safe. You can use it with your email to track your application status.</p>
+                                    <td style="padding:14px 18px;">
+                                        <p style="margin:0;color:#991B1B;font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;">Evaluation Remarks</p>
+                                        <p style="margin:6px 0 0;color:#7F1D1D;font-size:14px;line-height:1.55;">{{ $rejectionReason }}</p>
                                     </td>
                                 </tr>
                             </table>
-                        @endif
-                        <p style="margin:25px 0 4px;font-size:14px;color:#333333;">Sincerely,</p>
-                        <p style="margin:0;font-size:16px;font-weight:800;color:#102179;">WoSPIS</p>
-                        <p style="margin:3px 0;font-size:13px;color:#555555;">Work-Study Program</p>
-                        <p style="margin:3px 0 0;font-size:13px;font-weight:700;color:#102179;">Filamer Christian University</p>
-                    </td>
-                </tr>
-            </table>
-        </td>
-    </tr>
-</table>
+                            @endif
+
+                            <!-- Status Note Callout -->
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;border-left:3px solid #D4A017;background-color:#FFFBEB;border-radius:0 6px 6px 0;">
+                                <tr>
+                                    <td style="padding:12px 16px;">
+                                        <p style="margin:0;color:#78350F;font-size:13px;line-height:1.55;">
+                                            <strong>Status Note:</strong> {{ $statusNote }}
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Optional Attachment Notice -->
+                            @if (is_string($attachmentPdf) && $attachmentPdf !== '')
+                            <p style="margin:20px 0 0;color:#475569;font-size:13px;line-height:1.5;">
+                                <strong>Attached Document:</strong> {{ $attachmentName ?: 'completed-forms.pdf' }}
+                            </p>
+                            @endif
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding:20px 36px;background-color:#F8FAFC;border-top:1px solid #E2E8F0;">
+                            <p style="margin:0;color:#0F2557;font-size:13px;font-weight:600;">
+                                Work-Study Program Office (WSPO)
+                            </p>
+                            <p style="margin:4px 0 0;color:#64748B;font-size:12px;line-height:1.5;">
+                                Filamer Christian University, Inc. &middot;
+                                <a href="mailto:{{ $contactEmail }}" style="color:#1D4ED8;text-decoration:none;">{{ $contactEmail }}</a>
+                            </p>
+                            <p style="margin:10px 0 0;color:#94A3B8;font-size:11px;">
+                                This is an automated notification from WoSPIS. Please keep your tracking code for future reference.
+                            </p>
+                        </td>
+                    </tr>
+
+                </table>
+            </td>
+        </tr>
+    </table>
 </body>
+
 </html>

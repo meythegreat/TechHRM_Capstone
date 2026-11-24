@@ -11,6 +11,7 @@ use App\Support\ClassHoursDuty;
 use App\Support\CleaningProof;
 use App\Support\DutyHours;
 use App\Support\HourLimits;
+use App\Support\JanitorialWindows;
 use App\Support\RenderedHours;
 use App\Support\WorkSchedule;
 use App\Support\SuperAdminAudit;
@@ -1442,6 +1443,10 @@ class AdvancedAttendanceController extends Controller
         $limitDenial = HourLimits::jsonDenial($user->id, $now);
         if ($limitDenial) {
             return $limitDenial;
+        }
+
+        if ($windowMessage = JanitorialWindows::rejectionMessage((int) $user->id, $now)) {
+            return response()->json(['message' => $windowMessage], 422);
         }
 
         $method = $request->input('method', 'passcode');

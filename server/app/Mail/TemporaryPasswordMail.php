@@ -21,7 +21,7 @@ class TemporaryPasswordMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Your WoSPIS temporary password',
+            subject: 'Your WoSPIS Temporary Password',
         );
     }
 
@@ -40,51 +40,107 @@ class TemporaryPasswordMail extends Mailable
             htmlString: <<<HTML
 <!DOCTYPE html>
 <html lang="en">
-<body style="margin:0;padding:0;background:#FFD500;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FFD500;padding:32px 12px;">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your WoSPIS Temporary Password</title>
+</head>
+<body style="margin:0;padding:0;background-color:#F4F6F9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1E293B;-webkit-font-smoothing:antialiased;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F4F6F9;padding:40px 16px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#FFFFFF;border-radius:18px;overflow:hidden;border:2px solid #000000;font-family:Arial,Helvetica,sans-serif;">
+        <!-- Main Card -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;background-color:#FFFFFF;border-radius:12px;overflow:hidden;border:1px solid #E2E8F0;box-shadow:0 4px 12px rgba(15,23,42,0.05);">
+
+          <!-- Gold Accent Bar -->
           <tr>
-            <td style="background:#4AECED;height:8px;font-size:0;line-height:0;">&nbsp;</td>
+            <td style="background-color:#D4A017;height:4px;font-size:0;line-height:0;">&nbsp;</td>
           </tr>
+
+          <!-- Institutional Header -->
           <tr>
-            <td style="background:#1D54D3;padding:28px 32px 22px;">
-              <p style="margin:0;color:#4AECED;font-size:11px;letter-spacing:1.8px;font-weight:bold;">FILAMER CHRISTIAN UNIVERSITY</p>
-              <h1 style="margin:10px 0 0;color:#FFD500;font-size:30px;line-height:1.1;">WoSPIS</h1>
-              <p style="margin:8px 0 0;color:#FFFFFF;font-size:14px;">A Work Study Program Information System for Filamer Christian University, Inc.</p>
+            <td style="background-color:#0F2557;padding:32px 36px 28px;">
+              <p style="margin:0;color:#CBD5E1;font-size:11px;letter-spacing:1.6px;font-weight:600;text-transform:uppercase;">
+                Filamer Christian University, Inc.
+              </p>
+              <h1 style="margin:8px 0 0;color:#FFFFFF;font-size:24px;font-weight:700;letter-spacing:-0.3px;line-height:1.2;">
+                WoSPIS
+              </h1>
+              <p style="margin:6px 0 0;color:#94A3B8;font-size:13px;line-height:1.4;">
+                Work-Study Program Information System
+              </p>
             </td>
           </tr>
+
+          <!-- Email Body -->
           <tr>
-            <td style="padding:0;font-size:0;line-height:0;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            <td style="padding:36px 36px 32px;background-color:#FFFFFF;">
+              <p style="margin:0 0 16px;color:#0F172A;font-size:17px;font-weight:600;">
+                Dear {$name},
+              </p>
+              <p style="margin:0 0 24px;color:#475569;font-size:14px;line-height:1.65;">
+                A password reset was requested for your WoSPIS account. Please use the temporary password below to sign in. For your security, you will be prompted to set a new password immediately after logging in.
+              </p>
+
+              <!-- Account Details Table -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;margin-bottom:24px;">
                 <tr>
-                  <td width="34%" style="background:#102179;height:6px;">&nbsp;</td>
-                  <td width="33%" style="background:#1D54D3;height:6px;">&nbsp;</td>
-                  <td width="33%" style="background:#CC1E1B;height:6px;">&nbsp;</td>
+                  <td style="padding:14px 18px;border-bottom:1px solid #E2E8F0;">
+                    <p style="margin:0;color:#64748B;font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;">Username</p>
+                    <p style="margin:4px 0 0;color:#0F172A;font-size:15px;font-weight:600;">{$username}</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:14px 18px;">
+                    <p style="margin:0;color:#64748B;font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;">Account Email</p>
+                    <p style="margin:4px 0 0;color:#0F172A;font-size:15px;font-weight:600;">{$accountEmail}</p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Temporary Password Box -->
+              <p style="margin:0 0 8px;color:#64748B;font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;">
+                Temporary Password
+              </p>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+                <tr>
+                  <td align="center" style="background-color:#EFF6FF;border:1px dashed #93C5FD;border-radius:8px;padding:18px 16px;">
+                    <span style="font-family:Consolas,'Courier New',monospace;color:#0F2557;font-size:22px;font-weight:700;letter-spacing:2px;">
+                      {$password}
+                    </span>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Security Notice -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-left:3px solid #D4A017;background-color:#FFFBEB;border-radius:0 6px 6px 0;">
+                <tr>
+                  <td style="padding:12px 16px;">
+                    <p style="margin:0;color:#78350F;font-size:13px;line-height:1.55;">
+                      <strong>Didn't request this?</strong> Please contact the Work-Study Program Office immediately so we can secure your account.
+                    </p>
+                  </td>
                 </tr>
               </table>
             </td>
           </tr>
+
+          <!-- Footer -->
           <tr>
-            <td style="padding:32px;background:#FFFFFF;">
-              <p style="margin:0 0 14px;color:#102179;font-size:18px;font-weight:bold;">Hello {$name},</p>
-              <p style="margin:0 0 22px;color:#000000;font-size:15px;line-height:1.6;">A password reset was requested for your WoSPIS account. Use the temporary password below to sign in. You will be asked to choose a new password before you can continue.</p>
-              <p style="margin:0 0 6px;color:#1D54D3;font-size:11px;font-weight:bold;letter-spacing:1.2px;">USERNAME</p>
-              <p style="margin:0 0 18px;color:#102179;font-size:16px;font-weight:bold;">{$username}</p>
-              <p style="margin:0 0 6px;color:#1D54D3;font-size:11px;font-weight:bold;letter-spacing:1.2px;">EMAIL</p>
-              <p style="margin:0 0 18px;color:#102179;font-size:16px;font-weight:bold;">{$accountEmail}</p>
-              <p style="margin:0 0 8px;color:#1D54D3;font-size:11px;font-weight:bold;letter-spacing:1.2px;">TEMPORARY PASSWORD</p>
-              <p style="margin:0 0 24px;background:#FFD500;border:2px solid #000000;border-radius:12px;padding:16px 12px;color:#102179;font-size:22px;font-weight:bold;letter-spacing:1px;text-align:center;">{$password}</p>
-              <p style="margin:0;color:#000000;font-size:13px;line-height:1.6;">If you did not request this, contact the Work-Study Program office.</p>
+            <td style="padding:20px 36px;background-color:#F8FAFC;border-top:1px solid #E2E8F0;">
+              <p style="margin:0;color:#0F2557;font-size:13px;font-weight:600;">
+                Work-Study Program Office (WSPO)
+              </p>
+              <p style="margin:4px 0 0;color:#64748B;font-size:12px;line-height:1.5;">
+                Filamer Christian University, Inc. &middot;
+                <a href="mailto:{$contactEmail}" style="color:#1D4ED8;text-decoration:none;">{$contactEmail}</a>
+              </p>
+              <p style="margin:10px 0 0;color:#94A3B8;font-size:11px;">
+                This is an automated message from WoSPIS. Please do not share your temporary password with anyone.
+              </p>
             </td>
           </tr>
-          <tr>
-            <td style="padding:18px 32px;background:#102179;">
-              <p style="margin:0;color:#FFD500;font-size:13px;font-weight:bold;">WoSPIS WSPO</p>
-              <p style="margin:4px 0 0;color:#4AECED;font-size:13px;">{$contactEmail}</p>
-            </td>
-          </tr>
+
         </table>
       </td>
     </tr>

@@ -7,6 +7,7 @@ import {
   janitorialGroupService,
   type JanitorialGroup,
   type JanitorialLeader,
+  type JanitorialSupervisorAbsence,
 } from '../../services/janitorialGroupService';
 import { bindPopup } from '../../utils/popupDismiss';
 import { HelpDisclosure } from '../HelpDisclosure';
@@ -48,15 +49,19 @@ export function JanitorialGroupsDialog({ onClose }: { onClose: () => void }) {
   const [noticeError, setNoticeError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [panel, setPanel] = useState<'none' | 'leader' | 'group'>('none');
+  const [absences, setAbsences] = useState<JanitorialSupervisorAbsence[]>([]);
+  const [decidingId, setDecidingId] = useState<number | null>(null);
 
   const load = async () => {
-    const [leaderRows, studentRes, officeRes, immediateRes] = await Promise.all([
+    const [leaderRows, absenceRows, studentRes, officeRes, immediateRes] = await Promise.all([
       janitorialGroupService.leaders(),
+      janitorialGroupService.absenceRequests(),
       financialService.getHourStudents(),
       axios.get('/api/offices').catch(() => null),
       axios.get('/api/users', { params: { role: 'Immediate Supervisor', per_page: 100 } }).catch(() => null),
     ]);
     setLeaders(leaderRows);
+    setAbsences(absenceRows);
     setStudents((studentRes.students || []) as StudentOption[]);
     const officeRows = Array.isArray(officeRes?.data) ? officeRes.data : [];
     setOffices(officeRows.map((office: { name?: string }) => (office.name || '').trim()).filter(Boolean));
@@ -226,6 +231,21 @@ export function JanitorialGroupsDialog({ onClose }: { onClose: () => void }) {
     }
   };
 
+  const decideAbsence = async (id: number, status: 'Approved' | 'Rejected') => {
+    setDecidingId(id);
+    try {
+      const res = await janitorialGroupService.decideAbsence(id, status);
+      setNoticeError(false);
+      setNotice(res.message || 'Updated.');
+      await load();
+    } catch (error) {
+      setNoticeError(true);
+      setNotice(apiError(error, 'Could not decide this absence request.'));
+    } finally {
+      setDecidingId(null);
+    }
+  };
+
   const setPresence = async (leader: JanitorialLeader, isPresent: boolean) => {
     if ((leader.is_present !== false) === isPresent) return;
     try {
@@ -328,8 +348,46 @@ export function JanitorialGroupsDialog({ onClose }: { onClose: () => void }) {
               'Members can come from any department. One janitorial supervisor can cover up to 3 cleaning areas, with up to 6 members in each group.',
               'The janitorial supervisor can recommend approval, deduct hours, and add notes.',
               'The immediate supervisor reviews that recommendation and has the final say. This account is separate from the department secretary. The department supervisor can approve only when an absence is reported in advance.',
+              'Janitorial supervisors request their own absence here. They stay on duty until the WSPO coordinator approves it.',
             ]}
           />
+
+          {absences.some((row) => row.status === 'Pending') && (
+            <div className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50/80 p-4">
+              <p className="text-sm font-black tracking-tight text-amber-950">Absence requests</p>
+              <p className="text-xs font-medium text-amber-900">
+                A janitorial supervisor stays on duty until you approve the request.
+              </p>
+              <ul className="space-y-2">
+                {absences.filter((row) => row.status === 'Pending').map((row) => (
+                  <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-white px-3 py-2">
+                    <div className="min-w-0 text-xs font-semibold text-slate-700">
+                      <p className="font-extrabold text-slate-900">{row.leader_name || 'Janitorial supervisor'} · {row.absent_on}</p>
+                      <p className="mt-0.5">{row.reason}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={decidingId === row.id}
+                        onClick={() => decideAbsence(row.id, 'Approved')}
+                        className="rounded-lg bg-emerald-600 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-white disabled:opacity-45"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        disabled={decidingId === row.id}
+                        onClick={() => decideAbsence(row.id, 'Rejected')}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-slate-700 disabled:opacity-45"
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {notice && (
             <div className={`rounded-xl border px-4 py-3 text-xs font-bold ${noticeError ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>

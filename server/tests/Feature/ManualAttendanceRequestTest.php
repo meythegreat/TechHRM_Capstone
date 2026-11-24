@@ -95,6 +95,36 @@ class ManualAttendanceRequestTest extends TestCase
         $this->assertCount(2, $rows);
     }
 
+    public function test_only_office_supervisor_and_secretary_accept_regular_requests(): void
+    {
+        $student = $this->makeUser('Student', 'Library', 'Bea Santos');
+        $secretary = $this->makeUser('Department Secretary', 'Library', 'Library Secretary');
+        $coordinator = $this->makeUser('WSPO Staff', 'WSPO Coordinator', 'WSPO Coord');
+
+        Sanctum::actingAs($student);
+        $requestId = $this->postJson('/api/attendance/manual-requests', [
+            'reason' => 'Office had no internet yesterday.',
+            'shifts' => [
+                ['date' => '2026-11-13', 'time_in' => '08:00', 'time_out' => '12:00'],
+            ],
+        ])->assertCreated()->json('request.id');
+
+        Sanctum::actingAs($coordinator);
+        $this->patchJson('/api/attendance/manual-requests/'.$requestId, [
+            'status' => 'Approved',
+        ])->assertForbidden();
+        $this->assertSame('Pending', ManualAttendanceRequest::query()->find($requestId)->status);
+
+        Sanctum::actingAs($secretary);
+        $this->getJson('/api/attendance/manual-requests')
+            ->assertOk()
+            ->assertJsonPath('requests.0.id', $requestId);
+        $this->patchJson('/api/attendance/manual-requests/'.$requestId, [
+            'status' => 'Approved',
+        ])->assertOk()
+            ->assertJsonPath('request.status', 'Approved');
+    }
+
     public function test_client_request_id_replays_without_duplicate(): void
     {
         $student = $this->makeUser('Student', 'Library', 'Cara Reyes');

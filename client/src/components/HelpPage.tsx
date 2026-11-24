@@ -69,7 +69,7 @@ const HELP_TOPICS: HelpTopic[] = [
             'You can usually clock in starting 30 minutes before your shift begins.',
             'If you are already timed in, clock out first before starting another duty.',
             'Cleaning, devotionals, and assemblies use their own passcode or QR. Clock in, then time out the same way. Hours are added only when you time out, and only if the clock-in was on time.',
-            'Janitorial duty usually needs no code. On Attendance / DTR, choose Photo under Janitorial duty. The first surroundings photo starts your clock-in, and the last photo ends your clock-out. If your janitorial supervisor is with you, you can choose Supervisor code instead. That supervisor can approve, deduct hours, and add a note. The immediate supervisor has the final say. An accepted entry records up to 4 hours from clock-in.',
+            'Janitorial duty usually needs no code. On Attendance / DTR, choose Photo under Janitorial duty. You can record it twice a day: morning 5:00–7:00 AM and afternoon 5:00–9:00 PM, one entry in each window. The first surroundings photo starts your clock-in, and the last photo ends your clock-out. If your janitorial supervisor is with you, you can choose Supervisor code instead. That supervisor can approve, deduct hours, and add a note. The immediate supervisor has the final say. An accepted entry records up to 4 hours from clock-in.',
             'If you have no work schedule yet, follow the attendance rules set by WSPO.',
             'You may work up to 20 hours per week by default. Past 20 hours needs administrator approval (up to 25). The monthly maximum is 100 hours.',
             'Offline requests do not replace normal passcode or QR clock-in when the office is online.',
@@ -94,6 +94,7 @@ const HELP_TOPICS: HelpTopic[] = [
         tips: [
             'Department daily codes and campus activity codes do not clock janitorial duty.',
             'The WSPO Coordinator assigns leaders and their groups. You cannot create a group from this page.',
+            'To be absent, submit an absence request with the date and reason. Members can use a code again until the WSPO coordinator approves it.',
         ],
     },
     {
@@ -304,7 +305,7 @@ const HELP_TOPICS: HelpTopic[] = [
         title: 'Timesheets',
         summary: 'Review and manage student daily time records.',
         about:
-            'Timesheets shows student attendance logs. A student clock-out is approved immediately, so supervisors do not accept each one. Manual time entries can still be pending. Students may also submit offline manual attendance requests when an office had no internet; those stay pending until you approve or reject them. Approving credits closed shifts on the student DTR. Supervisors and WSPO staff can accept or reject pending rows, print monthly DTRs, and process Extra Hours letters that raise the weekly cap from 20 to 25. Super Admins can browse and filter records, and can force clock-out forgotten open regular-duty and group-activity sessions (selected or bulk).',
+            'Timesheets shows student attendance logs. A student clock-out is approved immediately, so supervisors do not accept each one. Manual time entries can still be pending. Students may also submit offline manual attendance requests when an office had no internet; those stay pending until you approve or reject them. Approving credits closed shifts on the student DTR. Supervisors and WSPO staff can accept or reject pending rows, print monthly DTRs, and process Extra Hours letters that raise the weekly cap from 20 to 25. Super Admins can browse and filter records, force clock-out forgotten open regular-duty and group-activity sessions (selected or bulk), and add, edit, or remove holidays and class breaks.',
         audience: ['Supervisor', 'WSPO Staff', 'Super Admin'],
         steps: [
             'Click Timesheets in the left menu.',
@@ -315,13 +316,13 @@ const HELP_TOPICS: HelpTopic[] = [
             'Review Extra Hours near the top. Supervisors Save & Print the letter, collect wet signatures, then upload the signed scan. WSPO records Approve 25 or Decline.',
             'Open a student monthly DTR when you need to review or print the full sheet.',
             'Use Manual Timesheet Override to add or edit time in and time out, including a date that has no DTR yet. Each shift is saved as its own row.',
-            'WSPO or Super Admin users can also manage holidays and class breaks when that tool is shown.',
+            'WSPO staff manage holidays and class breaks from the Holidays & Class Breaks section on Timesheets. Super Admins use the same section on their Timesheets page.',
             'Super Admins: use Force clock-out at the top of Timesheets to select specific open sessions or bulk-close every open regular and activity row.',
         ],
         tips: [
             'Supervisors usually handle students in their own department.',
             'WSPO staff can add or edit DTR times for any working student, even when that day has no recorded time yet.',
-            'Super Admin history filters stay audit-oriented; force clock-out is the documented write exception for forgotten open sessions.',
+            'Super Admin history filters stay audit-oriented. Force clock-out and holidays or class breaks are the documented write actions on this page.',
             'Students are limited to 20 hours/week unless you approve an extension. 100 hours/month is a hard stop.',
             'Offline requests are for no-internet offices. Prefer passcode or QR when connectivity is available.',
         ],
@@ -349,6 +350,34 @@ const HELP_TOPICS: HelpTopic[] = [
             'Not every WSPO office title can edit schedules—usually coordinator or secretary roles.',
             'Super Admin access on this page is mostly for reviewing, not editing.',
             'Extra Service letters need signatures from the supervisor, WSPO Coordinator, Guidance Committee Chair, VP-Administration, VP-Finance, and the University President.',
+        ],
+    },
+    {
+        id: 'staff-evaluation',
+        title: 'Evaluation',
+        summary: 'Fill and approve the monthly WSA Evaluation Form.',
+        about:
+            'Evaluation is its own section. Department supervisors and department secretaries fill one form for one student assistant in their office. The office, semester, school year, and date are filled in automatically. The form prints on long coupon paper (8.5 × 13 inches). After a signature proof is attached, it goes to the WSPO coordinator for approval.',
+        audience: ['Supervisor', 'Department Secretary', 'WSPO Staff', 'Super Admin'],
+        steps: [
+            'Open Evaluation in the left menu.',
+            'Confirm the office, semester, school year, and date. If you cover more than one office, choose one office first.',
+            'Search the student assistants in that office and select one name.',
+            'Choose one rating for each performance standard.',
+            'Type the supervisor’s comments.',
+            'Check one recommendation: Retained, Replace, or Suspension.',
+            'Type the Evaluated by and Attested by names.',
+            'Print the form on long coupon paper (8.5 × 13). In the print dialog, choose that paper size, set margins to None, and keep the scale at 100%.',
+            'Collect the wet signature of the immediate supervisor, the department head, or both.',
+            'Upload a photo or scan of the signed form, then submit it to the WSPO coordinator.',
+            'WSPO coordinator: open For approval, review the signature proof, then approve or return the form.',
+        ],
+        tips: [
+            'The document preview on the page shows the long coupon as you fill it in.',
+            'Each form is for one student assistant in one office. Start another form for the next student.',
+            'A student can have one evaluation per office each month.',
+            'One signed copy of the whole form is required. Use Clear if you want to empty the form, and confirm before it is wiped.',
+            'Super Admin can view submitted evaluations. Approval stays with the WSPO coordinator.',
         ],
     },
     {

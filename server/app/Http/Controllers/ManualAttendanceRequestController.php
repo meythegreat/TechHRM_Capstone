@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Support\ClassHoursDuty;
 use App\Support\DutyHours;
 use App\Support\JanitorialApproval;
+use App\Support\JanitorialWindows;
 use App\Support\ManualDtrEntry;
 use App\Support\SuperAdminAudit;
 use Carbon\Carbon;
@@ -46,7 +47,7 @@ class ManualAttendanceRequestController extends Controller
     public function index(Request $request)
     {
         $actor = $request->user()->loadMissing('profile');
-        if (!in_array($actor->role, ['Supervisor', 'WSPO Staff', 'Super Admin'], true)) {
+        if (! in_array($actor->role, ['Supervisor', 'Department Secretary', 'WSPO Staff', 'Super Admin'], true)) {
             return response()->json(['message' => 'Not allowed.'], 403);
         }
 
@@ -172,6 +173,7 @@ class ManualAttendanceRequestController extends Controller
         }
 
         $shiftRows = [];
+        $janitorialWindowsUsed = [];
         foreach (array_values($validated['shifts']) as $index => $shift) {
             if ($requestType === ManualAttendanceRequest::TYPE_JANITORIAL) {
                 $start = \Carbon\Carbon::createFromFormat('Y-m-d H:i', $shift['date'].' '.$shift['time_in']);
@@ -207,6 +209,24 @@ class ManualAttendanceRequestController extends Controller
                 return response()->json([
                     'message' => 'Shift '.($index + 1).' overlaps an existing DTR entry.',
                 ], 422);
+            }
+
+            if ($requestType === ManualAttendanceRequest::TYPE_JANITORIAL) {
+                $windowMessage = JanitorialWindows::rejectionMessage((int) $user->id, $timeIn);
+                if ($windowMessage) {
+                    return response()->json([
+                        'message' => 'Shift '.($index + 1).': '.$windowMessage,
+                    ], 422);
+                }
+                $windowKey = $timeIn->toDateString().'|'.DutyHours::janitorialWindow($timeIn);
+                if (isset($janitorialWindowsUsed[$windowKey])) {
+                    return response()->json([
+                        'message' => 'Shift '.($index + 1).': this request already includes a '
+                            .DutyHours::janitorialWindowPhrase(DutyHours::janitorialWindow($timeIn))
+                            .' janitorial attendance on that date.',
+                    ], 422);
+                }
+                $janitorialWindowsUsed[$windowKey] = true;
             }
 
             $area = trim((string) ($shift['janitorial_area'] ?? ''));
@@ -378,7 +398,7 @@ class ManualAttendanceRequestController extends Controller
         $message = match ($requestType) {
             ManualAttendanceRequest::TYPE_JANITORIAL => 'Janitorial offline request submitted. Your janitorial supervisor reviews it first. The immediate supervisor has the final say. If it is accepted, the DTR records up to 4 hours from your time in.',
             ManualAttendanceRequest::TYPE_CLASS_HOURS => 'Class-hours duty request submitted. Hours appear on DTR after supervisor approval.',
-            default => 'Offline attendance request submitted. It will appear on your DTR after your supervisor approves it.',
+            default => 'Offline attendance request submitted. Your department or office supervisor, or a department secretary, will review it.',
         };
         app(AccountEventMailer::class)->duty($user, $title, 'Request submitted', $message);
 
@@ -438,10 +458,12 @@ class ManualAttendanceRequestController extends Controller
             $janitorialStage = $gate['stage'];
             $janitorialCredit = $gate['hours'];
             $janitorialOnBehalf = $gate['on_behalf'];
-        } elseif (! in_array($reviewer->role, ['Supervisor', 'WSPO Staff'], true)) {
-            return response()->json(['message' => 'Only a supervisor or WSPO staff can decide this request.'], 403);
+        } elseif (! $this->canAcceptRegularRequest($reviewer)) {
+            return response()->json([
+                'message' => 'Only the department or office supervisor and department secretaries can accept this request.',
+            ], 403);
         } elseif (! $this->canReviewStudent($reviewer, $student)) {
-            return response()->json(['message' => 'You can only review offline attendance for students in your scope.'], 403);
+            return response()->json(['message' => 'You can only review offline attendance for students in your department or office.'], 403);
         }
 
         if ($janitorialStage === 'leader') {
@@ -477,7 +499,7 @@ class ManualAttendanceRequestController extends Controller
                 ? ($janitorialOnBehalf
                     ? 'The department dean or person-in-charge declined the offline request on behalf of your immediate supervisor.'
                     : 'Your immediate supervisor declined the offline request.')
-                : 'Your offline manual attendance request was declined by your supervisor.';
+                : 'Your offline attendance request was declined by your department or office supervisor, or by a department secretary.';
             Notification::create([
                 'user_id' => $student->id,
                 'title' => 'Offline attendance declined',
@@ -811,10 +833,17 @@ class ManualAttendanceRequestController extends Controller
         return $stored;
     }
 
+    private function canAcceptRegularRequest(User $actor): bool
+    {
+        $accounts = app(UserController::class);
+
+        return $actor->role === 'Supervisor' || $accounts->isActingDepartmentSecretary($actor);
+    }
+
     private function canReviewStudent(User $actor, User $student): bool
     {
-        if ($actor->role === 'WSPO Staff') {
-            return true;
+        if (! $this->canAcceptRegularRequest($actor)) {
+            return false;
         }
 
         return app(UserController::class)->supervisorCanAccessStudent($actor, $student);
@@ -824,16 +853,10 @@ class ManualAttendanceRequestController extends Controller
     {
         $accounts = app(UserController::class);
         $reviewers = User::query()
-            ->whereIn('role', ['Supervisor', 'WSPO Staff'])
+            ->whereIn('role', ['Supervisor', 'Department Secretary'])
             ->with('profile')
             ->get()
-            ->filter(function (User $reviewer) use ($accounts, $student) {
-                if ($reviewer->role === 'WSPO Staff') {
-                    return true;
-                }
-
-                return $accounts->supervisorCanAccessStudent($reviewer, $student);
-            });
+            ->filter(fn (User $reviewer) => $accounts->supervisorCanAccessStudent($reviewer, $student));
 
         foreach ($reviewers as $reviewer) {
             Notification::create([

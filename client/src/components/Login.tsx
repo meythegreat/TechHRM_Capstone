@@ -136,6 +136,8 @@ const Login = ({
             } else {
                 localStorage.removeItem('secretary_acting');
             }
+            localStorage.setItem('can_file_evaluations', response.data.can_file_evaluations ? '1' : '0');
+            localStorage.setItem('can_review_evaluations', response.data.can_review_evaluations ? '1' : '0');
 
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 

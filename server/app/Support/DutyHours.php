@@ -38,6 +38,35 @@ class DutyHours
         return $timeIn->copy()->addMinutes((int) round(self::JANITORIAL_FIXED_HOURS * 60));
     }
 
+    /**
+     * Janitorial duty may be recorded twice a day: once in the morning window
+     * and once in the afternoon window.
+     *
+     * @return 'morning'|'afternoon'|null
+     */
+    public static function janitorialWindow(Carbon $moment): ?string
+    {
+        $moment = $moment->copy()->timezone(config('app.timezone'));
+        $clock = $moment->format('H:i:s');
+        if ($clock >= '05:00:00' && $clock <= '07:00:00') {
+            return 'morning';
+        }
+        if ($clock >= '17:00:00' && $clock <= '21:00:00') {
+            return 'afternoon';
+        }
+
+        return null;
+    }
+
+    public static function janitorialWindowPhrase(?string $window = null): string
+    {
+        return match ($window) {
+            'morning' => 'morning (5:00–7:00 AM)',
+            'afternoon' => 'afternoon (5:00–9:00 PM)',
+            default => 'morning (5:00–7:00 AM) or afternoon (5:00–9:00 PM)',
+        };
+    }
+
     public static function isLibrary(?string $office): bool
     {
         $normalized = mb_strtolower(trim((string) $office));

@@ -5,6 +5,7 @@ import { Calendar, Clock, Search, ShieldCheck, X, FileSpreadsheet } from 'lucide
 import AuditPager, { pageSlice } from './AuditPager';
 import ComboFilter from './ComboFilter';
 import SuperAdminForceClockOut from './SuperAdminForceClockOut';
+import HolidayManager from './HolidayManager';
 import Toast from './Toast';
 
 interface AttendanceRecord {
@@ -63,6 +64,7 @@ const SuperAdminTimesheets = () => {
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
     const [error, setError] = useState<string | null>(null);
+    const [notice, setNotice] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
     const [historyTick, setHistoryTick] = useState(0);
 
     useEffect(() => {
@@ -152,7 +154,7 @@ const SuperAdminTimesheets = () => {
                             Recent Attendances
                         </h1>
                         <p className="mt-2 text-sm font-medium leading-relaxed text-slate-300">
-                            Audit campus-wide attendance records and close forgotten open sessions.
+                            Audit campus-wide attendance records, close forgotten open sessions, and add holidays or class breaks.
                         </p>
                     </div>
 
@@ -172,9 +174,20 @@ const SuperAdminTimesheets = () => {
                 </div>
             </motion.header>
 
-            <Toast message={error} type="error" onClose={() => setError(null)} />
+            <Toast
+                message={notice?.text ?? error}
+                type={notice?.type ?? 'error'}
+                onClose={() => {
+                    setNotice(null);
+                    setError(null);
+                }}
+            />
 
             <SuperAdminForceClockOut onClosed={() => setHistoryTick((tick) => tick + 1)} />
+
+            <HolidayManager
+                onToast={(message, type = 'success') => setNotice({ text: message, type })}
+            />
 
             {/* FILTER DECK */}
             <section className="grid grid-cols-1 items-end gap-3 rounded-[1.75rem] border border-slate-200/90 bg-white p-5 shadow-sm md:grid-cols-3 lg:grid-cols-[1fr_1fr_1.2fr_auto]">

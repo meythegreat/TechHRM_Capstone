@@ -136,6 +136,8 @@ class UserController extends Controller
         $data['can_manage_activity_groups'] = $this->canManageActivityGroups($user);
         $data['can_manage_janitorial_groups'] = $this->canManageJanitorialGroups($user);
         $data['can_issue_daily_attendance'] = $this->canIssueDailyAttendance($user);
+        $data['can_file_evaluations'] = $this->canFileEvaluation($user);
+        $data['can_review_evaluations'] = $this->canReviewEvaluation($user);
         $data['is_student_officer'] = $this->isStudentOfficer($user);
         $data['officer_position'] = $this->officerPosition($user) ?: null;
         $data['must_clock_as_student'] = $this->mustClockAsStudent($user);
@@ -985,6 +987,36 @@ class UserController extends Controller
             fn (string $department) => $this->departmentAliases($department),
             $departments
         ))));
+    }
+
+    /** Office labels that count as this one department, including older names. */
+    public function areasForDepartment(string $department): array
+    {
+        $department = trim($department);
+        if ($department === '') {
+            return [];
+        }
+
+        return $this->departmentAliases($department);
+    }
+
+    /** Department supervisors and department secretaries file the WSA evaluation. */
+    public function canFileEvaluation(User $user): bool
+    {
+        return $this->usesSupervisorScope($user);
+    }
+
+    /**
+     * The WSPO coordinator approves submitted evaluations.
+     * Super Admin may open the queue as a read-only audit.
+     */
+    public function canReviewEvaluation(User $user): bool
+    {
+        if ($user->role === 'Super Admin') {
+            return true;
+        }
+
+        return $user->role === 'WSPO Staff' && $this->canManageWorkSchedules($user);
     }
 
     public function supervisorCanAccessStudent(User $supervisor, User $student): bool

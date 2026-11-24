@@ -9,6 +9,7 @@ use App\Services\AccountEventMailer;
 use App\Support\CleaningProof;
 use App\Support\DutyHours;
 use App\Support\HourLimits;
+use App\Support\JanitorialWindows;
 use Carbon\Carbon;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\Request;
@@ -126,6 +127,10 @@ class CleaningProofController extends Controller
 
         if ($limitDenial = HourLimits::jsonDenial($user->id, $capturedAt)) {
             return $limitDenial;
+        }
+
+        if ($windowMessage = JanitorialWindows::rejectionMessage((int) $user->id, $capturedAt)) {
+            return response()->json(['message' => $windowMessage], 422);
         }
 
         try {

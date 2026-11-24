@@ -20,6 +20,7 @@ import {
   janitorialGroupService,
   type JanitorialCodeSession,
   type JanitorialGroup,
+  type JanitorialSupervisorAbsence,
 } from '../../services/janitorialGroupService';
 import CleaningProofCapture from '../CleaningProofCapture';
 import { HelpDisclosure } from '../HelpDisclosure';
@@ -48,17 +49,24 @@ export function JanitorialCodeScreen() {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [absences, setAbsences] = useState<JanitorialSupervisorAbsence[]>([]);
+  const [absentOn, setAbsentOn] = useState('');
+  const [absenceReason, setAbsenceReason] = useState('');
+  const [absenceNotice, setAbsenceNotice] = useState('');
+  const [absenceError, setAbsenceError] = useState(false);
+  const [savingAbsence, setSavingAbsence] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const expandedRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([axios.get('/api/user'), janitorialGroupService.list()])
-      .then(([userRes, rows]) => {
+    Promise.all([axios.get('/api/user'), janitorialGroupService.list(), janitorialGroupService.absenceRequests()])
+      .then(([userRes, rows, absenceRows]) => {
         if (cancelled) return;
         const userId = Number(userRes.data?.id);
         const mine = rows.filter((group) => group.supervisor?.id === userId);
         setGroups(mine);
+        setAbsences(absenceRows.filter((row) => row.user_id === userId));
         setGroupId(mine[0]?.id ?? null);
         if (mine.length === 0) {
           setError('You are not assigned as a janitorial group supervisor.');
@@ -257,6 +265,76 @@ export function JanitorialCodeScreen() {
             {error || 'You are not assigned as a janitorial group supervisor.'}
           </p>
         </div>
+      )}
+
+      {!loadingGroups && groups.length > 0 && (
+        <section className="rounded-[1.75rem] border border-slate-200/90 bg-white p-5 shadow-sm">
+          <h2 className="text-sm font-black tracking-tight text-slate-900">Request an absence</h2>
+          <p className="mt-1 text-xs font-medium leading-relaxed text-slate-500">
+            Send the date and reason to the WSPO coordinator. You stay on duty until they approve it. After approval, members record that day as offline attendance.
+          </p>
+          <form
+            className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[10rem_1fr_auto]"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              setSavingAbsence(true);
+              setAbsenceNotice('');
+              try {
+                const res = await janitorialGroupService.requestAbsence(absentOn, absenceReason.trim());
+                setAbsenceError(false);
+                setAbsenceNotice(res.message || 'Request sent.');
+                setAbsenceReason('');
+                const rows = await janitorialGroupService.absenceRequests();
+                setAbsences(rows);
+              } catch (err) {
+                setAbsenceError(true);
+                setAbsenceNotice(apiError(err, 'Could not send the absence request.'));
+              } finally {
+                setSavingAbsence(false);
+              }
+            }}
+          >
+            <input
+              type="date"
+              required
+              min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}
+              value={absentOn}
+              onChange={(event) => setAbsentOn(event.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-800"
+            />
+            <input
+              required
+              maxLength={500}
+              value={absenceReason}
+              onChange={(event) => setAbsenceReason(event.target.value)}
+              placeholder="Reason"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-800"
+            />
+            <button
+              type="submit"
+              disabled={savingAbsence}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-extrabold uppercase tracking-wider text-white disabled:opacity-45"
+            >
+              {savingAbsence ? 'Sending…' : 'Request'}
+            </button>
+          </form>
+          {absenceNotice && (
+            <p className={`mt-3 text-xs font-bold ${absenceError ? 'text-rose-700' : 'text-emerald-700'}`}>{absenceNotice}</p>
+          )}
+          {absences.length > 0 && (
+            <ul className="mt-4 space-y-2">
+              {absences.map((row) => (
+                <li key={row.id} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
+                  <span className="font-extrabold text-slate-900">{row.absent_on}</span>
+                  {' · '}
+                  {row.status}
+                  {' · '}
+                  {row.reason}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       )}
 
       {/* MAIN VERIFICATION DECK */}

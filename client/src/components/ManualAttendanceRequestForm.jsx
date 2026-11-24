@@ -475,6 +475,9 @@ const ManualAttendanceRequestForm = ({ onToast }) => {
                   ))}
                 </select>
               )}
+              <p className="mt-2 text-[11px] font-medium leading-relaxed text-slate-500">
+                Time in must fall in the morning window (5:00–7:00 AM) or the afternoon window (5:00–9:00 PM). One attendance per window each day.
+              </p>
             </div>
           )}
         </div>

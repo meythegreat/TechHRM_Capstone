@@ -185,7 +185,7 @@ class AttendanceDutyFeaturesTest extends TestCase
         $this->post('/api/attendance/manual-requests', [
             'request_type' => 'janitorial',
             'shifts' => [
-                ['date' => '2026-11-12', 'time_in' => '09:00', 'time_out' => '11:00'],
+                ['date' => '2026-11-12', 'time_in' => '06:00', 'time_out' => '07:00'],
             ],
         ], ['Accept' => 'application/json'])->assertStatus(422);
 
@@ -194,12 +194,12 @@ class AttendanceDutyFeaturesTest extends TestCase
             'shifts' => [
                 [
                     'date' => '2026-11-12',
-                    'time_in' => '09:00',
-                    'time_out' => '11:00',
+                    'time_in' => '06:00',
+                    'time_out' => '07:00',
                     'before_photo' => UploadedFile::fake()->image('before.jpg', 640, 480),
                     'after_photo' => UploadedFile::fake()->image('after.jpg', 640, 480),
-                    'before_captured_at' => '2026-11-12T09:00:00',
-                    'after_captured_at' => '2026-11-12T11:00:00',
+                    'before_captured_at' => '2026-11-12T06:00:00',
+                    'after_captured_at' => '2026-11-12T07:00:00',
                     'capture_source' => 'live_camera',
                 ],
             ],
@@ -246,19 +246,20 @@ class AttendanceDutyFeaturesTest extends TestCase
         Storage::disk('local')->assertExists($attendance->cleaning_before_path);
         Storage::disk('local')->assertExists($attendance->cleaning_after_path);
 
-        // Time in 16:30 with the clock at 16:55 credits a 20:30 clock-out, which is still later today.
+        // Time in 17:00 during the afternoon window credits a 21:00 clock-out, which is still later today.
+        Carbon::setTestNow(Carbon::parse('2026-11-13 17:20:00'));
         Sanctum::actingAs($member);
         $futureCreditId = $this->post('/api/attendance/manual-requests', [
             'request_type' => 'janitorial',
             'shifts' => [
                 [
                     'date' => '2026-11-13',
-                    'time_in' => '16:30',
-                    'time_out' => '17:00',
+                    'time_in' => '17:00',
+                    'time_out' => '18:00',
                     'before_photo' => UploadedFile::fake()->image('before-late.jpg', 640, 480),
                     'after_photo' => UploadedFile::fake()->image('after-late.jpg', 640, 480),
-                    'before_captured_at' => '2026-11-13T16:30:00',
-                    'after_captured_at' => '2026-11-13T16:50:00',
+                    'before_captured_at' => '2026-11-13T17:00:00',
+                    'after_captured_at' => '2026-11-13T17:20:00',
                     'capture_source' => 'live_camera',
                 ],
             ],

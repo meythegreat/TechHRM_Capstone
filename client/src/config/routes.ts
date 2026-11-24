@@ -23,6 +23,7 @@ export const STAFF_BASE_PATHS = new Set([
   'schedules',
   'attendance-hub',
   'compliance',
+  'evaluations',
   'messages',
   'help',
   'settings',

@@ -23,6 +23,7 @@ use App\Http\Controllers\GoogleCalendarController;
 use App\Http\Controllers\SemesterTermController;
 use App\Http\Controllers\HourLimitController;
 use App\Http\Controllers\ExtraHoursController;
+use App\Http\Controllers\WsaEvaluationController;
 use App\Http\Controllers\ClassClockInRequestController;
 use App\Http\Controllers\ManualAttendanceRequestController;
 
@@ -145,6 +146,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/attendance/janitorial-reviews', [\App\Http\Controllers\JanitorialReviewController::class, 'index']);
     Route::get('/attendance/janitorial-final-reviews', [\App\Http\Controllers\JanitorialReviewController::class, 'finalIndex']);
     Route::post('/attendance/janitorial-immediate-absence', [\App\Http\Controllers\JanitorialReviewController::class, 'informAbsence']);
+    Route::post('/attendance/janitorial-supervisor-absence', [\App\Http\Controllers\JanitorialGroupController::class, 'requestAbsence']);
     Route::post('/attendance/janitorial-supervision', [\App\Http\Controllers\JanitorialReviewController::class, 'supervisionPhoto']);
     Route::patch('/attendance/janitorial-reviews/{attendance}', [\App\Http\Controllers\JanitorialReviewController::class, 'decide']);
     Route::get('/attendance/janitorial-offline-requests', [\App\Http\Controllers\ManualAttendanceRequestController::class, 'janitorialQueue']);
@@ -219,6 +221,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::post('/attendance/janitorial-leaders', [\App\Http\Controllers\JanitorialGroupController::class, 'storeLeader']);
         Route::patch('/attendance/janitorial-leaders/{janitorialLeader}', [\App\Http\Controllers\JanitorialGroupController::class, 'updateLeader']);
+        Route::patch('/attendance/janitorial-supervisor-absence/{janitorialSupervisorAbsence}', [\App\Http\Controllers\JanitorialGroupController::class, 'decideAbsence']);
         Route::delete('/attendance/janitorial-leaders/{janitorialLeader}', [\App\Http\Controllers\JanitorialGroupController::class, 'destroyLeader']);
         Route::post('/attendance/janitorial-groups', [\App\Http\Controllers\JanitorialGroupController::class, 'store']);
         Route::put('/attendance/janitorial-groups/{janitorialGroup}', [\App\Http\Controllers\JanitorialGroupController::class, 'update']);
@@ -239,6 +242,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/extra-hours/signatories', [ExtraHoursController::class, 'signatories']);
         Route::get('/extra-hours/meta', [ExtraHoursController::class, 'meta']);
         Route::patch('/extra-hours/{extraHoursRequest}', [ExtraHoursController::class, 'decide']);
+
+        Route::get('/evaluations', [WsaEvaluationController::class, 'index']);
+        Route::get('/evaluations/meta', [WsaEvaluationController::class, 'meta']);
+        Route::get('/evaluations/candidates', [WsaEvaluationController::class, 'candidates']);
+        Route::post('/evaluations', [WsaEvaluationController::class, 'store']);
+        Route::post('/evaluations/{wsaEvaluation}/draft', [WsaEvaluationController::class, 'saveDraft']);
+        Route::post('/evaluations/{wsaEvaluation}/finalize', [WsaEvaluationController::class, 'finalize']);
+        Route::delete('/evaluations/{wsaEvaluation}', [WsaEvaluationController::class, 'destroy']);
+        Route::patch('/evaluations/{wsaEvaluation}', [WsaEvaluationController::class, 'decide']);
 
         // =================================================
         // SCHEDULE MANAGEMENT

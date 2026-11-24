@@ -955,6 +955,7 @@ const StudentAttendanceTerminal = () => {
                                                     title="How janitorial duty works"
                                                     className="mt-2"
                                                     items={[
+                                                        'Janitorial attendance can be recorded twice a day: morning 5:00–7:00 AM and afternoon 5:00–9:00 PM. One entry per window.',
                                                         'Photo mode starts and ends janitorial duty using live timestamped before and after area photos — no code required.',
                                                         'Supervisor code is optional and only available while your janitorial leader is physically present showing a code; area photos are still required before clock-out.',
                                                         'If your leader is marked absent, record the duty under Offline Attendance with your time in and live before/after camera photos.',

@@ -33,6 +33,17 @@ export type JanitorialLeader = {
   is_present: boolean;
 };
 
+export type JanitorialSupervisorAbsence = {
+  id: number;
+  user_id: number;
+  leader_name?: string | null;
+  absent_on: string;
+  reason: string;
+  status: 'Pending' | 'Approved' | 'Rejected' | string;
+  decision_note?: string | null;
+  reviewed_by?: string | null;
+};
+
 export const janitorialGroupService = {
   async list(): Promise<JanitorialGroup[]> {
     const { data } = await axios.get('/api/attendance/janitorial-groups');
@@ -42,6 +53,24 @@ export const janitorialGroupService = {
   async leaders(): Promise<JanitorialLeader[]> {
     const { data } = await axios.get('/api/attendance/janitorial-groups');
     return Array.isArray(data?.leaders) ? data.leaders : [];
+  },
+
+  async absenceRequests(): Promise<JanitorialSupervisorAbsence[]> {
+    const { data } = await axios.get('/api/attendance/janitorial-groups');
+    return Array.isArray(data?.absence_requests) ? data.absence_requests : [];
+  },
+
+  async requestAbsence(absentOn: string, reason: string) {
+    const { data } = await axios.post('/api/attendance/janitorial-supervisor-absence', {
+      absent_on: absentOn,
+      reason,
+    });
+    return data as { message: string; absence: JanitorialSupervisorAbsence };
+  },
+
+  async decideAbsence(id: number, status: 'Approved' | 'Rejected') {
+    const { data } = await axios.patch(`/api/attendance/janitorial-supervisor-absence/${id}`, { status });
+    return data as { message: string; absence: JanitorialSupervisorAbsence };
   },
 
   async addLeader(userId: number) {

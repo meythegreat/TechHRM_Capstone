@@ -12,6 +12,8 @@ export const CAMPUS_LETTERHEAD = {
     sealSrc: '/fcu-seal.jpg',
     logoSrc: '/fcu.jpg',
     wspoLogoSrc: '/logo.jpg',
+    /** 2026 short letterhead: header, rule, and accreditation footer on one sheet. */
+    letterheadSheetSrc: '/fcu-letterhead-2026.jpg',
     issuingOffice: 'WORK STUDY PROGRAM OFFICE',
     wspoOrgName: 'Work Study Program Organization',
     isoStandard: 'ISO 21001:2025',
@@ -70,5 +72,12 @@ export const OFFICIAL_FORM_META = {
         formName: 'WSA EXTRA SERVICE REQUEST',
         revisionNo: '1',
         effectivity: 'October 1, 2025',
+    },
+    evaluation: {
+        formNo: 'FCU-EOMS-WP-002-F',
+        formName: 'WSA EVALUATION FORM',
+        revisionNo: '1',
+        effectivity: 'October 1, 2025',
+        issuingOffice: 'WORK STUDY PROGRAM OFFICE',
     },
 } as const;

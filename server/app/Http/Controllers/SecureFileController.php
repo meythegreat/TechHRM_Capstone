@@ -20,6 +20,7 @@ class SecureFileController extends Controller
         'application-documents/',
         'staffing-approvals/',
         'extra-hours-approvals/',
+        'evaluation-signatures/',
         'cleaning-proofs/',
         'schedule-proofs/',
     ];
@@ -147,6 +148,29 @@ class SecureFileController extends Controller
             }
 
             return in_array($user->role, ['Super Admin', 'WSPO Staff'], true);
+        }
+
+        if (str_starts_with($path, 'evaluation-signatures/')) {
+            $evaluation = \App\Models\WsaEvaluation::query()
+                ->where('evaluated_signature_path', $path)
+                ->orWhere('attested_signature_path', $path)
+                ->first();
+
+            if (! $evaluation) {
+                return false;
+            }
+
+            if ((int) $evaluation->submitted_by === (int) $user->id) {
+                return true;
+            }
+
+            $accounts = app(UserController::class);
+            if ($accounts->canReviewEvaluation($user)) {
+                return true;
+            }
+
+            return $accounts->canFileEvaluation($user)
+                && in_array($evaluation->department, $accounts->supervisedDepartments($user), true);
         }
 
         if (str_starts_with($path, 'schedule-proofs/')) {
@@ -286,6 +310,18 @@ class SecureFileController extends Controller
     {
         if (str_starts_with($path, 'application-documents/')) {
             $name = ApplicationDocument::where('file_path', $path)->value('original_name');
+
+            return is_string($name) && trim($name) !== '' ? $name : null;
+        }
+
+        if (str_starts_with($path, 'evaluation-signatures/')) {
+            $evaluation = \App\Models\WsaEvaluation::query()
+                ->where('evaluated_signature_path', $path)
+                ->orWhere('attested_signature_path', $path)
+                ->first();
+            $name = $evaluation?->evaluated_signature_path === $path
+                ? $evaluation->evaluated_signature_name
+                : $evaluation?->attested_signature_name;
 
             return is_string($name) && trim($name) !== '' ? $name : null;
         }

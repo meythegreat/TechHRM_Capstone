@@ -78,6 +78,8 @@ class AuthController extends Controller
             'can_manage_activity_groups' => $accounts->canManageActivityGroups($user),
             'can_manage_janitorial_groups' => $accounts->canManageJanitorialGroups($user),
             'can_issue_daily_attendance' => $accounts->canIssueDailyAttendance($user),
+            'can_file_evaluations' => $accounts->canFileEvaluation($user),
+            'can_review_evaluations' => $accounts->canReviewEvaluation($user),
             'is_student_officer' => $accounts->isStudentOfficer($user),
             'officer_position' => $accounts->officerPosition($user) ?: null,
             'must_clock_as_student' => $accounts->mustClockAsStudent($user),

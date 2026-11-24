@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -18,9 +19,28 @@ class JanitorialLeader extends Model
         'is_present' => 'boolean',
     ];
 
-    /** Coordinator marks a leader absent when they are not with the group. */
-    public static function isOnDuty(int $userId): bool
+    /**
+     * A leader is off duty when the coordinator has marked them absent,
+     * or when the coordinator has approved their absence request for this date.
+     */
+    public static function isOnDuty(int $userId, ?Carbon $on = null): bool
     {
+        if ($userId <= 0) {
+            return true;
+        }
+
+        $day = ($on ?? now())->copy()->timezone(config('app.timezone'))->toDateString();
+        if (Schema::hasTable('janitorial_supervisor_absences')) {
+            $approved = JanitorialSupervisorAbsence::query()
+                ->where('user_id', $userId)
+                ->where('status', JanitorialSupervisorAbsence::APPROVED)
+                ->whereDate('absent_on', $day)
+                ->exists();
+            if ($approved) {
+                return false;
+            }
+        }
+
         if (! Schema::hasTable('janitorial_leaders') || ! Schema::hasColumn('janitorial_leaders', 'is_present')) {
             return true;
         }

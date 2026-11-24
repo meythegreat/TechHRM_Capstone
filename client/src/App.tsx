@@ -40,6 +40,7 @@ const STAFF_PAGE_TITLES: Record<string, string> = {
   pipeline: 'Applications',
   'attendance-hub': 'Attendance Hub',
   compliance: 'Compliance',
+  evaluations: 'Evaluation',
   logs: 'Audit Trail',
   users: 'User Management',
   offices: 'Offices',
@@ -73,6 +74,7 @@ import AdminAnalyticsDashboard from './components/AdminAnalyticsDashboard';
 import StaffProfileSettings from './components/StaffProfileSettings';
 import OfficeDirectory from './components/OfficeDirectory';
 import HelpPage from './components/HelpPage';
+import EvaluationPage from './components/EvaluationPage';
 import MessagesPage from './components/MessagesPage';
 import ChatPresence from './components/ChatPresence';
 import ChatHeads from './components/ChatHeads';
@@ -135,6 +137,9 @@ class PageErrorBoundary extends Component<{ children: ReactNode }, { error: Erro
 function App() {
   const [hasToken, setHasToken] = useState<boolean>(() => Boolean(localStorage.getItem('auth_token')));
   const [userRole, setUserRole] = useState<string | null>(localStorage.getItem('user_role'));
+  const [showEvaluation, setShowEvaluation] = useState(
+    () => localStorage.getItem('can_file_evaluations') === '1' || localStorage.getItem('can_review_evaluations') === '1',
+  );
   const [guestView, setGuestView] = useState<'home' | 'login' | 'apply' | 'track'>('home');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isVerifying, setIsVerifying] = useState(true);
@@ -183,6 +188,11 @@ function App() {
         } else {
           localStorage.removeItem('secretary_acting');
         }
+        const canFileEvaluation = Boolean(response.data.can_file_evaluations);
+        const canReviewEvaluation = Boolean(response.data.can_review_evaluations);
+        localStorage.setItem('can_file_evaluations', canFileEvaluation ? '1' : '0');
+        localStorage.setItem('can_review_evaluations', canReviewEvaluation ? '1' : '0');
+        setShowEvaluation(canFileEvaluation || canReviewEvaluation);
         storeActivityAttendanceCapability(response.data);
         setMustChangePassword(Boolean(response.data.must_change_password));
         
@@ -287,6 +297,9 @@ function App() {
     
     setHasToken(true);
     setUserRole(role);
+    setShowEvaluation(
+      localStorage.getItem('can_file_evaluations') === '1' || localStorage.getItem('can_review_evaluations') === '1',
+    );
     setAdminName(name);
     setMustChangePassword(mustChangePassword);
   };
@@ -311,6 +324,9 @@ function App() {
       localStorage.removeItem('must_clock_as_student');
       localStorage.removeItem('officer_position');
       localStorage.removeItem('assigned_office');
+      localStorage.removeItem('can_file_evaluations');
+      localStorage.removeItem('can_review_evaluations');
+      setShowEvaluation(false);
       clearStudentDashboardCache();
       localStorage.removeItem('secretary_acting');
       setHasToken(false);
@@ -410,6 +426,7 @@ function App() {
         setActiveTab={(path) => navigate(`/${path}`)}
         handleLogout={handleLogout}
         userRole={userRole}
+        showEvaluation={showEvaluation}
       />
 
       <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden print:h-auto print:overflow-visible">
@@ -496,6 +513,7 @@ function App() {
                 <Route path="/pipeline" element={<ApplicationManager />} />
                 <Route path="/attendance-hub" element={userRole === 'Super Admin' ? <SuperAdminAttendanceAudit /> : <SupervisorAttendanceHub />} />
                 <Route path="/compliance" element={<DisciplinaryManager />} />
+                <Route path="/evaluations" element={<EvaluationPage />} />
                 
                 {userRole === 'Super Admin' && (
                   <Route path="/bulletins" element={<BulletinManagement />} />

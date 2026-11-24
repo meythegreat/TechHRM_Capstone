@@ -115,13 +115,15 @@ const ManualAttendanceRequestsPanel = ({
     >
       <div className="space-y-4 p-6">
         <p className="text-xs font-medium text-slate-500">
-          Review and approve student offline and class-hours attendance requests.
+          {readOnly
+            ? 'Regular attendance requests are accepted by the department or office supervisor and department secretaries.'
+            : 'Accept regular offline attendance and class-hours requests for students in your department or office.'}
         </p>
         <HelpDisclosure
           variant="inline"
           title="Approval guidelines"
           items={[
-            'Covers regular offline attendance (when the office had no internet) and class-hours duty requests.',
+            'Only the department or office supervisor and department secretaries can accept regular offline attendance.',
             'Approving a request immediately credits the closed shift(s) on the student’s DTR.',
             'Janitorial offline requests are reviewed first by the janitorial supervisor before the immediate supervisor gives the final decision.',
           ]}

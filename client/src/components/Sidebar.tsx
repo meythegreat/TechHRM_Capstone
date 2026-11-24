@@ -34,6 +34,7 @@ interface SidebarProps {
     handleLogout: () => void;
     userRole?: string | null;
     navItems?: NavItem[];
+    showEvaluation?: boolean;
 }
 
 const staffNavItems: NavItem[] = [
@@ -45,6 +46,7 @@ const staffNavItems: NavItem[] = [
     { id: 'pipeline', label: 'Applications', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M4 4h16v16H4zM8 8h8m-8 4h8m-8 4h5" /> },
     { id: 'attendance-hub', label: 'Attendance Hub', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4" /> },
     { id: 'compliance', label: 'Compliance', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M5.1 19h13.8L12 4 5.1 19z" /> },
+    { id: 'evaluations', label: 'Evaluation', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /> },
     { id: 'logs', label: 'Audit Trail', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M6 3h9l3 3v15H6zM9 10h6m-6 4h6" /> },
     { id: 'users', label: 'User Management', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2m14-10a4 4 0 100-8 4 4 0 000 8z" /> },
     { id: 'offices', label: 'Offices', icon: <path strokeLinecap="round" strokeLinejoin="round" d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6" /> },
@@ -63,6 +65,7 @@ const Sidebar: FC<SidebarProps> = ({
     handleLogout,
     navItems,
     userRole,
+    showEvaluation,
 }) => {
     const isDesktop = useDesktopSidebar();
     const [hoverOpen, setHoverOpen] = useState(false);
@@ -99,6 +102,15 @@ const Sidebar: FC<SidebarProps> = ({
         navItems ??
         staffNavItems.filter((item) => {
             if (item.id === 'bulletins') return userRole === 'Super Admin';
+            if (item.id === 'evaluations') {
+                if (typeof showEvaluation === 'boolean') return showEvaluation;
+                const canFile = localStorage.getItem('can_file_evaluations') === '1';
+                const canReview = localStorage.getItem('can_review_evaluations') === '1';
+                if (localStorage.getItem('can_file_evaluations') === null && localStorage.getItem('can_review_evaluations') === null) {
+                    return userRole === 'Supervisor' || userRole === 'Department Secretary' || userRole === 'WSPO Staff' || userRole === 'Super Admin';
+                }
+                return canFile || canReview;
+            }
             if (userRole === 'Immediate Supervisor') {
                 return ['dashboard', 'messages', 'help', 'settings'].includes(item.id);
             }

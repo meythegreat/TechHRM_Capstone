@@ -4,11 +4,18 @@ namespace App\Http\Controllers;
 
 use App\Models\Holiday;
 use App\Support\GoogleCalendarSync;
-use App\Support\SuperAdminAudit;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * Holiday and class-break calendar.
+ *
+ * Explicit SuperAdminAudit exception: WSPO Staff and Super Admin may create,
+ * update, and delete these rows. Do not call SuperAdminAudit::denyMutation() here.
+ *
+ * @see \App\Support\SuperAdminAudit::HOLIDAY_EXCEPTION
+ */
 class HolidayController extends Controller
 {
     public function index(Request $request)
@@ -36,7 +43,6 @@ class HolidayController extends Controller
 
     public function store(Request $request)
     {
-        SuperAdminAudit::denyMutation($request);
         $validated = $request->validate([
             'date' => ['required', 'date'],
             'end_date' => ['nullable', 'date'],
@@ -67,7 +73,6 @@ class HolidayController extends Controller
 
     public function update(Request $request, Holiday $holiday)
     {
-        SuperAdminAudit::denyMutation($request);
         $validated = $request->validate([
             'date' => ['required', 'date'],
             'end_date' => ['nullable', 'date'],
@@ -95,9 +100,8 @@ class HolidayController extends Controller
         return response()->json($this->payload($holiday->fresh()));
     }
 
-    public function destroy(Request $request, Holiday $holiday)
+    public function destroy(Holiday $holiday)
     {
-        SuperAdminAudit::denyMutation($request);
         $holiday->delete();
         app(GoogleCalendarSync::class)->syncConnectedUsers();
 

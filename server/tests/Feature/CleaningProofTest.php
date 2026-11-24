@@ -79,6 +79,104 @@ class CleaningProofTest extends TestCase
         $this->assertTrue(Carbon::parse($accepted->time_in)->addHours(4)->equalTo(Carbon::parse($accepted->time_out)));
     }
 
+    public function test_janitorial_attendance_allows_one_morning_and_one_afternoon_window(): void
+    {
+        [$lead, $member, $groupId] = $this->seedJanitorialGroup();
+        Sanctum::actingAs($member);
+
+        $this->post('/api/attendance/janitorial-photo', [
+            'phase' => 'before',
+            'capture_source' => 'live_camera',
+            'captured_at' => '2026-11-13T10:00:00+08:00',
+            'group_id' => $groupId,
+            'photo' => UploadedFile::fake()->image('late-morning.jpg', 640, 480),
+        ], ['Accept' => 'application/json'])->assertStatus(422);
+
+        Carbon::setTestNow(Carbon::parse('2026-11-13 06:50:00'));
+        $this->post('/api/attendance/janitorial-photo', [
+            'phase' => 'before',
+            'capture_source' => 'live_camera',
+            'captured_at' => '2026-11-13T06:10:00+08:00',
+            'group_id' => $groupId,
+            'photo' => UploadedFile::fake()->image('morning.jpg', 640, 480),
+        ], ['Accept' => 'application/json'])->assertCreated();
+
+        $this->post('/api/attendance/janitorial-photo', [
+            'phase' => 'after',
+            'capture_source' => 'live_camera',
+            'captured_at' => '2026-11-13T06:40:00+08:00',
+            'photo' => UploadedFile::fake()->image('morning-out.jpg', 640, 480),
+        ], ['Accept' => 'application/json'])->assertCreated();
+
+        $this->post('/api/attendance/janitorial-photo', [
+            'phase' => 'before',
+            'capture_source' => 'live_camera',
+            'captured_at' => '2026-11-13T06:20:00+08:00',
+            'group_id' => $groupId,
+            'photo' => UploadedFile::fake()->image('morning-again.jpg', 640, 480),
+        ], ['Accept' => 'application/json'])->assertStatus(422);
+
+        Carbon::setTestNow(Carbon::parse('2026-11-13 18:00:00'));
+        $this->post('/api/attendance/janitorial-photo', [
+            'phase' => 'before',
+            'capture_source' => 'live_camera',
+            'captured_at' => '2026-11-13T17:30:00+08:00',
+            'group_id' => $groupId,
+            'photo' => UploadedFile::fake()->image('afternoon.jpg', 640, 480),
+        ], ['Accept' => 'application/json'])->assertCreated();
+
+        $this->assertSame(2, Attendance::query()->where('user_id', $member->id)->count());
+        $this->assertNotNull($lead);
+    }
+
+    public function test_janitorial_supervisor_absence_needs_coordinator_approval(): void
+    {
+        [$lead, $member, $groupId] = $this->seedJanitorialGroup();
+        Schema::create('janitorial_supervisor_absences', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->date('absent_on');
+            $table->string('reason', 500);
+            $table->string('status', 20)->default('Pending');
+            $table->text('decision_note')->nullable();
+            $table->unsignedBigInteger('reviewed_by')->nullable();
+            $table->timestamp('reviewed_at')->nullable();
+            $table->timestamps();
+        });
+
+        Sanctum::actingAs($member);
+        $this->postJson('/api/attendance/janitorial-supervisor-absence', [
+            'absent_on' => '2026-11-13',
+            'reason' => 'Sick',
+        ])->assertForbidden();
+
+        Sanctum::actingAs($lead);
+        $absenceId = $this->postJson('/api/attendance/janitorial-supervisor-absence', [
+            'absent_on' => '2026-11-13',
+            'reason' => 'Sick',
+        ])->assertCreated()->json('absence.id');
+
+        $this->assertTrue(\App\Models\JanitorialLeader::isOnDuty((int) $lead->id));
+
+        $coordinator = User::query()->where('role', 'WSPO Staff')->firstOrFail();
+        Sanctum::actingAs($coordinator);
+        $this->patchJson('/api/attendance/janitorial-supervisor-absence/'.$absenceId, [
+            'status' => 'Approved',
+        ])->assertOk();
+
+        $this->assertFalse(\App\Models\JanitorialLeader::isOnDuty((int) $lead->id));
+
+        Sanctum::actingAs($lead);
+        $code = $this->getJson('/api/attendance/janitorial-passcode?group_id='.$groupId)
+            ->assertOk()
+            ->json('token_code');
+        Sanctum::actingAs($member);
+        $this->postJson('/api/attendance/secure-clock-in', [
+            'token_code' => $code,
+            'method' => 'passcode',
+        ])->assertStatus(422);
+    }
+
     public function test_absent_janitorial_leader_blocks_code_and_live_photo(): void
     {
         [$lead, $member, $groupId] = $this->seedJanitorialGroup();
