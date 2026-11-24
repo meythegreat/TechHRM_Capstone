@@ -9,6 +9,7 @@ use App\Http\Controllers\ChatController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\ScheduleController;
+use App\Http\Controllers\ScheduleSubmissionController;
 use App\Http\Controllers\SecureFileController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\NotificationController;
@@ -170,6 +171,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/my-schedule/{id}/request-edit', [ScheduleController::class, 'requestEdit']);
 
+    Route::get('/schedule-submissions', [ScheduleSubmissionController::class, 'mine']);
+    Route::post('/schedule-submissions', [ScheduleSubmissionController::class, 'store']);
+    Route::delete('/schedule-submissions/{scheduleSubmission}', [ScheduleSubmissionController::class, 'destroy']);
+
     // =====================================================
     // REQUIREMENT UPLOADS
     // =====================================================
@@ -252,6 +257,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/schedules/{id}', [ScheduleController::class, 'destroy']);
 
         Route::patch('/schedules/{id}/resolve-request', [ScheduleController::class, 'resolveRequest']);
+        Route::get('/schedule-submissions/review', [ScheduleSubmissionController::class, 'review']);
+        Route::patch('/schedule-submissions/{scheduleSubmission}', [ScheduleSubmissionController::class, 'decide']);
         Route::get('/staffing-requests', [\App\Http\Controllers\StaffingRequestController::class, 'index']);
         Route::get('/staffing-requests/signatories', [\App\Http\Controllers\StaffingRequestController::class, 'signatories']);
 

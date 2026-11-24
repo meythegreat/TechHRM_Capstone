@@ -38,6 +38,7 @@ import { workShiftDutyOptions } from '../constants/workShiftDutyTypes';
 import { formatScheduleRange } from '../utils/scheduleTime';
 import ClockTimeInput from './ClockTimeInput';
 import { HelpDisclosure } from './HelpDisclosure';
+import ScheduleSubmissionReview from './ScheduleSubmissionReview';
 
 const HOUR_OPTIONS = Array.from({ length: 12 }, (_, index) => String(index + 1));
 const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0'));
@@ -1157,7 +1158,7 @@ const ScheduleManagement = () => {
                                 ? 'Configure the semester window and manage or audit campus-wide class and work schedules.'
                                 : canManageSchedules
                                   ? 'Configure the semester window and assign weekly work shifts and class schedules.'
-                                  : 'Review assigned work shifts and class schedules for your department.'}
+                                  : 'Review class schedules your working students submit, and the duty and class blocks already on file.'}
                         </p>
                     </div>
 
@@ -1185,6 +1186,14 @@ const ScheduleManagement = () => {
                     )}
                 </div>
             </motion.header>
+
+            <ScheduleSubmissionReview
+                onToast={showToast}
+                onViewProof={(path, title) => {
+                    setLetterViewerTitle(title);
+                    setLetterViewerPath(path);
+                }}
+            />
 
             {/* SEMESTER WINDOW CARD */}
             {canSetSemester ? (

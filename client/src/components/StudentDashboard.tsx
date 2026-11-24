@@ -51,6 +51,7 @@ import { JanitorialFinalReview } from './hours/JanitorialFinalReview';
 import { janitorialGroupService } from '../services/janitorialGroupService';
 import { canCheckActivityAttendance, storeActivityAttendanceCapability } from '../utils/wspoActivityAccess';
 import { formatClockTime, formatScheduleRange } from '../utils/scheduleTime';
+import StudentScheduleSubmission from './StudentScheduleSubmission';
 import { type StudentActivityItem } from '../types/studentActivity';
 
 interface ScheduleRecord {
@@ -824,7 +825,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                                         My Schedule
                                                     </h1>
                                                     <p className="mt-2 text-sm font-medium leading-relaxed text-slate-300">
-                                                        View your assigned work shifts and class schedule, or request a shift edit.
+                                                        Submit your class schedule for your office supervisor and your duty schedule for the WSPO coordinator. Attach a photo of your registration form and duty schedule.
                                                     </p>
                                                 </div>
 
@@ -847,6 +848,13 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                                 </div>
                                             </div>
                                         </motion.header>
+
+                                        <StudentScheduleSubmission
+                                            hasWork={workShifts.length > 0}
+                                            hasClass={classShifts.length > 0}
+                                            onMessage={(text, type) => setMessage({ text, type })}
+                                            onViewProof={(path, title) => setDocumentViewer({ path, title })}
+                                        />
 
                                         <div className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-2">
                                             {/* Work Schedule Column */}
@@ -873,7 +881,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                                                 No shifts assigned yet
                                                             </p>
                                                             <p className="mt-1 text-xs font-medium text-slate-400">
-                                                                Wait for your department supervisor to finalize your schedule.
+                                                                Submit your duty schedule with a photo. The WSPO coordinator approves it before it appears here.
                                                             </p>
                                                         </div>
                                                     ) : (
@@ -959,7 +967,7 @@ const StudentDashboard = ({ onLogout }: StudentDashboardProps) => {
                                                                 No class schedule yet
                                                             </p>
                                                             <p className="mt-1 max-w-xs text-xs font-medium text-slate-400">
-                                                                The WSPO coordinator or secretary can add your class hours beside your work schedule.
+                                                                Submit your class hours with a photo of your registration form. Your office supervisor approves them before they appear here.
                                                             </p>
                                                         </div>
                                                     ) : (

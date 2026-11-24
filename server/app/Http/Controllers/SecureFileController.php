@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ApplicationDocument;
 use App\Models\Attendance;
 use App\Models\Requirement;
+use App\Models\ScheduleSubmission;
 use App\Models\StaffingRequest;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -20,6 +21,7 @@ class SecureFileController extends Controller
         'staffing-approvals/',
         'extra-hours-approvals/',
         'cleaning-proofs/',
+        'schedule-proofs/',
     ];
 
     public function show(Request $request): BinaryFileResponse
@@ -147,6 +149,35 @@ class SecureFileController extends Controller
             return in_array($user->role, ['Super Admin', 'WSPO Staff'], true);
         }
 
+        if (str_starts_with($path, 'schedule-proofs/')) {
+            $submission = ScheduleSubmission::query()->where('proof_path', $path)->first();
+            if (! $submission) {
+                return false;
+            }
+
+            if ((int) $submission->user_id === (int) $user->id) {
+                return true;
+            }
+
+            if ($user->role === 'Super Admin') {
+                return true;
+            }
+
+            $submission->loadMissing('student.profile');
+            $student = $submission->student;
+            if (! $student) {
+                return false;
+            }
+
+            $accounts = app(UserController::class);
+            if ($submission->kind === 'class') {
+                return ($accounts->usesSupervisorScope($user) || $accounts->isWspoDepartmentSupervisor($user))
+                    && $accounts->supervisorCanAccessStudent($user, $student);
+            }
+
+            return $accounts->canManageWorkSchedules($user);
+        }
+
         if (str_starts_with($path, 'cleaning-proofs/')) {
             $attendance = Attendance::query()
                 ->where(function ($query) use ($path) {
@@ -255,6 +286,12 @@ class SecureFileController extends Controller
     {
         if (str_starts_with($path, 'application-documents/')) {
             $name = ApplicationDocument::where('file_path', $path)->value('original_name');
+
+            return is_string($name) && trim($name) !== '' ? $name : null;
+        }
+
+        if (str_starts_with($path, 'schedule-proofs/')) {
+            $name = ScheduleSubmission::query()->where('proof_path', $path)->value('proof_name');
 
             return is_string($name) && trim($name) !== '' ? $name : null;
         }
