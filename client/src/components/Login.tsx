@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
@@ -58,6 +58,8 @@ const Login = ({
     const [otpStep, setOtpStep] = useState<'request' | 'code'>('request');
     const [otpCode, setOtpCode] = useState('');
     const [otpMaskedEmail, setOtpMaskedEmail] = useState<string | null>(null);
+    const otpVerifyLock = useRef(false);
+    const otpInputRef = useRef<HTMLInputElement>(null);
 
     const reduceMotion = useReducedMotion();
     const ease = [0.22, 1, 0.36, 1] as const;
@@ -202,15 +204,18 @@ const Login = ({
         }
     };
 
-    const handleVerifyOtp = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const verifyOtpCode = async (code: string) => {
+        const digits = code.replace(/\D/g, '').slice(0, 8);
+        if (digits.length !== 8 || otpVerifyLock.current) return;
+
+        otpVerifyLock.current = true;
         setIsLoading(true);
         setError(null);
 
         try {
             const response = await axios.post('/api/login/otp/verify', {
                 username: username.trim(),
-                code: otpCode.trim(),
+                code: digits,
             });
             finishAuthenticated(response.data);
         } catch (err: any) {
@@ -218,8 +223,24 @@ const Login = ({
                 ? 'Cannot reach the server. Ensure Laravel is running.'
                 : err.response?.data?.message || 'That sign-in code could not be verified.';
             setError(message);
+            setOtpCode('');
+            otpInputRef.current?.focus();
         } finally {
+            otpVerifyLock.current = false;
             setIsLoading(false);
+        }
+    };
+
+    const handleVerifyOtp = (e: React.FormEvent) => {
+        e.preventDefault();
+        void verifyOtpCode(otpCode);
+    };
+
+    const handleOtpCodeChange = (value: string) => {
+        const digits = value.replace(/\D/g, '').slice(0, 8);
+        setOtpCode(digits);
+        if (digits.length === 8) {
+            void verifyOtpCode(digits);
         }
     };
 
@@ -453,17 +474,17 @@ const Login = ({
                                     </div>
                                     <input
                                         id="otp-code"
+                                        ref={otpInputRef}
                                         type="text"
                                         inputMode="numeric"
                                         autoComplete="one-time-code"
                                         autoFocus
                                         required
+                                        disabled={isLoading}
                                         maxLength={8}
                                         pattern="[0-9]{8}"
                                         value={otpCode}
-                                        onChange={(e) =>
-                                            setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 8))
-                                        }
+                                        onChange={(e) => handleOtpCodeChange(e.target.value)}
                                         className="peer block w-full appearance-none rounded-2xl border border-slate-200 bg-slate-50/70 pb-3 pl-12 pr-4 pt-6 text-center font-mono text-xl font-black tracking-[0.35em] text-slate-900 transition-all focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-600/10"
                                         placeholder=" "
                                     />
@@ -477,7 +498,7 @@ const Login = ({
 
                                 <div className="flex items-center justify-between px-1">
                                     <span className="font-mono text-[11px] font-bold text-slate-400">
-                                        {otpCode.length}/8 digits
+                                        {isLoading ? 'Checking code…' : `${otpCode.length}/8 digits`}
                                     </span>
                                     <button
                                         type="button"
